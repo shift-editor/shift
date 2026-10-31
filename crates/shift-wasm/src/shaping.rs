@@ -111,13 +111,17 @@ pub struct ShapedRun {
 }
 
 #[cfg(feature = "engine")]
-pub(crate) use exports::TextShaping;
+pub(crate) use exports::{TextPlace, TextShaping};
 
 #[cfg(feature = "engine")]
 mod exports {
     use std::cell::RefCell;
 
-    use shift_font::{ExternalLocation, Font, FontChangeImpact, GlyphId, ShaperFontSource};
+    use shift_font::interpolation::KerningBlend;
+    use shift_font::{
+        DesignLocation, ExternalLocation, Font, FontChangeImpact, GlyphId, ShaperFontSource,
+    };
+    use shift_layout::{LayoutFont, LayoutRequest, LineMetrics, TextLayout};
     use shift_shape::{ShapeError, Tag, Unit};
     use shift_shaper_font::{LiveShaper, ShaperFontError, ShaperFontRequest, ShaperFontState};
 
@@ -186,6 +190,15 @@ mod exports {
         pub(crate) const INPUTS: FontChangeImpact = FontChangeImpact::GLYPHS
             .union(FontChangeImpact::AXES.union(FontChangeImpact::AXIS_MAPPINGS));
 
+        /// What a change with this impact may change of laid-out text: what
+        /// the shaper reads, kerning, the source metrics lines are spaced by,
+        /// and the glyph layers glyphs are placed from.
+        pub(crate) const LAYOUT_INPUTS: FontChangeImpact = Self::INPUTS
+            .union(FontChangeImpact::KERNING)
+            .union(FontChangeImpact::SOURCE_METRICS)
+            .union(FontChangeImpact::SOURCES)
+            .union(FontChangeImpact::LAYERS);
+
         /// How many times the shaper font was compiled; a glyph change the
         /// compile does not read leaves it.
         #[cfg(test)]
@@ -218,22 +231,10 @@ mod exports {
             source: impl FnOnce() -> Result<ShaperFontSource, E>,
             paragraphs: &[ParagraphRequest],
         ) -> Vec<ShapedParagraph> {
-            let mut state = self.state.borrow_mut();
-            if state.stale {
-                state.stale = false;
-                let updated = source()
-                    .map_err(|error| ShapingFailure::Unreadable {
-                        detail: error.to_string(),
-                    })
-                    .and_then(|source| state.update(font, &source));
-                state.failure = updated.err().filter(|_| state.shaper.is_none());
-            }
-            let shaper = match (&state.shaper, &state.failure) {
-                (Some(shaper), _) => shaper,
-                (None, failure) => {
-                    let reason = failure
-                        .as_ref()
-                        .map_or_else(|| "no shaper font".to_string(), ToString::to_string);
+            let state = self.current(font, source);
+            let shaper = match state.shaper() {
+                Ok(shaper) => shaper,
+                Err(reason) => {
                     return paragraphs
                         .iter()
                         .map(|_| ShapedParagraph::Unshapable {
@@ -252,9 +253,71 @@ mod exports {
                 })
                 .collect()
         }
+
+        /// Lays `request` out over `font` at `place`, with the shaper brought
+        /// up to date first as [`Self::shape_paragraphs`] does; text that
+        /// cannot be shaped is laid out as typed, saying why.
+        pub(crate) fn layout_text<E: std::fmt::Display>(
+            &self,
+            font: &Font,
+            source: impl FnOnce() -> Result<ShaperFontSource, E>,
+            request: &LayoutRequest,
+            place: TextPlace,
+        ) -> TextLayout {
+            let state = self.current(font, source);
+            let class = |glyph| state.compilation.class(glyph);
+            let layout_font = LayoutFont::new(
+                font,
+                &place.design,
+                place.external,
+                place.kerning,
+                state.shaper(),
+                &class,
+                LineMetrics::at(font, &place.design),
+            );
+            TextLayout::new(&layout_font, request)
+        }
+
+        /// The shaper state, brought up to date with `font` when an edit may
+        /// have changed what it reads.
+        fn current<E: std::fmt::Display>(
+            &self,
+            font: &Font,
+            source: impl FnOnce() -> Result<ShaperFontSource, E>,
+        ) -> std::cell::RefMut<'_, ShaperState> {
+            let mut state = self.state.borrow_mut();
+            if state.stale {
+                state.stale = false;
+                let updated = source()
+                    .map_err(|error| ShapingFailure::Unreadable {
+                        detail: error.to_string(),
+                    })
+                    .and_then(|source| state.update(font, &source));
+                state.failure = updated.err().filter(|_| state.shaper.is_none());
+            }
+            state
+        }
+    }
+
+    /// Where text is laid out: its design and user-space locations and the
+    /// kerning there.
+    pub(crate) struct TextPlace {
+        pub(crate) design: DesignLocation,
+        pub(crate) external: ExternalLocation,
+        pub(crate) kerning: KerningBlend,
     }
 
     impl ShaperState {
+        /// The shaper, or why there is none.
+        fn shaper(&self) -> Result<&LiveShaper, String> {
+            match (&self.shaper, &self.failure) {
+                (Some(shaper), _) => Ok(shaper),
+                (None, failure) => Err(failure
+                    .as_ref()
+                    .map_or_else(|| "no shaper font".to_string(), ToString::to_string)),
+            }
+        }
+
         /// Brings the compilation up to `source`, compiling only when
         /// something the compile reads changed, and maps characters through
         /// `font`'s Unicode values over the compilation's glyph order, which
@@ -350,8 +413,12 @@ mod exports {
             Font, FontChangeImpact, Glyph, GlyphClasses, GlyphDataCategory, ShaperFontSource,
         };
 
+        use shift_font::interpolation::KerningBlend;
+        use shift_font::{DesignLocation, ExternalLocation};
+        use shift_layout::{LayoutRequest, LayoutUnit, TextLayout, TextOptions};
+
         use super::super::{ParagraphRequest, ShapeUnit, ShapedParagraph};
-        use super::TextShaping;
+        use super::{TextPlace, TextShaping};
 
         const LIGATURE: &str = "feature liga { sub f i by f_i; } liga;";
 
@@ -445,6 +512,48 @@ mod exports {
             // The source no longer compiles, so the last font shapes on.
             assert_eq!(shaped(&shaping, &font, "fi"), ["f_i.liga"]);
             assert_eq!(shaping.compiles(), first + 2);
+        }
+
+        fn laid_out(
+            shaping: &TextShaping,
+            font: &Font,
+            text: &str,
+            shaping_on: bool,
+        ) -> TextLayout {
+            let request = LayoutRequest {
+                units: text
+                    .chars()
+                    .map(|character| LayoutUnit::Character {
+                        codepoint: u32::from(character),
+                    })
+                    .collect(),
+                options: TextOptions {
+                    shaping: shaping_on,
+                    ..TextOptions::default()
+                },
+            };
+            let place = TextPlace {
+                design: DesignLocation::new(),
+                external: ExternalLocation::new(),
+                kerning: KerningBlend::default(),
+            };
+            shaping.layout_text(font, || Ok::<_, Infallible>(source(font)), &request, place)
+        }
+
+        #[test]
+        fn text_lays_out_with_the_session_s_shaper_or_as_typed() {
+            let font = font_with(&[("f", Some('f')), ("i", Some('i')), ("f_i", None)]);
+            let shaping = TextShaping::default();
+
+            let shaped = laid_out(&shaping, &font, "fi", true);
+            let typed = laid_out(&shaping, &font, "fi", false);
+
+            let ligature = font.glyph_by_name("f_i").unwrap().id();
+            assert_eq!(shaped.glyphs.len(), 1);
+            assert_eq!(shaped.glyphs[0].glyph_id, Some(ligature));
+            assert_eq!(typed.glyphs.len(), 2);
+            assert_eq!(shaped.carets.len(), 3);
+            assert_eq!(shaping.compiles(), 1);
         }
     }
 }

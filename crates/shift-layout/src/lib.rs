@@ -12,13 +12,19 @@
 // WebAssembly engine. Tests may unwrap (clippy.toml).
 #![warn(clippy::unwrap_used, clippy::print_stdout)]
 
+#[cfg(feature = "layout")]
 mod carets;
+#[cfg(feature = "layout")]
 mod font;
+#[cfg(feature = "layout")]
 mod lines;
+#[cfg(feature = "layout")]
 mod paragraph;
 mod request;
+#[cfg(feature = "layout")]
 mod units;
 
+#[cfg(feature = "layout")]
 pub use font::{LayoutFont, LineMetrics};
 pub use request::{FeatureSetting, LayoutRequest, LayoutUnit, LineHeight, TextAlign, TextOptions};
 
@@ -170,6 +176,7 @@ pub struct SecondaryCaret {
     pub direction: Direction,
 }
 
+#[cfg(feature = "layout")]
 impl TextLayout {
     /// Lays out `request` over `font`.
     pub fn new(font: &LayoutFont<'_>, request: &LayoutRequest) -> Self {
@@ -194,4 +201,5 @@ impl TextLayout {
 }
 
 #[cfg(test)]
+#[cfg(feature = "layout")]
 mod tests;

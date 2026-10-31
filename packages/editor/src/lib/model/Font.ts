@@ -65,7 +65,12 @@ import type {
   WorkspaceEditCoordinator,
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
-import type { ParagraphRequest, ShapedParagraph } from "@shift/wasm/protocol";
+import type {
+  LayoutRequest,
+  ParagraphRequest,
+  ShapedParagraph,
+  TextLayout as LaidOutText,
+} from "@shift/wasm/protocol";
 import { EngineVariationReader, StatelessVariationReader, locationValues } from "../wasm/variation";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
@@ -1460,6 +1465,34 @@ export class Font {
     if (!engine) return null;
     for (const flag of engine.shapingInputs()) track(engine.revision(flag));
     return engine.shapeParagraphs(paragraphs);
+  }
+
+  /**
+   * Lays text out in the window's engine, as it holds the font: unsaved
+   * edits included. Tracks the revision of each change flag layout reads,
+   * so a computed that lays text out does again after any edit that may
+   * change the result.
+   *
+   * @param location - External location displayed by editor controls.
+   * @param sourceId - Source being edited, which takes precedence over `location`.
+   * @returns null without an open engine.
+   */
+  layoutText(
+    text: LayoutRequest,
+    location: ExternalAxisLocation,
+    sourceId: SourceId | null,
+  ): LaidOutText | null {
+    const engine = this.#store.engine;
+    if (!engine) return null;
+    for (const flag of engine.layoutInputs()) track(engine.revision(flag));
+    const place = this.#peekDesignspace((designspace): KerningPlace => {
+      if (sourceId && designspace.source(sourceId)) return { kind: "source", sourceId };
+      return {
+        kind: "location",
+        location: locationValues(designspace.axes, designspace.toDesign(location)),
+      };
+    });
+    return engine.layoutText(text, place);
   }
 
   /** @knipclassignore — used by VariationPanel component */

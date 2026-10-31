@@ -28,6 +28,7 @@ use shift_engine::StoreReadError;
 use shift_font::{
     Axis, FontChangeFlag, GlyphRecords, MetricValue, MissingKerningOrigin, ResolvedKerning, Source,
 };
+use shift_layout::{LayoutRequest, TextLayout};
 use shift_wire::KerningSnapshot;
 
 use crate::shaping::{ParagraphRequest, ShapedParagraph};
@@ -97,6 +98,18 @@ pub trait EngineReads {
     /// The flags whose change may change what [`Self::shape_paragraphs`]
     /// returns.
     fn shaping_inputs(&self) -> Vec<FontChangeFlag>;
+    /// Lays text out over the session's font, unsaved edits included, as
+    /// `shift_layout::TextLayout::new` does: shaped with the session's
+    /// shaper (brought up to date as [`Self::shape_paragraphs`] does), with
+    /// kerning, mark attachment and cursive joins at each generated feature's
+    /// insert marker, then broken into lines, ordered, aligned, and given
+    /// caret stops. Text that cannot be shaped is laid out as typed, with
+    /// the reason. A glyph whose layers the session has not loaded lays out
+    /// empty until they are.
+    fn layout_text(&self, request: TextLayoutRequest) -> TextLayout;
+    /// The flags whose change may change what [`Self::layout_text`]
+    /// returns.
+    fn layout_inputs(&self) -> Vec<FontChangeFlag>;
     /// Every interned source set's weights at a design location, as the
     /// basis the session's font gives each set evaluates them
     /// (`InterpolationBasis::weights_at`): the weights of the sets a frame
@@ -115,6 +128,18 @@ pub trait EngineReads {
     /// The external location a design location's mapping came from, NaN on
     /// internal axes: `unmap_location_with_bases`.
     fn external_location(&self, design: Vec<f64>) -> Vec<f64>;
+}
+
+/// Text to lay out, and where.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct TextLayoutRequest {
+    pub text: LayoutRequest,
+    /// The design location to lay out at, in the font's axis order with NaN
+    /// for an axis default, as [`EngineReads::kerning_run`] takes it.
+    pub location: Vec<f64>,
+    /// A source, by the number the session interned, to lay out at instead,
+    /// as its own layers draw.
+    pub source: Option<usize>,
 }
 
 /// The authored pair an edit to the kerning between two glyphs at a source changes.
@@ -168,19 +193,20 @@ mod exports {
     use shift_engine::StoreReadError;
     use shift_font::naming::new_anchor_name;
     use shift_font::{
-        AxisMapping, AxisMappingBasis, DesignLocation, Font, FontCopyId, GlyphId, GlyphRecords,
-        InterpolationBasis, Kerning, KerningSide, LayerId, MissingKerningOrigin, ResolvedKerning,
-        SourceId,
+        AxisMapping, AxisMappingBasis, DesignLocation, ExternalLocation, Font, FontCopyId, GlyphId,
+        GlyphRecords, InterpolationBasis, Kerning, KerningSide, LayerId, MissingKerningOrigin,
+        ResolvedKerning, SourceId,
     };
     use shift_wire::values::{self, WireParse};
     use wasm_bindgen::prelude::*;
 
     use super::{
         Axis, EditablePair, EngineReads, FontChangeFlag, InterpolatedMetrics, KerningSnapshot,
-        ParagraphRequest, ShapedParagraph, Source, SourceSetWeights, engine_reads_request,
+        ParagraphRequest, ShapedParagraph, Source, SourceSetWeights, TextLayout, TextLayoutRequest,
+        engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
-    use crate::shaping::TextShaping;
+    use crate::shaping::{TextPlace, TextShaping};
     use crate::variation::{design_values, external_values, to_location, weights_at};
 
     /// The ids a session's reads name by number, each interned once.
@@ -521,6 +547,17 @@ mod exports {
             FontChangeFlag::of(TextShaping::INPUTS).collect()
         }
 
+        fn layout_text(&self, request: TextLayoutRequest) -> TextLayout {
+            let font = self.session.font();
+            let place = self.text_place(&request);
+            self.shaping
+                .layout_text(font, || self.shaper_font_source(), &request.text, place)
+        }
+
+        fn layout_inputs(&self) -> Vec<FontChangeFlag> {
+            FontChangeFlag::of(TextShaping::LAYOUT_INPUTS).collect()
+        }
+
         fn source_set_weights(&self, location: Vec<f64>) -> SourceSetWeights {
             let font = self.session.font();
             let variation = self.variation();
@@ -557,6 +594,44 @@ mod exports {
         fn external_location(&self, design: Vec<f64>) -> Vec<f64> {
             let font = self.session.font();
             external_values(font.axes(), &self.variation().mappings, &design)
+        }
+    }
+
+    impl Engine {
+        /// Where `request` lays out: at its source, when it names one the
+        /// font has, otherwise at its location mapped through the font's axis
+        /// mappings; with the kerning there, none when it cannot be blended.
+        fn text_place(&self, request: &TextLayoutRequest) -> TextPlace {
+            let font = self.session.font();
+            let source = request
+                .source
+                .and_then(|number| self.ids.sources.get(number))
+                .and_then(|source_id| font.source(*source_id));
+            let external_of = |design: &[f64]| {
+                let values = external_values(font.axes(), &self.variation().mappings, design);
+                ExternalLocation::from_untyped(to_location(font.axes(), &values))
+            };
+            let Some(source) = source else {
+                return TextPlace {
+                    design: design_location(font, &request.location),
+                    external: external_of(&request.location),
+                    kerning: font
+                        .kerning_blend_at(&design_location(font, &request.location))
+                        .unwrap_or_default(),
+                };
+            };
+            let design: Vec<f64> = font
+                .axes()
+                .iter()
+                .map(|axis| source.location().get(&axis.id()).unwrap_or(f64::NAN))
+                .collect();
+            TextPlace {
+                design: source.location().clone(),
+                external: external_of(&design),
+                kerning: font
+                    .kerning_blend_at_source(source.id())
+                    .unwrap_or_default(),
+            }
         }
     }
 

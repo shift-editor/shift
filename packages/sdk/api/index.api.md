@@ -546,6 +546,7 @@ export class Font {
     layerIdForPoint(pointId: PointId): LayerId | null;
     layerIdForSegment(segmentId: SegmentId): LayerId | null;
     layerState(layerId: LayerId): GlyphLayerState | null;
+    layoutText(text: LayoutRequest, location: ExternalAxisLocation, sourceId: SourceId | null): TextLayout$1 | null;
     // (undocumented)
     get loaded(): boolean;
     get loadedCell(): Signal<boolean>;

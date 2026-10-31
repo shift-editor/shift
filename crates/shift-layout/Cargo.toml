@@ -6,15 +6,21 @@ description = "Lays out text over the live font: shaping, generated positioning,
 license.workspace = true
 
 [features]
+default = ["layout"]
+# Laying out: shaping (shift-shape, HarfRust), the shaper font
+# (shift-shaper-font: fea-rs and fontbe) and positioning. Without it the
+# crate holds only the request and result types, for the editor's generated
+# side.
+layout = ["dep:shift-shape", "dep:shift-shaper-font", "dep:unicode-segmentation"]
 # A number packing for the types the editor's WebAssembly calls carry.
 pack = ["dep:pack", "shift-font/pack"]
 
 [dependencies]
 pack = { workspace = true, optional = true }
 shift-font = { workspace = true }
-shift-shape = { workspace = true }
-shift-shaper-font = { workspace = true }
-unicode-segmentation = "1.12"
+shift-shape = { workspace = true, optional = true }
+shift-shaper-font = { workspace = true, optional = true }
+unicode-segmentation = { version = "1.12", optional = true }
 
 [dev-dependencies]
 shift-backends = { workspace = true }

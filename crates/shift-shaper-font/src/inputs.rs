@@ -143,6 +143,11 @@ impl CompiledGlyphs {
         }
     }
 
+    /// The `GDEF` class the compile gave `glyph`.
+    pub(crate) fn class(&self, glyph: GlyphId) -> Option<GlyphClassDef> {
+        self.glyphs.get(&glyph)?.1
+    }
+
     /// How `next` differs, or `None` when it compiles differently: a glyph
     /// the feature source names is added, removed or renamed (any glyph, for
     /// a source that names glyphs by order), a glyph's class changes, a

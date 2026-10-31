@@ -46,9 +46,11 @@ import type {
   InterpolatedMetrics,
   MissingKerningOrigin,
   FontChangeFlag,
+  LayoutRequest,
   ParagraphRequest,
   ShapedParagraph,
   SourceSetWeights,
+  TextLayout as LaidOutText,
 } from "@shift/wasm/protocol";
 
 export { svgPaths } from "@shift/wasm/engine";
@@ -335,6 +337,25 @@ export class EngineSession {
   /** The change flags whose change may change what {@link shapeParagraphs} returns. */
   shapingInputs(): readonly FontChangeFlag[] {
     return this.#reads.shapingInputs();
+  }
+
+  /**
+   * Lays text out over the session's font, unsaved edits included: shaping,
+   * kerning, marks, cursive joins, lines, bidi order, carets and boxes, all
+   * in Rust (`shift_layout::TextLayout`), at a source or a design location.
+   */
+  layoutText(text: LayoutRequest, place: KerningPlace): LaidOutText {
+    const source =
+      place.kind === "source"
+        ? this.#numbers([place.sourceId], this.#sourceNumbers, engineSourceNumbers)[0]
+        : null;
+    const location = place.kind === "location" ? place.location : [];
+    return this.#reads.layoutText({ text, location, source: source ?? null });
+  }
+
+  /** The change flags whose change may change what {@link layoutText} returns. */
+  layoutInputs(): readonly FontChangeFlag[] {
+    return this.#reads.layoutInputs();
   }
 
   /**

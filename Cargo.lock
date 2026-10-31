@@ -2643,6 +2643,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "shift-engine",
  "shift-font",
+ "shift-layout",
  "shift-shape",
  "shift-shaper-font",
  "shift-wire",

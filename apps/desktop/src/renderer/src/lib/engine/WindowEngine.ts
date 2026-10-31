@@ -24,8 +24,10 @@ import {
 import {
   FontChangeFlagSchema,
   type FontChangeFlag,
+  type LayoutRequest,
   type ParagraphRequest,
   type ShapedParagraph,
+  type TextLayout as LaidOutText,
 } from "@shift/wasm/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
 import type { EngineVariation, FontEngine, KerningPlace } from "@shift/editor/types";
@@ -101,6 +103,11 @@ export class WindowEngine implements FontEngine {
   shapingInputs(): readonly FontChangeFlag[] {
     // Before a session opens, any flag: opening changes them all.
     return this.#opened?.session.shapingInputs() ?? CHANGE_FLAGS;
+  }
+
+  layoutInputs(): readonly FontChangeFlag[] {
+    // Before a session opens, any flag: opening changes them all.
+    return this.#opened?.session.layoutInputs() ?? CHANGE_FLAGS;
   }
 
   get variationCell(): Signal<EngineVariation | null> {
@@ -322,6 +329,10 @@ export class WindowEngine implements FontEngine {
 
   shapeParagraphs(paragraphs: readonly ParagraphRequest[]): readonly ShapedParagraph[] | null {
     return this.#opened?.session.shapeParagraphs(paragraphs) ?? null;
+  }
+
+  layoutText(text: LayoutRequest, place: KerningPlace): LaidOutText | null {
+    return this.#opened?.session.layoutText(text, place) ?? null;
   }
 
   newAnchorName(layerIds: readonly LayerId[]): string {

@@ -61,7 +61,7 @@ impl FontReplacement {
     ///
     /// Returns the font's error when its axis-mapping bases cannot be built.
     pub fn changed_by(font: &Font, impact: FontChangeImpact) -> CoreResult<Option<Self>> {
-        if impact.is_empty() {
+        if impact.difference(FontChangeImpact::LAYERS).is_empty() {
             return Ok(None);
         }
         let changed = ChangedScopes { font, impact };

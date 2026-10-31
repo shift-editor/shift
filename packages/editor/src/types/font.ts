@@ -31,7 +31,13 @@ import type {
   MissingKerningOrigin,
   SourceSetWeights,
 } from "../lib/wasm/engine";
-import type { FontChangeFlag, ParagraphRequest, ShapedParagraph } from "@shift/wasm/protocol";
+import type {
+  FontChangeFlag,
+  LayoutRequest,
+  ParagraphRequest,
+  ShapedParagraph,
+  TextLayout as LaidOutText,
+} from "@shift/wasm/protocol";
 import type { PendingEditId } from "./editing";
 import type { WorkspaceEditListener } from "./history";
 import type { GlyphReader } from "./glyph";
@@ -102,6 +108,8 @@ export interface FontEngine {
   revision(flag: FontChangeFlag): Signal<number>;
   /** The flags whose change may change what {@link shapeParagraphs} returns. */
   shapingInputs(): readonly FontChangeFlag[];
+  /** The flags whose change may change what {@link layoutText} returns. */
+  layoutInputs(): readonly FontChangeFlag[];
 
   /**
    * Reads the kerning between glyph pairs at one place, in one call.
@@ -195,6 +203,17 @@ export interface FontEngine {
    * open.
    */
   shapeParagraphs(paragraphs: readonly ParagraphRequest[]): readonly ShapedParagraph[] | null;
+
+  /**
+   * Lays text out over the engine's font, unsaved edits included: shaped
+   * with its shaper, positioned with live kerning, marks and cursive joins,
+   * broken into lines and given caret stops, at a source or a design
+   * location. Text that cannot be shaped is laid out as typed, with the
+   * reason.
+   *
+   * @returns null only while the engine is not open.
+   */
+  layoutText(text: LayoutRequest, place: KerningPlace): LaidOutText | null;
 }
 
 /**
