@@ -384,6 +384,7 @@ jobs:
           # .turbo/runs is a hidden path, which upload-artifact skips by default.
           include-hidden-files: true
           if-no-files-found: ignore
+          retention-days: 90
 
       - name: Save Typecheck Turbo results
         if: github.ref == 'refs/heads/main' && steps.typecheck-turbo-cache.outputs.cache-hit != 'true'
@@ -478,6 +479,7 @@ jobs:
           # .turbo/runs is a hidden path, which upload-artifact skips by default.
           include-hidden-files: true
           if-no-files-found: ignore
+          retention-days: 90
 
       - name: Save native Turbo build
         if: github.ref == 'refs/heads/main' && steps.native-turbo-cache.outputs.cache-hit != 'true'
@@ -738,6 +740,7 @@ jobs:
           # .turbo/runs is a hidden path, which upload-artifact skips by default.
           include-hidden-files: true
           if-no-files-found: ignore
+          retention-days: 90
 
   # ---------------------------------------------------------------------------
   # Required end-to-end correctness
@@ -1123,7 +1126,8 @@ jobs:
         with:
           name: playwright-report-${{ github.run_id }}
           path: playwright-report/
-          retention-days: 14
+          # results.json is the E2E history the CI dashboard reads; keep a quarter of it.
+          retention-days: 90
 
   # ---------------------------------------------------------------------------
   # Gate: all required checks must pass
