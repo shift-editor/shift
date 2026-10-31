@@ -830,6 +830,33 @@ mod tests {
     }
 
     #[derive(Clone, Debug, PartialEq, Pack)]
+    struct Labelled {
+        x: f64,
+        #[pack(skip)]
+        label: String,
+    }
+
+    #[test]
+    fn a_skipped_field_stays_behind_and_reads_as_its_default() {
+        let mut names = Table::default();
+        let labelled = Labelled {
+            x: 2.0,
+            label: "kept here".into(),
+        };
+
+        let encoded = encode(&mut names, &labelled);
+
+        assert_eq!(encoded, [2.0]);
+        assert_eq!(
+            decode::<Labelled>(&names, &encoded),
+            Labelled {
+                x: 2.0,
+                label: String::new()
+            }
+        );
+    }
+
+    #[derive(Clone, Debug, PartialEq, Pack)]
     struct Width(f64);
 
     #[derive(Clone, Debug, PartialEq, Pack)]

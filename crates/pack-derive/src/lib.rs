@@ -37,6 +37,9 @@ mod fragments;
 /// TypeScript reads it as a field named after the variant, as in
 /// `{ kind: "movePoints", movePoints: MovePoints }`.
 ///
+/// `#[pack(skip)]` leaves a struct's field behind: it does not cross, and
+/// reads as its type's default.
+///
 /// A tuple struct of one field (`struct Name(Inner)`), or a struct of one
 /// named field marked `#[pack(transparent)]`, crosses as that field alone,
 /// and TypeScript reads it as the field's type.
@@ -221,6 +224,7 @@ fn packed_fields(
     path: Option<&proc_macro2::TokenStream>,
 ) -> syn::Result<Vec<PackedField>> {
     let mut packed = Vec::new();
+    let mut skipped = Vec::new();
     for field in &fields.named {
         let Some(ident) = &field.ident else { continue };
         let ty = &field.ty;
@@ -229,6 +233,16 @@ fn packed_fields(
             None => quote! { #ident },
         };
         let options = FieldOptions::of(&field.attrs)?;
+        if options.skip {
+            if path.is_none() {
+                return Err(Error::new_spanned(
+                    field,
+                    "`skip` leaves out a struct's field, not a variant's",
+                ));
+            }
+            skipped.push(quote! { #ident: ::std::default::Default::default() });
+            continue;
+        }
         packed.push(PackedField {
             read: quote! { #ident: <#ty as ::pack::Pack>::read(read) },
             write: quote! { ::pack::Pack::write(#value, write); },
@@ -238,6 +252,19 @@ fn packed_fields(
                 "type": options.describe(field, type_of(ty)?)?,
             }),
         });
+    }
+    // A skipped field reads as its default, after the fields that cross.
+    if skipped.is_empty() {
+        return Ok(packed);
+    }
+    if let Some(last) = packed.last_mut() {
+        let read = &last.read;
+        last.read = quote! { #read, #(#skipped),* };
+    } else {
+        return Err(Error::new_spanned(
+            &fields.named,
+            "a packed struct keeps a field that crosses",
+        ));
     }
     Ok(packed)
 }
@@ -719,6 +746,9 @@ struct FieldOptions {
     id: Option<String>,
     /// Whether the field's `Vec<f64>` is typed as a `Float64Array`.
     numbers: bool,
+    /// Whether the field stays behind: it does not cross, and reads as its
+    /// type's default.
+    skip: bool,
 }
 
 impl FieldOptions {
@@ -732,8 +762,12 @@ impl FieldOptions {
                     options.id = Some(meta.value()?.parse::<LitStr>()?.value());
                 } else if meta.path.is_ident("numbers") {
                     options.numbers = true;
+                } else if meta.path.is_ident("skip") {
+                    options.skip = true;
                 } else {
-                    return Err(meta.error("expected `rename = \"…\"`, `id = \"…\"` or `numbers`"));
+                    return Err(
+                        meta.error("expected `rename = \"…\"`, `id = \"…\"`, `numbers` or `skip`")
+                    );
                 }
                 Ok(())
             })?;
