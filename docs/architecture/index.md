@@ -82,7 +82,7 @@ These modules have stricter change rules. Changes affect multiple layers and req
 
 - **`@shift/editor`** (`packages/editor/`) — browser-safe font model, editor, tools, and rendering runtime. It must not import Electron, native bridge modules, desktop host modules, persistence adapters, or its own package name. Internal modules use relative imports; consumers use the explicit root, clipboard, model, rendering, signals, testing, text, tools, transform, types, and variation exports.
 - **`@shift/types/bridge`** (`packages/types/src/bridge/`) — generated bridge DTO facade sourced from `crates/shift-bridge/index.d.ts`.
-- **`shared/workspace/protocol.ts`** — typed shell and renderer/utility session lanes. Changes affect main, utility, and renderer processes.
+- **`shared/workspace/lanes.ts`** — the shell (`WorkspaceShell`) and window/utility (`WorkspaceSync`) lane interfaces, served by `serve` and called through `client` from `shared/workspace/remote.ts`; lane events and port-carrying stream calls stay in `shared/workspace/protocol.ts`. Changes affect main, utility, and renderer processes.
 - **`WorkspaceHost`** (`apps/desktop/src/utility/workspace/WorkspaceHost.ts`) — utility-process owner of the native bridge.
 - **`FontSessionClient`** (`apps/desktop/src/renderer/src/lib/workspace/FontSessionClient.ts`) — renderer owner of the typed session connection.
 - **Browser editor check** (`apps/desktop/vite.browser.config.ts`) — build-only canary for `@shift/editor` plus the current React canvas shell. It is not a published embedding API.

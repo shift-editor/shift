@@ -1,6 +1,6 @@
 import type { ShiftBridge } from "@shift/bridge";
 import fs from "node:fs";
-import type { WorkspaceDocumentIdentity } from "../../shared/workspace/protocol";
+import type { WorkspaceDocumentIdentity } from "../../shared/workspace/lanes";
 import type { DocumentStorage } from "./DocumentStorage";
 import {
   DocumentAddress,

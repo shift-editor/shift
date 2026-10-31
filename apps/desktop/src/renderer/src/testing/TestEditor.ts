@@ -75,7 +75,7 @@ import type {
   SourceSelectionMode,
   TextRunNode,
 } from "@shift/editor/types";
-import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/protocol";
+import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/lanes";
 import type { GlyphFixture, PointNames } from "./fixtures";
 import type {
   AuthoredAnchor,

@@ -1,4 +1,4 @@
-import type { Specimen } from "./workspace/protocol";
+import type { Specimen } from "./workspace/lanes";
 
 /** One file Shift has opened, as the launcher and File → Open Recent show it. */
 export type RecentDocument = {

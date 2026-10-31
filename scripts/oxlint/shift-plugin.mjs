@@ -41,7 +41,7 @@ function checkParam(context, node) {
 const GLYPH_SNAPSHOT_ALLOWED = [
   "bridge/",
   "shared/bridge/",
-  "shared/workspace/protocol.ts",
+  "shared/workspace/lanes.ts",
   "utility/workspace/WorkspaceHost.ts",
   "renderer/src/types/glyph.ts",
   "renderer/src/lib/model/",

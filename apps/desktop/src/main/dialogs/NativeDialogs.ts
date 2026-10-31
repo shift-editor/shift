@@ -1,4 +1,4 @@
-import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
+import type { WorkspaceDocumentState } from "../../shared/workspace/lanes";
 import type { CloseReason, DirtyDocumentChoice, DocumentCrashChoice } from "../document/types";
 import type { Window } from "../windows/Window";
 
