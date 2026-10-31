@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { useSignalState } from "@shift/editor/signals";
 import { KerningGroupField } from "@/components/kerning/KerningGroupField";
 import { KerningGroupsPanel } from "@/components/kerning/groups/KerningGroupsPanel";
+import { KerningGroupsTarget } from "@/lib/kerning/KerningGroupsTarget";
 import { useEditor } from "@/workspace/WorkspaceContext";
 
 /**
@@ -16,22 +17,20 @@ import { useEditor } from "@/workspace/WorkspaceContext";
  */
 export const GlyphKerningGroups = () => {
   const editor = useEditor();
-  const scene = useSignalState(editor.scene.cell);
+  const node = useSignalState(editor.scene.onlyCell("glyph"));
   // The groups panel opens beside these rows; they span the sidebar so it sits flush against it.
   const rowsRef = useRef<HTMLDivElement>(null);
-  const glyphNodes = scene.nodes.filter((node) => node.kind === "glyph");
-  const node = glyphNodes.length === 1 ? glyphNodes[0] : undefined;
-  if (node?.kind !== "glyph") return null;
+  if (!node) return null;
 
   const glyphId = node.glyphId;
-  const glyphName = editor.font.entryForId(glyphId)?.name ?? glyphId;
+  const glyphName = editor.font.glyphName(glyphId) ?? glyphId;
   const disabled = editor.sessionMode !== "workspace";
 
   return (
     <div ref={rowsRef} className="-mx-3 mt-1 flex flex-col gap-2 px-3">
       <div className="flex h-6 items-center justify-between">
         <h3 className="text-ui font-medium text-primary">Kerning</h3>
-        <KerningGroupsPanel target={{ kind: "glyph", glyphId }} anchorRef={rowsRef} />
+        <KerningGroupsPanel target={KerningGroupsTarget.glyph(glyphId)} anchorRef={rowsRef} />
       </div>
       <div className="flex gap-2">
         {/* A glyph's left edge kerns as the second of a pair; its right edge as the first. */}
