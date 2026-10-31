@@ -12,6 +12,7 @@ import {
   applicationMenuSummary,
   clickApplicationMenuItem,
   clipboardText,
+  convertPreview,
   openFontFromLauncher,
   sessionMode,
   writeClipboardText,
@@ -551,7 +552,9 @@ convertiblePreviewTest(
       .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "edit.copy"))
       .toBe(false);
 
-    await clickApplicationMenuItem(workspacePage, electronApp, "file.save");
+    await convertPreview(workspacePage, () =>
+      clickApplicationMenuItem(workspacePage, electronApp, "file.save"),
+    );
     await waitForWorkspaceReady(workspacePage);
     await expect.poll(() => sessionMode(workspacePage, electronApp)).toBe("workspace");
     expect(fs.existsSync(saveShiftPath)).toBe(true);
