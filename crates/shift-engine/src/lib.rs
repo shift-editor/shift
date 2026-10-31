@@ -5,8 +5,9 @@
 //! shift-font. Before an edit it works out what the edit reads, loads what is
 //! missing, and then applies, so an edit never waits on anything asynchronous.
 //! The native workspace reads from its store and the renderer reads through a
-//! native reader in its preload; both run this same code. It depends only on
-//! shift-font, so it builds for WebAssembly.
+//! native reader in its preload, over the [`StoreReader`] request protocol;
+//! both run this same code. It depends only on shift-font and pack, so it
+//! builds for WebAssembly.
 
 // Library code returns errors instead of panicking: a panic kills the
 // WebAssembly engine. Tests may unwrap (clippy.toml).
@@ -16,8 +17,10 @@ mod history;
 mod residency;
 mod session;
 mod source;
+mod store_reader;
 
 pub use history::EditHistory;
 pub use residency::LayerResidency;
 pub use session::{ApplyError, EngineError, EngineSession, LoadError, StagedEdit};
 pub use source::LayerSource;
+pub use store_reader::{StoreReadError, StoreReader, StoreReaderClient, store_reader_request};

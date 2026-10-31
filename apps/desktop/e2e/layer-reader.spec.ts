@@ -6,5 +6,5 @@ test("the window reads the open document's layers through its preload", async ({
 
   expect(read.kind).toBe("document");
   expect(read.bytes).toContain(read.layerId);
-  expect(read.closure).toContain(read.glyphId);
+  expect(read.bases).not.toContain(read.glyphId);
 });

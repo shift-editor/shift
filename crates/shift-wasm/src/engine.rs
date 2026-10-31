@@ -1,16 +1,22 @@
 //! The editing engine: an [`EngineSession`] over the open font that applies
 //! the editor's intents synchronously, in the frame they are made.
 //!
-//! Layers load on demand through an [`EngineLayerSource`] the editor passes
-//! in, which reads the store synchronously. Intents arrive in the same shape
+//! Layers load on demand from the store, asked through shift-engine's
+//! [`StoreReader`] request protocol: the session encodes each request and
+//! calls the one function the editor passes in, which forwards it unchanged
+//! to the preload's native reader and returns its reply. Intents arrive in
+//! the same shape
 //! the native workspace takes (`shift_wire::intents`), and each touched layer
 //! comes back in the same shape as the workspace's echo.
 
 use std::cell::RefCell;
 
-use js_sys::{Array, Float64Array, Object, Reflect, Uint8Array};
+use js_sys::{Array, Float64Array, Function, Object, Reflect, Uint8Array};
+use pack::{CarryingNames, Packed};
 use serde::Serialize;
-use shift_engine::{ApplyError, EditHistory, EngineSession, LayerSource};
+use shift_engine::{
+    ApplyError, EditHistory, EngineSession, LayerSource, StoreReadError, StoreReaderClient,
+};
 use shift_font::{
     AppliedIntents, Contour, Font, FontChangeImpact, FontIntent, FontIntentSet, GlyphId,
     GlyphLayer, LayerId, SetPositions, TouchedLayer,
@@ -35,16 +41,21 @@ import type {
 } from "@shift/types";
 
 /**
- * Where an engine session reads layers it has not loaded: the saved and
- * persisted store, read synchronously. It must not call back into the engine.
+ * Sends one request of shift-engine's `StoreReader` protocol, encoded by the
+ * engine, to the store's reader unchanged, and returns the reader's reply. The
+ * engine calls it within an edit, synchronously; it must not call back into
+ * the engine.
  */
-export interface EngineLayerSource {
-  /** The content of `layerIds` as one MessagePack array of named-field layers. */
-  load(layerIds: string[]): Uint8Array;
-  /** `glyphIds` plus every glyph their components use, transitively. */
-  componentClosure(glyphIds: string[]): string[];
-  /** Glyphs with a component of a glyph that owns one of `layerIds`. */
-  dependents(layerIds: string[]): string[];
+export type StoreRequest = (
+  method: number,
+  numbers: Float64Array,
+  blobs: Uint8Array[],
+) => StoreReply;
+
+/** A `StoreReader` reply, as the native reader returns it. */
+export interface StoreReply {
+  numbers: Float64Array;
+  blobs: Uint8Array[];
 }
 
 /** What one edit did: the layers it touched and the font-level records it changed. */
@@ -103,36 +114,20 @@ export interface EngineLayer {
 }
 "#;
 
-#[wasm_bindgen]
-extern "C" {
-    /// The editor's synchronous reader of the store.
-    #[wasm_bindgen(typescript_type = "EngineLayerSource")]
-    pub type EngineLayerSource;
-
-    #[wasm_bindgen(method, catch)]
-    fn load(this: &EngineLayerSource, layer_ids: Array) -> Result<Uint8Array, JsValue>;
-
-    #[wasm_bindgen(method, catch, js_name = componentClosure)]
-    fn component_closure(this: &EngineLayerSource, glyph_ids: Array) -> Result<Array, JsValue>;
-
-    #[wasm_bindgen(method, catch)]
-    fn dependents(this: &EngineLayerSource, layer_ids: Array) -> Result<Array, JsValue>;
-}
-
-/// Why the editor's source failed to answer.
+/// Why the store did not answer.
 #[derive(Debug, thiserror::Error)]
 enum HostError {
-    #[error("the layer source threw: {0}")]
+    #[error("the store request threw: {0}")]
     Threw(String),
 
-    #[error("the layer source returned layers that do not decode: {0}")]
-    Decode(#[from] rmp_serde::decode::Error),
+    #[error("the store request's reply has {0}")]
+    NotAReply(&'static str),
 
-    #[error("the layer source returned an invalid {kind}: {value}")]
-    InvalidId {
-        kind: intents::IdKind,
-        value: String,
-    },
+    #[error(transparent)]
+    Store(#[from] StoreReadError),
+
+    #[error("the store returned layers that do not decode: {0}")]
+    Decode(#[from] rmp_serde::decode::Error),
 }
 
 impl From<JsValue> for HostError {
@@ -141,58 +136,91 @@ impl From<JsValue> for HostError {
     }
 }
 
-impl From<intents::WireError> for HostError {
-    fn from(error: intents::WireError) -> Self {
-        match error {
-            intents::WireError::InvalidId { kind, value } => Self::InvalidId { kind, value },
-            other => Self::Threw(other.to_string()),
-        }
-    }
+/// A `StoreReply`'s keys, made once: each `JsValue::from_str` decodes its text
+/// into a new JavaScript string.
+struct ReplyKeys {
+    numbers: JsValue,
+    blobs: JsValue,
 }
 
-/// The editor's source as the session's [`LayerSource`].
-struct HostLayers<'a>(&'a EngineLayerSource);
+thread_local! {
+    static REPLY_KEYS: ReplyKeys = ReplyKeys {
+        numbers: JsValue::from_str("numbers"),
+        blobs: JsValue::from_str("blobs"),
+    };
+}
+
+/// `value` as a `T`, or [`HostError::NotAReply`] saying it is `what`.
+fn cast<T: JsCast>(value: JsValue, what: &'static str) -> Result<T, HostError> {
+    value.dyn_into().map_err(|_| HostError::NotAReply(what))
+}
+
+/// Sends one encoded request through the editor's `StoreRequest` and reads
+/// its reply into this module's memory, the one copy each blob makes.
+fn send(request: &Function, method: u32, message: Packed) -> Result<Packed, HostError> {
+    let blobs: Array = message
+        .blobs
+        .iter()
+        .map(|blob| JsValue::from(Uint8Array::from(&blob[..])))
+        .collect();
+    let reply = request.call3(
+        &JsValue::NULL,
+        &JsValue::from(method),
+        &Float64Array::from(&message.numbers[..]),
+        &blobs,
+    )?;
+    let (numbers, blobs) = REPLY_KEYS.with(|keys| {
+        Ok::<_, HostError>((
+            Reflect::get(&reply, &keys.numbers)?,
+            Reflect::get(&reply, &keys.blobs)?,
+        ))
+    })?;
+    let numbers = cast::<Float64Array>(numbers, "numbers that are not a Float64Array")?.to_vec();
+    let blobs = cast::<Array>(blobs, "blobs that are not an array")?
+        .iter()
+        .map(|blob| Ok(cast::<Uint8Array>(blob, "a blob that is not a Uint8Array")?.to_vec()))
+        .collect::<Result<_, HostError>>()?;
+    Ok(Packed { numbers, blobs })
+}
+
+/// The editor's `StoreRequest` as the session's [`LayerSource`], through a
+/// [`StoreReaderClient`].
+struct HostLayers<'a>(&'a Function);
+
+impl HostLayers<'_> {
+    fn client(
+        &self,
+    ) -> StoreReaderClient<CarryingNames<impl Fn(u32, Packed) -> Result<Packed, HostError> + '_>>
+    {
+        StoreReaderClient(CarryingNames(|method, message| {
+            send(self.0, method, message)
+        }))
+    }
+}
 
 impl LayerSource for HostLayers<'_> {
     type Error = HostError;
 
     fn load_layers(&mut self, layer_ids: &[LayerId]) -> Result<Vec<GlyphLayer>, HostError> {
-        let bytes = self.0.load(texts(layer_ids))?;
-        Ok(rmp_serde::from_slice(&bytes.to_vec())?)
+        let bytes = self.client().layers(layer_ids.to_vec())??;
+        Ok(rmp_serde::from_slice(&bytes.0)?)
     }
 
-    fn component_closure(&mut self, roots: &[GlyphId]) -> Result<Vec<GlyphId>, HostError> {
-        ids(&self.0.component_closure(texts(roots))?)
+    fn bases_of(&mut self, glyph_ids: &[GlyphId]) -> Result<Vec<GlyphId>, HostError> {
+        Ok(self.client().bases_of(glyph_ids.to_vec())??)
     }
 
-    fn dependents(&mut self, layer_ids: &[LayerId]) -> Result<Vec<GlyphId>, HostError> {
-        ids(&self.0.dependents(texts(layer_ids))?)
+    fn composites_of(&mut self, glyph_ids: &[GlyphId]) -> Result<Vec<GlyphId>, HostError> {
+        Ok(self.client().composites_of(glyph_ids.to_vec())??)
     }
 }
 
-/// Ids as the JavaScript strings the source takes.
-fn texts<T: ToString>(values: &[T]) -> Array {
-    values
-        .iter()
-        .map(|value| JsValue::from_str(&value.to_string()))
-        .collect()
-}
-
-/// Glyph ids from the JavaScript strings the source returns.
-fn ids(values: &Array) -> Result<Vec<GlyphId>, HostError> {
-    let texts: Vec<String> = values
-        .iter()
-        .filter_map(|value| value.as_string())
-        .collect();
-    Ok(intents::parse_id_list::<GlyphId>(&texts)?)
-}
-
-/// An open session, the source it reads from, its undo history, the
+/// An open session, the store request it reads through, its undo history, the
 /// session as it stood when the open edit began, to go back to if it is
 /// cancelled, and the ids the editor's reads name by number.
 pub(crate) struct Engine {
     pub(crate) session: EngineSession,
-    source: EngineLayerSource,
+    source: Function,
     history: EditHistory,
     before_edit: Option<EngineSession>,
     pub(crate) ids: InternedIds,
@@ -227,13 +255,17 @@ pub(crate) fn with_engine<T>(
 }
 
 /// Opens a session over a font directory, as named MessagePack from the
-/// store's reader, with every layer a placeholder. Returns its handle.
+/// store's reader, with every layer a placeholder; it loads layers through
+/// `source`, a `StoreRequest`. Returns its handle.
 ///
 /// # Errors
 ///
 /// Fails when `directory` does not decode to a font.
 #[wasm_bindgen(js_name = engineOpen)]
-pub fn engine_open(directory: &[u8], source: EngineLayerSource) -> Result<u32, JsError> {
+pub fn engine_open(
+    directory: &[u8],
+    #[wasm_bindgen(unchecked_param_type = "StoreRequest")] source: Function,
+) -> Result<u32, JsError> {
     let font: Font = rmp_serde::from_slice(directory)?;
     let session = EngineSession::open_directory(font);
     ENGINES.with_borrow_mut(|engines| {

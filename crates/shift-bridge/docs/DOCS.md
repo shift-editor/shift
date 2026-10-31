@@ -8,7 +8,7 @@ NAPI bindings that expose the Rust font engine to Node.js and Electron as a `Bri
 
 **Architecture Invariant:** The bridge does not own hidden edit sessions or durable font state directly. It owns an optional `FontWorkspace` and forwards mutation transactions into `shift-workspace`. **WHY:** Renderer selection state stays in TypeScript, transport stays in `shift-bridge`, and workspace/store synchronization has one Rust owner.
 
-**Architecture Invariant:** `LayerReader` only reads. It opens a store read-only through `shift-store`'s `StoreReader`, beside the utility process that writes it, and returns layers as one MessagePack array of named-field layers for the engine to decode. It never reads the whole directory: the window's engine opens from `ShiftBridge::encoded_directory`, which the workspace builds from the font it already holds (`EngineSession::directory`), so a window keeps no second native copy of the font. **WHY:** building the directory in the preload cost each CJK window about 220 MB of resident memory that never came back.
+**Architecture Invariant:** `LayerReader` only reads. It opens a store read-only through `shift-store`'s `StoreReader`, beside the utility process that writes it, and implements shift-engine's `StoreReader` request protocol over it: its one `request(method, numbers, blobs)` export answers what the window's engine encoded, returning layers as one MessagePack array of named-field layers (a `pack::Bytes` blob) and failures in the reply as a `StoreReadError`. It reads the request in place and copies the reply's blobs into JavaScript once (`BufferSlice::copy_from`): Electron's V8 sandbox refuses external buffers, so napi would copy them anyway, and an external buffer's finalizer costs more than copying a small reply. It never reads the whole directory: the window's engine opens from `ShiftBridge::encoded_directory`, which the workspace builds from the font it already holds (`EngineSession::directory`), so a window keeps no second native copy of the font. **WHY:** building the directory in the preload cost each CJK window about 220 MB of resident memory that never came back.
 
 **Architecture Invariant:** Mutation echoes select complete renderer projections from `FontChangeSet::impact()`. The bridge translates those domain impacts into transport fields; it does not reconstruct transitive font coupling by matching individual change variants.
 
@@ -38,7 +38,7 @@ crates/shift-bridge/
     config.rs    -- stateless config.toml and theme-file functions over shift-config, used by desktop main
     errors.rs    -- bridge error type and NAPI mapping
     input.rs     -- boundary parsing/adaptation helpers
-    layer_reader.rs -- `LayerReader` NAPI class: read-only layers, component closure and dependents for the renderer's preload
+    layer_reader.rs -- `LayerReader` NAPI class: shift-engine's `StoreReader` (layers, bases, composites) over a read-only store, for the renderer's preload
   scripts/
     profile-slug-atlas.mjs -- release source/native-document page and stream profiler
   Cargo.toml     -- cdylib crate; depends on shift-font, shift-wire, shift-backends, napi

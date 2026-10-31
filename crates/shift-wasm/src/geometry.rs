@@ -5,8 +5,6 @@ use pack::Pack;
 use shift_font::{DecomposedTransform, PointType, SegmentIndexIter, SegmentIndices, Transform};
 use wasm_bindgen::prelude::wasm_bindgen;
 
-use crate::names::with_names;
-
 /// A contour's segments and bounds, and a component's placement, as
 /// shift-font computes them.
 #[pack::interface]
@@ -38,8 +36,16 @@ impl Geometry for GeometryRules {
 
 /// Runs one [`Geometry`] method for the editor's generated `Geometry` class.
 #[wasm_bindgen(js_name = geometryRequest)]
-pub fn request(method: u32, input: &[f64]) -> Vec<f64> {
-    with_names(|names| geometry_request(&GeometryRules, method, input, names))
+pub fn request(
+    method: u32,
+    input: &[f64],
+    #[wasm_bindgen(unchecked_param_type = "readonly Uint8Array[] | undefined")] blobs: Option<
+        js_sys::Array,
+    >,
+) -> Vec<f64> {
+    crate::blobs::answer(blobs, |blobs, names| {
+        geometry_request(&GeometryRules, method, input, blobs, names)
+    })
 }
 
 /// The kind of curve a segment draws.

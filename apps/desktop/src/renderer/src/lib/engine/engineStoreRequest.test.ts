@@ -16,7 +16,7 @@ import {
 } from "@shift/types";
 import { loadEngine, type EngineSession } from "@shift/editor/model";
 import { layerReaderHost } from "../../../../preload/layerReaders";
-import { engineLayerSource } from "./engineLayerSource";
+import { engineStoreRequest } from "./engineStoreRequest";
 
 /**
  * The window's engine edits a real store through the preload's reader: the
@@ -71,7 +71,7 @@ describe("the window's engine edits from the store", () => {
       const { EngineSession } = await loadEngine();
       return EngineSession.open(
         bridge.encodedDirectory(),
-        engineLayerSource(layers, () => reader),
+        engineStoreRequest(layers, () => reader),
       );
     };
     engine = await openEngine();

@@ -85,7 +85,6 @@ mod exports {
 
     use super::{EditablePair, EngineReads, InterpolatedMetrics, engine_reads_request};
     use crate::engine::{Engine, with_engine};
-    use crate::names::with_names;
     use crate::variation::to_location;
 
     /// The ids a session's reads name by number, each interned once.
@@ -176,10 +175,17 @@ mod exports {
     /// Runs one [`EngineReads`] method on the session `handle`. An unknown
     /// handle replies with nothing, which the editor reads as null or empty.
     #[wasm_bindgen(js_name = engineReadsRequest)]
-    pub fn request(handle: u32, method: u32, input: &[f64]) -> Vec<f64> {
+    pub fn request(
+        handle: u32,
+        method: u32,
+        input: &[f64],
+        #[wasm_bindgen(unchecked_param_type = "readonly Uint8Array[] | undefined")] blobs: Option<
+            js_sys::Array,
+        >,
+    ) -> Vec<f64> {
         with_engine(handle, |engine| {
-            Ok(with_names(|names| {
-                engine_reads_request(&*engine, method, input, names)
+            Ok(crate::blobs::answer(blobs, |blobs, names| {
+                engine_reads_request(&*engine, method, input, blobs, names)
             }))
         })
         .unwrap_or_default()

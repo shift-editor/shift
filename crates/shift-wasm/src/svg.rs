@@ -31,7 +31,6 @@ mod exports {
 
     use super::{SvgPathData, SvgPaths, svg_paths_request};
     use crate::geometry::ContourPoints;
-    use crate::names::with_names;
     use crate::numbers::whole;
 
     /// The parser [`SvgPaths`] calls.
@@ -48,8 +47,16 @@ mod exports {
     /// Runs one [`SvgPaths`] method for the editor's generated `SvgPaths`
     /// class.
     #[wasm_bindgen(js_name = svgPathsRequest)]
-    pub fn request(method: u32, input: &[f64]) -> Vec<f64> {
-        with_names(|names| svg_paths_request(&SvgPathParser, method, input, names))
+    pub fn request(
+        method: u32,
+        input: &[f64],
+        #[wasm_bindgen(unchecked_param_type = "readonly Uint8Array[] | undefined")] blobs: Option<
+            js_sys::Array,
+        >,
+    ) -> Vec<f64> {
+        crate::blobs::answer(blobs, |blobs, names| {
+            svg_paths_request(&SvgPathParser, method, input, blobs, names)
+        })
     }
 
     impl SvgPathData {

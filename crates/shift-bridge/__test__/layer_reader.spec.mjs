@@ -11,6 +11,56 @@ let counter = 0;
 const mintId = (prefix) => `${prefix}_reader${String(counter++).padStart(4, "0")}`;
 const text = (bytes) => new TextDecoder().decode(bytes);
 
+/** A names table as `pack::CarriedNames` writes it: each name's UTF-8 length as a little-endian u32, then its text. */
+function namesBlob(names) {
+  const parts = names.map((name) => new TextEncoder().encode(name));
+  const blob = new Uint8Array(parts.reduce((total, part) => total + 4 + part.length, 0));
+  const view = new DataView(blob.buffer);
+  let at = 0;
+  for (const part of parts) {
+    view.setUint32(at, part.length, true);
+    blob.set(part, at + 4);
+    at += 4 + part.length;
+  }
+  return blob;
+}
+
+function readNames(blob) {
+  const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
+  const names = [];
+  for (let at = 0; at < blob.length; ) {
+    const length = view.getUint32(at, true);
+    names.push(new TextDecoder().decode(blob.subarray(at + 4, at + 4 + length)));
+    at += 4 + length;
+  }
+  return names;
+}
+
+const METHODS = { layers: 0, basesOf: 1, compositesOf: 2 };
+
+/**
+ * Sends one StoreReader method with a list of ids, as shift-engine's
+ * StoreReaderClient encodes it, and splits the reply into its numbers, its
+ * blobs and the names it carries.
+ */
+function ask(reader, method, ids) {
+  const numbers = new Float64Array([ids.length, ...ids.map((_, index) => index)]);
+  const reply = reader.request(METHODS[method], numbers, [namesBlob(ids)]);
+  return {
+    numbers: [...reply.numbers],
+    blobs: reply.blobs.slice(0, -1),
+    names: readNames(reply.blobs.at(-1)),
+  };
+}
+
+/** A reply's list of ids after its ok flag. */
+function okIds(reply) {
+  const [ok, count, ...ids] = reply.numbers;
+  expect(ok).toBe(1);
+  expect(ids).toHaveLength(count);
+  return ids.map((id) => reply.names[id]);
+}
+
 describe("LayerReader", () => {
   let bridge;
   let tempDir;
@@ -55,46 +105,59 @@ describe("LayerReader", () => {
     return pointId;
   }
 
-  it("reads layers as the workspace writes them", () => {
+  it("answers a StoreReader request with layers as one blob", () => {
     const { layerId } = createGlyph("A");
     const contourId = mintId("contour");
     bridge.apply([{ kind: "addContour", addContour: { layerId, contourId, closed: false } }]);
-    const first = addPoint(layerId, contourId, 10);
+    const point = addPoint(layerId, contourId, 10);
 
     const reader = LayerReader.openWorkingStore(storePath);
-    const bytes = reader.loadLayers([layerId]);
+    const reply = ask(reader, "layers", [layerId]);
+
+    expect(reply.numbers).toEqual([1, 0]);
+    expect(reply.blobs).toHaveLength(1);
     // A MessagePack array of one named-field layer.
-    expect(bytes[0]).toBe(0x91);
-    expect(text(bytes)).toContain(layerId);
-    expect(text(bytes)).toContain(first);
+    expect(reply.blobs[0][0]).toBe(0x91);
+    expect(text(reply.blobs[0])).toContain(layerId);
+    expect(text(reply.blobs[0])).toContain(point);
 
     const second = addPoint(layerId, contourId, 20);
-    expect(text(reader.loadLayers([layerId]))).toContain(second);
+    expect(text(ask(reader, "layers", [layerId]).blobs[0])).toContain(second);
   });
 
-  it("answers which glyphs a composite uses and which composites use a glyph", () => {
+  it("answers bases without the roots and only direct composites", () => {
     const base = createGlyph("base");
-    const composite = createGlyph("composite");
-    bridge.apply([
-      {
-        kind: "addComponent",
-        addComponent: {
-          layerId: composite.layerId,
-          componentId: mintId("component"),
-          baseGlyphId: base.glyphId,
-        },
+    const middle = createGlyph("middle");
+    const top = createGlyph("top");
+    const use = (composite, glyph) => ({
+      kind: "addComponent",
+      addComponent: {
+        layerId: composite.layerId,
+        componentId: mintId("component"),
+        baseGlyphId: glyph.glyphId,
       },
-    ]);
-
+    });
+    bridge.apply([use(middle, base), use(top, middle)]);
     const reader = LayerReader.openWorkingStore(storePath);
-    expect(reader.componentClosure([composite.glyphId]).sort()).toEqual(
-      [base.glyphId, composite.glyphId].sort(),
+
+    expect(okIds(ask(reader, "basesOf", [top.glyphId])).sort()).toEqual(
+      [base.glyphId, middle.glyphId].sort(),
     );
-    expect(reader.dependents([base.layerId])).toEqual([composite.glyphId]);
+    expect(okIds(ask(reader, "compositesOf", [base.glyphId]))).toEqual([middle.glyphId]);
   });
 
-  it("rejects ids that are not layer ids", () => {
+  it("replies with the closed error once the reader is closed", () => {
     const reader = LayerReader.openWorkingStore(storePath);
-    expect(() => reader.loadLayers(["not an id"])).toThrow(/layer ID/);
+    reader.close();
+
+    expect(ask(reader, "basesOf", []).numbers).toEqual([0, 0]);
+  });
+
+  it("replies with the store's error for a layer it does not hold", () => {
+    const reply = ask(LayerReader.openWorkingStore(storePath), "layers", ["not a layer"]);
+
+    const [ok, kind, detail] = reply.numbers;
+    expect([ok, kind]).toEqual([0, 1]);
+    expect(reply.names[detail]).toMatch(/not a layer/);
   });
 });

@@ -24,7 +24,8 @@ import {
   type EngineEdit,
   type EngineKerningPair,
   type EngineLayer,
-  type EngineLayerSource,
+  type StoreRequest,
+  type StoreReply,
   type EngineStage,
   type MissingKerningOrigin,
 } from "@shift/wasm/engine";
@@ -44,7 +45,7 @@ const released = new FinalizationRegistry<number>(engineRelease);
  * @remarks
  * Loaded through `loadEngine` so this module, and the engine module it
  * imports, load only when a font opens for editing. Layers load on demand
- * through the `EngineLayerSource` it opens with. The module's copy is
+ * from the store, through the `StoreRequest` it opens with. The module's copy is
  * released by `dispose`, or when this object is collected.
  */
 export class EngineSession {
@@ -67,7 +68,7 @@ export class EngineSession {
    *
    * @throws When `directory` does not decode to a font.
    */
-  static open(directory: Uint8Array, source: EngineLayerSource): EngineSession {
+  static open(directory: Uint8Array, source: StoreRequest): EngineSession {
     return new EngineSession(engineOpen(directory, source));
   }
 
@@ -279,7 +280,8 @@ export type {
   EngineEdit,
   EngineKerningPair,
   EngineLayer,
-  EngineLayerSource,
+  StoreRequest,
+  StoreReply,
   EngineStage,
   InterpolatedMetrics,
   MissingKerningOrigin,

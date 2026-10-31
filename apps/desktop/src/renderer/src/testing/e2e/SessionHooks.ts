@@ -2,6 +2,7 @@ import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { CommandId } from "@shared/commands";
 import type { AppConfigState } from "@shared/config/config";
 import type { GlyphId, GlyphName } from "@shift/types";
+import { storeReader } from "@shift/wasm/store-reader";
 import type { FontSession } from "@/types/fontSession";
 
 /** One layer read through the preload's layer store, as the window reads the open document. */
@@ -9,7 +10,8 @@ export interface PreloadLayerRead {
   readonly kind: string;
   readonly layerId: string;
   readonly bytes: string;
-  readonly closure: readonly string[];
+  /** The glyphs the glyph's components use, transitively, not the glyph itself. */
+  readonly bases: readonly string[];
   readonly glyphId: GlyphId;
 }
 
@@ -73,7 +75,7 @@ export class SessionHooks {
 
   /**
    * Reads the first glyph that has a layer through the preload's layer store API: the store's
-   * kind, that layer's id, its decoded bytes, the glyph's component closure, and its id.
+   * kind, that layer's id, its decoded bytes, the glyphs its components use, and its id.
    */
   async firstLayerThroughPreload(): Promise<PreloadLayerRead> {
     const workspace = this.#session.workspace;
@@ -85,12 +87,15 @@ export class SessionHooks {
 
     const layers = this.#host.layers;
     const reader = layers.open(location);
+    const store = storeReader((method, numbers, blobs) =>
+      layers.request(reader, method, numbers, blobs),
+    );
     try {
       return {
         kind: location.kind,
         layerId,
-        bytes: new TextDecoder().decode(layers.load(reader, [layerId])),
-        closure: layers.componentClosure(reader, [record.id]),
+        bytes: new TextDecoder().decode(store.layers([layerId])),
+        bases: store.basesOf([record.id]),
         glyphId: record.id,
       };
     } finally {

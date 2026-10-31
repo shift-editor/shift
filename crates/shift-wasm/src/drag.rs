@@ -9,7 +9,6 @@ use shift_font::drag_rules::{DragContour, DragPoint, PointRef, PreparedDrag};
 use shift_font::kurbo::{Point, Vec2};
 use wasm_bindgen::prelude::wasm_bindgen;
 
-use crate::names::with_names;
 use crate::variation::Registry;
 
 thread_local! {
@@ -95,8 +94,16 @@ impl Drag for DragRules {
 
 /// Runs one [`Drag`] method for the editor's generated `Drag` class.
 #[wasm_bindgen(js_name = dragRequest)]
-pub fn request(method: u32, input: &[f64]) -> Vec<f64> {
-    with_names(|names| drag_request(&DragRules, method, input, names))
+pub fn request(
+    method: u32,
+    input: &[f64],
+    #[wasm_bindgen(unchecked_param_type = "readonly Uint8Array[] | undefined")] blobs: Option<
+        js_sys::Array,
+    >,
+) -> Vec<f64> {
+    crate::blobs::answer(blobs, |blobs, names| {
+        drag_request(&DragRules, method, input, blobs, names)
+    })
 }
 
 /// Forgets a prepared drag. Releasing an unknown handle does nothing.

@@ -331,8 +331,8 @@ export async function quitApp(
 
 /**
  * Reads the first glyph that has a layer through the preload's layer store API, as the window
- * reads the open document: the store's kind, that layer's id, its decoded bytes, the component
- * closure of the glyph, and the glyph's id.
+ * reads the open document: the store's kind, that layer's id, its decoded bytes, the glyphs its
+ * components use, and the glyph's id.
  */
 export async function readFirstLayerThroughPreload(page: Page): Promise<PreloadLayerRead> {
   return hooksOf(page).session.firstLayerThroughPreload();

@@ -726,15 +726,15 @@ impl LayerSource for StoreLayers<'_> {
         Ok(layers)
     }
 
-    fn component_closure(&mut self, roots: &[GlyphId]) -> Result<Vec<GlyphId>, Self::Error> {
+    fn bases_of(&mut self, glyph_ids: &[GlyphId]) -> Result<Vec<GlyphId>, Self::Error> {
         let started = Instant::now();
-        let closure = self.0.referenced_glyph_closure(roots.iter().copied())?;
+        let bases = self.0.bases_of(glyph_ids)?;
         profile_acquisition("component-closure", started);
-        Ok(closure)
+        Ok(bases)
     }
 
-    fn dependents(&mut self, layer_ids: &[LayerId]) -> Result<Vec<GlyphId>, Self::Error> {
-        self.0.dependent_glyph_ids_for_layers(layer_ids)
+    fn composites_of(&mut self, glyph_ids: &[GlyphId]) -> Result<Vec<GlyphId>, Self::Error> {
+        self.0.composites_of(glyph_ids)
     }
 }
 

@@ -16,17 +16,19 @@ pub trait LayerSource {
     /// Returns the source's error when a layer cannot be read.
     fn load_layers(&mut self, layer_ids: &[LayerId]) -> Result<Vec<GlyphLayer>, Self::Error>;
 
-    /// `roots` plus every glyph their components use, transitively.
+    /// Every glyph the components of `glyph_ids` use, transitively, other
+    /// than `glyph_ids` themselves.
     ///
     /// # Errors
     ///
     /// Returns the source's error when the component references cannot be read.
-    fn component_closure(&mut self, roots: &[GlyphId]) -> Result<Vec<GlyphId>, Self::Error>;
+    fn bases_of(&mut self, glyph_ids: &[GlyphId]) -> Result<Vec<GlyphId>, Self::Error>;
 
-    /// Glyphs with a component of a glyph that owns one of `layer_ids`.
+    /// Glyphs with a component whose base is one of `glyph_ids`, directly;
+    /// not the composites of those composites.
     ///
     /// # Errors
     ///
     /// Returns the source's error when the component references cannot be read.
-    fn dependents(&mut self, layer_ids: &[LayerId]) -> Result<Vec<GlyphId>, Self::Error>;
+    fn composites_of(&mut self, glyph_ids: &[GlyphId]) -> Result<Vec<GlyphId>, Self::Error>;
 }

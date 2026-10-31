@@ -15,8 +15,6 @@ use shift_font::{ComponentAlignment, DecomposedTransform, Transform};
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
 
-use crate::names::with_names;
-
 /// An anchor's role in mark positioning, as export reads its name.
 #[derive(Serialize, Tsify)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -128,8 +126,16 @@ impl Anchors for AnchorRules {
 
 /// Runs one [`Anchors`] method for the editor's generated `Anchors` class.
 #[wasm_bindgen(js_name = anchorsRequest)]
-pub fn request(method: u32, input: &[f64]) -> Vec<f64> {
-    with_names(|names| anchors_request(&AnchorRules, method, input, names))
+pub fn request(
+    method: u32,
+    input: &[f64],
+    #[wasm_bindgen(unchecked_param_type = "readonly Uint8Array[] | undefined")] blobs: Option<
+        js_sys::Array,
+    >,
+) -> Vec<f64> {
+    crate::blobs::answer(blobs, |blobs, names| {
+        anchors_request(&AnchorRules, method, input, blobs, names)
+    })
 }
 
 /// One component of a composite, as propagation reads it.

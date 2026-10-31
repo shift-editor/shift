@@ -99,8 +99,12 @@ impl LayerSource for Persisted {
             .collect())
     }
 
-    fn component_closure(&mut self, roots: &[GlyphId]) -> Result<Vec<GlyphId>, Infallible> {
-        let mut pending = roots.to_vec();
+    fn bases_of(&mut self, glyph_ids: &[GlyphId]) -> Result<Vec<GlyphId>, Infallible> {
+        let mut pending: Vec<GlyphId> = glyph_ids
+            .iter()
+            .filter_map(|glyph_id| self.0.glyph(*glyph_id))
+            .flat_map(|glyph| glyph.layers().values().flat_map(|layer| bases(layer)))
+            .collect();
         let mut closure = BTreeSet::new();
         while let Some(glyph_id) = pending.pop() {
             if !closure.insert(glyph_id) {
@@ -110,14 +114,14 @@ impl LayerSource for Persisted {
                 pending.extend(glyph.layers().values().flat_map(|layer| bases(layer)));
             }
         }
-        Ok(closure.into_iter().collect())
+        Ok(closure
+            .into_iter()
+            .filter(|glyph_id| !glyph_ids.contains(glyph_id))
+            .collect())
     }
 
-    fn dependents(&mut self, layer_ids: &[LayerId]) -> Result<Vec<GlyphId>, Infallible> {
-        let targets: BTreeSet<GlyphId> = layer_ids
-            .iter()
-            .filter_map(|layer_id| self.0.glyph_id_by_layer(*layer_id))
-            .collect();
+    fn composites_of(&mut self, glyph_ids: &[GlyphId]) -> Result<Vec<GlyphId>, Infallible> {
+        let targets: BTreeSet<GlyphId> = glyph_ids.iter().copied().collect();
         Ok(self
             .0
             .glyphs()

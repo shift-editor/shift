@@ -18,6 +18,7 @@ import {
   internName,
   nameOf,
   svgPathsRequest,
+  takeReplyBlobs,
 } from "./generated-engine/shift_wasm.js";
 import { EngineReads, SvgPaths } from "./generated-protocol";
 import { moduleNames } from "./names";
@@ -48,12 +49,16 @@ initSync({ module: await engineModule() });
 const names = moduleNames(internName, nameOf);
 
 /** Contours from SVG path data, as shift-font parses them. */
-export const svgPaths = new SvgPaths(syncTransport(svgPathsRequest, names));
+export const svgPaths = new SvgPaths(syncTransport(svgPathsRequest, names, takeReplyBlobs));
 
 /** What the editor reads from the engine session `handle`'s font. */
 export function engineReads(handle: number): EngineReads {
   return new EngineReads(
-    syncTransport((method, input) => engineReadsRequest(handle, method, input), names),
+    syncTransport(
+      (method, input, blobs) => engineReadsRequest(handle, method, input, blobs),
+      names,
+      takeReplyBlobs,
+    ),
   );
 }
 
@@ -83,7 +88,8 @@ export {
   type EngineLayer,
   type EngineStructure,
   type KeptContour,
-  type EngineLayerSource,
+  type StoreRequest,
+  type StoreReply,
   type EngineStage,
   type MissingKerningOrigin,
 } from "./generated-engine/shift_wasm.js";

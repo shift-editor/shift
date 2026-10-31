@@ -27,19 +27,14 @@ export function layerReaderHost(): LayerReaderHost {
     if (!found) throw new Error(`no layer reader ${handle}`);
     return found;
   };
-  // A native Buffer as a plain view the context bridge copies.
-  const plainView = (buffer: Buffer): Uint8Array =>
-    new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-
   return {
     open: (location) => {
       const handle = nextHandle++;
       readers.set(handle, openAt(location));
       return handle;
     },
-    load: (handle, layerIds) => plainView(reader(handle).loadLayers([...layerIds])),
-    componentClosure: (handle, glyphIds) => reader(handle).componentClosure([...glyphIds]),
-    dependents: (handle, layerIds) => reader(handle).dependents([...layerIds]),
+    request: (handle, method, numbers, blobs) =>
+      reader(handle).request(method, numbers, [...blobs]),
     close: (handle) => {
       // Release the files now: the workspace deletes them on Save As and close,
       // which Windows refuses while a reader still holds them open.
