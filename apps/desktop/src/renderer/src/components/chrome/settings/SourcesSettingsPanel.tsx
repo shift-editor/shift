@@ -298,7 +298,7 @@ const SourceNumberField = ({ label, value, onChange, onCommit }: SourceNumberFie
 
 interface OptionalSourceNumberFieldProps {
   label: string;
-  value: number | undefined;
+  value: number | null | undefined;
   onChange: (value: number | undefined) => void;
   onCommit: () => Promise<void>;
 }

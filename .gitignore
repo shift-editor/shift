@@ -136,4 +136,6 @@ packages/wasm/src/generated-protocol/
 packages/pack/src/.generated-*/
 # Generated before typecheck, tests and builds (generate:bridge-types); not committed.
 crates/shift-bridge/index.d.ts
+crates/shift-bridge/protocol.ts
 packages/types/src/bridge/generated.ts
+packages/types/src/bridge/protocol.ts

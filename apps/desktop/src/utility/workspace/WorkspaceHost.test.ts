@@ -346,10 +346,10 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
     fs.mkdirSync(path.dirname(recoveryPath), { recursive: true });
     try {
-      bridge.openDocument(documentPath, recoveryPath);
-      return bridge.getGlyphs().map((glyph) => glyph.name);
+      bridge.workspace.openDocument(documentPath, recoveryPath);
+      return bridge.workspace.getGlyphs().map((glyph) => glyph.name);
     } finally {
-      bridge.closeWorkspace();
+      bridge.workspace.closeWorkspace();
     }
   }
 
@@ -1275,9 +1275,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       intents: [{ kind: "setXAdvance", setXAdvance: { layerId, width: 642 } }],
     });
 
-    expect(applied.next).toBeUndefined();
+    expect(applied.next).toBeNull();
     expect(applied.layers[0].layerId).toBe(layerId);
-    expect(applied.layers[0].structure).toBeUndefined();
+    expect(applied.layers[0].structure).toBeNull();
     expect(applied.layers[0].values[0]).toBe(642);
   });
 
@@ -1332,7 +1332,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(structure?.contours[0].points.map((point) => point.id)).toEqual([p1, p2]);
     // Drawing changes no glyph record (its layers and component bases stay the
     // same), so the echo does not resend the directory.
-    expect(applied.next?.glyphChanges).toBeUndefined();
+    expect(applied.next?.glyphChanges ?? null).toBeNull();
     expect(created.next?.glyphChanges?.updated).toEqual([
       {
         id: glyphId,
@@ -1340,6 +1340,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
         unicodes: [65],
         layers: [{ id: layerId, sourceId: snapshot.sources[0].id }],
         componentBaseGlyphIds: [],
+        mark: false,
+        nonspacingMark: false,
+        ligature: null,
       },
     ]);
     expect(applied.dependents).toEqual([]);

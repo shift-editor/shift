@@ -114,8 +114,8 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     await stack.editCoordinator.settled();
 
     const compiled = createBridge();
-    compiled.openWorkspace(outputPath, join(outputRoot, "compiled.sqlite3"));
-    const unicodes = compiled.getGlyphs().flatMap((glyph) => glyph.unicodes);
+    compiled.workspace.openWorkspace(outputPath, join(outputRoot, "compiled.sqlite3"));
+    const unicodes = compiled.workspace.getGlyphs().flatMap((glyph) => glyph.unicodes);
     expect(unicodes).toEqual([65]);
   });
 

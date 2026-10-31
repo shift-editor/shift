@@ -100,8 +100,8 @@ export function suggestedSourceName(
 
     const range = axis.labels.find(
       (label) =>
-        label.minimum !== undefined &&
-        label.maximum !== undefined &&
+        label.minimum != null &&
+        label.maximum != null &&
         value >= label.minimum - LOCATION_TOLERANCE &&
         value <= label.maximum + LOCATION_TOLERANCE,
     );

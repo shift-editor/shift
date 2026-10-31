@@ -62,9 +62,9 @@ export type ShiftOptions = {
 };
 
 export interface CanonicalVariableFont {
-  axes: Axis[];
-  sources: Source[];
-  namedInstances: NamedInstance[];
+  axes: readonly Axis[];
+  sources: readonly Source[];
+  namedInstances: readonly NamedInstance[];
 }
 
 export interface ActiveGlyph {

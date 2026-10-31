@@ -9,6 +9,11 @@ import {
 } from "@shift/types";
 import { GlyphGeometry } from "./GlyphGeometry";
 
+/** `T` with every field and list writable, for a test that edits a copy in place. */
+type Writable<T> = T extends string | number | boolean
+  ? T
+  : { -readonly [K in keyof T]: Writable<T[K]> };
+
 function geometryWithOvershootingControl(): GlyphGeometry {
   const structure: GlyphStructure = {
     contours: [
@@ -42,7 +47,7 @@ describe("glyph metric bounds", () => {
 
 describe("glyph structure equality preserves every ordered metadata field", () => {
   let structure: GlyphStructure;
-  let copy: GlyphStructure;
+  let copy: Writable<GlyphStructure>;
 
   beforeEach(() => {
     structure = {
@@ -58,7 +63,12 @@ describe("glyph structure equality preserves every ordered metadata field", () =
       ],
       anchors: [{ id: asAnchorId("anchor"), name: "top" }],
       components: [
-        { id: asComponentId("component"), baseGlyphId: asGlyphId("base"), baseGlyphName: "A" },
+        {
+          id: asComponentId("component"),
+          baseGlyphId: asGlyphId("base"),
+          baseGlyphName: "A",
+          alignment: "unset",
+        },
       ],
     };
     copy = JSON.parse(JSON.stringify(structure));

@@ -24,14 +24,14 @@ describe("the window's engine releases its store", () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "shift-window-engine-"));
     const storePath = path.join(dir, "working.sqlite");
     bridge = createBridge();
-    bridge.createUntitledWorkspace(storePath);
+    bridge.workspace.createUntitledWorkspace(storePath);
     const glyphId = mintGlyphId();
     layerId = mintLayerId();
-    bridge.apply([
+    bridge.workspace.apply([
       { kind: "createGlyph", createGlyph: { glyphId, name: "A", unicodes: [65] } },
       {
         kind: "createGlyphLayer",
-        createGlyphLayer: { layerId, glyphId, sourceId: bridge.getSources()[0]!.id },
+        createGlyphLayer: { layerId, glyphId, sourceId: bridge.workspace.getSources()[0]!.id },
       },
     ]);
 
@@ -52,14 +52,14 @@ describe("the window's engine releases its store", () => {
     };
     engine = new WindowEngine(layers, {
       storeLocation: () => Promise.resolve({ kind: "working", storePath }),
-      directory: () => Promise.resolve(bridge.encodedDirectory()),
+      directory: () => Promise.resolve(bridge.workspace.encodedDirectory()),
     });
     await engine.reopen();
   });
 
   afterEach(() => {
     engine.dispose();
-    bridge.closeWorkspace();
+    bridge.workspace.closeWorkspace();
     fs.rmSync(dir, { recursive: true, force: true });
   });
 

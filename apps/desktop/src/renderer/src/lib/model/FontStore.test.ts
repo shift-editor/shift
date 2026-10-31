@@ -86,6 +86,8 @@ describe("FontStore record index", () => {
       unicodes: [],
       componentBaseGlyphIds: [],
       layers: [],
+      mark: false,
+      nonspacingMark: false,
     });
     const store = new FontStore({
       workspace: {
@@ -117,6 +119,8 @@ describe("FontStore record index", () => {
       unicodes: [180 as Unicode, 65 as Unicode],
       componentBaseGlyphIds: [],
       layers: [],
+      mark: false,
+      nonspacingMark: false,
     };
     const aacute = {
       id: "glyph_aacute" as GlyphId,
@@ -124,6 +128,8 @@ describe("FontStore record index", () => {
       unicodes: [193 as Unicode],
       componentBaseGlyphIds: [GLYPH_ID, acute.id],
       layers: [{ id: LAYER_B_ID, sourceId: SOURCE_ID }],
+      mark: false,
+      nonspacingMark: false,
     };
     const store = new FontStore({
       workspace: { ...base, glyphs: [...base.glyphs, acute, aacute] },
@@ -340,6 +346,8 @@ function snapshot(workspaceId: string, layerId: LayerId): WorkspaceSnapshot {
         unicodes: [65 as Unicode],
         componentBaseGlyphIds: [],
         layers: [{ id: layerId, sourceId: SOURCE_ID }],
+        mark: false,
+        nonspacingMark: false,
       },
     ],
     sources: [

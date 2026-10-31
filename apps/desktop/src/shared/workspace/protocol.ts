@@ -219,7 +219,7 @@ export type SyncCallMap = {
   "source.snapshot": { request: void; response: FontSourceSnapshot | null };
   "source.glyph": {
     request: { glyphId: GlyphId };
-    response: GlyphSnapshot[];
+    response: readonly GlyphSnapshot[];
   };
   "source.atlasPagePrepare": {
     request: FontSourceAtlasPageRequest;
@@ -235,7 +235,7 @@ export type SyncCallMap = {
   };
   "source.atlasWeights": {
     request: { coordinates: number[] };
-    response: CatalogAtlasWeights[];
+    response: readonly CatalogAtlasWeights[];
   };
   "document.state": { request: void; response: WorkspaceDocumentState | null };
   /**
@@ -281,7 +281,7 @@ export type SyncCallMap = {
   /** Reads exact authored layers in request order; unknown identities reject. */
   "workspace.layers.read": {
     request: { layerIds: LayerId[] };
-    response: GlyphLayerSnapshot[];
+    response: readonly GlyphLayerSnapshot[];
   };
   /** Reads exact authored layers with composited geometry at each layer's source. */
   "workspace.layers.resolve": {

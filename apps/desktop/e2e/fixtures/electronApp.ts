@@ -505,11 +505,11 @@ async function readyWorkspacePage(app: ElectronApplication): Promise<Page> {
 function readCanonicalGlyphNames(documentPath: string, testRoot: string): string[] {
   const bridge = createBridge();
   const recoveryPath = path.join(testRoot, `${crypto.randomUUID()}.recovery.sqlite`);
-  bridge.openDocument(documentPath, recoveryPath);
+  bridge.workspace.openDocument(documentPath, recoveryPath);
   try {
-    return bridge.getGlyphs().map((glyph) => glyph.name);
+    return bridge.workspace.getGlyphs().map((glyph) => glyph.name);
   } finally {
-    bridge.closeWorkspace();
+    bridge.workspace.closeWorkspace();
     fs.rmSync(recoveryPath, { force: true });
   }
 }
@@ -517,15 +517,15 @@ function readCanonicalGlyphNames(documentPath: string, testRoot: string): string
 function readCanonicalVariableFont(documentPath: string, testRoot: string): CanonicalVariableFont {
   const bridge = createBridge();
   const recoveryPath = path.join(testRoot, `${crypto.randomUUID()}.recovery.sqlite`);
-  bridge.openDocument(documentPath, recoveryPath);
+  bridge.workspace.openDocument(documentPath, recoveryPath);
   try {
     return {
-      axes: bridge.getAxes(),
-      sources: bridge.getSources(),
-      namedInstances: bridge.getNamedInstances(),
+      axes: bridge.workspace.getAxes(),
+      sources: bridge.workspace.getSources(),
+      namedInstances: bridge.workspace.getNamedInstances(),
     };
   } finally {
-    bridge.closeWorkspace();
+    bridge.workspace.closeWorkspace();
     fs.rmSync(recoveryPath, { force: true });
   }
 }

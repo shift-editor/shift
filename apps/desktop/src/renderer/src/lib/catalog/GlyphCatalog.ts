@@ -152,9 +152,9 @@ function catalogAxis(axis: Axis, index: number): CatalogAxis {
     name: axis.name,
     hidden: axis.hidden,
     axisType: axis.axisType,
-    minimum: axis.minimum,
+    minimum: axis.minimum ?? undefined,
     default: axis.default,
-    maximum: axis.maximum,
-    values: axis.values ?? [],
+    maximum: axis.maximum ?? undefined,
+    values: [...(axis.values ?? [])],
   };
 }

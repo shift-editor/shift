@@ -37,16 +37,16 @@ describe("the window's engine edits from the store", () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "shift-engine-source-"));
     const storePath = path.join(dir, "working.sqlite");
     bridge = createBridge();
-    bridge.createUntitledWorkspace(storePath);
+    bridge.workspace.createUntitledWorkspace(storePath);
     const glyphId = mintGlyphId();
     layerId = mintLayerId();
     const contourId = mintContourId();
     pointIds = [mintPointId(), mintPointId(), mintPointId()];
-    bridge.apply([
+    bridge.workspace.apply([
       { kind: "createGlyph", createGlyph: { glyphId, name: "A", unicodes: [65] } },
       {
         kind: "createGlyphLayer",
-        createGlyphLayer: { layerId, glyphId, sourceId: bridge.getSources()[0]!.id },
+        createGlyphLayer: { layerId, glyphId, sourceId: bridge.workspace.getSources()[0]!.id },
       },
       { kind: "addContour", addContour: { layerId, contourId, closed: true } },
       {
@@ -70,7 +70,7 @@ describe("the window's engine edits from the store", () => {
     openEngine = async () => {
       const { EngineSession } = await loadEngine();
       return EngineSession.open(
-        bridge.encodedDirectory(),
+        bridge.workspace.encodedDirectory(),
         engineStoreRequest(layers, () => reader),
       );
     };
@@ -79,7 +79,7 @@ describe("the window's engine edits from the store", () => {
 
   afterEach(() => {
     engine.dispose();
-    bridge.closeWorkspace();
+    bridge.workspace.closeWorkspace();
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
@@ -102,8 +102,8 @@ describe("the window's engine edits from the store", () => {
   }
 
   it("returns the same font-level records the workspace echoes for the edit", () => {
-    const glyphId = bridge.getGlyphs()[0]!.id;
-    const sourceId = bridge.getSources()[0]!.id;
+    const glyphId = bridge.workspace.getGlyphs()[0]!.id;
+    const sourceId = bridge.workspace.getSources()[0]!.id;
     const edits: FontIntent[] = [
       {
         kind: "setKerningValues",
@@ -120,14 +120,16 @@ describe("the window's engine edits from the store", () => {
       },
       {
         kind: "updateFontMetadata",
-        updateFontMetadata: { metadata: { ...bridge.getMetadata(), familyName: "Parity Sans" } },
+        updateFontMetadata: {
+          metadata: { ...bridge.workspace.getMetadata(), familyName: "Parity Sans" },
+        },
       },
       { kind: "setLanguages", setLanguages: { languageIds: ["en", "fr"] } },
     ];
 
     for (const intent of edits) {
       const fromEngine = edit(intent).next;
-      const fromWorkspace = bridge.apply([intent]).next;
+      const fromWorkspace = bridge.workspace.apply([intent]).next;
       expect(Object.keys(asJson(fromEngine) as object)).not.toHaveLength(0);
       expect(asJson(fromEngine)).toEqual(asJson({ ...fromWorkspace, glyphs: undefined }));
     }
@@ -174,11 +176,11 @@ describe("the window's engine edits from the store", () => {
   });
 
   it("moves the composites attached to a moved anchor", async () => {
-    const source = bridge.getSources()[0]!.id;
+    const source = bridge.workspace.getSources()[0]!.id;
     const glyph = (name: string) => {
       const glyphId = mintGlyphId();
       const glyphLayer = mintLayerId();
-      bridge.apply([
+      bridge.workspace.apply([
         { kind: "createGlyph", createGlyph: { glyphId, name, unicodes: [] } },
         {
           kind: "createGlyphLayer",
@@ -191,7 +193,7 @@ describe("the window's engine edits from the store", () => {
     const mark = glyph("mark");
     const composite = glyph("composite");
     const top = mintAnchorId();
-    bridge.apply([
+    bridge.workspace.apply([
       {
         kind: "addAnchors",
         addAnchors: { layerId: base.layerId, anchors: [{ id: top, name: "top", x: 200, y: 700 }] },
@@ -205,7 +207,7 @@ describe("the window's engine edits from the store", () => {
       },
     ]);
     for (const glyphId of [base.glyphId, mark.glyphId]) {
-      bridge.apply([
+      bridge.workspace.apply([
         {
           kind: "addComponent",
           addComponent: {

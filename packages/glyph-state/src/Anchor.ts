@@ -41,7 +41,7 @@ export class Anchor {
   }
 
   get name(): string | undefined {
-    return this.#data.name;
+    return this.#data.name ?? undefined;
   }
 
   get x(): number {

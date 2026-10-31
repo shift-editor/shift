@@ -63,9 +63,10 @@
         "$TURBO_ROOT$/crates/*/Cargo.toml",
         "$TURBO_ROOT$/crates/*/build.rs",
         "$TURBO_ROOT$/crates/*/src/**",
+        "$TURBO_ROOT$/packages/pack/src/**",
         "scripts/**"
       ],
-      "outputs": ["index.d.ts"]
+      "outputs": ["index.d.ts", "protocol.ts"]
     },
     "@shift/wasm#build": {
       "inputs": [
@@ -163,10 +164,11 @@
       "dependsOn": ["shift-bridge#types"],
       "inputs": [
         "$TURBO_ROOT$/crates/shift-bridge/index.d.ts",
+        "$TURBO_ROOT$/crates/shift-bridge/protocol.ts",
         "$TURBO_ROOT$/crates/shift-bridge/dts-header.d.ts",
         "$TURBO_ROOT$/scripts/generate-bridge-types.mjs"
       ],
-      "outputs": ["src/bridge/generated.ts"]
+      "outputs": ["src/bridge/generated.ts", "src/bridge/protocol.ts"]
     },
     "generate": {
       "outputs": ["resources/**"]

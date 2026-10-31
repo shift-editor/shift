@@ -4,8 +4,10 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
+import { nativeBridge } from "./bridge.mjs";
+
 const require = createRequire(import.meta.url);
-const { Bridge, LayerReader } = require("../index.js");
+const { LayerReader } = require("../index.js");
 
 let counter = 0;
 const mintId = (prefix) => `${prefix}_reader${String(counter++).padStart(4, "0")}`;
@@ -69,8 +71,8 @@ describe("LayerReader", () => {
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "shift-layer-reader-"));
     storePath = join(tempDir, "working.sqlite");
-    bridge = new Bridge();
-    bridge.createUntitledWorkspace(storePath);
+    bridge = nativeBridge();
+    bridge.workspace.createUntitledWorkspace(storePath);
   });
 
   afterEach(() => {
@@ -80,11 +82,11 @@ describe("LayerReader", () => {
   function createGlyph(name) {
     const glyphId = mintId("glyph");
     const layerId = mintId("layer");
-    bridge.apply([
+    bridge.workspace.apply([
       { kind: "createGlyph", createGlyph: { glyphId, name, unicodes: [] } },
       {
         kind: "createGlyphLayer",
-        createGlyphLayer: { layerId, glyphId, sourceId: bridge.getSources()[0].id },
+        createGlyphLayer: { layerId, glyphId, sourceId: bridge.workspace.getSources()[0].id },
       },
     ]);
     return { glyphId, layerId };
@@ -92,7 +94,7 @@ describe("LayerReader", () => {
 
   function addPoint(layerId, contourId, x) {
     const pointId = mintId("point");
-    bridge.apply([
+    bridge.workspace.apply([
       {
         kind: "addPoints",
         addPoints: {
@@ -108,7 +110,9 @@ describe("LayerReader", () => {
   it("answers a StoreReader request with layers as one blob", () => {
     const { layerId } = createGlyph("A");
     const contourId = mintId("contour");
-    bridge.apply([{ kind: "addContour", addContour: { layerId, contourId, closed: false } }]);
+    bridge.workspace.apply([
+      { kind: "addContour", addContour: { layerId, contourId, closed: false } },
+    ]);
     const point = addPoint(layerId, contourId, 10);
 
     const reader = LayerReader.openWorkingStore(storePath);
@@ -137,7 +141,7 @@ describe("LayerReader", () => {
         baseGlyphId: glyph.glyphId,
       },
     });
-    bridge.apply([use(middle, base), use(top, middle)]);
+    bridge.workspace.apply([use(middle, base), use(top, middle)]);
     const reader = LayerReader.openWorkingStore(storePath);
 
     expect(okIds(ask(reader, "basesOf", [top.glyphId])).sort()).toEqual(
