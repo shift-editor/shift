@@ -2,26 +2,30 @@ import * as React from "react";
 import { Tabs as BaseTabs } from "@base-ui/react/tabs";
 import { X } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { useInlineRename } from "../inline-rename";
+import type { SortableItemHandle } from "../sortable-list";
+import { Tooltip } from "../tooltip";
 
-export interface DocumentTabsProps {
+export interface DocumentTabsProps extends Omit<
+  React.ComponentProps<typeof BaseTabs.Root>,
+  "value" | "onValueChange"
+> {
   /** The active tab's value; null when no tab is active. */
   value: string | null;
   onValueChange: (value: string) => void;
   /** Names the strip for assistive technology. */
   "aria-label": string;
-  className?: string;
-  children: React.ReactNode;
 }
 
 /**
  * A strip of document tabs, as in a browser or an editor's title bar.
  *
  * @remarks
- * Arrow keys move between tabs and Enter or Space opens one; the tabs are
- * navigation, so the strip owns no panels. Fill it with {@link DocumentTab}s
- * and {@link DocumentTabsDivider}s. When space runs short the tabs shrink,
- * their labels ending in an ellipsis, and only below their minimum width does
- * the strip scroll sideways.
+ * Arrow keys move between tabs and Enter opens one; the tabs are navigation,
+ * so the strip owns no panels. Fill it with {@link DocumentTab}s and
+ * {@link DocumentTabsDivider}s. When space runs short the tabs shrink, their
+ * labels ending in an ellipsis, and only below their minimum width does the
+ * strip scroll sideways.
  */
 export function DocumentTabs({
   value,
@@ -29,12 +33,14 @@ export function DocumentTabs({
   "aria-label": ariaLabel,
   className,
   children,
+  ...props
 }: DocumentTabsProps) {
   return (
     <BaseTabs.Root
       value={value}
       onValueChange={(next) => onValueChange(String(next))}
       className={cn("min-w-0", className)}
+      {...props}
     >
       <BaseTabs.List
         aria-label={ariaLabel}
@@ -47,16 +53,14 @@ export function DocumentTabs({
   );
 }
 
-export interface DocumentTabProps {
+export interface DocumentTabProps extends Omit<
+  React.ComponentProps<typeof BaseTabs.Tab>,
+  "value" | "children" | "onDoubleClick"
+> {
   value: string;
   label: string;
   /** Drawn before the label at 16 × 16, in the title bar's icon colour. */
   icon?: React.ReactNode;
-  /**
-   * A preview tab: shown in italics, and replaced by the next item opened the
-   * same way until it is kept.
-   */
-  preview?: boolean;
   /** Shows a close button; omit it for a tab that cannot be closed. */
   onClose?: () => void;
   /**
@@ -66,32 +70,48 @@ export interface DocumentTabProps {
   onRename?: (name: string) => void;
   /** Runs on double-click when the tab cannot be renamed. */
   onDoubleClick?: () => void;
-  "data-testid"?: string;
+  /** Makes the tab reorderable in a `SortableList`: from `useSortableItem` for this tab. */
+  sortable?: SortableItemHandle;
 }
+
+/** A tab outside a `SortableList`: a frame that never moves and nothing that drags it. */
+const NOT_SORTABLE = {
+  itemRef: (_element: HTMLElement | null) => undefined,
+  itemStyle: undefined,
+  activator: undefined,
+  dragging: false,
+} as const;
 
 /**
  * One tab of a {@link DocumentTabs} strip.
  *
  * @remarks
  * The close button sits beside the tab rather than inside it, so the tab stays
- * one button; it shows only while the tab is hovered. Being active changes the
- * background only, never the text, so tabs keep their width; a long label is
- * cut short with an ellipsis.
+ * one button. It shows while the tab is hovered or focus is in it, and Tab
+ * reaches it after its tab. Being active changes the background only, never
+ * the text, so tabs keep their width; a long label is cut short with an
+ * ellipsis.
  */
 export function DocumentTab({
   value,
   label,
   icon,
-  preview = false,
   onClose,
   onRename,
   onDoubleClick,
-  "data-testid": testId,
+  sortable,
+  className,
+  ...props
 }: DocumentTabProps) {
-  const tabRef = React.useRef<HTMLDivElement>(null);
+  const tabRef = React.useRef<HTMLDivElement | null>(null);
   // The tab's width when renaming began, so the name field takes its exact place.
   const [renamingWidth, setRenamingWidth] = React.useState<number | null>(null);
   const startRenaming = () => setRenamingWidth(tabRef.current?.offsetWidth ?? null);
+  const { itemRef, itemStyle, activator, dragging } = sortable ?? NOT_SORTABLE;
+  const setFrame = (element: HTMLDivElement | null) => {
+    tabRef.current = element;
+    itemRef(element);
+  };
 
   if (renamingWidth !== null && onRename) {
     return (
@@ -109,37 +129,44 @@ export function DocumentTab({
 
   return (
     <div
-      ref={tabRef}
+      ref={setFrame}
+      style={itemStyle}
+      data-dragging={dragging || undefined}
       className={cn(
-        "group/tab relative flex h-7 max-w-48 min-w-16 shrink items-center rounded text-ui text-muted transition-colors",
+        "group/tab relative flex h-7 max-w-48 min-w-16 shrink items-center rounded text-ui text-muted transition-colors data-dragging:z-10 data-dragging:opacity-70",
         "hover:bg-icon-button-hover hover:text-primary has-data-active:bg-surface-hover has-data-active:text-primary has-data-active:shadow-sm",
       )}
     >
       <BaseTabs.Tab
         value={value}
-        data-testid={testId}
         title={label}
         onDoubleClick={onRename ? startRenaming : onDoubleClick}
         className={cn(
           "flex h-full min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded pl-2 outline-none",
           "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent",
           onClose ? "pr-1.5" : "pr-2",
+          className,
         )}
+        {...props}
+        {...activator}
       >
         {icon ? <TabIcon>{icon}</TabIcon> : null}
-        {/* Italics lean past the clipping box; the padding keeps the last letter whole. */}
-        <span className={cn("min-w-0 truncate", preview && "pr-0.5 italic")}>{label}</span>
+        <span className="min-w-0 truncate">{label}</span>
       </BaseTabs.Tab>
       {onClose ? (
-        <button
-          type="button"
-          aria-label={`Close ${label}`}
-          tabIndex={-1}
-          onClick={onClose}
-          className="mr-1 flex h-4.5 w-4.5 shrink-0 cursor-pointer items-center justify-center rounded text-muted opacity-0 transition-opacity hover:bg-hover hover:text-primary group-hover/tab:opacity-100"
-        >
-          <X aria-hidden className="h-3 w-3" />
-        </button>
+        <Tooltip content="Close tab">
+          <button
+            type="button"
+            aria-label={`Close ${label}`}
+            onClick={onClose}
+            className={cn(
+              "mr-1 flex h-4.5 w-4.5 shrink-0 cursor-pointer items-center justify-center rounded text-muted opacity-0 transition-opacity outline-none",
+              "hover:bg-hover hover:text-primary focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-accent group-focus-within/tab:opacity-100 group-hover/tab:opacity-100",
+            )}
+          >
+            <X aria-hidden className="h-3 w-3" />
+          </button>
+        </Tooltip>
       ) : null}
     </div>
   );
@@ -148,10 +175,6 @@ export function DocumentTab({
 /**
  * A tab's name being edited in its place: the tab keeps its icon, size, and
  * position, its label becomes the text field, and a ring marks it.
- *
- * @remarks
- * Enter or blur reports the draft; Escape reports null so nothing is renamed.
- * Keys stop here, so the app's shortcuts do not fire while typing.
  */
 const TabNameField = ({
   label,
@@ -163,10 +186,10 @@ const TabNameField = ({
   icon: React.ReactNode;
   /** The tab's width in pixels, kept while its name is edited. */
   width: number;
+  /** Receives the new name, or null when renaming was cancelled. */
   onDone: (name: string | null) => void;
 }) => {
-  const [draft, setDraft] = React.useState(label);
-  const cancelled = React.useRef(false);
+  const field = useInlineRename(label, onDone);
 
   return (
     <div
@@ -175,18 +198,9 @@ const TabNameField = ({
     >
       {icon ? <TabIcon>{icon}</TabIcon> : null}
       <input
-        autoFocus
         aria-label={`Rename ${label}`}
-        value={draft}
         className="min-w-0 flex-1 bg-transparent outline-none"
-        onChange={(event) => setDraft(event.currentTarget.value)}
-        onFocus={(event) => event.currentTarget.select()}
-        onBlur={() => onDone(cancelled.current ? null : draft)}
-        onKeyDown={(event) => {
-          event.nativeEvent.stopImmediatePropagation();
-          if (event.key === "Escape") cancelled.current = true;
-          if (event.key === "Enter" || event.key === "Escape") event.currentTarget.blur();
-        }}
+        {...field}
       />
     </div>
   );

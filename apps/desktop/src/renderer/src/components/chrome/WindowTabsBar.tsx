@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useLocation } from "react-router";
 import {
   Button,
@@ -5,7 +6,9 @@ import {
   DocumentTabs,
   DocumentTabsDivider,
   FileIcon,
+  SortableList,
   Tooltip,
+  useSortableItem,
 } from "@shift/ui";
 import { useSignalState } from "@shift/editor/signals";
 import type { GlyphId } from "@shift/types";
@@ -13,7 +16,7 @@ import GridIcon from "@/assets/toolbar/grid.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 import { useShownPageId } from "@/hooks/usePages";
 import { useWindowTabs } from "@/hooks/useWindowTabs";
-import { windowLocation, type WindowTab } from "@/lib/tabs/WindowTabs";
+import { windowLocation, type MovableTab, type WindowTab } from "@/lib/tabs/WindowTabs";
 import { useEditor } from "@/workspace/WorkspaceContext";
 
 /**
@@ -29,7 +32,12 @@ export const WindowTabsBar = () => {
   const location = windowLocation(useLocation().pathname, shownPageId);
   const active = tabs.activeTab(location);
 
-  const [overview, ...rest] = openTabs;
+  const overview = openTabs[0];
+  const rest = useMemo(
+    () => openTabs.filter((tab): tab is MovableTab => tab.kind !== "glyphs"),
+    [openTabs],
+  );
+  const restIds = useMemo(() => rest.map((tab) => tab.id), [rest]);
   const label = (tab: WindowTab): string => {
     switch (tab.kind) {
       case "glyphs":
@@ -39,6 +47,11 @@ export const WindowTabsBar = () => {
       case "glyph":
         return editor.font.entryForId(tab.glyphId)?.name ?? "Glyph";
     }
+  };
+
+  const tabLabel = (id: string): string => {
+    const tab = openTabs.find((candidate) => candidate.id === id);
+    return tab ? label(tab) : "Tab";
   };
 
   return (
@@ -60,25 +73,22 @@ export const WindowTabsBar = () => {
           />
         ) : null}
         {rest.length > 0 ? <DocumentTabsDivider /> : null}
-        {rest.map((tab) => (
-          <DocumentTab
-            key={tab.id}
-            value={tab.id}
-            label={label(tab)}
-            data-testid={`tab-${tab.kind}`}
-            icon={
-              tab.kind === "glyph" ? (
-                <GlyphMark glyphId={tab.glyphId} />
-              ) : (
-                <FileIcon aria-hidden className="h-4 w-4" strokeWidth={1.5} />
-              )
-            }
-            onRename={
-              tab.kind === "page" ? (name) => editor.pages.rename(tab.pageId, name) : undefined
-            }
-            onClose={() => close(tab, tab.id === active?.id)}
-          />
-        ))}
+        {/* The overview stays pinned first; only the tabs after it reorder. */}
+        <SortableList
+          ids={restIds}
+          orientation="horizontal"
+          itemLabel={tabLabel}
+          onMove={(id, index) => tabs.move(id, index)}
+        >
+          {rest.map((tab) => (
+            <SortableTab
+              key={tab.id}
+              tab={tab}
+              label={label(tab)}
+              onClose={() => close(tab, tab.id === active?.id)}
+            />
+          ))}
+        </SortableList>
       </DocumentTabs>
       <Tooltip content="New page">
         <Button
@@ -92,6 +102,38 @@ export const WindowTabsBar = () => {
         </Button>
       </Tooltip>
     </div>
+  );
+};
+
+/** A page or glyph tab that reorders by dragging or from the keyboard. */
+const SortableTab = ({
+  tab,
+  label,
+  onClose,
+}: {
+  tab: MovableTab;
+  label: string;
+  onClose: () => void;
+}) => {
+  const editor = useEditor();
+  const sortable = useSortableItem(tab.id);
+
+  return (
+    <DocumentTab
+      value={tab.id}
+      label={label}
+      sortable={sortable}
+      data-testid={`tab-${tab.kind}`}
+      icon={
+        tab.kind === "glyph" ? (
+          <GlyphMark glyphId={tab.glyphId} />
+        ) : (
+          <FileIcon aria-hidden className="h-4 w-4" strokeWidth={1.5} />
+        )
+      }
+      onRename={tab.kind === "page" ? (name) => editor.pages.rename(tab.pageId, name) : undefined}
+      onClose={onClose}
+    />
   );
 };
 

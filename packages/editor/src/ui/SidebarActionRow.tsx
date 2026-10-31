@@ -1,4 +1,4 @@
-import { Button, cn, type ButtonProps } from "@shift/ui";
+import { Button, cn, type ButtonProps, type SortableActivatorProps } from "@shift/ui";
 import { forwardRef, type KeyboardEventHandler, type MouseEvent, type ReactNode } from "react";
 import { SidebarRowButton } from "./SidebarRowButton";
 
@@ -17,6 +17,8 @@ export interface SidebarActionRowProps {
   contentClassName?: string;
   tabIndex?: number;
   "data-testid"?: string;
+  /** Makes the row's button drag the row in a `SortableList` (`useSortableItem(id).activator`). */
+  activator?: SortableActivatorProps;
 }
 
 export const SidebarActionRow = ({
@@ -34,6 +36,7 @@ export const SidebarActionRow = ({
   contentClassName,
   tabIndex,
   "data-testid": testId,
+  activator,
 }: SidebarActionRowProps) => (
   <div
     className={cn(
@@ -52,18 +55,23 @@ export const SidebarActionRow = ({
     {onClick ? (
       <SidebarRowButton
         variant="transparent"
+        {...activator}
         data-testid={testId}
         tabIndex={tabIndex}
         aria-pressed={isSelected}
         onPointerDown={(event) => {
           event.currentTarget.dataset.pointerFocus = "true";
+          if (activator?.onPointerDown) activator.onPointerDown(event);
         }}
         onBlur={(event) => {
           delete event.currentTarget.dataset.pointerFocus;
         }}
         onClick={onClick}
         onDoubleClick={onDoubleClick}
-        onKeyDown={onKeyDown}
+        onKeyDown={(event) => {
+          if (onKeyDown) onKeyDown(event);
+          if (activator?.onKeyDown) activator.onKeyDown(event);
+        }}
         className={cn("w-auto flex-1 data-[pointer-focus]:focus-visible:ring-0", contentClassName)}
       >
         {children}
