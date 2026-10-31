@@ -38,8 +38,14 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
   const leftSidebearing = sidebearings.lsb === null ? null : Math.round(sidebearings.lsb);
   const rightSidebearing = sidebearings.rsb === null ? null : Math.round(sidebearings.rsb);
   const sidebearingsEditable = editable && leftSidebearing !== null && rightSidebearing !== null;
+  // Reads the cells, so the header follows page switches and renames.
   const pageNameCell = useMemo(
-    () => computed(() => editor.scene.shownPage()?.name ?? null),
+    () =>
+      computed(() => {
+        const shownPageId = editor.scene.shownPageIdCell.value;
+        const page = editor.scene.pagesCell.value.find((candidate) => candidate.id === shownPageId);
+        return page?.name ?? null;
+      }),
     [editor],
   );
   const pageName = useSignalState(pageNameCell);
