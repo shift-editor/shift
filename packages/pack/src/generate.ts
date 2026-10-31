@@ -58,6 +58,15 @@ interface IdFragment {
   readonly module: string;
 }
 
+/** A struct of one field, which crosses as that field and reads as its type. */
+interface AliasFragment {
+  readonly kind: "alias";
+  readonly rust: string;
+  readonly name: string;
+  readonly doc: string | null;
+  readonly type: Type;
+}
+
 interface Case {
   readonly name: string;
   readonly doc: string | null;
@@ -93,6 +102,7 @@ export type Fragment = (
   | EnumFragment
   | UnionFragment
   | IdFragment
+  | AliasFragment
   | InterfaceFragment
 ) & {
   readonly crate?: string;
@@ -166,10 +176,11 @@ export function generate(
  * declare different types under one Rust name.
  */
 export function render(
-  fragments: readonly Fragment[],
+  described: readonly Fragment[],
   header = "",
   options: RenderOptions = {},
 ): string {
+  const fragments = withCrateNames(withoutAliases(described));
   const types = new Map<string, Declared>();
   for (const fragment of fragments) {
     if (fragment.kind === "interface") continue;
@@ -622,6 +633,17 @@ export function render(
     return writeStruct(type);
   };
 
+  const named = new Map<string, string>();
+  for (const type of ordered) {
+    const other = named.get(type.name);
+    if (other !== undefined && other !== type.rust) {
+      throw new Error(
+        `two types are called ${type.name} in TypeScript (${other} and ${type.rust})`,
+      );
+    }
+    named.set(type.name, type.rust);
+  }
+
   const codecs: Code[] = [];
   for (const type of ordered) {
     if (read.has(type.rust)) codecs.push(reader(type));
@@ -634,6 +656,115 @@ export function render(
 /** The name a type's schema is exported under, beside the type itself. */
 function schemaName(type: { readonly name: string }): string {
   return `${type.name}Schema`;
+}
+
+type Unaliased = Exclude<Fragment, AliasFragment>;
+
+/** `type` with every type it holds that holds none, however deep, passed through `map`. */
+function mapType(type: Type, map: (type: Type) => Type): Type {
+  switch (type.kind) {
+    case "list":
+      return { ...type, item: mapType(type.item, map) };
+    case "option":
+      return { ...type, inner: mapType(type.inner, map) };
+    case "map":
+      return { ...type, key: mapType(type.key, map), value: mapType(type.value, map) };
+    case "result":
+      return { ...type, ok: mapType(type.ok, map), err: mapType(type.err, map) };
+    default:
+      return map(type);
+  }
+}
+
+/** `fragment` with every type it names passed through `map`, as {@link mapType} does. */
+function mapTypes(fragment: Unaliased, map: (type: Type) => Type): Unaliased {
+  const each = (type: Type): Type => mapType(type, map);
+  const fields = (list: readonly Field[]): Field[] =>
+    list.map((field) => ({ ...field, type: each(field.type) }));
+  switch (fragment.kind) {
+    case "struct":
+      return { ...fragment, fields: fields(fragment.fields) };
+    case "union":
+      return {
+        ...fragment,
+        cases: fragment.cases.map((item) => ({ ...item, fields: fields(item.fields) })),
+      };
+    case "interface":
+      return {
+        ...fragment,
+        methods: fragment.methods.map((method) => ({
+          ...method,
+          params: method.params.map((param) => ({ ...param, type: each(param.type) })),
+          output: each(method.output),
+        })),
+      };
+    default:
+      return fragment;
+  }
+}
+
+/**
+ * `fragments` without their aliases, each type that names an alias naming the
+ * alias's field type instead: an alias crosses as its field, so TypeScript
+ * reads it as that type.
+ */
+function withoutAliases(fragments: readonly Fragment[]): Unaliased[] {
+  const aliases = new Map<string, Type>();
+  for (const fragment of fragments) {
+    if (fragment.kind === "alias") aliases.set(fragment.rust, fragment.type);
+  }
+  const unaliased = (type: Type): Type => {
+    const alias = type.kind === "ref" ? aliases.get(type.rust) : undefined;
+    return alias ? mapType(alias, unaliased) : type;
+  };
+  return fragments
+    .filter((fragment): fragment is Unaliased => fragment.kind !== "alias")
+    .map((fragment) => mapTypes(fragment, unaliased));
+}
+
+/**
+ * `fragments` with each Rust name that two crates give different types
+ * qualified by its crate (`shift-font::Axis`) wherever that crate declares
+ * or names it. The one of them TypeScript calls by its Rust name keeps it,
+ * and is the one other crates name; the rest need a `#[pack(rename)]`.
+ *
+ * @throws When two crates' types under one Rust name both keep that name.
+ */
+function withCrateNames(fragments: readonly Unaliased[]): Unaliased[] {
+  const declared = new Map<string, Declared[]>();
+  for (const fragment of fragments) {
+    if (fragment.kind === "interface") continue;
+    declared.set(fragment.rust, [...(declared.get(fragment.rust) ?? []), fragment]);
+  }
+  // Rust name → the crates whose own type under it is qualified.
+  const qualified = new Map<string, Set<string>>();
+  for (const [rust, declarations] of declared) {
+    const shapes = new Set(declarations.map(shapeOf));
+    if (shapes.size < 2) continue;
+    const keeping = declarations.filter((fragment) => fragment.name === rust);
+    if (new Set(keeping.map(shapeOf)).size !== 1) {
+      const [first, second] = declarations;
+      throw new Error(`two types are named ${rust} (in ${first!.crate} and ${second!.crate})`);
+    }
+    const kept = shapeOf(keeping[0]!);
+    qualified.set(
+      rust,
+      new Set(
+        declarations.filter((fragment) => shapeOf(fragment) !== kept).map((f) => f.crate ?? ""),
+      ),
+    );
+  }
+  if (qualified.size === 0) return [...fragments];
+  return fragments.map((fragment) => {
+    const crate = fragment.crate ?? "";
+    const own = (rust: string) => qualified.get(rust)?.has(crate) ?? false;
+    const renamed = mapTypes(fragment, (type) =>
+      type.kind === "ref" && own(type.rust) ? { ...type, rust: `${crate}::${type.rust}` } : type,
+    );
+    return renamed.kind !== "interface" && own(renamed.rust)
+      ? { ...renamed, rust: `${crate}::${renamed.rust}` }
+      : renamed;
+  });
 }
 
 /** Orders items by their TypeScript name. */
