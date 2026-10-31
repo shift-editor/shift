@@ -2630,6 +2630,7 @@ dependencies = [
  "shift-engine",
  "shift-font",
  "shift-shape",
+ "shift-shaper-font",
  "shift-wire",
  "thiserror",
  "wasm-bindgen",

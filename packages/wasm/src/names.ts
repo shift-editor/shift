@@ -2,7 +2,7 @@ import type { Names } from "@shift/pack";
 
 /**
  * A module's name table, mirrored on this side so each name crosses as text
- * once: every module (`@shift/wasm`, its engine and shaping builds) interns
+ * once: every module (`@shift/wasm` and its engine build) interns
  * its own names.
  */
 export function moduleNames(

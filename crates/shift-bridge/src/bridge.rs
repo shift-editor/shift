@@ -1425,13 +1425,19 @@ impl Bridge {
           kind: "font",
           value: "it has no shaping tables".to_string(),
         })?;
-    let characters = self.font()?.glyphs().flat_map(|glyph| {
-      glyph
-        .unicodes()
-        .iter()
-        .map(move |&codepoint| (codepoint, glyph.id()))
-    });
-    Ok(LiveShaper::new(shaper_font, characters)?)
+    let characters: Vec<(u32, GlyphId)> = self
+      .font()?
+      .glyphs()
+      .flat_map(|glyph| {
+        glyph
+          .unicodes()
+          .iter()
+          .map(move |&codepoint| (codepoint, glyph.id()))
+      })
+      .collect();
+    let mut shaper = LiveShaper::new(shaper_font, characters.iter().copied())?;
+    shaper.set_glyphs(self.shaper_fonts.glyph_order(), characters);
+    Ok(shaper)
   }
 
   fn mark_font_changed(&mut self) {

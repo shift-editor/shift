@@ -10,7 +10,7 @@
 // pinned binaryen devDependency.
 //
 // A plain run builds the variants the app loads (`generated`,
-// `generated-shaping`, `generated-engine`). With `--types`, it writes every
+// `generated-engine`). With `--types`, it writes every
 // variant's declarations (shift_wasm.d.ts and module.d.ts) from a debug build,
 // for typecheck. Release builds write the same declarations, so the two never
 // disagree. Every run also writes src/generated-protocol (scripts/protocol.mjs).
@@ -32,7 +32,7 @@ const typesOnly = process.argv.includes("--types");
 const optimise = process.env.SHIFT_WASM_OPT === "1";
 const profile = typesOnly ? "debug" : "release";
 // Declarations build each variant at once in its own target directory, except
-// on CI, where nothing is cached between runs and four directories would each
+// on CI, where nothing is cached between runs and three directories would each
 // compile every dependency.
 const parallel = typesOnly && !process.env.CI;
 const run = (command, args, env = process.env) =>
@@ -62,7 +62,6 @@ if (locked !== cli) {
  */
 const variants = [
   { folder: "generated-engine", features: ["engine"], file: true },
-  { folder: "generated-shaping", features: ["shaping"], file: false },
   { folder: "generated", features: [], file: false },
 ];
 

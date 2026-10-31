@@ -82,7 +82,6 @@
       ],
       "outputs": [
         "src/generated/**",
-        "src/generated-shaping/**",
         "src/generated-engine/**",
         "src/generated-protocol/**"
       ],
@@ -102,7 +101,6 @@
       ],
       "outputs": [
         "src/generated/**",
-        "src/generated-shaping/**",
         "src/generated-engine/**",
         "src/generated-protocol/**"
       ],
@@ -122,7 +120,6 @@
       ],
       "outputs": [
         "src/generated/**",
-        "src/generated-shaping/**",
         "src/generated-engine/**",
         "src/generated-protocol/**"
       ],

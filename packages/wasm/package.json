@@ -12,10 +12,6 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
-    "./shaping": {
-      "types": "./src/shaping.ts",
-      "import": "./src/shaping.ts"
-    },
     "./engine": {
       "types": "./src/engine.ts",
       "import": "./src/engine.ts"
