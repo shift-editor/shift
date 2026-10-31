@@ -189,6 +189,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   movePointerTo(position: Point2D, modifiers?: Modifiers): void;
   /** Moves the pointer without a frame passing, so the move is still queued when the next event arrives. */
   queuePointerMove(position: Point2D, modifiers?: Modifiers): void;
+  /** Lets the next animation frame run, as the browser does, so a queued pointer move is applied. */
+  passFrame(): void;
   /** Releases the pointer at a glyph-local position and waits for the edit it makes. */
   releaseAt(position: Point2D, modifiers?: Modifiers): Promise<void>;
   /**

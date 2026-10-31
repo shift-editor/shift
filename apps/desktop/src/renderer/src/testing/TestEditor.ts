@@ -741,6 +741,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
     });
   }
 
+  passFrame(): void {
+    this.toolManager.flushPointerMoves();
+  }
+
   async releaseAt(position: Point2D, modifiers?: Modifiers): Promise<void> {
     const screen = this.localToScreen(position);
     this.pointerUp(screen.x, screen.y, modifiers);
