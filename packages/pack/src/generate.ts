@@ -1,8 +1,10 @@
 // Writes the TypeScript side of `crates/pack` from the fragments its macros
 // write while they expand (see crates/pack-derive/src/fragments.rs).
 //
-// Each type becomes a schema (`struct`, `variants`) and its type (`Infer`),
-// plus its own read and write functions, with every list read and written by
+// Each type becomes its type, spelled out as an interface or a union so
+// editors and declaration bundles show it by name, its schema (`struct`,
+// `variants`) as `<Name>Schema`, whose `Infer` is the same type, and its own
+// read and write functions, with every list read and written by
 // a loop of its own: shared helpers cost up to 1.6x in V8 once many types use
 // them (the phase c bench in the boundary protocol plan). Each interface
 // becomes a class whose methods send their arguments by the method's index
@@ -15,7 +17,11 @@ import { code, imp, joinCode, literalOf, type Code } from "ts-poet";
 /** A field's, argument's or result's type, as the derive spells it. */
 export type Type =
   | { readonly kind: "number" | "count" | "flag" | "name" | "numbers" | "bytes" }
+  /** Nothing: only as a method's result, or a `Result`'s value. */
+  | { readonly kind: "unit" }
   | { readonly kind: "list"; readonly item: Type }
+  /** Read as a `Record`: its key is a name or an id. */
+  | { readonly kind: "map"; readonly key: Type; readonly value: Type }
   /** Only as a method's result. */
   | { readonly kind: "result"; readonly ok: Type; readonly err: Type }
   | { readonly kind: "option"; readonly inner: Type }
@@ -103,13 +109,18 @@ const packType = (name: string) => imp(`t:${name}@@shift/pack`);
 const Reader = packType("Reader");
 const Writer = packType("Writer");
 const SyncTransport = packType("SyncTransport");
-const Infer = packType("Infer");
+const Schema = packType("Schema");
 const PackError = pack("PackError");
 const SCALARS = new Set(["number", "count", "flag", "name", "numbers", "bytes"]);
 
 /** Thrown for a `Result` anywhere but as a method's result, which TypeScript has no shape for. */
 function nestedResult(): never {
   throw new Error("a Result crosses only as an interface method's result");
+}
+
+/** Thrown for `()` anywhere but as a method's result or a `Result`'s value. */
+function nestedUnit(): never {
+  throw new Error("() crosses only as an interface method's result");
 }
 
 /** Reads every crate's fragments under `folder` (`<folder>/<package>/*.json`). */
@@ -122,9 +133,27 @@ export function readFragments(folder: string): Fragment[] {
     }));
 }
 
+/** How {@link render} writes the module. */
+export interface RenderOptions {
+  /**
+   * Where to import each id brand's module from instead, by the module an
+   * id names: for a module generated inside the package that declares the
+   * brands, which cannot import itself by name.
+   */
+  readonly brandModules?: Readonly<Record<string, string>>;
+  /** Render only the interfaces these packages declare, and the types they use; all by default. */
+  // oxlint-disable-next-line shift/no-optional-collection-field -- absent renders every package's interfaces, which an empty list would not
+  readonly crates?: readonly string[];
+}
+
 /** Writes the module `render` returns for the fragments under `folder` to `output`. */
-export function generate(folder: string, output: string, header = ""): void {
-  const text = render(readFragments(folder), header);
+export function generate(
+  folder: string,
+  output: string,
+  header = "",
+  options: RenderOptions = {},
+): void {
+  const text = render(readFragments(folder), header, options);
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(output, text);
 }
@@ -136,15 +165,16 @@ export function generate(folder: string, output: string, header = ""): void {
  * @throws When an interface uses a type no fragment declares, or two crates
  * declare different types under one Rust name.
  */
-export function render(fragments: readonly Fragment[], header = ""): string {
+export function render(
+  fragments: readonly Fragment[],
+  header = "",
+  options: RenderOptions = {},
+): string {
   const types = new Map<string, Declared>();
   for (const fragment of fragments) {
     if (fragment.kind === "interface") continue;
     const existing = types.get(fragment.rust);
-    if (
-      existing &&
-      JSON.stringify(withoutCrate(existing)) !== JSON.stringify(withoutCrate(fragment))
-    ) {
+    if (existing && shapeOf(existing) !== shapeOf(fragment)) {
       throw new Error(
         `two types are named ${fragment.rust} (in ${existing.crate} and ${fragment.crate})`,
       );
@@ -152,7 +182,11 @@ export function render(fragments: readonly Fragment[], header = ""): string {
     types.set(fragment.rust, fragment);
   }
   const interfaces = fragments
-    .filter((fragment): fragment is InterfaceFragment => fragment.kind === "interface")
+    .filter(
+      (fragment): fragment is InterfaceFragment & { readonly crate?: string } =>
+        fragment.kind === "interface",
+    )
+    .filter((item) => !options.crates || options.crates.includes(item.crate ?? ""))
     .sort(byName);
 
   const resolve = (type: Extract<Type, { kind: "ref" }>, user?: string): Declared => {
@@ -170,6 +204,10 @@ export function render(fragments: readonly Fragment[], header = ""): string {
   const visit = (type: Type, user: string, direction: Set<string>): void => {
     if (type.kind === "list") return visit(type.item, user, direction);
     if (type.kind === "option") return visit(type.inner, user, direction);
+    if (type.kind === "map") {
+      visit(type.key, user, direction);
+      return visit(type.value, user, direction);
+    }
     if (type.kind === "result") {
       visit(type.ok, user, direction);
       return visit(type.err, user, direction);
@@ -180,6 +218,7 @@ export function render(fragments: readonly Fragment[], header = ""): string {
     direction.add(found.rust);
     for (const field of fieldsOf(found)) {
       if (field.type.kind === "result") nestedResult();
+      if (field.type.kind === "unit") nestedUnit();
       visit(field.type, found.rust, direction);
     }
     if (!ordered.includes(found)) ordered.push(found);
@@ -188,6 +227,7 @@ export function render(fragments: readonly Fragment[], header = ""): string {
     for (const method of item.methods) {
       for (const param of method.params) {
         if (param.type.kind === "result") nestedResult();
+        if (param.type.kind === "unit") nestedUnit();
         visit(param.type, item.name, written);
       }
       visit(method.output, item.name, read);
@@ -195,7 +235,20 @@ export function render(fragments: readonly Fragment[], header = ""): string {
   }
 
   /** An id's brand, imported from the module that declares it. */
-  const brand = (type: IdFragment): Code => code`${imp(`t:${type.name}@${type.module}`)}`;
+  const brand = (type: IdFragment): Code => {
+    const module = options.brandModules?.[type.module] ?? type.module;
+    return code`${imp(`t:${type.name}@${module}`)}`;
+  };
+
+  /** A map's key type, which a `Record` takes: a name or an id. */
+  const key = (type: Type): Code => {
+    if (type.kind === "name") return code`string`;
+    if (type.kind === "ref") {
+      const found = resolve(type);
+      if (found.kind === "id") return brand(found);
+    }
+    throw new Error("a map's key is a name or an id");
+  };
 
   /** The TypeScript type of `type`'s values. */
   const ts = (type: Type): Code => {
@@ -215,6 +268,10 @@ export function render(fragments: readonly Fragment[], header = ""): string {
         return code`readonly ${element(type.item)}[]`;
       case "option":
         return code`${ts(type.inner)} | null`;
+      case "map":
+        return code`Readonly<Record<${key(type.key)}, ${ts(type.value)}>>`;
+      case "unit":
+        return code`void`;
       case "ref": {
         const found = resolve(type);
         return found.kind === "id" ? brand(found) : code`${found.name}`;
@@ -235,9 +292,15 @@ export function render(fragments: readonly Fragment[], header = ""): string {
         return code`${pack("list")}(${schema(type.item)})`;
       case "option":
         return code`${pack("option")}(${schema(type.inner)})`;
+      case "map":
+        return code`${pack("map")}(${schema(type.key)}, ${schema(type.value)})`;
+      case "unit":
+        return nestedUnit();
       case "ref": {
         const found = resolve(type);
-        return found.kind === "id" ? code`${pack("id")}<${brand(found)}>()` : code`${found.name}`;
+        return found.kind === "id"
+          ? code`${pack("id")}<${brand(found)}>()`
+          : code`${schemaName(found)}`;
       }
       case "result":
         return nestedResult();
@@ -275,6 +338,19 @@ export function render(fragments: readonly Fragment[], header = ""): string {
           }
         `;
       }
+      case "map": {
+        const [k, v, i, n] = [`key${depth}`, `value${depth}`, `i${depth}`, `n${depth}`];
+        return code`
+          const ${target}: Record<${key(type.key)}, ${ts(type.value)}> = {};
+          for (let ${i} = 0, ${n} = r.count(); ${i} < ${n}; ${i}++) {
+            ${readInto(type.key, k, depth + 1)}
+            ${readInto(type.value, v, depth + 1)}
+            ${target}[${k}] = ${v};
+          }
+        `;
+      }
+      case "unit":
+        return code``;
     }
     throw new Error(`unknown type ${type.kind}`);
   };
@@ -306,6 +382,17 @@ export function render(fragments: readonly Fragment[], header = ""): string {
             w.flag(false);
           }
         `;
+      case "map": {
+        const [entries, k, v] = [`entries${depth}`, `key${depth}`, `value${depth}`];
+        return code`
+          const ${entries} = Object.entries(${value}) as [${key(type.key)}, ${ts(type.value)}][];
+          w.count(${entries}.length);
+          for (const [${k}, ${v}] of ${entries}) {
+            ${writeFrom(type.key, k, depth + 1)}
+            ${writeFrom(type.value, v, depth + 1)}
+          }
+        `;
+      }
     }
     throw new Error(`unknown type ${type.kind}`);
   };
@@ -335,17 +422,54 @@ export function render(fragments: readonly Fragment[], header = ""): string {
     return fieldsSchema(type.fields);
   };
 
+  /** A struct's or a case's fields as an object type's members, an option left out as `null` or absent. */
+  const members = (fields: readonly Field[]): Code =>
+    joinCode(
+      fields.map(
+        (field) =>
+          code`${doc(field.doc)}readonly ${field.name}${field.type.kind === "option" ? "?" : ""}: ${ts(field.type)};`,
+      ),
+      { on: "\n" },
+    );
+
+  /** The type of `type`'s values, spelled out, so editors and declaration bundles show it by name. */
+  const typeOf = (type: Generated): Code => {
+    if (type.kind === "enum") {
+      return joinCode(
+        type.variants.map((variant) => code`${literalOf(variant)}`),
+        { on: " | " },
+      );
+    }
+    if (type.kind === "union") {
+      const cases = type.cases.map(
+        (item) =>
+          code`${doc(item.doc)}| { readonly kind: ${literalOf(item.name)}; ${members(item.fields)} }`,
+      );
+      return joinCode(cases, { on: "\n" });
+    }
+    return code`{ ${members(type.fields)} }`;
+  };
+
   const declaration = (type: Generated): Code => {
     const value = schemaOf(type);
+    const declared =
+      type.kind === "struct"
+        ? code`export interface ${type.name} ${typeOf(type)}`
+        : code`export type ${type.name} =\n${typeOf(type)};`;
     return code`
-      ${doc(type.doc)}export const ${type.name} = ${value};
-      export type ${type.name} = ${Infer}<typeof ${type.name}>;
+      ${doc(type.doc)}${declared}
+      /** {@link ${type.name}}'s schema: its shape, as the packed encoding reads it. */
+      export const ${schemaName(type)} = ${value} satisfies ${Schema};
     `;
   };
 
   const method = (item: Method, index: number): Code => {
+    // Trailing optional arguments may be left out, as `undefined` writes as absent.
+    const required = item.params.findLastIndex((param) => param.type.kind !== "option") + 1;
     const params = joinCode(
-      item.params.map((param) => code`${param.name}: ${ts(param.type)}`),
+      item.params.map(
+        (param, at) => code`${param.name}${at < required ? "" : "?"}: ${ts(param.type)}`,
+      ),
       { on: ", " },
     );
     const writes = item.params.map((param) => writeFrom(param.type, param.name));
@@ -361,8 +485,7 @@ export function render(fragments: readonly Fragment[], header = ""): string {
             ${readInto(output.err, "error")}
             throw new ${PackError}<${ts(output.err)}>(${literalOf(errorName(output.err))}, error);
           }
-          ${readInto(output.ok, "result")}
-          return result;
+          ${returned(output.ok)}
         }
       `;
     }
@@ -370,12 +493,20 @@ export function render(fragments: readonly Fragment[], header = ""): string {
       ${doc(item.doc)}${item.name}(${params}): ${ts(output)} {
         const w = this.#transport.writer();
         ${joinCode(writes, { on: "\n" })}
-        const r = this.#transport.request(${index}, w);
-        ${readInto(output, "result")}
-        return result;
+        ${output.kind === "unit" ? code`this.#transport.request(${index}, w);` : code`const r = this.#transport.request(${index}, w);`}
+        ${returned(output)}
       }
     `;
   };
+
+  /** Statements that read a method's result of `type` and return it; none for a unit. */
+  const returned = (type: Type): Code =>
+    type.kind === "unit"
+      ? code``
+      : code`
+          ${readInto(type, "result")}
+          return result;
+        `;
 
   /** The TypeScript name of an error type, as a thrown `PackError`'s `type`. */
   const errorName = (type: Type): string => (type.kind === "ref" ? resolve(type).name : type.kind);
@@ -396,7 +527,7 @@ export function render(fragments: readonly Fragment[], header = ""): string {
     const unknown = `unknown ${type.name}, from a module built with another ${type.name}`;
     return code`
       function read${type.name}(r: ${Reader}): ${type.name} {
-        const value = ${type.name}.names[r.count()];
+        const value = ${schemaName(type)}.names[r.count()];
         if (value === undefined) throw new Error(${literalOf(unknown)});
         return value;
       }
@@ -441,7 +572,7 @@ export function render(fragments: readonly Fragment[], header = ""): string {
 
   const writeEnum = (type: EnumFragment): Code => code`
     function write${type.name}(w: ${Writer}, value: ${type.name}): void {
-      w.count(${type.name}.names.indexOf(value));
+      w.count(${schemaName(type)}.names.indexOf(value));
     }
   `;
 
@@ -467,10 +598,13 @@ export function render(fragments: readonly Fragment[], header = ""): string {
           break;
       `,
     );
+    const unknown = `unknown ${type.name} kind `;
     return code`
       function write${type.name}(w: ${Writer}, value: ${type.name}): void {
         switch (value.kind) {
           ${joinCode(cases, { on: "\n" })}
+          default:
+            throw new Error(${literalOf(unknown)} + String((value as { kind: unknown }).kind));
         }
       }
     `;
@@ -497,14 +631,24 @@ export function render(fragments: readonly Fragment[], header = ""): string {
   return joinCode([...declarations, ...codecs], { on: "\n\n" }).toString({ prefix: header });
 }
 
+/** The name a type's schema is exported under, beside the type itself. */
+function schemaName(type: { readonly name: string }): string {
+  return `${type.name}Schema`;
+}
+
 /** Orders items by their TypeScript name. */
 function byName(a: { readonly name: string }, b: { readonly name: string }): number {
   return a.name.localeCompare(b.name);
 }
 
-/** A fragment without where it came from, for comparing two declarations. */
-function withoutCrate({ crate: _crate, ...fragment }: Declared): object {
-  return fragment;
+/**
+ * What TypeScript sees of a declaration, for comparing two: everything but
+ * where it came from and its docs. Two crates may each declare a type under
+ * one Rust name, as a wire type and its domain type do, while their shapes
+ * agree; the first one's docs are kept.
+ */
+function shapeOf({ crate: _crate, ...fragment }: Declared): string {
+  return JSON.stringify(fragment, (key, value: unknown) => (key === "doc" ? undefined : value));
 }
 
 /** The fields a type's values carry: a struct's, or every case's of a union. */

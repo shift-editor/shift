@@ -6,7 +6,9 @@
 //! interned id ([`Names`]), and so is an id ([`derive@PackId`]), which
 //! TypeScript reads as its brand; a list is its length followed by its items,
 //! and [`Numbers`] is the same but read as one `Float64Array`; an optional
-//! value is a flag followed by the value when present; a [`Result`] is a flag,
+//! value is a flag followed by the value when present; a [`HashMap`] is its
+//! length followed by each key and its value, read in TypeScript as a
+//! `Record`; `()` is nothing; a [`Result`] is a flag,
 //! set for `Ok`, followed by the value or the error; an enum is its variant's
 //! index, followed by the variant's fields when it has any, read in
 //! TypeScript as a string union for unit variants and otherwise as a union
@@ -34,6 +36,7 @@
 extern crate self as pack;
 
 use std::collections::HashMap;
+use std::hash::Hash;
 
 pub use pack_derive::{Pack, PackId, interface};
 
@@ -306,6 +309,40 @@ impl<T: Pack> Pack for Option<T> {
     fn write(&self, write: &mut Writer) {
         write.flag(self.is_some());
         if let Some(value) = self {
+            value.write(write);
+        }
+    }
+}
+
+/// Nothing: what a method that returns no value replies with.
+impl Pack for () {
+    fn read(_read: &mut Reader) -> Self {}
+
+    fn write(&self, _write: &mut Writer) {}
+}
+
+/// A count, then each key followed by its value, in the map's iteration
+/// order. TypeScript reads it as a `Record`, so a key is a name or an id.
+impl<K: Pack + Eq + Hash, V: Pack> Pack for HashMap<K, V> {
+    fn read(read: &mut Reader) -> Self {
+        let count = read.count();
+        // As for a list: a corrupt count must not reserve unbounded memory.
+        let mut map = Self::with_capacity(count.min(read.remaining()));
+        for _ in 0..count {
+            let key = K::read(read);
+            map.insert(key, V::read(read));
+        }
+        map
+    }
+
+    fn write(&self, write: &mut Writer) {
+        write.count(self.len());
+        #[expect(
+            clippy::iter_over_hash_type,
+            reason = "a map crosses in any order; the reader keys it again"
+        )]
+        for (key, value) in self {
+            key.write(write);
             value.write(write);
         }
     }
@@ -863,6 +900,91 @@ mod tests {
                 name: "missing".into()
             }))
         );
+    }
+
+    #[interface]
+    trait Counter {
+        fn add(&mut self, amount: f64);
+        fn total(&self) -> f64;
+        fn reset(&mut self) -> Result<(), ReadError>;
+    }
+
+    #[derive(Default)]
+    struct Tally(f64);
+
+    impl Counter for Tally {
+        fn add(&mut self, amount: f64) {
+            self.0 += amount;
+        }
+
+        fn total(&self) -> f64 {
+            self.0
+        }
+
+        fn reset(&mut self) -> Result<(), ReadError> {
+            if self.0 == 0.0 {
+                return Err(ReadError::Closed);
+            }
+            self.0 = 0.0;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn a_method_may_change_its_target_and_return_nothing() {
+        let mut names = Table::default();
+        let mut tally = Tally::default();
+
+        let added = counter_request(&mut tally, 0, &[2.5], Vec::new(), &mut names);
+        let total = counter_request(&mut tally, 1, &[], Vec::new(), &mut names);
+
+        assert_eq!(added, Packed::default());
+        assert_eq!(total.numbers, [2.5]);
+    }
+
+    #[test]
+    fn a_result_without_a_value_is_its_flag_alone() {
+        let mut names = Table::default();
+        let mut tally = Tally(1.0);
+
+        let reset = counter_request(&mut tally, 2, &[], Vec::new(), &mut names);
+        let again = counter_request(&mut tally, 2, &[], Vec::new(), &mut names);
+
+        assert_eq!(reset.numbers, [1.0]);
+        assert_eq!(again.numbers, [0.0, 0.0]);
+    }
+
+    #[test]
+    fn a_map_crosses_as_its_length_then_each_key_and_value() {
+        let mut names = Table::default();
+        let map = HashMap::from([("wght".to_string(), 400.0)]);
+
+        let encoded = encode(&mut names, &map);
+
+        assert_eq!(encoded, [1.0, 0.0, 400.0]);
+        assert_eq!(decode::<HashMap<String, f64>>(&names, &encoded), map);
+    }
+
+    #[derive(Clone, Debug, PartialEq, Pack)]
+    struct Typed {
+        #[pack(id = "GlyphId")]
+        glyph: String,
+        #[pack(numbers)]
+        values: Vec<f64>,
+    }
+
+    #[test]
+    fn a_field_typed_only_for_typescript_crosses_as_its_rust_type() {
+        let mut names = Table::default();
+        let typed = Typed {
+            glyph: "glyph_a".into(),
+            values: vec![1.0, 2.0],
+        };
+
+        let encoded = encode(&mut names, &typed);
+
+        assert_eq!(encoded, [0.0, 2.0, 1.0, 2.0]);
+        assert_eq!(decode::<Typed>(&names, &encoded), typed);
     }
 
     #[test]

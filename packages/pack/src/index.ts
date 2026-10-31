@@ -182,6 +182,8 @@ function noBlobs(): Blobs {
  * @remarks
  * Narrow it by the Rust enum's TypeScript name, then by `kind`:
  * `if (error instanceof PackError && error.type === "StoreReadError")`.
+ * The message is `<type>.<kind>`, followed by the error's `detail` when it
+ * carries one, as a variant that holds the text of a Rust error does.
  */
 export class PackError<E = unknown> extends Error {
   /** The error enum's TypeScript name, such as `StoreReadError`. */
@@ -192,9 +194,10 @@ export class PackError<E = unknown> extends Error {
   readonly error: E;
 
   constructor(type: string, error: E) {
-    const kind =
-      typeof error === "string" ? error : String((error as { readonly kind?: unknown }).kind);
-    super(`${type}.${kind}`);
+    const fields = typeof error === "object" && error !== null ? error : {};
+    const kind = typeof error === "string" ? error : String((fields as { kind?: unknown }).kind);
+    const detail = (fields as { detail?: unknown }).detail;
+    super(typeof detail === "string" ? `${type}.${kind}: ${detail}` : `${type}.${kind}`);
     this.name = "PackError";
     this.type = type;
     this.kind = kind;
@@ -246,6 +249,16 @@ export interface Reply {
   readonly blobs: Blobs;
 }
 
+/** The text codecs every JavaScript runtime this runs in has. */
+interface TextCodecs {
+  readonly TextEncoder: new () => { encode(text: string): Uint8Array };
+  readonly TextDecoder: new () => { decode(bytes: Uint8Array): string };
+}
+
+// Typed here rather than by the DOM or Node libraries, so a package that
+// imports generated types typechecks without either.
+const textCodecs = globalThis as unknown as TextCodecs;
+
 /**
  * Names for one message to or from a module this side shares no name table
  * with: what the message writes is interned in a table of its own, sent as its
@@ -279,7 +292,7 @@ class CarriedNames implements Names {
 
   /** The names this request wrote, as a blob. */
   sentBlob(): Uint8Array {
-    const encoder = new TextEncoder();
+    const encoder = new textCodecs.TextEncoder();
     const texts = this.#sent
       .keys()
       .map((name) => encoder.encode(name))
@@ -300,7 +313,7 @@ class CarriedNames implements Names {
     const received: string[] = [];
     if (blob) {
       const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
-      const decoder = new TextDecoder();
+      const decoder = new textCodecs.TextDecoder();
       for (let at = 0; at + 4 <= blob.length; ) {
         const end = at + 4 + view.getUint32(at, true);
         if (end > blob.length) break;
@@ -369,6 +382,7 @@ export type Schema =
   | { readonly kind: "id"; readonly brand?: string }
   | { readonly kind: "list"; readonly item: Schema }
   | { readonly kind: "option"; readonly inner: Schema }
+  | { readonly kind: "map"; readonly key: Schema; readonly value: Schema }
   | { readonly kind: "variants"; readonly names: readonly string[] }
   | { readonly kind: "struct"; readonly fields: Readonly<Record<string, Schema>> }
   | { readonly kind: "union"; readonly cases: Readonly<Record<string, StructSchema>> };
@@ -383,6 +397,14 @@ export function list<S extends Schema>(item: S): { readonly kind: "list"; readon
 /** A flag, then the value when present; absent reads as `null`. */
 export function option<S extends Schema>(inner: S): { readonly kind: "option"; readonly inner: S } {
   return { kind: "option", inner };
+}
+
+/** A count, then each key and its value; read as a `Record`, so a key is a name or an id. */
+export function map<K extends Schema, V extends Schema>(
+  key: K,
+  value: V,
+): { readonly kind: "map"; readonly key: K; readonly value: V } {
+  return { kind: "map", key, value };
 }
 
 /** An enum without data: its variant's index, read as the variant's name. */
@@ -438,13 +460,15 @@ type InferValue<S> = S extends { readonly kind: "number" | "count" }
         ? readonly Infer<I>[]
         : S extends { readonly kind: "option"; readonly inner: infer I }
           ? Infer<I> | null
-          : S extends { readonly kind: "variants"; readonly names: readonly (infer N)[] }
-            ? N
-            : S extends { readonly kind: "struct"; readonly fields: infer F }
-              ? InferFields<F>
-              : S extends { readonly kind: "union"; readonly cases: infer C }
-                ? InferCases<C>
-                : never;
+          : S extends { readonly kind: "map"; readonly key: infer K; readonly value: infer V }
+            ? Readonly<Record<Infer<K> & string, Infer<V>>>
+            : S extends { readonly kind: "variants"; readonly names: readonly (infer N)[] }
+              ? N
+              : S extends { readonly kind: "struct"; readonly fields: infer F }
+                ? InferFields<F>
+                : S extends { readonly kind: "union"; readonly cases: infer C }
+                  ? InferCases<C>
+                  : never;
 
 type InferCases<C> = {
   [K in keyof C]: { readonly kind: K } & (C[K] extends { readonly fields: infer F }
