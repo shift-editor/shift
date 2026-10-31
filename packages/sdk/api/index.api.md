@@ -302,7 +302,7 @@ export class Editor {
     object(id: ShiftId): ShiftObject | null;
     objects(ids: readonly ShiftId[]): readonly ShiftObject[];
     on: EventEmitter["on"];
-    openGlyphInText(glyphId: GlyphId, page?: PageNode): GlyphNode | null;
+    openGlyphInText(glyphId: GlyphId, page: PageNode): GlyphNode | null;
     readonly pages: Pages;
     // (undocumented)
     get pan(): Point2D;
@@ -458,10 +458,12 @@ export interface EditorView {
     externalLocation: AxisCoordinate[];
     // (undocumented)
     glyph: EditorGlyph | null;
+    pages: EditorPage[];
     // (undocumented)
     route: string;
     // (undocumented)
     selectionIds: SelectableId[];
+    shownPageId: NodeId | null;
     // (undocumented)
     tool: EditorTool | null;
 }
@@ -585,6 +587,7 @@ export class Font {
     recordForId(glyphId: GlyphId): GlyphRecord | null;
     // (undocumented)
     recordForName(name: GlyphName): GlyphRecord | null;
+    renameGlyph(glyphId: GlyphId, name: string): GlyphIdentityChange;
     renameKerningGroup(groupId: KerningGroupId, name: string): Promise<void>;
     resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]>;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
@@ -593,6 +596,7 @@ export class Font {
     setKerningValues(edits: readonly KerningValueEdit[], label: string): void;
     setLanguageIds(languageIds: readonly string[]): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
+    setPrimaryCodepoint(glyphId: GlyphId, text: string): GlyphIdentityChange;
     shapeParagraphs(paragraphs: readonly ParagraphRequest[]): readonly ShapedParagraph[] | null;
     source(sourceId: SourceId): Source | null;
     sourceAt(location: ExternalAxisLocation): Source | null;
