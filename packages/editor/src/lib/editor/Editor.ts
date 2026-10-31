@@ -122,7 +122,7 @@ import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { ShiftObject } from "../../types/object";
 import type { ShiftEditorRecord, ShiftRecordId } from "../../types/records";
-import type { GlyphNode, NodeKind, PageNode, ShiftNode, TextRunNode } from "../../types/node";
+import type { GlyphNode, NodeKind, PageNode, ShiftNode } from "../../types/node";
 import {
   AnchorObject,
   ComponentObject,
@@ -1151,13 +1151,12 @@ export class Editor {
     return SelectedPoints.resolve(ids, layer, node);
   }
 
-  /** Returns the glyph node showing a layer: one placing the layer's glyph at the layer's source. */
-  /** The glyph node on the active page that shows `layer`, or null. */
+  /** Returns the glyph node on the shown page that places the layer's glyph at the layer's source. */
   #placedGlyphNodeForLayer(layer: GlyphLayer): GlyphNode | null {
     const glyphId = this.font.glyphIdForLayer(layer.id);
     if (!glyphId) return null;
 
-    const pageId = this.scene.activePageIdCell.peek();
+    const pageId = this.scene.shownPageIdCell.peek();
     for (const node of this.scene.nodesReferencing(glyphId)) {
       if (node.kind !== "glyph" || node.sourceId !== layer.sourceId) continue;
       if (this.scene.pageOf(node.id)?.id === pageId) return node;
@@ -1983,32 +1982,31 @@ export class Editor {
    *
    * @remarks
    * Shows `page` first. Until runs are placed by the user each page has at most
-   * one run at its origin, created on the first open there and kept after;
+   * one run at its origin, placed on the first open there and kept after;
    * opening replaces its text with the glyph, and opening the glyph the run
    * already edits re-enters it. Runs on other pages keep their text. Opening is
-   * navigation, never a history entry. Tools reset afterwards, since they
-   * activate against the glyph node they find.
+   * navigation, never a history entry. Tools activate against the glyph node
+   * they find, so they reset whenever that node is replaced: on a page switch
+   * (`Pages.activate`), or here when the shown page's run changes glyph.
    *
    * @param glyphId - A glyph whose model is already loaded.
-   * @param page - The page to show and open it on; defaults to the first glyph-view page.
+   * @param page - The page to show and open it on.
    * @returns the glyph node now being edited, or null when the glyph cannot be placed.
    */
-  public openGlyphInText(glyphId: GlyphId, page?: PageNode): GlyphNode | null {
-    const open = (): GlyphNode | null => {
-      const target = page ?? this.pages.glyphView();
-      this.pages.activate(target.id);
+  public openGlyphInText(glyphId: GlyphId, page: PageNode): GlyphNode | null {
+    return this.history.withoutRecording(() => {
+      this.pages.activate(page.id);
       const runs = this.nodeDefinition("textRun");
-      const run =
-        this.scene.first("textRun") ??
-        this.scene.createNode<TextRunNode>({
-          kind: "textRun",
-          parentId: target.id,
-          runId: this.text.createRun([]).id,
-          size: this.font.metricsCell.peek().unitsPerEm,
-          position: { x: 0, y: 0 },
-        });
+      const existing = this.scene.first("textRun");
+      if (!existing) {
+        const run = this.text.placeRun({ page, at: { x: 0, y: 0 }, glyphs: [glyphId] });
+        const item = this.text.items(run)[0];
+        const child = item ? runs.editItem(run, item.id) : null;
+        if (child) this.enterNode(child.id);
+        return child;
+      }
 
-      const previous = runs.childGlyph(run);
+      const previous = runs.childGlyph(existing);
       if (previous?.glyphId === glyphId) {
         this.enterNode(previous.id);
         return previous;
@@ -2017,14 +2015,13 @@ export class Editor {
       const item = this.text.glyphItem(glyphId);
       if (!item) return null;
 
-      this.text.setItems(run.runId, [item]);
-      const child = runs.editItem(run, item.id);
+      this.text.setItems(existing.runId, [item]);
+      const child = runs.editItem(existing, item.id);
       if (child) this.enterNode(child.id);
+      // The page stayed, so Pages.activate did not reset the tools; the node they edit did change.
+      this.toolManager.reset();
       return child;
-    };
-    const node = this.history.withoutRecording(open);
-    this.toolManager.reset();
-    return node;
+    });
   }
 
   /** Frames a glyph node's editing frame (`GlyphNodeDefinition.frameBounds`) until the user moves the camera. */

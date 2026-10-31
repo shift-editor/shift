@@ -38,7 +38,10 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
   const leftSidebearing = sidebearings.lsb === null ? null : Math.round(sidebearings.lsb);
   const rightSidebearing = sidebearings.rsb === null ? null : Math.round(sidebearings.rsb);
   const sidebearingsEditable = editable && leftSidebearing !== null && rightSidebearing !== null;
-  const pageNameCell = useMemo(() => computed(() => editor.pages.active?.name ?? null), [editor]);
+  const pageNameCell = useMemo(
+    () => computed(() => editor.scene.shownPage()?.name ?? null),
+    [editor],
+  );
   const pageName = useSignalState(pageNameCell);
 
   return (

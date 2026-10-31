@@ -4,14 +4,15 @@ import { computed, signal, type Signal, type WritableSignal } from "../signals/i
 import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { NodeReference, ShiftEditorRecord, ShiftNodeRecord } from "../../types/records";
-import type {
-  CreateNode,
-  NodeKind,
-  NodeOfKind,
+import {
   PageNode,
-  ShiftNode,
-  UpdateNode,
+  type CreateNode,
+  type NodeKind,
+  type NodeOfKind,
+  type ShiftNode,
+  type UpdateNode,
 } from "../../types/node";
+import { IndexKey } from "../../types/indexKey";
 
 /** Name given to the page a scene gets when it has none. */
 export const DEFAULT_PAGE_NAME = "Page 1";
@@ -37,8 +38,9 @@ interface DocumentValue {
  *
  * @remarks
  * The roots of the scene are pages, and every other node descends from one.
- * The canvas shows one page at a time, so the collection queries (`cell`,
- * `nodes`, `nodesOfKind`, `only`, `first`) answer for the active page only.
+ * The canvas shows one page at a time ({@link shownPageIdCell}), so the
+ * collection queries (`cell`, `nodes`, `nodesOfKind`, `only`, `first`) answer
+ * for the shown page only.
  * Lookups by id (`node`, `children`, `parent`, `ancestors`,
  * `nodesReferencing`) and {@link allNodes} see every page.
  */
@@ -46,8 +48,9 @@ export class Scene {
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #documentCell: Signal<DocumentValue>;
   readonly #pagesCell: Signal<readonly PageNode[]>;
-  readonly #requestedPageId: WritableSignal<NodeId | null>;
-  readonly #activePageIdCell: Signal<NodeId | null>;
+  readonly #requestedPageIdCell: WritableSignal<NodeId | null>;
+  readonly #shownPageIdCell: Signal<NodeId | null>;
+  readonly #pageIdByNodeCell: Signal<ReadonlyMap<NodeId, NodeId>>;
   readonly #cell: Signal<SceneValue>;
   readonly #nodesById: Signal<ReadonlyEntityMap<NodeId, ShiftNode>>;
   readonly #nodesByKind: Signal<ReadonlyMap<NodeKind, readonly ShiftNode[]>>;
@@ -70,7 +73,7 @@ export class Scene {
         const tree = Tree.from<NodeId, ShiftNode>(nodes, {
           id: (node) => node.id,
           parentId: (node) => node.parentId,
-          order: (a, b) => compareIndex(a.index, b.index),
+          order: (a, b) => IndexKey.compare(a.index, b.index),
         });
         return { nodes: tree.walk(), tree };
       },
@@ -81,22 +84,36 @@ export class Scene {
     this.#pagesCell = computed(
       () => this.#documentCell.value.tree.roots().filter((node) => node.kind === "page"),
       // Most node writes touch no page; keep the list's identity so a pages list does not rerender.
-      { name: "editor.scene.pages", equals: sameNodes },
+      { name: "editor.scene.pages", equals: PageNode.sameList },
     );
-    this.#requestedPageId = signal<NodeId | null>(null, { name: "editor.scene.requestedPage" });
-    this.#activePageIdCell = computed(
+    this.#requestedPageIdCell = signal<NodeId | null>(null, {
+      name: "editor.scene.requestedPage",
+    });
+    this.#shownPageIdCell = computed(
       () => {
         const pages = this.#pagesCell.value;
-        const requested = this.#requestedPageId.value;
+        const requested = this.#requestedPageIdCell.value;
         const page = pages.find((candidate) => candidate.id === requested) ?? pages[0];
         return page?.id ?? null;
       },
-      { name: "editor.scene.activePage" },
+      { name: "editor.scene.shownPage" },
+    );
+    this.#pageIdByNodeCell = computed(
+      () => {
+        const { tree } = this.#documentCell.value;
+        const pageIds = new Map<NodeId, NodeId>();
+        for (const page of this.#pagesCell.value) {
+          pageIds.set(page.id, page.id);
+          for (const node of tree.descendants(page.id)) pageIds.set(node.id, page.id);
+        }
+        return pageIds;
+      },
+      { name: "editor.scene.pageIdByNode" },
     );
     this.#cell = computed(
       () => {
         const { tree } = this.#documentCell.value;
-        const pageId = this.#activePageIdCell.value;
+        const pageId = this.#shownPageIdCell.value;
         const nodes = pageId ? [...tree.descendants(pageId)] : [];
         return { nodes, tree };
       },
@@ -174,16 +191,18 @@ export class Scene {
    * The page the canvas shows; null only while the scene has no page.
    *
    * @remarks
+   * The one owner of the shown page: the page-scoped queries read it.
    * Session state, never stored. Falls back to the first page when the page
-   * last shown is deleted (including by undo).
+   * last shown is deleted (including by undo). `Pages.activate` switches it
+   * and keeps each page's camera.
    */
-  get activePageIdCell(): Signal<NodeId | null> {
-    return this.#activePageIdCell;
+  get shownPageIdCell(): Signal<NodeId | null> {
+    return this.#shownPageIdCell;
   }
 
   /** Returns the page the canvas shows, or null while the scene has no page. */
-  activePage(): PageNode | null {
-    return this.nodeOfKind(this.#activePageIdCell.peek(), "page");
+  shownPage(): PageNode | null {
+    return this.nodeOfKind(this.#shownPageIdCell.peek(), "page");
   }
 
   /**
@@ -196,43 +215,30 @@ export class Scene {
   showPage(pageId: NodeId): void {
     if (!this.nodeOfKind(pageId, "page")) return;
 
-    this.#requestedPageId.set(pageId);
+    this.#requestedPageIdCell.set(pageId);
   }
 
   /**
-   * Returns the active page, creating {@link DEFAULT_PAGE_NAME} first when the scene has none.
+   * Returns the shown page, creating {@link DEFAULT_PAGE_NAME} first when the scene has none.
    *
    * @remarks
-   * Also moves any root node that is not a page onto the active page, so a
-   * scene written before pages existed keeps its content. Writes records, so
-   * inside a capture the creation is part of that undo step.
+   * Writes a record when it creates the page, so inside a capture the
+   * creation is part of that undo step.
    */
   ensurePage(): PageNode {
-    const page =
-      this.activePage() ??
+    return (
+      this.shownPage() ??
       this.createNode<PageNode>({
         kind: "page",
         name: DEFAULT_PAGE_NAME,
         position: { x: 0, y: 0 },
-      });
-    for (const root of this.#documentCell.peek().tree.roots()) {
-      if (root.kind === "page") continue;
-
-      this.#store.put(copyNode({ ...root, parentId: page.id }) as ShiftNodeRecord);
-    }
-
-    return page;
+      })
+    );
   }
 
   /** Returns the page a node is on (the page itself for a page), or null for a node on no page. */
   pageOf(nodeId: NodeId): PageNode | null {
-    const node = this.node(nodeId);
-    if (!node) return null;
-    if (node.kind === "page") return node;
-
-    let root: ShiftNode = node;
-    for (const ancestor of this.ancestors(nodeId)) root = ancestor;
-    return root.kind === "page" ? root : null;
+    return this.nodeOfKind(this.#pageIdByNodeCell.peek().get(nodeId) ?? null, "page");
   }
 
   node(nodeId: NodeId | null): ShiftNode | null {
@@ -355,20 +361,13 @@ export class Scene {
     return next;
   }
 
-  /**
-   * Replaces every node on every page.
-   *
-   * @remarks
-   * Root nodes that are not pages move onto the first page, or onto a new
-   * {@link DEFAULT_PAGE_NAME} when `nodes` has no page.
-   */
+  /** Replaces every node on every page. */
   setNodes(nodes: readonly ShiftNode[]): void {
     this.#deleteNodes();
 
     for (const node of nodes) {
       this.#store.put(copyNode(node) as ShiftNodeRecord);
     }
-    this.ensurePage();
   }
 
   /**
@@ -387,6 +386,21 @@ export class Scene {
     this.#store.delete(nodeId);
   }
 
+  /**
+   * Deletes a node and everything under it, children before their parents.
+   *
+   * @returns the deleted nodes, the node itself last.
+   */
+  deleteSubtree(nodeId: NodeId): readonly ShiftNode[] {
+    const node = this.node(nodeId);
+    if (!node) return [];
+
+    const deleted = [...this.descendants(nodeId)].reverse();
+    deleted.push(node);
+    for (const each of deleted) this.#store.delete(each.id);
+    return deleted;
+  }
+
   clear(): void {
     this.#deleteNodes();
   }
@@ -401,33 +415,8 @@ export class Scene {
     const { tree } = this.#documentCell.peek();
     const siblings = parentId ? tree.children(parentId) : tree.roots();
 
-    return indexAfter(siblings.at(-1)?.index ?? null);
+    return IndexKey.between(siblings.at(-1)?.index ?? null, null);
   }
-}
-
-// Numeric-aware, so "a10" sorts after "a9".
-const INDEX_COLLATOR = new Intl.Collator("en", { numeric: true });
-
-/** Orders sibling `index` keys; digit runs compare as numbers. */
-export function compareIndex(a: string, b: string): number {
-  if (a === b) return 0;
-
-  const order = INDEX_COLLATOR.compare(a, b);
-  if (order !== 0) return order;
-  return a < b ? -1 : 1;
-}
-
-/** Returns an index key that sorts after `last`, or the first key when there is no sibling. */
-export function indexAfter(last: string | null): string {
-  if (last === null) return "a0";
-
-  const match = /^a(\d+)$/.exec(last);
-  if (match?.[1]) return `a${Number(match[1]) + 1}`;
-  return `${last}1`;
-}
-
-function sameNodes(a: readonly ShiftNode[], b: readonly ShiftNode[]): boolean {
-  return a.length === b.length && a.every((node, index) => node === b[index]);
 }
 
 function copyNode<T extends ShiftNode>(node: T): T {

@@ -1,9 +1,9 @@
 import type { NodeId } from "@shift/types";
 import type { Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
-import { indexAfter } from "../editor/Scene";
 import { computed, type Signal } from "../signals";
-import type { PageNode } from "../../types/node";
+import { PageNode, type TextRunNode } from "../../types/node";
+import { IndexKey } from "../../types/indexKey";
 import type { PageCamera } from "../../types/page";
 
 /**
@@ -11,57 +11,45 @@ import type { PageCamera } from "../../types/page";
  *
  * @remarks
  * Pages are root scene nodes, so this is a view over `Scene` plus per-page
- * session state. Page edits (`create`, `rename`, `move`, `delete`) write scene
- * records inside a history capture, one undo step each. Switching pages
- * (`activate`) is navigation: it writes no record and is never undone.
+ * session state: the cameras. `Scene.shownPageIdCell` is the one owner of the
+ * shown page; {@link activate} switches it through `Scene.showPage`. Page
+ * edits (`create`, `rename`, `move`, `delete`) write scene records inside a
+ * history capture, one undo step each. Switching pages is navigation: it
+ * writes no record and is never undone.
  */
 export class Pages {
   readonly #editor: Editor;
   // non-reactive: session camera memory, read only when a page is activated.
   readonly #cameras = new Map<NodeId, PageCamera>();
 
+  readonly #listCell: Signal<readonly PageNode[]>;
+
   /**
    * @param editor - editor whose scene holds the pages.
    */
-  readonly #listCell: Signal<readonly PageNode[]>;
-
   constructor(editor: Editor) {
     this.#editor = editor;
     this.#listCell = computed(
       () => editor.scene.pagesCell.value.filter((page) => page.role !== "glyph"),
-      { name: "editor.pages.list", equals: samePages },
+      { name: "editor.pages.list", equals: PageNode.sameList },
     );
   }
 
   /**
-   * The user's pages in list order, the glyph view's page left out; keeps its
-   * identity until a page record changes, so a list can render from it.
+   * The user's pages in list order, glyph pages left out; keeps its identity
+   * until a page record changes, so a list can render from it.
    */
   get listCell(): Signal<readonly PageNode[]> {
     return this.#listCell;
   }
 
-  /** The user's pages in list order, the glyph view's page left out. */
+  /** The user's pages in list order, glyph pages left out. */
   get list(): readonly PageNode[] {
     return this.#listCell.peek();
   }
 
   /**
-   * Returns the glyph view's page, creating it the first time.
-   *
-   * @remarks
-   * A page that never shows in the pages list (`PageNode.role`), where a
-   * glyph opened from the font overview is edited. Writes a record the first
-   * time, so call it inside `history.withoutRecording` when it is navigation.
-   */
-  glyphView(): PageNode {
-    return (
-      this.#editor.scene.pages().find((page) => page.role === "glyph") ?? this.createGlyphPage()
-    );
-  }
-
-  /**
-   * Adds a glyph-view page and returns it. Does not show it.
+   * Adds a glyph page and returns it. Does not show it.
    *
    * @remarks
    * A page the pages list leaves out (`PageNode.role`), for a glyph opened
@@ -74,12 +62,12 @@ export class Pages {
       name: "Glyph",
       role: "glyph",
       position: { x: 0, y: 0 },
-      index: indexAfter(this.#editor.scene.pages().at(-1)?.index ?? null),
+      index: IndexKey.between(this.#editor.scene.pages().at(-1)?.index ?? null, null),
     });
   }
 
   /**
-   * Removes a glyph-view page and everything on it, as navigation: no undo step.
+   * Removes a glyph page and everything on it, as navigation: no undo step.
    *
    * @remarks
    * For closing what showed it, such as a glyph tab. Text runs placed only on
@@ -90,7 +78,7 @@ export class Pages {
     const page = this.#editor.scene.nodeOfKind(pageId, "page");
     if (page?.role !== "glyph") return;
 
-    if (this.activeCell.peek() === pageId) {
+    if (this.#editor.scene.shownPageIdCell.peek() === pageId) {
       const fallback = this.list[0];
       if (fallback) this.activate(fallback.id);
     }
@@ -99,27 +87,11 @@ export class Pages {
   }
 
   /**
-   * The page the canvas shows; null only while the scene has no page.
+   * Returns the shown page, creating "Page 1" when the scene has none.
    *
    * @remarks
-   * Session state, never stored or undone. When the page shown is deleted, it
-   * falls back to the first page.
-   */
-  get activeCell(): Signal<NodeId | null> {
-    return this.#editor.scene.activePageIdCell;
-  }
-
-  /** The page the canvas shows, or null while the scene has no page. */
-  get active(): PageNode | null {
-    return this.#editor.scene.activePage();
-  }
-
-  /**
-   * Returns the active page, creating "Page 1" when the scene has none.
-   *
-   * @remarks
-   * Root nodes that are not pages move onto it. Writes records, so call it
-   * inside `history.withoutRecording` when it is setup rather than an edit.
+   * Writes a record when it creates the page, so call it inside
+   * `history.withoutRecording` when it is setup rather than an edit.
    */
   ensure(): PageNode {
     return this.#editor.scene.ensurePage();
@@ -139,7 +111,7 @@ export class Pages {
         kind: "page",
         name: pageName,
         position: { x: 0, y: 0 },
-        index: indexAfter(pages.at(-1)?.index ?? null),
+        index: IndexKey.between(this.#editor.scene.pages().at(-1)?.index ?? null, null),
       }),
     );
   }
@@ -164,25 +136,23 @@ export class Pages {
   /**
    * Moves a page to `index` in the list order.
    *
+   * @remarks
+   * Writes only the moved page: its new key sorts between its new neighbours.
+   *
    * @param index - position among the pages after the move; clamped to the list.
    */
   move(pageId: NodeId, index: number): void {
     const pages = this.list;
     const from = pages.findIndex((page) => page.id === pageId);
-    const page = pages[from];
-    if (!page) return;
+    if (from < 0) return;
 
     const others = pages.filter((candidate) => candidate.id !== pageId);
     const to = Math.max(0, Math.min(Math.trunc(index), others.length));
     if (to === from) return;
 
-    const ordered = [...others.slice(0, to), page, ...others.slice(to)];
+    const key = IndexKey.between(others[to - 1]?.index ?? null, others[to]?.index ?? null);
     this.#editor.history.capture("Move page", () => {
-      ordered.forEach((candidate, position) => {
-        const key = `a${position}`;
-        if (candidate.index !== key)
-          this.#editor.scene.updateNode({ id: candidate.id, index: key });
-      });
+      this.#editor.scene.updateNode({ id: pageId, index: key });
     });
   }
 
@@ -202,7 +172,9 @@ export class Pages {
     if (at < 0 || pages.length <= 1) return false;
 
     const neighbour = pages[at + 1] ?? pages[at - 1];
-    if (neighbour && this.activeCell.peek() === pageId) this.activate(neighbour.id);
+    if (neighbour && this.#editor.scene.shownPageIdCell.peek() === pageId) {
+      this.activate(neighbour.id);
+    }
 
     this.#editor.history.capture("Delete page", () => this.#removePage(pageId));
     this.#cameras.delete(pageId);
@@ -218,7 +190,7 @@ export class Pages {
    */
   activate(pageId: NodeId): void {
     const scene = this.#editor.scene;
-    const current = this.activeCell.peek();
+    const current = scene.shownPageIdCell.peek();
     if (current === pageId || !scene.nodeOfKind(pageId, "page")) return;
 
     if (current) this.#cameras.set(current, this.#camera());
@@ -243,17 +215,9 @@ export class Pages {
   }
 
   #removePage(pageId: NodeId): void {
-    const scene = this.#editor.scene;
-    const nodes = scene.descendants(pageId);
-    const deleted = new Set(nodes.map((node) => node.id));
-    for (const node of [...nodes].reverse()) scene.deleteNode(node.id);
-    scene.deleteNode(pageId);
-
-    for (const node of nodes) {
-      if (node.kind !== "textRun") continue;
-      const elsewhere = scene.nodesReferencing(node.runId).some((other) => !deleted.has(other.id));
-      if (!elsewhere) this.#editor.text.deleteRun(node.runId);
-    }
+    const deleted = this.#editor.scene.deleteSubtree(pageId);
+    const runs = deleted.filter((node): node is TextRunNode => node.kind === "textRun");
+    this.#editor.text.deleteRunsPlacedBy(runs);
   }
 
   #camera(): PageCamera {
@@ -268,8 +232,4 @@ export class Pages {
 
     return `Page ${number}`;
   }
-}
-
-function samePages(a: readonly PageNode[], b: readonly PageNode[]): boolean {
-  return a.length === b.length && a.every((page, index) => page === b[index]);
 }

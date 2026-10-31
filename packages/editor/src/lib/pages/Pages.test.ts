@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mintNodeId } from "@shift/types";
 import { startEmptyMemorySession } from "../../testing/emptyMemorySession";
 import type { MemoryFontSession } from "../../types/fontSession";
-import type { TextRunNode } from "../../types/node";
 import { effect } from "../signals";
 import type { Editor } from "../editor/Editor";
 
@@ -19,14 +17,14 @@ describe("Pages", () => {
   const pageNames = () => editor.pages.list.map((page) => page.name);
 
   it("publishes the list and the shown page to reactive readers", () => {
-    const shownAtStart = editor.pages.activeCell.peek();
+    const shownAtStart = editor.scene.shownPageIdCell.peek();
     const seen: string[][] = [];
     const shown: (string | null)[] = [];
     const listReader = effect(() => {
       seen.push(editor.pages.listCell.value.map((page) => page.name));
     });
     const activeReader = effect(() => {
-      shown.push(editor.pages.activeCell.value);
+      shown.push(editor.scene.shownPageIdCell.value);
     });
 
     const second = editor.pages.create();
@@ -39,23 +37,17 @@ describe("Pages", () => {
     expect(shown).toEqual([shownAtStart, second.id]);
   });
 
-  it("puts nodes written without a page onto Page 1", () => {
-    const loose: TextRunNode = {
-      type: "node",
-      kind: "textRun",
-      id: mintNodeId(),
-      parentId: null,
-      index: "a0",
-      runId: editor.text.createRun([]).id,
-      size: 1000,
-      position: { x: 0, y: 0 },
-    };
+  it("moves a page by writing only its own index key", () => {
+    const pages = [editor.pages.list[0]!, editor.pages.create("B"), editor.pages.create("C")];
+    const written: string[] = [];
+    const before = new Map(pages.map((page) => [page.id, page.index]));
 
-    editor.scene.setNodes([loose]);
+    editor.pages.move(pages[2]!.id, 0);
+    for (const page of editor.pages.list) {
+      if (before.get(page.id) !== page.index) written.push(page.name);
+    }
 
-    const page = editor.pages.list[0];
-    expect(pageNames()).toEqual(["Page 1"]);
-    expect(editor.scene.node(loose.id)?.parentId).toBe(page?.id);
-    expect(editor.scene.first("textRun")?.id).toBe(loose.id);
+    expect(pageNames()).toEqual(["C", "Page 1", "B"]);
+    expect(written).toEqual(["C"]);
   });
 });
