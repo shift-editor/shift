@@ -19,19 +19,6 @@ use crate::{
 };
 
 #[napi(object)]
-pub struct NapiCatalogAxis {
-    pub index: u32,
-    pub tag: String,
-    pub name: String,
-    pub hidden: bool,
-    pub axis_type: String,
-    pub minimum: Option<f64>,
-    pub default: f64,
-    pub maximum: Option<f64>,
-    pub values: Vec<f64>,
-}
-
-#[napi(object)]
 pub struct NapiCatalogMetrics {
     pub units_per_em: f64,
     pub ascender: f64,

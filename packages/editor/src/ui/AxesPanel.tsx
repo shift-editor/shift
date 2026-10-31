@@ -1,8 +1,7 @@
 import { Slider, cn } from "@shift/ui";
-import type { Axis } from "@shift/types";
 import type { ReactNode } from "react";
 import { useSignalState } from "../lib/signals";
-import { continuousBounds, discreteValues } from "../lib/variation/axisKind";
+import type { Axis } from "../lib/model/Axis";
 import { axisValue, withExternalAxisValue } from "../lib/variation/location";
 import { EditableSidebarInput } from "./EditableSidebarInput";
 import type { EditorUISession } from "./types";
@@ -14,10 +13,9 @@ export interface AxesPanelProps {
 
 export function AxesPanel({ session, actions }: AxesPanelProps) {
   const { editor, font } = session;
-  const axes = useSignalState(font.externalAxesCell).filter((axis) => {
-    const bounds = continuousBounds(axis);
-    return bounds !== null && bounds.minimum !== bounds.maximum;
-  });
+  const axes = useSignalState(font.externalAxesCell).filter(
+    (axis) => !axis.isDiscrete && axis.varies,
+  );
   const location = useSignalState(editor.externalLocationCell);
 
   if (axes.length === 0) return <p className="pl-2 text-ui text-muted">No varying axes</p>;
@@ -25,10 +23,7 @@ export function AxesPanel({ session, actions }: AxesPanelProps) {
   return (
     <div className="flex flex-col gap-1">
       {axes.map((axis) => {
-        const bounds = continuousBounds(axis);
-        const values = discreteValues(axis) ?? [];
-        const minimum = bounds?.minimum ?? Math.min(axis.kind.default, ...values);
-        const maximum = bounds?.maximum ?? Math.max(axis.kind.default, ...values);
+        const { minimum, maximum } = axis;
         const value = axisValue(location, axis);
         const setValue = (nextValue: number) =>
           editor.setExternalLocation(withExternalAxisValue(location, axis, nextValue));
@@ -50,7 +45,7 @@ export function AxesPanel({ session, actions }: AxesPanelProps) {
                 className="min-w-0 flex-1"
                 onDoubleClick={(event) => {
                   event.preventDefault();
-                  setValue(axis.kind.default);
+                  setValue(axis.default);
                 }}
               >
                 <Slider

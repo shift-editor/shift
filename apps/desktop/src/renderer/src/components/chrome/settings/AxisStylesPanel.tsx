@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import type { Axis, AxisLabel, AxisLabelId } from "@shift/types";
+import { Axis } from "@shift/editor/model";
+import type { AxisLabel, AxisLabelId, Axis as AxisRecord } from "@shift/types";
 import { ascending, mintAxisLabelId, removeBy, replaceBy } from "@shift/types";
-import { continuousBounds, discreteValues } from "@shift/editor/variation";
 import { Button, Checkbox, Input, Tooltip } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
@@ -273,17 +273,17 @@ function updateLabelDraft(
 }
 
 function replaceLabel(
-  axis: Axis,
+  axis: AxisRecord,
   labelId: AxisLabelId,
   transform: (label: AxisLabel) => AxisLabel,
-): Axis {
+): AxisRecord {
   return {
     ...axis,
     labels: replaceBy(axis.labels, labelId, transform, (label) => label.id),
   };
 }
 
-function setElidableLabel(axis: Axis, labelId: AxisLabelId, elidable: boolean): Axis {
+function setElidableLabel(axis: AxisRecord, labelId: AxisLabelId, elidable: boolean): AxisRecord {
   return {
     ...axis,
     labels: axis.labels.map((label) => {
@@ -297,7 +297,7 @@ function setElidableLabel(axis: Axis, labelId: AxisLabelId, elidable: boolean): 
 
 async function addLabel(draft: AxisDraft, range: boolean): Promise<void> {
   await draft.updateAndCommit((axis) => {
-    const value = nextLabelValue(axis);
+    const value = nextLabelValue(new Axis(axis));
     if (value === null) return axis;
 
     const label: AxisLabel = {
@@ -313,18 +313,17 @@ async function addLabel(draft: AxisDraft, range: boolean): Promise<void> {
 
 function nextLabelValue(axis: Axis): number | null {
   const used = new Set(axis.labels.map(({ value }) => value));
-  if (!used.has(axis.kind.default)) return axis.kind.default;
+  if (!used.has(axis.default)) return axis.default;
 
-  if (axis.kind.kind === "discrete") {
-    return discreteValues(axis)?.find((value) => !used.has(value)) ?? null;
+  if (axis.isDiscrete) {
+    return axis.values.find((value) => !used.has(value)) ?? null;
   }
 
-  const minimum = continuousBounds(axis)?.minimum ?? axis.kind.default;
-  const maximum = continuousBounds(axis)?.maximum ?? axis.kind.default;
+  const { minimum, maximum } = axis;
   if (!used.has(minimum)) return minimum;
   if (!used.has(maximum)) return maximum;
 
-  const values = [...used].filter((value) => minimum <= value && value <= maximum).sort(ascending);
+  const values = [...used].filter((value) => axis.accepts(value)).sort(ascending);
   let largestGap = 0;
   let available: number | null = null;
 

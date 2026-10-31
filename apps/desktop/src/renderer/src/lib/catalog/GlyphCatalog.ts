@@ -1,23 +1,11 @@
 import type { GlyphInfo } from "@shift/glyph-info";
-import type {
-  Axis,
-  CatalogAxis,
-  CatalogMetrics,
-  GlyphId,
-  GlyphName,
-  GlyphPreview,
-  SourceId,
-} from "@shift/types";
+import type { CatalogMetrics, GlyphId, GlyphName, GlyphPreview, SourceId } from "@shift/types";
 import { computed, track, type ComputedSignal, type Signal } from "@shift/editor/signals";
 import type { Editor } from "@shift/editor";
-import {
-  continuousBounds,
-  discreteValues,
-  externalAxisLocationFromRecord,
-} from "@shift/editor/variation";
+import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { GlyphAtlasSource } from "@/types/glyphAtlas";
 import type { CatalogLocation, GlyphCatalogItem } from "@/types/glyphCatalog";
-import { RenderGlyph, type GlyphInvalidation } from "@shift/editor/model";
+import { RenderGlyph, type Axis, type GlyphInvalidation } from "@shift/editor/model";
 
 /** Projects the editor model into the source-independent catalog boundary. */
 export class GlyphCatalog {
@@ -25,7 +13,8 @@ export class GlyphCatalog {
   readonly #derived: readonly ComputedSignal<unknown>[];
 
   readonly glyphsCell: ComputedSignal<readonly GlyphCatalogItem[]>;
-  readonly axesCell: ComputedSignal<readonly CatalogAxis[]>;
+  /** The font's axes, in the order {@link GlyphCatalog.locationCell} lists coordinates. */
+  readonly axesCell: Signal<readonly Axis[]>;
   readonly locationCell: ComputedSignal<CatalogLocation>;
   readonly metricsCell: ComputedSignal<CatalogMetrics>;
   readonly familyNameCell: ComputedSignal<string | null>;
@@ -45,13 +34,11 @@ export class GlyphCatalog {
         ),
       { name: "catalog.glyphs" },
     );
-    this.axesCell = computed(() => font.axesCell.value.map(catalogAxis), {
-      name: "catalog.axes",
-    });
+    this.axesCell = font.axesCell;
     this.locationCell = computed(
       () => {
         const location = editor.externalLocationCell.value;
-        return font.axesCell.value.map((axis) => location.get(axis.id) ?? axis.kind.default);
+        return font.axesCell.value.map((axis) => location.get(axis.id) ?? axis.default);
       },
       { name: "catalog.location" },
     );
@@ -84,7 +71,6 @@ export class GlyphCatalog {
     this.atlas = atlas;
     this.#derived = [
       this.glyphsCell,
-      this.axesCell,
       this.locationCell,
       this.metricsCell,
       this.familyNameCell,
@@ -104,9 +90,7 @@ export class GlyphCatalog {
     }
 
     const externalLocation = externalAxisLocationFromRecord(
-      Object.fromEntries(
-        axes.map((axis, index) => [axis.id, location[index] ?? axis.kind.default]),
-      ),
+      Object.fromEntries(axes.map((axis, index) => [axis.id, location[index] ?? axis.default])),
     );
     return font.glyphPreviews(glyphIds, font.designspace.toDesign(externalLocation));
   }
@@ -125,9 +109,7 @@ export class GlyphCatalog {
     }
 
     const axisLocation = externalAxisLocationFromRecord(
-      Object.fromEntries(
-        axes.map((axis, index) => [axis.id, location[index] ?? axis.kind.default]),
-      ),
+      Object.fromEntries(axes.map((axis, index) => [axis.id, location[index] ?? axis.default])),
     );
     this.#editor.setExternalLocation(axisLocation);
   }
@@ -150,19 +132,5 @@ function glyphCatalogItem(
     name,
     displayName: glyphInfo.resolveGlyphName(name, unicode),
     unicode,
-  };
-}
-
-function catalogAxis(axis: Axis, index: number): CatalogAxis {
-  return {
-    index,
-    tag: axis.tag,
-    name: axis.name,
-    hidden: axis.hidden,
-    axisType: axis.kind.kind,
-    minimum: continuousBounds(axis)?.minimum,
-    default: axis.kind.default,
-    maximum: continuousBounds(axis)?.maximum,
-    values: [...(discreteValues(axis) ?? [])],
   };
 }

@@ -156,7 +156,6 @@ export type {
   CatalogAtlasGlyph,
   CatalogAtlasPage,
   CatalogAtlasWeights,
-  CatalogAxis,
   CatalogMetrics,
   ComponentData,
   ComponentGlyph,

@@ -1,5 +1,5 @@
-import { ascending, type Axis, type AxisKind } from "@shift/types";
-import { continuousBounds, discreteValues } from "@shift/editor/variation";
+import { Axis } from "@shift/editor/model";
+import { ascending, type Axis as AxisRecord, type AxisKind } from "@shift/types";
 import {
   Checkbox,
   Input,
@@ -78,8 +78,8 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
         <div className="grid grid-cols-[repeat(3,minmax(0,1fr))_7rem] gap-2">
           <DefinitionNumberField
             label="Minimum"
-            value={continuousBounds(axis)?.minimum ?? axis.kind.default}
-            disabled={axis.kind.kind === "discrete"}
+            value={axis.minimum}
+            disabled={axis.isDiscrete}
             onChange={(minimum) =>
               draft.update((current) => withContinuousBound(current, { minimum }))
             }
@@ -87,7 +87,7 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
           />
           <DefinitionNumberField
             label="Default"
-            value={axis.kind.default}
+            value={axis.default}
             onChange={(value) =>
               draft.update((current) => ({ ...current, kind: { ...current.kind, default: value } }))
             }
@@ -95,8 +95,8 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
           />
           <DefinitionNumberField
             label="Maximum"
-            value={continuousBounds(axis)?.maximum ?? axis.kind.default}
-            disabled={axis.kind.kind === "discrete"}
+            value={axis.maximum}
+            disabled={axis.isDiscrete}
             onChange={(maximum) =>
               draft.update((current) => withContinuousBound(current, { maximum }))
             }
@@ -176,34 +176,30 @@ const DefinitionNumberField = ({
 
 /** `axis` with one continuous bound replaced; a discrete axis has no bounds to change. */
 function withContinuousBound(
-  axis: Axis,
+  axis: AxisRecord,
   bound: { readonly minimum: number } | { readonly maximum: number },
-): Axis {
+): AxisRecord {
   if (axis.kind.kind !== "continuous") return axis;
 
   return { ...axis, kind: { ...axis.kind, ...bound } };
 }
 
-function axisWithType(axis: Axis, axisType: AxisKind["kind"]): Axis {
+function axisWithType(record: AxisRecord, axisType: AxisKind["kind"]): AxisRecord {
+  const axis = new Axis(record);
   switch (axisType) {
-    case "continuous": {
-      const values = discreteValues(axis) ?? [axis.kind.default];
+    case "continuous":
       return {
-        ...axis,
+        ...record,
         kind: {
           kind: axisType,
-          minimum: Math.min(...values),
-          default: axis.kind.default,
-          maximum: Math.max(...values),
+          minimum: axis.minimum,
+          default: axis.default,
+          maximum: axis.maximum,
         },
       };
-    }
     case "discrete": {
-      const bounds = continuousBounds(axis);
-      const values = [...new Set([bounds?.minimum, axis.kind.default, bounds?.maximum])]
-        .filter((value): value is number => value !== undefined)
-        .sort(ascending);
-      return { ...axis, kind: { kind: axisType, values, default: axis.kind.default } };
+      const values = [...new Set([axis.minimum, axis.default, axis.maximum])].sort(ascending);
+      return { ...record, kind: { kind: axisType, values, default: axis.default } };
     }
   }
 }

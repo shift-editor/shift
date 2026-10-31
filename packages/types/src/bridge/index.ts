@@ -6,7 +6,6 @@ export type { GlyphName } from "../ids";
 export type {
   AnchorMatch,
   BridgeApi,
-  CatalogAxis,
   CatalogMetrics,
   ComponentMatch,
   ContourMatch,

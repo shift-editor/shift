@@ -1,11 +1,11 @@
-import type { Axis, Location, NamedInstance } from "@shift/types";
+import type { Axis } from "@shift/editor/model";
+import type { Axis as AxisRecord, Location, NamedInstance } from "@shift/types";
 import type { InstanceCreationIssue } from "@shift/editor/types";
-import { continuousBounds, discreteValues } from "@shift/editor/variation";
 import { LocationDraft, type LocationDraftValues } from "./locationDraft";
 
 /** Parses editable external-axis fields into a complete named-instance location. */
 export function instanceLocation(
-  axes: readonly Axis[],
+  axes: readonly AxisRecord[],
   values: LocationDraftValues["location"],
 ): Location | null {
   const coordinates = new LocationDraft({ name: "", location: values }).coordinates(axes);
@@ -25,7 +25,6 @@ export function instanceCreationIssue(
 
   for (const axis of axes) {
     const value = draft.coordinate(axis);
-    const bounds = continuousBounds(axis);
     if (!Number.isFinite(value)) {
       return {
         kind: "axis",
@@ -34,25 +33,25 @@ export function instanceCreationIssue(
       };
     }
 
-    if (axis.kind.kind === "discrete" && !discreteValues(axis)?.includes(value)) {
+    if (axis.isDiscrete && !axis.accepts(value)) {
       return {
         kind: "axis",
         axisId: axis.id,
         message: `Choose a defined value for ${axis.name}`,
       };
     }
-    if (bounds && value < bounds.minimum) {
+    if (!axis.isDiscrete && value < axis.minimum) {
       return {
         kind: "axis",
         axisId: axis.id,
-        message: `${axis.name} must be at least ${bounds.minimum}`,
+        message: `${axis.name} must be at least ${axis.minimum}`,
       };
     }
-    if (bounds && value > bounds.maximum) {
+    if (!axis.isDiscrete && value > axis.maximum) {
       return {
         kind: "axis",
         axisId: axis.id,
-        message: `${axis.name} must be at most ${bounds.maximum}`,
+        message: `${axis.name} must be at most ${axis.maximum}`,
       };
     }
   }

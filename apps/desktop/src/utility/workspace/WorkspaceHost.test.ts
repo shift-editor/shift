@@ -40,8 +40,7 @@ import type {
   SyncStreamCallMap,
 } from "../../shared/workspace/protocol";
 import { client } from "../../shared/workspace/remote";
-import { loadEngine, type EngineEdit, type EngineSession } from "@shift/editor/model";
-import { continuousBounds } from "@shift/editor/variation";
+import { Axis, loadEngine, type EngineEdit, type EngineSession } from "@shift/editor/model";
 import { engineStoreRequest } from "../../renderer/src/lib/engine/engineStoreRequest";
 import { storeReader } from "@shift/wasm/store-reader";
 import { WorkspaceHost } from "./WorkspaceHost";
@@ -523,9 +522,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     }
 
     const weights = await sync.sourceAtlasWeights(coordinates);
-    const maximumCoordinates = snapshot.font.axes.map(
-      (axis) => continuousBounds(axis)?.maximum ?? axis.kind.default,
-    );
+    const maximumCoordinates = snapshot.font.axes.map((axis) => new Axis(axis).maximum);
     const maximumWeights = await sync.sourceAtlasWeights(maximumCoordinates);
     expect(weights.map((page) => page.pageIndex)).toEqual(pages.map((page) => page.pageIndex));
     expect(weights.map((page) => page.weights)).toEqual(pages.map((page) => page.weights));
