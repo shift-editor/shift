@@ -35,6 +35,8 @@ export const CollapsibleSection = ({
     open={open}
     onOpenChange={onOpenChange}
     className={cn("flex flex-col", className)}
+    // Marks the section, so a panel its actions open can line up with its top.
+    data-sidebar-section=""
   >
     <div
       className="group sticky top-0 z-10 isolate grid grid-cols-[minmax(0,1fr)_auto] items-center rounded bg-surface before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded before:bg-transparent before:content-[''] hover:before:bg-hover data-[active]:before:bg-hover"

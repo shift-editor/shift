@@ -200,7 +200,7 @@ test("keeps variable preview and exact-source editability coherent across Grid n
     })
     .toBe(400);
 
-  await editorShell(page).getByLabel("Font overview").click();
+  await editorShell(page).getByRole("tab", { name: "Glyphs", exact: true }).click();
   await page.waitForURL(/#\/home$/);
   await expect
     .poll(() => editor.editorView())
@@ -232,7 +232,7 @@ test("keeps variable preview and exact-source editability coherent across Grid n
   await expect.poll(() => editor.editorView()).toMatchObject({ activeSourceId: null });
   await expect(glyphProperties(page).getByLabel("Advance width", { exact: true })).toBeDisabled();
 
-  await editorShell(page).getByLabel("Font overview").click();
+  await editorShell(page).getByRole("tab", { name: "Glyphs", exact: true }).click();
   await page.waitForURL(/#\/home$/);
   await openCatalogGlyph(page, "navigationVariable", fixture.firstGlyphId);
   await expectPreview(page, fixture, {

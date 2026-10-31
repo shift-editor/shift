@@ -65,6 +65,7 @@ import {
   type SourceId,
   type SourceMetrics,
   type Unicode,
+  asNodeId,
 } from "@shift/types";
 import { segmentIdFor, type Contour } from "@shift/glyph-state";
 import type { SystemClipboard } from "@shift/editor/clipboard";
@@ -72,6 +73,7 @@ import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 import type {
   GlyphNode,
   GlyphOutlineTarget,
+  PageNode,
   PositionGuide,
   SourceSelectionMode,
   TextRunNode,
@@ -108,6 +110,7 @@ import type {
   DrawOptions,
   EditorTestSurface,
   Modifiers,
+  PageListing,
   ToolbarButton,
   ToolShortcut,
 } from "./surface";
@@ -370,7 +373,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.font.loadGlyph(record.id);
   }
 
-  /** The canvas's text run; the editor route creates it on the first open. */
+  /** The active page's text run; the editor route creates it on the first open. */
   get textRun(): TextRunNode | null {
     return this.scene.first("textRun");
   }
@@ -381,20 +384,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return run ? this.nodeDefinition("textRun").childGlyph(run) : null;
   }
 
-  /** Opens a glyph as the editor route does: the canvas run becomes that glyph, edited in place. */
+  /** Opens a glyph as the editor route does: the active page's run becomes that glyph, edited in place. */
   #placeGlyph(glyphId: GlyphId): void {
-    const item = this.text.glyphItem(glyphId);
-    if (!item || !this.glyphForId(glyphId)) throw new Error("placed glyph is not loaded");
-    const record = this.text.createRun([item]);
-    const run = this.scene.createNode<TextRunNode>({
-      kind: "textRun",
-      runId: record.id,
-      size: this.font.metricsCell.peek().unitsPerEm,
-      position: { x: 0, y: 0 },
-    });
-    const child = this.nodeDefinition("textRun").editItem(run, item.id);
-    if (!child) throw new Error("placed glyph is not loaded");
-    this.enterNode(child.id);
+    if (!this.glyphForId(glyphId)) throw new Error("placed glyph is not loaded");
+    if (!this.openGlyphInText(glyphId)) throw new Error("placed glyph is not loaded");
   }
 
   /**
@@ -1585,6 +1578,45 @@ export class TestEditor extends Editor implements EditorTestSurface {
     }
   }
 
+  pageList(): readonly PageListing[] {
+    return this.pages.list.map(pageListing);
+  }
+
+  page(id: string): PageListing | null {
+    const page = this.scene.nodeOfKind(asNodeId(id), "page");
+    return page ? pageListing(page) : null;
+  }
+
+  shownPage(): PageListing | null {
+    const page = this.pages.active;
+    return page ? pageListing(page) : null;
+  }
+
+  pageOf(nodeId: string): PageListing | null {
+    const page = this.pages.pageOf(asNodeId(nodeId));
+    return page ? pageListing(page) : null;
+  }
+
+  addPage(name?: string): PageListing {
+    return pageListing(this.pages.create(name));
+  }
+
+  showPage(id: string): void {
+    this.pages.activate(asNodeId(id));
+  }
+
+  renamePage(id: string, name: string): void {
+    this.pages.rename(asNodeId(id), name);
+  }
+
+  movePage(id: string, index: number): void {
+    this.pages.move(asNodeId(id), index);
+  }
+
+  deletePage(id: string): boolean {
+    return this.pages.delete(asNodeId(id));
+  }
+
   asEditor(): Editor {
     return this;
   }
@@ -1598,4 +1630,9 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
 function plainBounds(bounds: Bounds | null): Bounds | null {
   return bounds && { min: { ...bounds.min }, max: { ...bounds.max } };
+}
+
+/** A page as plain data, for {@link TestEditor.pageList} and the other page reads. */
+function pageListing(page: PageNode): PageListing {
+  return { id: page.id, name: page.name, role: page.role ?? null };
 }

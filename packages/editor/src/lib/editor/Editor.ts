@@ -122,7 +122,7 @@ import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { ShiftObject } from "../../types/object";
 import type { ShiftEditorRecord, ShiftRecordId } from "../../types/records";
-import type { GlyphNode, NodeKind, ShiftNode, TextRunNode } from "../../types/node";
+import type { GlyphNode, NodeKind, PageNode, ShiftNode, TextRunNode } from "../../types/node";
 import {
   AnchorObject,
   ComponentObject,
@@ -135,6 +135,8 @@ import {
 import type { NodeDefinition } from "../nodes/NodeDefinition";
 import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
+import { PageNodeDefinition } from "../nodes/PageNodeDefinition";
+import { Pages } from "../pages/Pages";
 import type { NodeDefinitionByKind, NodeDefinitionConstructors } from "../../types/nodeDefinition";
 import { MultiSourceEditing } from "./MultiSourceEditing";
 import { SelectedPoints } from "./SelectedPoints";
@@ -202,6 +204,8 @@ export class Editor {
   readonly scene: Scene;
   readonly text: Text;
   readonly textEditing: TextEditing;
+  /** The document's pages and the page the canvas shows. */
+  readonly pages: Pages;
   readonly #nodeDefinitions: NodeDefinitionByKind;
   readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #fontStore: FontStore;
@@ -302,9 +306,11 @@ export class Editor {
 
     const GlyphDefinition = options.nodeDefinitions?.glyph ?? GlyphNodeDefinition;
     const TextRunDefinition = options.nodeDefinitions?.textRun ?? TextRunNodeDefinition;
+    const PageDefinition = options.nodeDefinitions?.page ?? PageNodeDefinition;
     this.#nodeDefinitions = {
       glyph: new GlyphDefinition(this),
       textRun: new TextRunDefinition(this),
+      page: new PageDefinition(this),
     };
 
     this.#view = new EditorViewState();
@@ -324,6 +330,9 @@ export class Editor {
       this.sessionMode === "workspace" ? this.font.editCoordinator : null,
     );
     this.history.onCaptureFinishing((changed) => this.#runContentHooks(changed));
+    this.pages = new Pages(this);
+    // A session starts with one page; setup, not an edit.
+    this.pages.ensure();
     this.hover = new Hover();
     this.snapping = new Snapping(this);
     this.#selectedPoints = computed(
@@ -1143,12 +1152,15 @@ export class Editor {
   }
 
   /** Returns the glyph node showing a layer: one placing the layer's glyph at the layer's source. */
+  /** The glyph node on the active page that shows `layer`, or null. */
   #placedGlyphNodeForLayer(layer: GlyphLayer): GlyphNode | null {
     const glyphId = this.font.glyphIdForLayer(layer.id);
     if (!glyphId) return null;
 
+    const pageId = this.scene.activePageIdCell.peek();
     for (const node of this.scene.nodesReferencing(glyphId)) {
-      if (node.kind === "glyph" && node.sourceId === layer.sourceId) return node;
+      if (node.kind !== "glyph" || node.sourceId !== layer.sourceId) continue;
+      if (this.scene.pageOf(node.id)?.id === pageId) return node;
     }
     return null;
   }
@@ -1211,6 +1223,7 @@ export class Editor {
 
   nodeDefinition(kind: "glyph"): GlyphNodeDefinition;
   nodeDefinition(kind: "textRun"): TextRunNodeDefinition;
+  nodeDefinition(kind: "page"): PageNodeDefinition;
   nodeDefinition(kind: NodeKind): NodeDefinition;
   nodeDefinition(kind: NodeKind): NodeDefinition {
     return this.#nodeDefinitions[kind];
@@ -1965,36 +1978,45 @@ export class Editor {
   }
 
   /**
-   * Opens a glyph for editing in place in the canvas's text run, as choosing it
-   * in the glyph grid does.
+   * Opens a glyph for editing in place in a page's text run, as choosing it in
+   * the glyph grid does.
    *
    * @remarks
-   * Until pages exist the canvas has one text run at the scene origin, created
-   * on the first open and kept after; opening replaces its text with the glyph.
-   * Opening is navigation, never a history entry. Tools reset afterwards, since
-   * they activate against the glyph node they find.
+   * Shows `page` first. Until runs are placed by the user each page has at most
+   * one run at its origin, created on the first open there and kept after;
+   * opening replaces its text with the glyph, and opening the glyph the run
+   * already edits re-enters it. Runs on other pages keep their text. Opening is
+   * navigation, never a history entry. Tools reset afterwards, since they
+   * activate against the glyph node they find.
    *
    * @param glyphId - A glyph whose model is already loaded.
+   * @param page - The page to show and open it on; defaults to the first glyph-view page.
    * @returns the glyph node now being edited, or null when the glyph cannot be placed.
    */
-  public openGlyphInText(glyphId: GlyphId): GlyphNode | null {
-    const runs = this.nodeDefinition("textRun");
-    const run =
-      this.scene.first("textRun") ??
-      this.scene.createNode<TextRunNode>({
-        kind: "textRun",
-        runId: this.text.createRun([]).id,
-        size: this.font.metricsCell.peek().unitsPerEm,
-        position: { x: 0, y: 0 },
-      });
-    const previous = runs.childGlyph(run);
+  public openGlyphInText(glyphId: GlyphId, page?: PageNode): GlyphNode | null {
     const open = (): GlyphNode | null => {
+      const target = page ?? this.pages.glyphView();
+      this.pages.activate(target.id);
+      const runs = this.nodeDefinition("textRun");
+      const run =
+        this.scene.first("textRun") ??
+        this.scene.createNode<TextRunNode>({
+          kind: "textRun",
+          parentId: target.id,
+          runId: this.text.createRun([]).id,
+          size: this.font.metricsCell.peek().unitsPerEm,
+          position: { x: 0, y: 0 },
+        });
+
+      const previous = runs.childGlyph(run);
       if (previous?.glyphId === glyphId) {
         this.enterNode(previous.id);
         return previous;
       }
+
       const item = this.text.glyphItem(glyphId);
       if (!item) return null;
+
       this.text.setItems(run.runId, [item]);
       const child = runs.editItem(run, item.id);
       if (child) this.enterNode(child.id);

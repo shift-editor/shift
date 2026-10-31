@@ -9,6 +9,14 @@ export function glyphCatalogViewport(page: Page) {
   return page.getByLabel("Glyph catalog", { exact: true });
 }
 
+/** The glyph search field, opened from the Glyphs header when it is closed. */
+export async function glyphSearch(page: Page): Promise<Locator> {
+  const field = page.getByPlaceholder("Search glyphs...");
+  if (!(await field.isVisible())) await page.getByRole("button", { name: "Search glyphs" }).click();
+  await expect(field).toBeVisible();
+  return field;
+}
+
 export function glyphCatalogSurface(page: Page) {
   return page.getByRole("region", { name: "Glyph catalog surface", exact: true });
 }
@@ -44,7 +52,7 @@ export function fontNavigation(page: Page) {
 }
 
 export function editorSidebar(page: Page) {
-  return page.getByRole("complementary", { name: "Glyph objects and variations" });
+  return page.getByRole("complementary", { name: "Layers and designspace" });
 }
 
 export function variationControls(page: Page) {
@@ -103,10 +111,13 @@ async function waitForCatalogCells(page: Page): Promise<void> {
   );
 }
 
-/** Keeps the catalog preview coordinate contract in one place. */
+/**
+ * Opens the first catalog glyph: a double-click, since a single click only selects it.
+ * Keeps the catalog preview coordinate contract in one place.
+ */
 export async function clickFirstCatalogGlyph(page: Page): Promise<void> {
   await waitForCatalogCells(page);
-  await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_PREVIEW_POINT });
+  await glyphCatalogViewport(page).dblclick({ position: FIRST_GLYPH_PREVIEW_POINT });
 }
 
 /** Keeps the catalog name-cell coordinate contract in one place. */
@@ -177,7 +188,7 @@ export async function openCatalogGlyph(
 ): Promise<void> {
   const surface = glyphCatalogSurface(page);
   await expect(surface).toBeVisible();
-  await page.getByPlaceholder("Search glyphs...").fill(glyphName);
+  await (await glyphSearch(page)).fill(glyphName);
   await expect(surface).toHaveAttribute("data-filtered-glyph-count", "1");
   await expect(surface).toHaveAttribute("data-first-glyph-id", glyphId);
   await expect(glyphCatalogRenderer(page)).toHaveAttribute("data-grid-readiness", "Complete", {

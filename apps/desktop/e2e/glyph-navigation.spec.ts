@@ -24,7 +24,7 @@ async function navigationGlyphs(editor: EditorDriver): Promise<NavigationGlyphs>
 }
 
 async function returnHome(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Font overview" }).click();
+  await page.getByRole("tab", { name: "Glyphs", exact: true }).click();
   await page.waitForURL(/#\/home$/);
 }
 

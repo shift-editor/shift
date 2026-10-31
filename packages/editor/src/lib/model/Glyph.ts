@@ -2384,6 +2384,11 @@ export class Glyph {
     return this.#entryCell.peek();
   }
 
+  /** The glyph's name and Unicode values, updated when either is changed. */
+  get entryCell(): Signal<GlyphEntry> {
+    return this.#entryCell;
+  }
+
   get handle(): GlyphHandle {
     const entry = this.#entryCell.peek();
     const unicode = entry.unicodes[0];

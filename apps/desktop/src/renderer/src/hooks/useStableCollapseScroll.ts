@@ -15,7 +15,7 @@ import { useLayoutEffect, useRef } from "react";
  * rendered after the content inside the container.
  */
 export function useStableCollapseScroll() {
-  const scrollRef = useRef<HTMLElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
 

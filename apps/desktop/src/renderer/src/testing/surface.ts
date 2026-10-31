@@ -138,6 +138,14 @@ export interface DrawnOutlineIds {
 // `@shift/runtime` (or app reader) type agents read; tests import these,
 // never the runtime or `agent/`.
 
+/** A page as the pages list names it. Test-only: not agent data yet. */
+export interface PageListing {
+  readonly id: string;
+  readonly name: string;
+  /** `glyph` for the glyph view's page, which the pages list leaves out; null for an ordinary page. */
+  readonly role: "glyph" | null;
+}
+
 /** A glyph drawn at a designspace location: its path and advance. */
 export type GlyphAtLocation = ResolvedGlyph;
 /** The active tool and its state. */
@@ -571,6 +579,25 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   viewportCentre(): ScreenPoint;
   /** The document's save state behind every edit made so far, as agents read it; null without a document. */
   documentState(): Promise<DocumentSaveState | null>;
+
+  /** The pages list, in order; the glyph view's page is left out. Test-only. */
+  pageList(): readonly PageListing[];
+  /** The page with id `id`, the glyph view's page included, or null. Test-only. */
+  page(id: string): PageListing | null;
+  /** The page the canvas shows, or null. Test-only. */
+  shownPage(): PageListing | null;
+  /** The page the scene node `nodeId` is on, or null. Test-only. */
+  pageOf(nodeId: string): PageListing | null;
+  /** Adds a page after the last one, as the pages list's add button does, without showing it. */
+  addPage(name?: string): PageListing;
+  /** Shows a page on the canvas, as choosing it in the pages list does. */
+  showPage(id: string): void;
+  /** Renames a page, as editing its name in the pages list does. */
+  renamePage(id: string, name: string): void;
+  /** Moves a page to `index` in the pages list, as dragging it there does. */
+  movePage(id: string, index: number): void;
+  /** Deletes a page and everything on it; false when it is the last page. */
+  deletePage(id: string): boolean;
 
   /** Adds a glyph to the font and loads it. */
   addGlyph(name: string, unicode: number | null): Promise<void>;

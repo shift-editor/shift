@@ -190,6 +190,14 @@ export {
   type CollapsiblePanelProps,
   type CollapsibleChevronProps,
 } from "./components/collapsible";
+export { ScrollArea, type ScrollAreaProps } from "./components/scroll-area";
+export {
+  DocumentTab,
+  DocumentTabs,
+  DocumentTabsDivider,
+  type DocumentTabProps,
+  type DocumentTabsProps,
+} from "./components/document-tabs";
 export {
   ResizablePanelGroup,
   ResizablePanel,
@@ -211,6 +219,7 @@ export {
   ChevronDown,
   ChevronRight,
   Copy,
+  FileIcon,
   LayoutGrid,
   List,
   MenuIcon,

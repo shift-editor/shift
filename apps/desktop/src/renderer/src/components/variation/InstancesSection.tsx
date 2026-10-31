@@ -1,6 +1,10 @@
-import { useState } from "react";
+import { useState, type ComponentType } from "react";
 import { Tooltip } from "@shift/ui";
-import { CollapsibleSection, SidebarActionButton } from "@/components/sidebar";
+import {
+  CollapsibleSection,
+  SidebarActionButton,
+  type CollapsibleSectionProps,
+} from "@/components/sidebar";
 import { CreateInstanceMenu } from "./CreateInstanceMenu";
 import { Instances } from "./Instances";
 import { OutlineVisibilityButton } from "./OutlineVisibilityButton";
@@ -12,12 +16,15 @@ import PlusIcon from "@/assets/general/plus.svg";
 
 interface InstancesSectionProps {
   defaultOpen?: boolean;
+  /** Draws the section, so it can match the sections around it. */
+  section?: ComponentType<CollapsibleSectionProps>;
   outlineControls?: GlyphOutlineControls;
 }
 
 export const InstancesSection = ({
   defaultOpen = false,
   outlineControls,
+  section: Section = CollapsibleSection,
 }: InstancesSectionProps) => {
   const [open, setOpen] = useState(defaultOpen);
   const [instanceMenuOpen, setInstanceMenuOpen] = useState(false);
@@ -27,7 +34,7 @@ export const InstancesSection = ({
   const toggleAll = () => outlineControls?.onToggleGroup(instanceTargets);
 
   return (
-    <CollapsibleSection
+    <Section
       title="Instances"
       open={open || instanceMenuOpen}
       onOpenChange={setOpen}
@@ -55,6 +62,6 @@ export const InstancesSection = ({
       }
     >
       <Instances canAuthor={canAuthor} outlineControls={outlineControls} />
-    </CollapsibleSection>
+    </Section>
   );
 };

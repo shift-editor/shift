@@ -4,7 +4,7 @@ import { workspaceTest as test, expect, FONTS } from "./fixtures/electronApp";
 
 /** Turns on agent connections in Settings → Agents and returns the MCP URL it shows. */
 async function enableAgentConnections(page: Page): Promise<string> {
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: /font info$/ }).click();
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await dialog.getByRole("button", { name: "Agents", exact: true }).click();
   const agents = dialog.getByRole("region", { name: "Agents" });
