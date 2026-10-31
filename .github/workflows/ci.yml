@@ -381,6 +381,8 @@ jobs:
             .turbo/runs/
             **/vitest-report.json
             !**/node_modules/**
+          # .turbo/runs is a hidden path, which upload-artifact skips by default.
+          include-hidden-files: true
           if-no-files-found: ignore
 
       - name: Save Typecheck Turbo results
@@ -473,6 +475,8 @@ jobs:
             .turbo/runs/
             **/vitest-report.json
             !**/node_modules/**
+          # .turbo/runs is a hidden path, which upload-artifact skips by default.
+          include-hidden-files: true
           if-no-files-found: ignore
 
       - name: Save native Turbo build
@@ -731,6 +735,8 @@ jobs:
             .turbo/runs/
             **/vitest-report.json
             !**/node_modules/**
+          # .turbo/runs is a hidden path, which upload-artifact skips by default.
+          include-hidden-files: true
           if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
