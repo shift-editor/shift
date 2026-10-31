@@ -72,6 +72,7 @@ shift-bridge = { path = "crates/shift-bridge" }
 shift-config = { path = "crates/shift-config" }
 shift-engine = { path = "crates/shift-engine" }
 shift-shape = { path = "crates/shift-shape" }
+shift-shaper-font = { path = "crates/shift-shaper-font" }
 shift-font = { path = "crates/shift-font" }
 pack = { path = "crates/pack" }
 shift-proof = { path = "crates/shift-proof" }

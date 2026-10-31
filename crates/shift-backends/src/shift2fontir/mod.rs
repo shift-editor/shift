@@ -21,7 +21,6 @@ mod stat;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use axes::to_ir_axes;
-pub use axes::{AxisConversionError, MappingSide};
 pub use propagation::{PropagatedAnchor, PropagatedGlyphAnchors, PropagatedSourceAnchors};
-pub(crate) use source::{ShiftIrSource, ShiftIrSourceError, units_per_em};
+pub use shift_shaper_font::{AxisConversionError, MappingSide};
+pub(crate) use source::{ShiftIrSource, ShiftIrSourceError};

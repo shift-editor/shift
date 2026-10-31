@@ -80,7 +80,7 @@ pub(crate) struct ShaperAxis {
 }
 
 impl ShaperFont {
-  fn new(revision: u64, font: &shift_backends::shaper_font::ShaperFont) -> Self {
+  fn new(revision: u64, font: &shift_shaper_font::ShaperFont) -> Self {
     Self {
       revision: u32::try_from(revision).unwrap_or(u32::MAX),
       bytes: Bytes(font.bytes().to_vec()),

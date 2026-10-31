@@ -9,7 +9,6 @@ use shift_shape::{
 pub use shift_shape::{FeatureSetting, ShapeError, TextDirection};
 
 use super::ShaperFont;
-use crate::traits::FontView;
 
 /// One unit of text to shape, inserting glyphs by Shift glyph id.
 pub type ShapeUnit = shift_shape::Unit<GlyphId>;
@@ -36,20 +35,31 @@ pub struct LiveShaper {
 }
 
 impl LiveShaper {
-    /// Makes a shaper for `font`, mapping characters through the Unicode
-    /// values of `view`'s glyphs. A character two glyphs claim maps to the
-    /// first in glyph order.
+    /// Makes a shaper for `font`, mapping each character to the glyph that
+    /// claims it in `characters`, the live font's Unicode values. A character
+    /// two glyphs claim maps to the first in the shaper font's glyph order.
     ///
     /// # Errors
     ///
     /// Returns [`ShapeError::InvalidFont`] when the shaper font's bytes
     /// cannot be read.
-    pub fn new(font: Arc<ShaperFont>, view: &impl FontView) -> Result<Self, ShapeError> {
-        Ok(Self {
+    pub fn new(
+        font: Arc<ShaperFont>,
+        characters: impl IntoIterator<Item = (u32, GlyphId)>,
+    ) -> Result<Self, ShapeError> {
+        let mut shaper = Self {
             shaper: Shaper::new(font.bytes().to_vec())?,
             axes: font.axis_normalizations(),
-            glyphs: LiveGlyphs::new(font, view),
-        })
+            glyphs: LiveGlyphs::new(font),
+        };
+        shaper.set_characters(characters);
+        Ok(shaper)
+    }
+
+    /// Maps characters through `characters` instead, as after Unicode values
+    /// change; see [`Self::new`].
+    pub fn set_characters(&mut self, characters: impl IntoIterator<Item = (u32, GlyphId)>) {
+        self.glyphs.set_characters(characters);
     }
 
     /// Returns the shaper font this shaper uses.
@@ -106,7 +116,7 @@ struct LiveGlyphs {
 }
 
 impl LiveGlyphs {
-    fn new(font: Arc<ShaperFont>, view: &impl FontView) -> Self {
+    fn new(font: Arc<ShaperFont>) -> Self {
         let shaper_glyphs: HashMap<GlyphId, u32> = font
             .glyph_ids
             .iter()
@@ -114,20 +124,20 @@ impl LiveGlyphs {
             .filter_map(|(index, glyph_id)| Some(((*glyph_id)?, u32::try_from(index).ok()?)))
             .collect();
 
-        let characters = character_glyphs(view.glyphs().flat_map(|glyph| {
-            let shaper_glyph = shaper_glyphs.get(&glyph.id()).copied();
-            glyph
-                .unicodes()
-                .iter()
-                .filter_map(move |&codepoint| Some((codepoint, shaper_glyph?)))
-                .collect::<Vec<_>>()
-        }));
-
         Self {
             font,
             shaper_glyphs,
-            characters,
+            characters: HashMap::new(),
         }
+    }
+
+    fn set_characters(&mut self, characters: impl IntoIterator<Item = (u32, GlyphId)>) {
+        let shaper_glyphs = &self.shaper_glyphs;
+        self.characters = character_glyphs(
+            characters
+                .into_iter()
+                .filter_map(|(codepoint, glyph)| Some((codepoint, *shaper_glyphs.get(&glyph)?))),
+        );
     }
 }
 

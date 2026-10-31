@@ -1,7 +1,7 @@
 use napi::{Error, JsError, Status};
-use shift_backends::shaper_font::{ShapeError, ShaperFontError};
 use shift_backends::{BackendError, FontReadError, SourceAtlasError};
 use shift_font::error::CoreError;
+use shift_shaper_font::{ShapeError, ShaperFontError};
 use shift_slug::{AuthoredSlugError, SlugError};
 use shift_workspace::WorkspaceError;
 
@@ -127,8 +127,8 @@ macro_rules! through_bridge_error {
       rmp_serde::decode::Error,
       shift_slug::AuthoredSlugError,
       shift_slug::SlugError,
-      shift_backends::shaper_font::ShaperFontError,
-      shift_backends::shaper_font::ShapeError,
+      shift_shaper_font::ShaperFontError,
+      shift_shaper_font::ShapeError,
     );
   };
   ($error:ty: $($source:ty),+ $(,)?) => {

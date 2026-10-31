@@ -14,6 +14,7 @@ use shift_font::{GlyphCategory, GlyphSubcategory};
 
 use write_fonts::types::Tag;
 
+use super::test_fonts::request_for;
 use super::*;
 
 /// Shapes `text` the way Shift shapes live text: characters map through the
@@ -121,7 +122,7 @@ fn variable_kerning_resolves_at_the_shaped_location() {
     font.features_mut().set_fea_source(Some(
         "feature kern { pos A A (wght=400:-50 wght=900:-90); } kern;".to_string(),
     ));
-    let shaper_font = compiled(&ShaperFontRequest::from_font(&font).unwrap());
+    let shaper_font = compiled(&request_for(&font).unwrap());
 
     let kern_at = |variation| shape(&shaper_font, "AA", &[variation])[0].2;
 
@@ -193,7 +194,7 @@ fn request_puts_notdef_first_and_reads_the_font() {
     font.features_mut()
         .set_fea_source(Some(LIGATURE.to_string()));
 
-    let request = ShaperFontRequest::from_font(&font).unwrap();
+    let request = request_for(&font).unwrap();
 
     assert_eq!(request.glyph_names[0], NOTDEF);
     assert_eq!(
@@ -291,7 +292,7 @@ fn request_classifies_glyphs_by_category() {
     )
     .unwrap();
 
-    let request = ShaperFontRequest::from_font(&font).unwrap();
+    let request = request_for(&font).unwrap();
 
     assert_eq!(request.gdef_classes.get("A"), Some(&GlyphClassDef::Mark));
 }
@@ -303,7 +304,7 @@ fn request_rejects_fractional_or_out_of_range_units_per_em() {
         font.metrics_mut().units_per_em = value;
 
         assert!(matches!(
-            ShaperFontRequest::from_font(&font),
+            request_for(&font),
             Err(ShaperFontError::InvalidUnitsPerEm { value: rejected }) if rejected == value
         ));
     }
@@ -333,7 +334,7 @@ fn request_rejects_axes_whose_mapping_cannot_convert() {
     font.set_axis_mappings(vec![mapping]).unwrap();
 
     assert!(matches!(
-        ShaperFontRequest::from_font(&font),
+        request_for(&font),
         Err(ShaperFontError::InvalidAxes(
             AxisConversionError::MappingMissingBounds { .. }
         ))
