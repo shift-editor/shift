@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum AxisRole {
     #[default]
     External,
@@ -13,6 +14,7 @@ pub enum AxisRole {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum AxisKind {
     Continuous {
         minimum: f64,
@@ -26,6 +28,8 @@ pub enum AxisKind {
 }
 
 impl AxisKind {
+    /// Returns the lowest position: a continuous axis's minimum, or a
+    /// discrete axis's smallest value (its default when it has none).
     pub fn minimum(&self) -> f64 {
         match self {
             Self::Continuous { minimum, .. } => *minimum,
@@ -41,6 +45,8 @@ impl AxisKind {
         }
     }
 
+    /// Returns the highest position: a continuous axis's maximum, or a
+    /// discrete axis's largest value (its default when it has none).
     pub fn maximum(&self) -> f64 {
         match self {
             Self::Continuous { maximum, .. } => *maximum,
@@ -56,10 +62,98 @@ impl AxisKind {
             Self::Discrete { values, .. } => Some(values),
         }
     }
+
+    /// Returns this kind as a continuous range over the same positions: from
+    /// [`Self::minimum`] to [`Self::maximum`], keeping the default. A
+    /// continuous kind comes back unchanged.
+    pub fn to_continuous(&self) -> Self {
+        Self::Continuous {
+            minimum: self.minimum(),
+            default: self.default(),
+            maximum: self.maximum(),
+        }
+    }
+
+    /// Returns this kind as discrete values: a continuous range becomes its
+    /// minimum, default and maximum, ascending, each once. A discrete kind
+    /// comes back unchanged.
+    pub fn to_discrete(&self) -> Self {
+        if let Self::Discrete { .. } = self {
+            return self.clone();
+        }
+        let mut values = vec![self.minimum(), self.default(), self.maximum()];
+        values.sort_by(f64::total_cmp);
+        values.dedup();
+        Self::Discrete {
+            values,
+            default: self.default(),
+        }
+    }
+
+    /// Returns whether the axis has more than one position: a range wider
+    /// than a point, or more than one discrete value.
+    pub fn varies(&self) -> bool {
+        self.minimum() < self.maximum()
+    }
+
+    /// Returns whether `value` is a position this axis allows: finite and
+    /// inside its range, or one of its discrete values.
+    pub fn accepts(&self, value: f64) -> bool {
+        match self {
+            Self::Continuous {
+                minimum, maximum, ..
+            } => value.is_finite() && value >= *minimum && value <= *maximum,
+            Self::Discrete { values, .. } => values.contains(&value),
+        }
+    }
+
+    /// Maps a user-space `value` to `-1..=1`, with the default at `0`, the
+    /// minimum at `-1` and the maximum at `1`, linearly on each side.
+    ///
+    /// A side with no extent (the default at the minimum or maximum) maps to
+    /// `0`. Values outside the range are not clamped.
+    pub fn normalize(&self, value: f64) -> f64 {
+        let minimum = self.minimum();
+        let default = self.default();
+        let maximum = self.maximum();
+
+        if value < default {
+            if (default - minimum).abs() < f64::EPSILON {
+                0.0
+            } else {
+                (value - default) / (default - minimum)
+            }
+        } else if value > default {
+            if (maximum - default).abs() < f64::EPSILON {
+                0.0
+            } else {
+                (value - default) / (maximum - default)
+            }
+        } else {
+            0.0
+        }
+    }
+
+    /// Maps a normalized `value` back to user space: the inverse of
+    /// [`Self::normalize`] on a side with extent.
+    pub fn denormalize(&self, value: f64) -> f64 {
+        let minimum = self.minimum();
+        let default = self.default();
+        let maximum = self.maximum();
+
+        if value < 0.0 {
+            default + value * (default - minimum)
+        } else if value > 0.0 {
+            default + value * (maximum - default)
+        } else {
+            default
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AxisLabelRange {
     pub minimum: f64,
     pub maximum: f64,
@@ -71,6 +165,9 @@ pub struct AxisLabelRange {
 ///
 /// Labels describe values for authoring UI and STAT output. They do not create
 /// products or reference sources.
+// The editor's axis records keep the name `AxisLabel` until it reads axes
+// from the engine.
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AxisLabel {
     id: AxisLabelId,
     pub name: String,
@@ -120,7 +217,7 @@ impl AxisLabel {
 
     /// Returns the identity retained across label renames and reordering.
     pub fn id(&self) -> AxisLabelId {
-        self.id.clone()
+        self.id
     }
 
     fn invalid(&self, message: impl Into<String>) -> CoreError {
@@ -133,6 +230,9 @@ impl AxisLabel {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+// The editor's axis records keep the name `Axis` until it reads axes from the
+// engine.
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Axis {
     id: AxisId,
     tag: String,
@@ -146,30 +246,25 @@ pub struct Axis {
 /// Looks up axes by id in a list of axes.
 pub trait AxisList {
     /// Returns the axis with `axis_id`.
-    fn axis(&self, axis_id: &AxisId) -> Option<&Axis>;
+    fn axis(&self, axis_id: AxisId) -> Option<&Axis>;
 
     /// Returns whether the list has an axis with `axis_id`.
-    fn contains_axis(&self, axis_id: &AxisId) -> bool {
+    fn contains_axis(&self, axis_id: AxisId) -> bool {
         self.axis(axis_id).is_some()
     }
 }
 
 impl AxisList for [Axis] {
-    fn axis(&self, axis_id: &AxisId) -> Option<&Axis> {
-        self.iter().find(|axis| axis.id() == *axis_id)
+    fn axis(&self, axis_id: AxisId) -> Option<&Axis> {
+        self.iter().find(|axis| axis.id() == axis_id)
     }
 }
 
 impl Axis {
-    /// Returns whether `value` is a position this axis allows: finite and
-    /// inside its range, or one of its discrete values.
+    /// Returns whether `value` is a position this axis allows; see
+    /// [`AxisKind::accepts`].
     pub fn accepts(&self, value: f64) -> bool {
-        match self.kind() {
-            AxisKind::Continuous {
-                minimum, maximum, ..
-            } => value.is_finite() && value >= *minimum && value <= *maximum,
-            AxisKind::Discrete { values, .. } => values.contains(&value),
-        }
+        self.kind.accepts(value)
     }
 
     pub fn new(tag: String, name: String, minimum: f64, default: f64, maximum: f64) -> Self {
@@ -243,7 +338,7 @@ impl Axis {
     }
 
     pub fn id(&self) -> AxisId {
-        self.id.clone()
+        self.id
     }
 
     pub fn tag(&self) -> &str {
@@ -420,45 +515,21 @@ impl Axis {
         }
     }
 
+    /// Maps a user-space `value` to `-1..=1`; see [`AxisKind::normalize`].
     pub fn normalize(&self, value: f64) -> f64 {
-        let minimum = self.minimum();
-        let default = self.default();
-        let maximum = self.maximum();
-
-        if value < default {
-            if (default - minimum).abs() < f64::EPSILON {
-                0.0
-            } else {
-                (value - default) / (default - minimum)
-            }
-        } else if value > default {
-            if (maximum - default).abs() < f64::EPSILON {
-                0.0
-            } else {
-                (value - default) / (maximum - default)
-            }
-        } else {
-            0.0
-        }
+        self.kind.normalize(value)
     }
 
+    /// Maps a normalized `value` back to user space; see
+    /// [`AxisKind::denormalize`].
     pub fn denormalize(&self, value: f64) -> f64 {
-        let minimum = self.minimum();
-        let default = self.default();
-        let maximum = self.maximum();
-
-        if value < 0.0 {
-            default + value * (default - minimum)
-        } else if value > 0.0 {
-            default + value * (maximum - default)
-        } else {
-            default
-        }
+        self.kind.denormalize(value)
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AxisMappingPoint {
     pub description: Option<String>,
     pub input: Location,
@@ -467,6 +538,7 @@ pub struct AxisMappingPoint {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AxisMapping {
     id: AxisMappingId,
     name: String,
@@ -504,7 +576,7 @@ impl AxisMapping {
     }
 
     pub fn id(&self) -> AxisMappingId {
-        self.id.clone()
+        self.id
     }
 
     pub fn name(&self) -> &str {
@@ -560,13 +632,13 @@ impl AxisMapping {
         }
 
         for axis_id in self.inputs.iter().chain(&self.outputs) {
-            if !axes.contains_axis(axis_id) {
+            if !axes.contains_axis(*axis_id) {
                 return Err(self.invalid(format!("references unknown axis {axis_id}")));
             }
         }
         for input_id in &self.inputs {
             let axis = axes
-                .axis(input_id)
+                .axis(*input_id)
                 .expect("mapping axes were checked above");
             if self.is_independent() && axis.role() != AxisRole::External {
                 return Err(self.invalid(format!("input axis {input_id} is not external")));
@@ -578,8 +650,8 @@ impl AxisMapping {
                 return Err(self.invalid("mapping points require input and output locations"));
             }
             if self.is_independent()
-                && (point.input.get(&self.inputs[0]).is_none()
-                    || point.output.get(&self.outputs[0]).is_none())
+                && (point.input.get(self.inputs[0]).is_none()
+                    || point.output.get(self.outputs[0]).is_none())
             {
                 return Err(self.invalid(
                     "independent mapping points require explicit input and output values",
@@ -625,6 +697,7 @@ fn has_duplicates(ids: &[AxisId]) -> bool {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Location {
     /// Sorted by axis id, so a location serializes to the same bytes every time.
     values: BTreeMap<AxisId, f64>,
@@ -646,22 +719,22 @@ impl Location {
             .collect()
     }
 
-    pub fn get(&self, axis_id: &AxisId) -> Option<f64> {
-        self.values.get(axis_id).copied()
+    pub fn get(&self, axis_id: AxisId) -> Option<f64> {
+        self.values.get(&axis_id).copied()
     }
 
     /// Returns this location's value on `axis`, or the axis default when the
     /// location has none.
     pub fn value_on(&self, axis: &Axis) -> f64 {
-        self.get(&axis.id()).unwrap_or_else(|| axis.default())
+        self.get(axis.id()).unwrap_or_else(|| axis.default())
     }
 
     pub fn set(&mut self, axis_id: AxisId, value: f64) {
         self.values.insert(axis_id, value);
     }
 
-    pub fn remove(&mut self, axis_id: &AxisId) -> Option<f64> {
-        self.values.remove(axis_id)
+    pub fn remove(&mut self, axis_id: AxisId) -> Option<f64> {
+        self.values.remove(&axis_id)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -727,6 +800,7 @@ impl<'a> IntoIterator for &'a Location {
 macro_rules! typed_location {
     ($name:ident) => {
         #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+        #[cfg_attr(feature = "pack", derive(pack::Pack))]
         #[serde(transparent)]
         pub struct $name(Location);
 
@@ -757,7 +831,7 @@ macro_rules! typed_location {
             }
 
             pub fn get(&self, axis_id: &AxisId) -> Option<f64> {
-                self.0.get(axis_id)
+                self.0.get(*axis_id)
             }
 
             /// Returns this location's value on `axis`, or the axis default
@@ -771,7 +845,7 @@ macro_rules! typed_location {
             }
 
             pub fn remove(&mut self, axis_id: &AxisId) -> Option<f64> {
-                self.0.remove(axis_id)
+                self.0.remove(*axis_id)
             }
 
             pub fn is_empty(&self) -> bool {
@@ -825,6 +899,56 @@ impl DesignLocation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_discrete_axis_ranges_from_its_smallest_to_its_largest_value() {
+        let kind = AxisKind::Discrete {
+            values: vec![0.0, 1.0, 2.0],
+            default: 1.0,
+        };
+
+        assert_eq!((kind.minimum(), kind.maximum()), (0.0, 2.0));
+        assert!(kind.varies());
+        assert!(kind.accepts(2.0));
+        assert!(!kind.accepts(0.5));
+    }
+
+    #[test]
+    fn a_range_becomes_its_bounds_and_default_as_discrete_values_and_back() {
+        let range = AxisKind::Continuous {
+            minimum: 100.0,
+            default: 100.0,
+            maximum: 900.0,
+        };
+
+        let discrete = range.to_discrete();
+
+        assert_eq!(
+            discrete,
+            AxisKind::Discrete {
+                values: vec![100.0, 900.0],
+                default: 100.0,
+            }
+        );
+        assert_eq!(discrete.to_continuous(), range);
+        assert_eq!(discrete.to_discrete(), discrete);
+    }
+
+    #[test]
+    fn an_axis_with_one_position_does_not_vary() {
+        let point = AxisKind::Continuous {
+            minimum: 100.0,
+            default: 100.0,
+            maximum: 100.0,
+        };
+        let single = AxisKind::Discrete {
+            values: vec![1.0],
+            default: 1.0,
+        };
+
+        assert!(!point.varies());
+        assert!(!single.varies());
+    }
 
     #[test]
     fn locations_build_from_pairs_and_axis_defaults() {
@@ -888,14 +1012,7 @@ mod tests {
     #[test]
     fn axis_label_identity_is_stable_and_unique() {
         let label_id = AxisLabelId::from_raw("regular");
-        let label = AxisLabel::with_id(
-            label_id.clone(),
-            "Regular".to_string(),
-            400.0,
-            None,
-            None,
-            true,
-        );
+        let label = AxisLabel::with_id(label_id, "Regular".to_string(), 400.0, None, None, true);
         let mut axis = Axis::weight();
         axis.set_labels(vec![label.clone()]);
 
@@ -914,7 +1031,7 @@ mod tests {
         let label_id = AxisLabelId::from_raw("regular");
         let mut axis = Axis::weight();
         axis.set_labels(vec![AxisLabel::with_id(
-            label_id.clone(),
+            label_id,
             "Regular".to_string(),
             400.0,
             Some(AxisLabelRange {
@@ -939,7 +1056,7 @@ mod tests {
         let label_id = AxisLabelId::from_raw("black");
         let mut axis = Axis::weight();
         axis.set_labels(vec![AxisLabel::with_id(
-            label_id.clone(),
+            label_id,
             "Black".to_string(),
             950.0,
             None,
@@ -1000,11 +1117,11 @@ mod tests {
         let weight = AxisId::from_raw("wght");
         let width = AxisId::from_raw("wdth");
         let slant = AxisId::from_raw("slnt");
-        let loc = Location::from([(weight.clone(), 700.0), (width.clone(), 100.0)]);
+        let loc = Location::from([(weight, 700.0), (width, 100.0)]);
 
-        assert_eq!(loc.get(&weight), Some(700.0));
-        assert_eq!(loc.get(&width), Some(100.0));
-        assert_eq!(loc.get(&slant), None);
+        assert_eq!(loc.get(weight), Some(700.0));
+        assert_eq!(loc.get(width), Some(100.0));
+        assert_eq!(loc.get(slant), None);
     }
 
     #[test]
@@ -1036,9 +1153,9 @@ mod tests {
         let weight = Axis::weight();
         let axes = [weight.clone()];
 
-        assert_eq!(axes.axis(&weight.id()), Some(&weight));
-        assert!(axes.contains_axis(&weight.id()));
-        assert!(!axes.contains_axis(&Axis::width().id()));
+        assert_eq!(axes.axis(weight.id()), Some(&weight));
+        assert!(axes.contains_axis(weight.id()));
+        assert!(!axes.contains_axis(Axis::width().id()));
     }
 
     #[test]

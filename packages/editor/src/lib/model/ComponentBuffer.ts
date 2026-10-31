@@ -1,5 +1,5 @@
 import type { DecomposedTransform } from "@shift/geo";
-import { decomposedTransformValues, readDecomposedTransform } from "@shift/glyph-state";
+import { readDecomposedTransform } from "@shift/glyph-state";
 import { DECOMPOSED_COMPONENT_VALUE_COUNT, type ComponentData } from "@shift/types";
 import {
   computed,
@@ -41,10 +41,6 @@ export class ComponentBuffer {
 
   get transform(): DecomposedTransform {
     return readDecomposedTransform(this.#transform.view, 0);
-  }
-
-  setTransform(transform: DecomposedTransform): void {
-    this.replaceValues(decomposedTransformValues(transform));
   }
 
   replaceValues(values: Float64Array): void {

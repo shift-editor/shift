@@ -1,19 +1,12 @@
-import {
-  Bounds,
-  Mat,
-  type Bounds as BoundsType,
-  type DecomposedTransform,
-  type MatModel,
-} from "@shift/geo";
+import { EntityMap } from "@shift/types";
+import { Bounds, type Bounds as BoundsType, type DecomposedTransform } from "@shift/geo";
 import type {
-  AnchorId,
-  AnchorSeed,
   ComponentId,
+  ContourData,
   ContourId,
   GlyphState,
   GlyphStructure,
   PointId,
-  PointSeed,
 } from "@shift/types";
 import type {
   GlyphPosition,
@@ -50,7 +43,7 @@ export class LayerBuffers {
   readonly components: readonly ComponentBuffer[];
 
   // non-reactive: routes imperative point edits; render readers track contour/structure cells.
-  readonly #pointContours = new Map<PointId, ContourBuffer>();
+  readonly #pointContours = new EntityMap<PointId, ContourBuffer>("point contour");
 
   readonly structureCell: ComputedSignal<GlyphStructure>;
   readonly snapshotCell: ComputedSignal<Float64Array>;
@@ -132,14 +125,26 @@ export class LayerBuffers {
     );
   }
 
-  static fromState(state: GlyphState): LayerBuffers {
+  /**
+   * Buffers for `state`, reusing each contour buffer of `previous` whose
+   * contour data is the same object in `state`: a structural edit to one
+   * contour of a large glyph rebuilds that contour, not the glyph.
+   */
+  static fromState(state: GlyphState, previous?: LayerBuffers): LayerBuffers {
+    const reusable = new Map<ContourData, ContourBuffer>();
+    for (const contour of previous?.contours ?? []) reusable.set(contour.data, contour);
+
     let cursor = 0;
     const xAdvance = state.values[cursor++] ?? 0;
     const contours = state.structure.contours.map((data, contourIndex) => {
       const length = data.points.length * 2;
       const values = state.values.subarray(cursor, cursor + length);
       cursor += length;
-      return new ContourBuffer(data, values, contourIndex);
+      const reused = reusable.get(data);
+      if (!reused) return new ContourBuffer(data, values, contourIndex);
+      reusable.delete(data);
+      reused.replaceValues(values);
+      return reused;
     });
 
     const anchorLength = state.structure.anchors.length * 2;
@@ -214,194 +219,49 @@ export class LayerBuffers {
     return positions;
   }
 
+  /** How many positions the layer holds: every contour point and every anchor. */
+  get positionCount(): number {
+    let count = this.anchors.data.length;
+    for (const contour of this.contours) count += contour.pointCount;
+    return count;
+  }
+
+  /**
+   * Every contour point's position, contour after contour, then every
+   * anchor's, as `x, y` pairs, with `updates` applied: what a `setPositions`
+   * intent takes.
+   */
+  positionsWith(updates: GlyphPositions): Float64Array {
+    const starts = new Map<ContourBuffer, number>();
+    let pointsLength = 0;
+    for (const contour of this.contours) {
+      starts.set(contour, pointsLength);
+      pointsLength += contour.pointCount * 2;
+    }
+    const length = pointsLength + this.anchors.data.length * 2;
+    // The snapshot's leading value is the advance; positions follow it.
+    const positions = this.snapshot.slice(1, 1 + length);
+    for (const update of updates) {
+      let start = -1;
+      if (update.kind === "point") {
+        const contour = this.#contourForPoint(update.id);
+        const index = contour?.pointIndex(update.id) ?? -1;
+        if (contour && index >= 0) start = starts.get(contour)! + index * 2;
+      } else {
+        const index = this.anchors.data.findIndex((anchor) => anchor.id === update.id);
+        if (index >= 0) start = pointsLength + index * 2;
+      }
+      if (start < 0) continue;
+      positions[start] = update.x;
+      positions[start + 1] = update.y;
+    }
+    return positions;
+  }
+
   componentTransform(componentId: ComponentId): DecomposedTransform | null {
     return (
       this.components.find((component) => component.data.id === componentId)?.transform ?? null
     );
-  }
-
-  setComponentTransforms(
-    componentIds: readonly ComponentId[],
-    transforms: readonly DecomposedTransform[],
-  ): boolean {
-    if (componentIds.length !== transforms.length) return false;
-
-    const components = componentIds.map((componentId) =>
-      this.components.find((component) => component.data.id === componentId),
-    );
-    if (components.some((component) => component === undefined)) return false;
-
-    batch(() => {
-      for (let index = 0; index < components.length; index++) {
-        const component = components[index];
-        const transform = transforms[index];
-        if (component && transform) component.setTransform(transform);
-      }
-    });
-    return true;
-  }
-
-  addContour(contourId: ContourId, closed: boolean): boolean {
-    if (this.contour(contourId)) return false;
-
-    const contours = this.contoursCell.peek();
-    this.contoursCell.set([
-      ...contours,
-      new ContourBuffer({ id: contourId, points: [], closed }, new Float64Array(), contours.length),
-    ]);
-    return true;
-  }
-
-  addPoints(points: readonly PointSeed[], contourId?: ContourId, before?: PointId): boolean {
-    const pointIds = new Set(points.map((point) => point.id));
-    if (pointIds.size !== points.length) return false;
-    if ([...pointIds].some((pointId) => this.#contourForPoint(pointId))) return false;
-
-    const contour = this.#insertionContour(contourId, before);
-    if (!contour) return false;
-
-    return batch(() => {
-      if (!contour.insertPoints(points, before)) return false;
-
-      for (const point of points) this.#pointContours.set(point.id, contour);
-
-      return true;
-    });
-  }
-
-  #insertionContour(contourId?: ContourId, before?: PointId) {
-    if (contourId) return this.contour(contourId);
-    if (before) return this.#contourForPoint(before);
-    return null;
-  }
-
-  setContourClosed(contourId: ContourId, closed: boolean): boolean {
-    const contour = this.contour(contourId);
-    if (!contour) return false;
-
-    contour.setClosed(closed);
-    return true;
-  }
-
-  movePoints(pointIds: readonly PointId[], coords: readonly number[]): boolean {
-    if (coords.length !== pointIds.length * 2) return false;
-
-    if (!pointIds.every((pointId) => this.#contourForPoint(pointId))) return false;
-
-    this.patchPositions(
-      pointIds.map((id, index) => ({
-        kind: "point",
-        id,
-        x: coords[index * 2] ?? 0,
-        y: coords[index * 2 + 1] ?? 0,
-      })),
-    );
-    return true;
-  }
-
-  setPointSmooth(pointId: PointId, smooth: boolean): boolean {
-    return this.#contourForPoint(pointId)?.setPointSmooth(pointId, smooth) ?? false;
-  }
-
-  removePoints(pointIds: readonly PointId[]): boolean {
-    const removed = new Set(pointIds);
-    if (removed.size !== pointIds.length) return false;
-
-    const contours = new Map<ContourBuffer, Set<PointId>>();
-    for (const pointId of removed) {
-      const contour = this.#contourForPoint(pointId);
-      if (!contour) return false;
-
-      const contourPoints = contours.get(contour) ?? new Set<PointId>();
-      contourPoints.add(pointId);
-      contours.set(contour, contourPoints);
-    }
-
-    batch(() => {
-      for (const [contour, ids] of contours) contour.removePoints(ids);
-      for (const pointId of removed) this.#pointContours.delete(pointId);
-
-      const emptyContours = new Set(contours.keys().filter((contour) => contour.pointCount === 0));
-      if (emptyContours.size > 0) {
-        this.contoursCell.set(this.contours.filter((contour) => !emptyContours.has(contour)));
-      }
-    });
-    return true;
-  }
-
-  reverseContour(contourId: ContourId): boolean {
-    const contour = this.contour(contourId);
-    if (!contour) return false;
-
-    contour.reverse();
-    return true;
-  }
-
-  setContourStart(contourId: ContourId, pointId: PointId): boolean {
-    return this.contour(contourId)?.setContourStart(pointId) ?? false;
-  }
-
-  /**
-   * Maps every contour point and anchor through `matrix` and composes it onto each component.
-   *
-   * @remarks
-   * Mirrors Rust's `GlyphLayer::transform_layer`, so a local preview matches
-   * the authoritative result. The advance width is unchanged.
-   */
-  transformLayer(matrix: MatModel): boolean {
-    this.patchPositions(
-      this.positions.map((position) => ({ ...position, ...Mat.applyToPoint(matrix, position) })),
-    );
-
-    return this.setComponentTransforms(
-      this.components.map((component) => component.data.id),
-      this.components.map(({ transform }) => composeOnto(transform, matrix)),
-    );
-  }
-
-  setXAdvance(width: number): boolean {
-    this.xAdvanceCell.set(width);
-    return true;
-  }
-
-  addAnchors(anchors: readonly AnchorSeed[]): boolean {
-    const anchorIds = new Set(anchors.map((anchor) => anchor.id));
-    if (anchorIds.size !== anchors.length) return false;
-    if (this.anchors.data.some((anchor) => anchorIds.has(anchor.id))) return false;
-
-    this.anchors.add(anchors);
-    return true;
-  }
-
-  moveAnchors(anchorIds: readonly AnchorId[], coords: readonly number[]): boolean {
-    if (coords.length !== anchorIds.length * 2) return false;
-
-    const updates: GlyphPosition[] = anchorIds.map((id, index) => ({
-      kind: "anchor",
-      id,
-      x: coords[index * 2] ?? 0,
-      y: coords[index * 2 + 1] ?? 0,
-    }));
-    if (this.positionsFor(updates).length !== updates.length) return false;
-
-    this.patchPositions(updates);
-    return true;
-  }
-
-  renameAnchors(anchorIds: readonly AnchorId[], names: readonly string[]): boolean {
-    if (names.length !== anchorIds.length) return false;
-    return this.anchors.rename(new Map(anchorIds.map((id, index) => [id, names[index]!])));
-  }
-
-  removeAnchors(anchorIds: readonly AnchorId[]): boolean {
-    const removed = new Set(anchorIds);
-    if (removed.size !== anchorIds.length) return false;
-    if (this.anchors.data.filter((anchor) => removed.has(anchor.id)).length !== removed.size) {
-      return false;
-    }
-
-    this.anchors.remove(removed);
-    return true;
   }
 
   patchPositions(updates: GlyphPositions): void {
@@ -458,7 +318,7 @@ export class LayerBuffers {
   }
 
   #contourForPoint(pointId: PointId): ContourBuffer | null {
-    return this.#pointContours.get(pointId) ?? null;
+    return this.#pointContours.get(pointId);
   }
 
   static #snapshot(
@@ -495,22 +355,4 @@ export class LayerBuffers {
     }
     return result;
   }
-}
-
-/**
- * A component placement after `matrix`, matching Rust's `GlyphLayer::transform_layer`.
- *
- * @remarks
- * A pure translation is added to the placement's translation so its other
- * decomposed values stay exact; anything else composes and re-decomposes.
- */
-function composeOnto(transform: DecomposedTransform, matrix: MatModel): DecomposedTransform {
-  const translationOnly = matrix.a === 1 && matrix.b === 0 && matrix.c === 0 && matrix.d === 1;
-  if (!translationOnly) return Mat.toDecomposed(Mat.Compose(matrix, Mat.fromDecomposed(transform)));
-
-  return {
-    ...transform,
-    translateX: transform.translateX + matrix.e,
-    translateY: transform.translateY + matrix.f,
-  };
 }

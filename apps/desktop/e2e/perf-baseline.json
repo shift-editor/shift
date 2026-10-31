@@ -1,13 +1,13 @@
 {
-  "translate-drag (5 pts)": {
+  "position patch (5 pts)": {
     "p50": 0.40000003576278687,
     "p95": 0.5
   },
-  "translate-drag (1K pts)": {
+  "position patch (1K pts)": {
     "p50": 0.5999999642372131,
     "p95": 0.7000000476837158
   },
-  "translate-drag (all pts)": {
+  "position patch (all pts)": {
     "p50": 2.400000035762787,
     "p95": 7.200000047683716
   },

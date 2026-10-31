@@ -1,6 +1,6 @@
 import { afterAll, bench, describe } from "vitest";
 import type { GlyphName, PointType, Unicode } from "@shift/types";
-import { mintContourId, mintGlyphId, mintLayerId, mintPointId } from "@shift/types";
+import { ascending, mintContourId, mintGlyphId, mintLayerId, mintPointId } from "@shift/types";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
 
 /**
@@ -24,7 +24,7 @@ const created = await stack.editCoordinator.apply([
     createGlyphLayer: { layerId, glyphId, sourceId: stack.font.defaultSource.id },
   },
 ]);
-if (!created.next?.glyphs?.[0]?.layers.find((layer) => layer.id === layerId)) {
+if (!created.next?.glyphChanges?.updated[0]?.layers.find((layer) => layer.id === layerId)) {
   throw new Error("createGlyphLayer did not echo sparse layer membership");
 }
 
@@ -118,12 +118,12 @@ const largeUndoSamples: number[] = [];
 const largeRedoSamples: number[] = [];
 
 function percentile(samples: readonly number[], fraction: number): number {
-  const sorted = [...samples].sort((a, b) => a - b);
+  const sorted = samples.toSorted(ascending);
   return sorted[Math.floor(sorted.length * fraction)] ?? 0;
 }
 
 afterAll(() => {
-  console.log(
+  console.info(
     `50K position replay: undo p50=${percentile(largeUndoSamples, 0.5).toFixed(2)}ms p95=${percentile(largeUndoSamples, 0.95).toFixed(2)}ms; redo p50=${percentile(largeRedoSamples, 0.5).toFixed(2)}ms p95=${percentile(largeRedoSamples, 0.95).toFixed(2)}ms`,
   );
 });

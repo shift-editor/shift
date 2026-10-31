@@ -1,8 +1,5 @@
 import type { MessagePortMain } from "electron";
-import type {
-  WorkspaceDocumentState,
-  WorkspaceExportResult,
-} from "../../shared/workspace/protocol";
+import type { WorkspaceDocumentState, WorkspaceExportResult } from "../../shared/workspace/lanes";
 import type { DocumentCallMap, DocumentEventMap } from "../../shared/ipc/contract";
 import { Channel, electronPortTransport } from "../../shared/workspace/channel";
 import { createShiftLogger, type ShiftLogger } from "../logging";
@@ -63,6 +60,16 @@ export class DocumentClient implements Document {
    */
   export(path: string): Promise<WorkspaceExportResult> {
     return this.#call("document.export", { path });
+  }
+
+  /**
+   * Has the window close its reader of the workspace's store, so closing the
+   * workspace can delete the files. A window that is gone holds nothing open.
+   */
+  async releaseStore(): Promise<void> {
+    if (!this.connected) return;
+
+    await this.#call("document.releaseStore", undefined);
   }
 
   /** Disconnects the active renderer document lane. */

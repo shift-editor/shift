@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { asContourId, asPointId, type ContourData } from "@shift/types";
 import { Contour } from "./Contour";
 
-function contourData(closed = false): ContourData {
+/** `T` with every field and list writable, for a test that edits a copy in place. */
+type Writable<T> = T extends string | number | boolean
+  ? T
+  : { -readonly [K in keyof T]: Writable<T[K]> };
+
+function contourData(closed = false): Writable<ContourData> {
   return {
     id: asContourId("c1"),
     closed,

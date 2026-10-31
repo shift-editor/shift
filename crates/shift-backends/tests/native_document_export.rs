@@ -66,7 +66,7 @@ fn mapped_weight_interpolation_survives_native_round_trip() {
     for font in [&original, &native] {
         let axis_id = font.axes()[0].id();
         let glyph = font.glyph_by_name("A").unwrap();
-        let interpolation = font.glyph_interpolation(&glyph.id()).unwrap().unwrap();
+        let interpolation = font.glyph_interpolation(glyph.id()).unwrap().unwrap();
         let metrics = font.source_metric_interpolation().unwrap();
         let ascender_id = font
             .metric_definition_for_kind(MetricKind::Ascender)
@@ -85,7 +85,7 @@ fn mapped_weight_interpolation_survives_native_round_trip() {
             (681.25, 123.0, 750.0, 850.0),
             (800.0, 160.0, 900.0, 900.0),
         ] {
-            let external_location = ExternalLocation::from([(axis_id.clone(), external)]);
+            let external_location = ExternalLocation::from([(axis_id, external)]);
             let design_location = font.mapped_location(&external_location).unwrap();
             let layer = interpolation
                 .resolve(&design_location, font.axes())

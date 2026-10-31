@@ -19,14 +19,32 @@
     "./shaping": {
       "types": "./src/shaping.ts",
       "import": "./src/shaping.ts"
+    },
+    "./engine": {
+      "types": "./src/engine.ts",
+      "import": "./src/engine.ts"
+    },
+    "./protocol": {
+      "types": "./src/generated-protocol/index.ts",
+      "import": "./src/generated-protocol/index.ts"
+    },
+    "./store-reader": {
+      "types": "./src/storeReader.ts",
+      "import": "./src/storeReader.ts"
     }
   },
   "scripts": {
     "build": "node scripts/build.mjs",
     "build:debug": "node scripts/build.mjs",
     "build:e2e": "node scripts/build.mjs",
+    "build:reference": "node scripts/build.mjs --reference",
+    "types": "node scripts/build.mjs --types",
     "lint": "oxlint --fix src/",
     "lint:check": "oxlint --deny-warnings src/"
+  },
+  "dependencies": {
+    "@shift/pack": "workspace:*",
+    "@shift/types": "workspace:*"
   },
   "devDependencies": {
     "binaryen": "132.0.0"

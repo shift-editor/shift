@@ -1,5 +1,6 @@
-import type { Axis, AxisId, AxisMappingBasis, Source, SourceId } from "@shift/types";
-import { track, type Signal } from "../signals";
+import type { AxisId, AxisMappingBasis, Axis as AxisRecord, Source, SourceId } from "@shift/types";
+import { Axis } from "../model/Axis";
+import { computed, track, type ComputedSignal, type Signal } from "../signals";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import {
   axisValue,
@@ -8,10 +9,9 @@ import {
   designAxisLocationFromLocation,
   designAxisLocationsEqual,
   emptyExternalAxisLocation,
-  externalAxisLocationForDesignLocation,
   externalAxisLocationFromRecord,
-  mapAxisLocation,
 } from "./location";
+import { externalAxisLocationForDesignLocation, mapAxisLocation } from "../wasm/variation";
 
 /**
  * A font's axes, axis mappings, and sources, with the location operations over them.
@@ -22,18 +22,34 @@ import {
  * readers current when the designspace changes.
  */
 export class Designspace {
-  readonly #axesCell: Signal<Axis[]>;
-  readonly #mappingBasesCell: Signal<AxisMappingBasis[]>;
-  readonly #sourcesCell: Signal<Source[]>;
+  readonly #axesCell: ComputedSignal<readonly Axis[]>;
+  readonly #mappingBasesCell: Signal<readonly AxisMappingBasis[]>;
+  readonly #sourcesCell: Signal<readonly Source[]>;
 
+  /**
+   * @param cells - the font's axis records, axis mapping bases and sources;
+   *   each is read reactively, never written.
+   */
   constructor(cells: {
-    axesCell: Signal<Axis[]>;
-    mappingBasesCell: Signal<AxisMappingBasis[]>;
-    sourcesCell: Signal<Source[]>;
+    axesCell: Signal<readonly AxisRecord[]>;
+    mappingBasesCell: Signal<readonly AxisMappingBasis[]>;
+    sourcesCell: Signal<readonly Source[]>;
   }) {
-    this.#axesCell = cells.axesCell;
+    const recordsCell = cells.axesCell;
+    this.#axesCell = computed(() => recordsCell.value.map((record) => new Axis(record)));
     this.#mappingBasesCell = cells.mappingBasesCell;
     this.#sourcesCell = cells.sourcesCell;
+  }
+
+  /**
+   * The font's axes in authored order, rebuilt only when the axis records change.
+   *
+   * @remarks
+   * The array keeps its identity while the records do, so readers that key on
+   * it (module handles, memoized weights) stay valid across unrelated edits.
+   */
+  get axesCell(): ComputedSignal<readonly Axis[]> {
+    return this.#axesCell;
   }
 
   get axes(): readonly Axis[] {
@@ -51,8 +67,36 @@ export class Designspace {
     track(this.#sourcesCell);
   }
 
+  axis(axisId: AxisId): Axis | null {
+    return this.axes.find((axis) => axis.id === axisId) ?? null;
+  }
+
+  /** The axis tagged `tag`; a font has at most one axis per tag. */
+  axisTagged(tag: string): Axis | null {
+    return this.axes.find((axis) => axis.tag === tag) ?? null;
+  }
+
   source(sourceId: SourceId): Source | null {
     return this.sources.find((source) => source.id === sourceId) ?? null;
+  }
+
+  /**
+   * The source named exactly `name`.
+   *
+   * @remarks
+   * Names are not unique: the store does not constrain them and renaming a
+   * source in Font Settings does not check, so two sources can share one.
+   * Only creating a source and importing a designspace pick unused names.
+   *
+   * @returns null when no source has the name.
+   * @throws {Error} when more than one source has it.
+   */
+  sourceNamed(name: string): Source | null {
+    const named = this.sources.filter((source) => source.name === name);
+    if (named.length > 1) {
+      throw new Error(`Source name ${name} is ambiguous: ${named.length} sources have it`);
+    }
+    return named[0] ?? null;
   }
 
   /** Maps external user coordinates once into internal design coordinates. */

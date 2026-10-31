@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { ElectronApplication, Locator, Page } from "@playwright/test";
 import { expect, glyphsPreviewTest, ufoPreviewTest } from "./fixtures/perfApp";
 import {
   editorShell,
@@ -9,91 +9,68 @@ import {
   openFirstCatalogGlyph,
   openVariationControls,
 } from "./fixtures/appLocators";
+import { sessionMode } from "./fixtures/documentLifecycle";
+import {
+  catalogLocation,
+  expectCompleteResidency,
+  paintsGlyphs,
+} from "./fixtures/glyphCatalogProbe";
 
-async function expectRenderedGrid(page: Page): Promise<void> {
-  await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
+async function expectRenderedGrid(page: Page, electronApp: ElectronApplication): Promise<void> {
+  await expect.poll(() => sessionMode(page, electronApp)).toBe("preview");
 
   const viewport = glyphCatalogViewport(page);
   await viewport.waitFor({ state: "visible" });
-  const canvas = glyphCatalogCanvas(page);
-  await expect(canvas).toHaveAttribute("data-grid-readiness", "Complete", { timeout: 30_000 });
-  await expect(canvas).toHaveAttribute("data-fully-resident", "true");
+  const canvas: Locator = glyphCatalogCanvas(page);
+  await expectCompleteResidency(canvas);
 
-  const counts = await canvas.evaluate((element) => ({
-    resident: Number(element.dataset.residentGlyphCount),
-    target: Number(element.dataset.targetGlyphCount),
-  }));
-  expect(counts.resident).toBeGreaterThan(0);
-  expect(counts.resident).toBe(counts.target);
-
-  const surface = glyphCatalogSurface(page);
-  await expect
-    .poll(async () => {
-      const rendered = await surface.screenshot();
-      const visibility = await canvas.evaluate((element) => element.style.visibility);
-      try {
-        await canvas.evaluate((element) => {
-          element.style.visibility = "hidden";
-        });
-        const withoutGlyphs = await surface.screenshot();
-        return rendered.equals(withoutGlyphs);
-      } finally {
-        await canvas.evaluate((element, value) => {
-          element.style.visibility = value;
-        }, visibility);
-      }
-    })
-    .toBe(false);
+  await expect.poll(() => paintsGlyphs(glyphCatalogSurface(page), canvas)).toBe(true);
 }
 
-ufoPreviewTest("UFO sources render a complete resident Grid", async ({ page }) => {
-  await expectRenderedGrid(page);
+ufoPreviewTest("UFO sources render a complete resident Grid", async ({ page, electronApp }) => {
+  await expectRenderedGrid(page, electronApp);
 });
 
-glyphsPreviewTest("Glyphs sources render a complete resident Grid", async ({ page, editor }) => {
-  await expectRenderedGrid(page);
+glyphsPreviewTest(
+  "Glyphs sources render a complete resident Grid",
+  async ({ page, editor, electronApp }) => {
+    await expectRenderedGrid(page, electronApp);
 
-  const surface = glyphCatalogSurface(page);
-  const beforeFrame = await surface.screenshot();
-  const beforeLocation = await page.evaluate(() => window.shiftSession?.catalog.locationCell.value);
+    const surface = glyphCatalogSurface(page);
+    const beforeFrame = await surface.screenshot();
+    const beforeLocation = await catalogLocation(page);
 
-  await openFirstCatalogGlyph(page);
-  await editor.waitForCanvasRender();
+    await openFirstCatalogGlyph(page);
+    await editor.waitForCanvasRender();
 
-  const sceneCanvas = page.locator("#scene-canvas");
-  const beforeSourceFrame = await sceneCanvas.screenshot();
-  const variationControls = await openVariationControls(page);
-  const sourceButtons = variationControls.getByRole("button", {
-    name: "Regular",
-    exact: true,
-  });
-  await expect(sourceButtons).toHaveCount(2);
-  const targetSourceId = await page.evaluate(() => window.shiftSession?.font.sources[1]?.id);
-  if (!targetSourceId) throw new Error("Expected a second source");
-  await page.getByTestId(`source-${targetSourceId}`).click();
-  await expect
-    .poll(() => page.evaluate(() => window.shiftSession?.editor.activeSourceId))
-    .toBe(targetSourceId);
-  await expect
-    .poll(() => page.evaluate(() => window.shiftSession?.catalog.locationCell.value))
-    .not.toEqual(beforeLocation);
-  await expect
-    .poll(async () => (await sceneCanvas.screenshot()).equals(beforeSourceFrame))
-    .toBe(false);
+    const sceneCanvas = page.locator("#scene-canvas");
+    const beforeSourceFrame = await sceneCanvas.screenshot();
+    const variationControls = await openVariationControls(page);
+    const sourceButtons = variationControls.getByRole("button", {
+      name: "Regular",
+      exact: true,
+    });
+    await expect(sourceButtons).toHaveCount(2);
+    // Both sources are named Regular, so pick the second row and follow its source by id.
+    const target = (await editor.fontOverview()).sources[1];
+    if (!target) throw new Error("Expected a second source");
+    await sourceButtons.nth(1).click();
+    await expect.poll(async () => (await editor.editorView()).activeSourceId).toBe(target.id);
+    await expect.poll(() => catalogLocation(page)).not.toEqual(beforeLocation);
+    await expect
+      .poll(async () => (await sceneCanvas.screenshot()).equals(beforeSourceFrame))
+      .toBe(false);
 
-  const slider = await firstAxisSlider(page);
-  await slider.press("End");
-  await slider.press("ArrowLeft");
-  await expect
-    .poll(() => page.evaluate(() => window.shiftSession?.editor.activeSourceId))
-    .toBeNull();
-  await expect
-    .poll(() => page.evaluate(() => window.shiftSession?.catalog.locationCell.value))
-    .not.toEqual(beforeLocation);
-  await editorShell(page).getByLabel("Font overview").click();
-  await page.waitForURL(/#\/home$/);
-  await expect(glyphCatalogCanvas(page)).toHaveAttribute("data-grid-readiness", "Complete");
-  await expect
-    .poll(async () => (await surface.screenshot()).equals(beforeFrame), { timeout: 5_000 })
-    .toBe(false);
-});
+    const slider = await firstAxisSlider(page);
+    await slider.press("End");
+    await slider.press("ArrowLeft");
+    await expect.poll(async () => (await editor.editorView()).activeSourceId).toBeNull();
+    await expect.poll(() => catalogLocation(page)).not.toEqual(beforeLocation);
+    await editorShell(page).getByLabel("Font overview").click();
+    await page.waitForURL(/#\/home$/);
+    await expect(glyphCatalogCanvas(page)).toHaveAttribute("data-grid-readiness", "Complete");
+    await expect
+      .poll(async () => (await surface.screenshot()).equals(beforeFrame), { timeout: 5_000 })
+      .toBe(false);
+  },
+);

@@ -91,6 +91,81 @@ fn merged_view_sql(table: &RecoveryTableShape) -> String {
     format!("CREATE TEMP VIEW {name} AS\n{select};")
 }
 
+/// A condition that holds when the overlay changes `table` from the saved
+/// document, or `None` for a table the overlay never changes.
+///
+/// It reads only what the overlay touches: for row overrides, the overlay's
+/// rows as the merged document shows them, and saved rows a tombstone hides;
+/// for replaced collections, the marked owners' rows, compared both ways.
+pub(super) fn differs_from_saved_sql(table: &RecoveryTableShape) -> Option<String> {
+    let name = identifier(table.table.name());
+    let columns = column_list(&table.columns);
+    let checks = match table.table.mode() {
+        RecoveryMode::CanonicalOnly => return None,
+        RecoveryMode::OverlayRows { tombstone_kind, .. } => {
+            let primary_key = column_list(&table.primary_key);
+            let mut checks = vec![format!(
+                "SELECT {columns} FROM temp.{name}
+                 WHERE ({primary_key}) IN (SELECT {primary_key} FROM recovery.{name})
+                 EXCEPT SELECT {columns} FROM main.{name}"
+            )];
+            if let Some(kind) = tombstone_kind {
+                checks.push(format!(
+                    "SELECT 1 FROM main.{name} AS m
+                     JOIN recovery.recovery_tombstones AS t
+                       ON t.entity_kind = {} AND t.entity_id = m.{}",
+                    string_literal(kind),
+                    identifier(&table.primary_key[0])
+                ));
+            }
+            checks
+        }
+        RecoveryMode::ReplaceCollection { owner_column, .. } => {
+            let collection = string_literal(table.table.name());
+            let replaced = match owner_column {
+                Some(column) => format!(
+                    " WHERE {} IN (
+                        SELECT owner_id FROM recovery.recovery_replacements
+                        WHERE collection = {collection}
+                    )",
+                    identifier(column)
+                ),
+                None => format!(
+                    " WHERE EXISTS (
+                        SELECT 1 FROM recovery.recovery_replacements
+                        WHERE collection = {collection} AND owner_id = ''
+                    )"
+                ),
+            };
+            vec![
+                format!(
+                    "SELECT {columns} FROM temp.{name}{replaced}
+                     EXCEPT SELECT {columns} FROM main.{name}{replaced}"
+                ),
+                format!(
+                    "SELECT {columns} FROM main.{name}{replaced}
+                     EXCEPT SELECT {columns} FROM temp.{name}{replaced}"
+                ),
+            ]
+        }
+    };
+    Some(
+        checks
+            .iter()
+            .map(|check| format!("EXISTS ({check})"))
+            .collect::<Vec<_>>()
+            .join(" OR "),
+    )
+}
+
+fn column_list(columns: &[String]) -> String {
+    columns
+        .iter()
+        .map(|column| identifier(column))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 fn projection(
     columns: &[String],
     row_alias: &str,

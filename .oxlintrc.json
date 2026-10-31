@@ -52,13 +52,35 @@
     "shift/no-manual-index-wrap": "error",
     "shift/brand-cast-via-helper": "error",
     "shift/prefer-iterator-helpers": "error",
-    "shift/prefer-scene-only": "error"
+    "shift/prefer-scene-only": "error",
+    "shift/no-optional-collection-field": "error",
+    "shift/no-map-get-to-null": "error",
+    "shift/no-conditional-spread": "error",
+    "shift/no-inline-comparator": "error",
+    "shift/no-page-evaluate-in-specs": "error",
+    "shift/no-agent-types-in-behaviour-tests": "error",
+    "shift/no-editor-internals-in-tests": "error"
   },
   "overrides": [
     {
       "files": ["**/*.test.ts", "**/testing/**/*.ts"],
       "rules": {
         "typescript/no-explicit-any": "error"
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/testing/**/*.ts"],
+      "rules": {
+        "shift/no-escape-hatch-reads": "error",
+        "shift/no-test-type-escapes": "off",
+        "shift/no-wire-shapes-in-tests": "off"
+      }
+    },
+    {
+      "files": ["**/renderer/src/behaviour/**/*.test.ts", "**/desktop/e2e/**/*.spec.ts"],
+      "rules": {
+        "shift/no-drill-into-reads": "error",
+        "shift/no-lookup-in-tests": "error"
       }
     }
   ]

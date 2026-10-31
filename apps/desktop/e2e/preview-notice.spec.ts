@@ -1,10 +1,11 @@
-import { documentTest, expect, FONT_PATH } from "./fixtures/electronApp";
+import { documentTest, expect, FONTS } from "./fixtures/electronApp";
 import { glyphCatalogRenderer } from "./fixtures/appLocators";
+import { sessionMode } from "./fixtures/documentLifecycle";
 import { expectPanelSnapshot } from "./fixtures/snapshots";
 import { prepareWindow } from "./fixtures/window";
 
 const test = documentTest.extend({
-  openFontPath: FONT_PATH,
+  openFontPath: FONTS.mutatorSansTtf,
 });
 
 test(
@@ -18,9 +19,7 @@ test(
     // centred in it, so give it the fixed visual size before capturing.
     await prepareWindow(electronApp, workspacePage, "visual");
     await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
-    await expect
-      .poll(() => workspacePage.evaluate(() => window.shiftSession?.mode))
-      .toBe("preview");
+    await expect.poll(() => sessionMode(workspacePage, electronApp)).toBe("preview");
 
     // The notice's soft edge shows the catalog behind it, so capture only once the catalog
     // has finished rendering.

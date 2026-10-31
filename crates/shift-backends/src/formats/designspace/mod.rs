@@ -108,21 +108,21 @@ mod tests {
 
         let independent = AxisMapping::new(
             "Weight curve".to_string(),
-            vec![weight_id.clone()],
-            vec![weight_id.clone()],
+            vec![weight_id],
+            vec![weight_id],
             vec![
-                mapping_point(&[(weight_id.clone(), 100.0)], &[(weight_id.clone(), 80.0)]),
-                mapping_point(&[(weight_id.clone(), 400.0)], &[(weight_id.clone(), 400.0)]),
-                mapping_point(&[(weight_id.clone(), 900.0)], &[(weight_id.clone(), 850.0)]),
+                mapping_point(&[(weight_id, 100.0)], &[(weight_id, 80.0)]),
+                mapping_point(&[(weight_id, 400.0)], &[(weight_id, 400.0)]),
+                mapping_point(&[(weight_id, 900.0)], &[(weight_id, 850.0)]),
             ],
         );
         let mut cross = AxisMapping::new(
             "Weight by italic".to_string(),
-            vec![weight_id.clone(), italic_id.clone()],
-            vec![weight_id.clone()],
+            vec![weight_id, italic_id],
+            vec![weight_id],
             vec![mapping_point(
-                &[(weight_id.clone(), 850.0), (italic_id.clone(), 1.0)],
-                &[(weight_id.clone(), 800.0)],
+                &[(weight_id, 850.0), (italic_id, 1.0)],
+                &[(weight_id, 800.0)],
             )],
         );
         cross.set_description(Some("Italic masters become lighter".to_string()));
@@ -248,7 +248,7 @@ mod tests {
     fn location(values: &[(shift_font::AxisId, f64)]) -> Location {
         let location: Location = values
             .iter()
-            .map(|(axis_id, value)| (axis_id.clone(), *value))
+            .map(|(axis_id, value)| (*axis_id, *value))
             .collect();
         location
     }

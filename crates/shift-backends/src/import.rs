@@ -75,7 +75,7 @@ impl GlyphStream for GlifGlyphStream {
         self.glyphs
             .iter()
             .map(|glyph| GlyphDirectoryEntry {
-                glyph_id: glyph.id.clone(),
+                glyph_id: glyph.id,
                 name: glyph.name.clone().into(),
             })
             .collect()
@@ -114,7 +114,7 @@ fn load_glif_glyph(
     record: &GlifGlyph,
     glyph_ids: &HashMap<String, GlyphId>,
 ) -> FormatBackendResult<Glyph> {
-    let mut glyph = Glyph::with_id(record.id.clone(), record.name.clone());
+    let mut glyph = Glyph::with_id(record.id, record.name.clone());
     for (index, layer_record) in record.layers.iter().enumerate() {
         let norad_glyph = norad::Glyph::load(&layer_record.path).map_err(|error| {
             crate::FormatBackendError::Ufo(format!(
@@ -131,8 +131,8 @@ fn load_glif_glyph(
         }
         let layer = crate::formats::ufo::UfoReader::convert_stream_layer(
             &norad_glyph,
-            layer_record.layer_id.clone(),
-            layer_record.source_id.clone(),
+            layer_record.layer_id,
+            layer_record.source_id,
             glyph_ids,
         )?;
         glyph.set_layer(layer);

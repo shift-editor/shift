@@ -29,7 +29,7 @@ impl GlyphInspection {
             .wrap_err_with(|| format!("failed to load font {}", path.display()))?;
         let glyph_id = font.glyph_id_for(selector)?;
         let glyph = font
-            .glyph(&glyph_id)
+            .glyph(glyph_id)
             .ok_or_else(|| miette!("glyph {selector:?} disappeared while inspecting the font"))?;
         let external = parse_location(&font, coordinates)?;
         let design = font
@@ -37,7 +37,7 @@ impl GlyphInspection {
             .into_diagnostic()
             .wrap_err("failed to map the external location into design space")?;
         let projection = font
-            .glyph_projection(&glyph_id)
+            .glyph_projection(glyph_id)
             .into_diagnostic()
             .wrap_err("failed to construct the glyph projection")?
             .ok_or_else(|| miette!("glyph {selector:?} has no master-backed geometry"))?;
@@ -53,7 +53,7 @@ impl GlyphInspection {
         let variation = inspect_variation(&font, &projection, glyph, exact_source, &design)?;
         let mut font_projection = font.projection(&design);
         let resolved = font_projection
-            .glyph(&glyph_id)
+            .glyph(glyph_id)
             .into_diagnostic()
             .wrap_err("failed to flatten the resolved glyph")?
             .ok_or_else(|| {
@@ -125,7 +125,7 @@ pub(crate) fn parse_location(font: &Font, coordinates: &[String]) -> Result<Exte
         }
         let axis = font
             .axis_id_by_tag(tag)
-            .and_then(|axis_id| font.axis(&axis_id))
+            .and_then(|axis_id| font.axis(axis_id))
             .ok_or_else(|| miette!("axis tag {tag:?} does not exist"))?;
         let value = value
             .trim()
@@ -217,7 +217,7 @@ fn inspect_components(
         .map(|(order, occurrence)| {
             let parent_id = occurrence.parent_glyph_id();
             let parent_projection = font
-                .glyph_projection(&parent_id)
+                .glyph_projection(parent_id)
                 .into_diagnostic()
                 .wrap_err("failed to construct a component parent projection")?
                 .ok_or_else(|| miette!("component parent glyph {parent_id} has no projection"))?;
@@ -235,9 +235,9 @@ fn inspect_components(
                 })?;
             let base_id = occurrence.base_glyph_id();
             let parent_name = font
-                .glyph(&parent_id)
+                .glyph(parent_id)
                 .map_or_else(|| parent_id.to_string(), |glyph| glyph.name().to_string());
-            let base_name = font.glyph(&base_id).map_or_else(
+            let base_name = font.glyph(base_id).map_or_else(
                 || component.base_glyph_name().to_string(),
                 |glyph| glyph.name().to_string(),
             );
@@ -303,7 +303,7 @@ fn inspect_sources(
     font.sources()
         .iter()
         .map(|source| {
-            let layer = glyph.layer_for_source(&source.id());
+            let layer = glyph.layer_for_source(source.id());
             let layer_match = layer.map(|layer| reference.match_with(layer));
             SourceInspection {
                 id: source.id().to_string(),
@@ -365,7 +365,7 @@ fn inspect_variation(
                     .zip(weights)
                     .map(|(source_id, weight)| SourceWeight {
                         source_id: source_id.to_string(),
-                        source_name: font.source(source_id).map_or_else(
+                        source_name: font.source(*source_id).map_or_else(
                             || source_id.to_string(),
                             |source| source.name().to_string(),
                         ),
@@ -399,7 +399,7 @@ fn inspect_variation(
                             .supports()
                             .iter()
                             .map(|support| VariationSupport {
-                                axis_tag: font.axis(&support.axis_id()).map_or_else(
+                                axis_tag: font.axis(support.axis_id()).map_or_else(
                                     || support.axis_id().to_string(),
                                     |axis| axis.tag().to_string(),
                                 ),
@@ -422,7 +422,7 @@ fn inspect_variation(
         })
         .transpose()?
         .unwrap_or_default();
-    let exact_layer = exact_source.and_then(|source| glyph.layer_for_source(&source.id()));
+    let exact_layer = exact_source.and_then(|source| glyph.layer_for_source(source.id()));
     let selection = if exact_layer.is_some() {
         "exactSource"
     } else if interpolation.is_some() {

@@ -38,7 +38,7 @@ export const GlyphCatalogView = () => {
     selectedLanguageId,
     visibleCategoryFilters,
     expandedCategories,
-    setExpandedCategories,
+    setCategoryExpanded,
     query,
     setQuery,
     createQuickGlyph,
@@ -125,14 +125,7 @@ export const GlyphCatalogView = () => {
                 >
                   <Collapsible
                     open={expandedCategories.has(categoryNode.category)}
-                    onOpenChange={(open) => {
-                      setExpandedCategories((previous) => {
-                        const next = new Set(previous);
-                        if (open) next.add(categoryNode.category);
-                        else next.delete(categoryNode.category);
-                        return next;
-                      });
-                    }}
+                    onOpenChange={(open) => setCategoryExpanded(categoryNode.category, open)}
                     className="flex flex-col"
                   >
                     <CollapsibleTrigger

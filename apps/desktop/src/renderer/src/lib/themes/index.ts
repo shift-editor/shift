@@ -637,9 +637,10 @@ const MINIMUM_SECONDARY_CONTRAST = 3;
 
 /** WCAG contrast ratio between two `#rrggbb` colors. */
 function contrastRatio(first: string, second: string): number {
-  const [lighter, darker] = [relativeLuminance(first), relativeLuminance(second)].sort(
-    (a, b) => b - a,
-  );
+  const firstLuminance = relativeLuminance(first);
+  const secondLuminance = relativeLuminance(second);
+  const lighter = Math.max(firstLuminance, secondLuminance);
+  const darker = Math.min(firstLuminance, secondLuminance);
   return (lighter + 0.05) / (darker + 0.05);
 }
 

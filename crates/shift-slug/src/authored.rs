@@ -141,7 +141,7 @@ impl AuthoredAtlasBuilder {
     ) -> Result<AuthoredGlyph, AuthoredSlugError> {
         let glyph_id = projection.glyph_id();
         let projection_set = font.glyph_projection_set(std::slice::from_ref(&glyph_id))?;
-        let projection = projection_set.projection(&glyph_id).require(&glyph_id)?;
+        let projection = projection_set.projection(glyph_id).require(&glyph_id)?;
         self.add_glyph_from_projection_set(
             font,
             &projection_set,
@@ -970,7 +970,7 @@ pub fn add_authored_component_projection_glyph(
     )?;
     let glyph_id = projection.glyph_id();
     let projection_set = font.glyph_projection_set(std::slice::from_ref(&glyph_id))?;
-    let projection = projection_set.projection(&glyph_id).require(&glyph_id)?;
+    let projection = projection_set.projection(glyph_id).require(&glyph_id)?;
     let checkpoint = builder.checkpoint();
     let weight_sets = [weight_set];
     let mut profile = AuthoredAtlasProfile::default();
@@ -1037,13 +1037,13 @@ pub fn add_authored_glyph(
     })
 }
 
-fn source_location<'a>(
-    font: &'a Font,
-    source_id: &SourceId,
-) -> Result<&'a shift_font::DesignLocation, AuthoredSlugError> {
+fn source_location(
+    font: &Font,
+    source_id: SourceId,
+) -> Result<&shift_font::DesignLocation, AuthoredSlugError> {
     font.source(source_id)
         .map(shift_font::Source::location)
-        .ok_or_else(|| AuthoredSlugError::MissingSourceLocation(source_id.clone()))
+        .ok_or(AuthoredSlugError::MissingSourceLocation(source_id))
 }
 
 fn authored_advance(value: f64, source_index: usize) -> Result<f32, AuthoredSlugError> {

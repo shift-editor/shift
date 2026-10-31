@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { asGlyphId, type WorkspaceDocumentState } from "@shift/types";
+import {
+  asGlyphId,
+  RecentList,
+  type RecentListRules,
+  type WorkspaceDocumentState,
+} from "@shift/types";
+import { parseEach } from "@shared/parseEach";
 
 const documentViewSchema = z
   .object({
@@ -26,6 +32,13 @@ const STORAGE_KEY = "shift.documentViews";
 /** Most documents remembered; the least recently used fall off. */
 export const DOCUMENT_VIEWS_LIMIT = 50;
 
+/** One view per document key, most recently used first, at most {@link DOCUMENT_VIEWS_LIMIT}. */
+const VIEW_RULES: RecentListRules<StoredView, string> = {
+  matches: (stored, key) => stored.key === key,
+  usedAt: (stored) => stored.usedAt,
+  limit: DOCUMENT_VIEWS_LIMIT,
+};
+
 /**
  * Identifies a document across sessions: by `DocumentId` once it has one, so moves
  * and renames keep its view, otherwise by its untitled workspace.
@@ -50,7 +63,7 @@ export class DocumentViews {
 
   /** Returns the view last recorded for `key`, or null when none is remembered. */
   read(key: string): DocumentView | null {
-    const stored = this.#readAll().find((view) => view.key === key);
+    const stored = this.#readAll().find(key);
     if (!stored) return null;
 
     const { key: _key, usedAt: _usedAt, ...view } = stored;
@@ -59,32 +72,24 @@ export class DocumentViews {
 
   /** Records the view for `key`, replacing what was remembered. */
   write(key: string, view: DocumentView, usedAt: number = Date.now()): void {
-    const others = this.#readAll().filter((stored) => stored.key !== key);
-    const views = [{ ...view, key, usedAt }, ...others]
-      .sort((left, right) => right.usedAt - left.usedAt)
-      .slice(0, DOCUMENT_VIEWS_LIMIT);
+    const views = this.#readAll().touch(key, () => ({ ...view, key, usedAt }));
 
     try {
-      this.#storage().setItem(STORAGE_KEY, JSON.stringify(views));
+      this.#storage().setItem(STORAGE_KEY, JSON.stringify(views.items));
     } catch (error) {
       console.warn("failed to remember document view", error);
     }
   }
 
-  #readAll(): StoredView[] {
-    let parsed: unknown;
+  #readAll(): RecentList<StoredView, string> {
+    let text: string;
     try {
-      parsed = JSON.parse(this.#storage().getItem(STORAGE_KEY) ?? "[]");
+      text = this.#storage().getItem(STORAGE_KEY) ?? "[]";
     } catch {
-      return [];
+      return RecentList.of([], VIEW_RULES);
     }
 
-    if (!Array.isArray(parsed)) return [];
-
-    // Drop entries individually so one malformed view cannot forget every document.
-    return parsed.flatMap((value) => {
-      const result = storedViewSchema.safeParse(value);
-      return result.success ? [result.data] : [];
-    });
+    // parseEach drops entries individually, so one malformed view cannot forget every document.
+    return RecentList.of(parseEach(storedViewSchema, text), VIEW_RULES);
   }
 }

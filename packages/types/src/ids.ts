@@ -494,3 +494,6 @@ export function mintTextItemId(): TextItemId {
 export function mintSourceId(): SourceId {
   return mintPrefixedId("source");
 }
+
+/** A glyph's authored name, such as `A` or `uni0041`. */
+export type GlyphName = string;

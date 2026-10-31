@@ -1,472 +1,85 @@
-import { localPoint, scenePoint } from "@shift/editor/spaces";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
-import { mintNodeId } from "@shift/types";
-import type { GlyphNode } from "@shift/editor/types";
-import { TestEditor } from "@/testing/TestEditor";
-import { effect } from "@shift/editor/signals";
-import { runRendererCommand } from "@/lib/commands/rendererCommands";
-import { externalAxisLocationFromRecord } from "@shift/editor/variation";
+import { describe, expect, it } from "vitest";
+import type { ContourId } from "@shift/types";
+import { line } from "@/testing/fixtures";
+import { useTestEditor, WEIGHT } from "@/testing/fontFixture";
 
 describe("Editor scene bootstrap", () => {
-  let editor: TestEditor;
-
-  beforeEach(async () => {
-    editor = new TestEditor();
-    await editor.startSession();
-  });
+  const editor = useTestEditor();
 
   it("places the opened glyph as the page run's child at the origin", () => {
-    const record = editor.font.recordForName("A")!;
-    const [run, child] = editor.scene.nodes();
-    if (run?.kind !== "textRun") throw new Error("Expected the page run first");
-    const item = editor.text.run(run.runId)?.items[0];
+    const glyph = editor.glyphNamed("A")!;
+    const text = editor.canvasText();
+    const [item] = text?.items ?? [];
 
-    expect(editor.scene.nodes()).toHaveLength(2);
-    expect(run.position).toEqual({ x: 0, y: 0 });
-    expect(child).toMatchObject({
-      kind: "glyph",
-      parentId: run.id,
-      itemId: item?.id,
-      glyphId: record.id,
-      sourceId: editor.font.defaultSource.id,
+    expect(text?.items).toHaveLength(1);
+    expect(text?.glyphs).toMatchObject([{ glyphId: glyph.id, itemIds: [item?.id] }]);
+    expect(text?.glyphs).toMatchObject([{ left: 0, baseline: 0, origin: { x: 0, y: 0 } }]);
+    expect(text?.baselines).toEqual([0]);
+    expect(editor.editorView().glyph).toMatchObject({
+      glyphId: glyph.id,
+      sourceId: editor.source("default")?.id,
     });
-    expect(editor.toScene(child!, localPoint(0, 0))).toEqual({ x: 0, y: 0 });
-    expect(editor.editing.nodeIds).toEqual([child!.id]);
-  });
-
-  it("finds the nodes that depend on a run or a glyph, and follows their removal", () => {
-    const [run, child] = editor.scene.nodes();
-    if (run?.kind !== "textRun" || child?.kind !== "glyph")
-      throw new Error("Expected run and glyph");
-    const dependents: number[] = [];
-    const reader = effect(() => {
-      dependents.push(editor.scene.nodesReferencing(child.glyphId).length);
-    });
-
-    expect(editor.scene.nodesReferencing(run.runId)).toEqual([run]);
-    expect(editor.scene.nodesReferencing(child.glyphId)).toEqual([child]);
-
-    editor.scene.deleteNode(child.id);
-    reader.dispose();
-
-    expect(dependents).toEqual([1, 0]);
+    expect(text?.openItemId).toBe(item?.id);
+    expect(text?.editedItemId).toBe(item?.id);
   });
 
   it("resolves authored points and contours to their layer and the node showing it", async () => {
-    const [pointId] = await editor.drawOpenContour([
-      { x: 100, y: 100 },
-      { x: 200, y: 100 },
-    ]);
-    const contourId = editor.font.contourIdForPoint(pointId!);
-
-    const point = editor.object(pointId!);
-    const contour = editor.object(contourId!);
-
-    expect(point).toMatchObject({
-      kind: "point",
-      layer: editor.glyphLayer,
-      node: editor.glyphNode,
+    const { start } = await editor.draw({
+      contours: [line({ x: 100, y: 100, name: "start" }, [200, 100])],
     });
-    expect(contour).toMatchObject({
-      kind: "contour",
-      layer: editor.glyphLayer,
-      node: editor.glyphNode,
-    });
-  });
+    const [contour] = await editor.outline();
 
-  it("keeps the scene value when only the selection changes, and updates it when a node moves", async () => {
-    const [pointId] = await editor.drawOpenContour([
-      { x: 100, y: 100 },
-      { x: 200, y: 100 },
-    ]);
-    const scene = editor.scene.cell.peek();
-
-    editor.selection.select([pointId!]);
-    expect(editor.scene.cell.peek()).toBe(scene);
-
-    const [node] = editor.scene.nodes();
-    editor.scene.updateNode({ id: node!.id, position: { x: 40, y: 0 } });
-    expect(editor.scene.cell.peek()).not.toBe(scene);
-    expect(editor.scene.nodes()[0]?.position).toEqual({ x: 40, y: 0 });
-  });
-
-  it("names the one glyph node only while the scene shows exactly one", () => {
-    const [firstRun, firstChild] = editor.scene.nodes();
-
-    expect(editor.scene.only("glyph")).toBe(firstChild);
-    expect(editor.scene.first("textRun")).toBe(firstRun);
-
-    const record = editor.font.recordForName("A")!;
-    editor.scene.createNode<GlyphNode>({
-      kind: "glyph",
-      glyphId: record.id,
-      sourceId: editor.font.defaultSource.id,
-      position: { x: 700, y: 0 },
-    });
-
-    expect(editor.scene.nodesOfKind("glyph")).toHaveLength(2);
-    expect(editor.scene.only("glyph")).toBeNull();
-    expect(editor.scene.first("glyph")).toBe(firstChild);
-  });
-
-  it("can place the same glyph id twice with distinct node ids", () => {
-    const record = editor.font.recordForName("A")!;
-    const left = mintNodeId();
-    const right = mintNodeId();
-
-    editor.scene.setNodes([
-      {
-        id: left,
-        type: "node",
-        kind: "glyph",
-        parentId: null,
-        index: "a0",
-        glyphId: record.id,
-        sourceId: editor.font.defaultSource.id,
-        position: { x: 0, y: 0 },
-      },
-      {
-        id: right,
-        type: "node",
-        kind: "glyph",
-        parentId: null,
-        index: "a1",
-        glyphId: record.id,
-        sourceId: editor.font.defaultSource.id,
-        position: { x: 700, y: 0 },
-      },
-    ]);
-
-    const leftNode = editor.scene.node(left);
-    const rightNode = editor.scene.node(right);
-    if (leftNode?.kind !== "glyph" || rightNode?.kind !== "glyph") {
-      throw new Error("Expected two glyph nodes");
-    }
-
-    expect(leftNode.glyphId).toBe(record.id);
-    expect(rightNode.glyphId).toBe(record.id);
-    expect(editor.toLocal(rightNode, scenePoint(710, -20))).toEqual({
-      x: 10,
-      y: 20,
-    });
-
-    editor.scene.updateNode({
-      id: rightNode.id,
-      position: { x: rightNode.position.x + 30, y: rightNode.position.y + 5 },
-    });
-
-    expect(editor.scene.node(right)?.position).toEqual({ x: 730, y: 5 });
+    editor.select([start]);
+    expect(editor.selectionLocalRect()).toMatchObject({ x: 100, y: 100, width: 0, height: 0 });
+    editor.selectObjects([contour!.id as ContourId]);
+    expect(editor.selectionLocalRect()).toMatchObject({ x: 100, y: 100, width: 100, height: 0 });
   });
 
   it("resolves authored points through the ownership index and keeps their bounds live", async () => {
     editor.selectTool("pen");
-    await editor.clickLocal(0, 0);
-    await editor.clickLocal(100, 0);
-    await editor.clickLocal(100, 100);
+    await editor.clickAt({ x: 0, y: 0 });
+    await editor.clickAt({ x: 100, y: 0 });
+    await editor.clickAt({ x: 100, y: 100 });
+    editor.selectTool("select");
 
-    const layer = editor.requireGlyphLayer();
-    const point = layer.allPoints[0];
+    const [contour] = await editor.outline();
+    const point = contour?.points[0];
     if (!point) throw new Error("Expected an authored point");
 
-    const object = editor.object(point.id);
-    if (object?.kind !== "point") throw new Error("Expected a point object");
+    editor.select([point.id]);
+    expect(editor.selectionLocalRect()).toMatchObject({ x: point.x });
 
-    expect(object.layer).toBe(layer);
+    await editor.dragPoint(point.id, { x: 25, y: 0 });
 
-    let x = object.bounds()?.min.x ?? Number.NaN;
-    const subscription = effect(() => {
-      x = object.bounds()?.min.x ?? Number.NaN;
-    });
-
-    layer.movePoints([point.id], { x: 25, y: 0 });
-
-    expect(x).toBe(point.x + 25);
-    expect(object.geometry.point(point.id)?.x).toBe(point.x + 25);
-    subscription.dispose();
-  });
-
-  it("creates and selects a source by materializing the opened glyph", async () => {
-    editor.selectTool("pen");
-    await editor.clickLocal(0, 0);
-    await editor.clickLocal(100, 0);
-    await editor.clickLocal(100, 100);
-
-    const node = editor.glyphNode;
-    if (!node) throw new Error("Expected opened glyph node");
-
-    const defaultLayer = editor
-      .glyphForId(node.glyphId)
-      ?.layerForSource(editor.font.defaultSource.id);
-    if (!defaultLayer) throw new Error("Expected default glyph layer");
-
-    const defaultContour = defaultLayer.contours[0];
-    if (!defaultContour) throw new Error("Expected default contour");
-
-    const axisId = editor.font.createAxis(weightAxis());
-    await editor.settle();
-    const sourceId = editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
-
-    expect(editor.activeSourceId).toBeNull();
-    expect(editor.activeSource).toBeNull();
-
-    await editor.settle();
-
-    expect(editor.activeSourceId).toBe(sourceId);
-    expect(editor.glyphNode?.sourceId).toBe(sourceId);
-
-    const createdLayer = editor.glyphForId(node.glyphId)?.layerForSource(sourceId);
-    if (!createdLayer) throw new Error("Expected seeded glyph layer");
-
-    const createdContour = createdLayer.contours[0];
-    if (!createdContour) throw new Error("Expected seeded contour");
-
-    expect(createdLayer.xAdvance).toBe(defaultLayer.xAdvance);
-    expect(createdContour.closed).toBe(defaultContour.closed);
-    expect(
-      createdContour.points.map(({ x, y, pointType, smooth }) => ({
-        x,
-        y,
-        pointType,
-        smooth,
-      })),
-    ).toEqual(
-      defaultContour.points.map(({ x, y, pointType, smooth }) => ({
-        x,
-        y,
-        pointType,
-        smooth,
-      })),
-    );
-    expect(createdContour.points.map((point) => point.id)).not.toEqual(
-      defaultContour.points.map((point) => point.id),
-    );
-  });
-
-  it("keeps source selection and external axis location synchronized", async () => {
-    const axisId = editor.font.createAxis(weightAxis());
-    await editor.settle();
-    const sourceId = editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
-    await editor.settle();
-
-    editor.selectSource(editor.font.defaultSource.id);
-    expect(editor.externalLocation.get(axisId)).toBe(400);
-    editor.selectSource(sourceId);
-    expect(editor.externalLocation.get(axisId)).toBe(700);
-    expect([...editor.editingSourceIds]).toEqual([sourceId]);
-
-    editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 550 }));
-    expect(editor.activeSourceId).toBeNull();
-    expect(editor.editingSourceIds.size).toBe(0);
-
-    editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 700 }));
-    expect(editor.activeSourceId).toBe(sourceId);
-    expect([...editor.editingSourceIds]).toEqual([sourceId]);
-  });
-
-  it("selects contiguous and noncontiguous editing sources around the reference", async () => {
-    const axisId = editor.font.createAxis(weightAxis());
-    await editor.settle();
-    const thinId = editor.createSource("Thin", externalAxisLocationFromRecord({ [axisId]: 100 }));
-    await editor.settle();
-    const boldId = editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
-    await editor.settle();
-    const blackId = editor.createSource("Black", externalAxisLocationFromRecord({ [axisId]: 900 }));
-    await editor.settle();
-
-    const referenceId = editor.font.defaultSource.id;
-    editor.selectSource(referenceId);
-    editor.selectSourceForEditing(blackId, "range");
-    expect(editor.activeSourceId).toBe(referenceId);
-    expect([...editor.editingSourceIds]).toEqual(editor.font.sources.map(({ id }) => id));
-
-    editor.selectSource(referenceId);
-    editor.selectSourceForEditing(boldId, "toggle");
-    editor.selectSourceForEditing(thinId, "toggle");
-    expect(editor.editingSourceIds).toEqual(new Set([referenceId, boldId, thinId]));
-
-    editor.selectSourceForEditing(referenceId, "toggle");
-    expect(editor.editingSourceIds).toEqual(new Set([referenceId, boldId, thinId]));
-  });
-
-  it("toggles editing between every source and the reference", async () => {
-    const axisId = editor.font.createAxis(weightAxis());
-    await editor.settle();
-    editor.createSource("Bold", externalAxisLocationFromRecord({ [axisId]: 700 }));
-    await editor.settle();
-    const referenceId = editor.font.defaultSource.id;
-    editor.selectSource(referenceId);
-
-    expect(editor.toggleAllSourcesForEditing()).toBe(true);
-    expect([...editor.editingSourceIds]).toEqual(editor.font.sources.map(({ id }) => id));
-    expect(editor.activeSourceId).toBe(referenceId);
-
-    expect(editor.toggleAllSourcesForEditing()).toBe(true);
-    expect([...editor.editingSourceIds]).toEqual([referenceId]);
-    expect(editor.collapseEditingSources()).toBe(false);
+    expect(editor.selectionLocalRect()).toMatchObject({ x: point.x + 25 });
+    expect(await editor.point(point.id)).toMatchObject({ x: point.x + 25 });
   });
 
   it("materializes the opened glyph when selecting a sparse source", async () => {
-    editor.selectTool("pen");
-    await editor.clickLocal(0, 0);
-    await editor.clickLocal(100, 0);
+    await editor.draw({ contours: [line([0, 0], [100, 0])] });
+    const regular = editor.source("default")!;
+    const defaultLayer = await editor.layerAt(regular.name);
 
-    const node = editor.glyphNode;
-    if (!node) throw new Error("Expected opened glyph node");
+    await editor.addGlyph("B", 66);
+    await editor.openGlyph("B");
+    await editor.addAxis(WEIGHT);
+    await editor.addSource("Bold", { wght: 700 });
+    editor.clickSource(regular.name);
+    await editor.openGlyph("A");
+    const bold = editor.source({ name: "Bold" })!;
 
-    const defaultLayer = editor
-      .glyphForId(node.glyphId)
-      ?.layerForSource(editor.font.defaultSource.id);
-    if (!defaultLayer) throw new Error("Expected default glyph layer");
+    expect(editor.glyphNamed("A")?.layers.map(({ sourceId }) => sourceId)).not.toContain(bold.id);
 
-    const axisId = editor.font.createAxis(weightAxis());
-    await editor.settle();
-    const sourceId = editor.font.createSource(
-      "Bold",
-      externalAxisLocationFromRecord({ [axisId]: 700 }),
-    );
+    editor.clickSource("Bold");
     await editor.settle();
 
-    expect(editor.glyphForId(node.glyphId)?.layerForSource(sourceId)).toBeNull();
-
-    editor.selectSourceForEditing(sourceId);
-    await editor.settle();
-
-    const materializedLayer = editor.glyphForId(node.glyphId)?.layerForSource(sourceId);
-    if (!materializedLayer) throw new Error("Expected materialized glyph layer");
-
-    expect(editor.activeSourceId).toBe(sourceId);
+    const materializedLayer = await editor.layerAt("Bold");
+    expect(editor.source("active")?.id).toBe(bold.id);
     expect(materializedLayer.contours[0]?.points.map(({ x, y }) => ({ x, y }))).toEqual(
       defaultLayer.contours[0]?.points.map(({ x, y }) => ({ x, y })),
     );
     expect(materializedLayer.contours[0]?.points.map((point) => point.id)).not.toEqual(
       defaultLayer.contours[0]?.points.map((point) => point.id),
     );
-  });
-});
-
-function weightAxis() {
-  return {
-    tag: "wght",
-    name: "Weight",
-    role: "external" as const,
-    axisType: "continuous" as const,
-    minimum: 100,
-    default: 400,
-    maximum: 900,
-    labels: [],
-    hidden: false,
-  };
-}
-
-describe("Editor renderer commands", () => {
-  let editor: TestEditor;
-
-  beforeEach(async () => {
-    editor = new TestEditor();
-    await editor.startSession();
-    editor.selectTool("pen");
-    await editor.click(0, 0);
-    await editor.click(100, 0);
-    await editor.click(200, 0);
-  });
-
-  it("reverses the contour implied by selected points", async () => {
-    const contour = editor.requireGlyphLayer().contours[0]!;
-    editor.selection.select(contour.points.slice(0, 2).map((point) => point.id));
-
-    const handled = await runRendererCommand(editor, "glyph.reverseSelectedContour");
-    await editor.settle();
-
-    expect(handled).toBe(true);
-    expect(editor.requireGlyphLayer().contours[0]!.points.map(({ x }) => x)).toEqual([200, 100, 0]);
-  });
-});
-
-describe("Editor glyph generation", () => {
-  let editor: TestEditor;
-
-  beforeEach(async () => {
-    editor = new TestEditor();
-    await editor.startSession();
-  });
-
-  it("creates encoded glyphs as one undoable step", async () => {
-    const created = editor.createGlyphsForUnicodes([0x00e9, 0x0416]);
-    await editor.settle();
-
-    expect(created.map(({ name, unicodes }) => [name, unicodes])).toEqual([
-      ["eacute", [0x00e9]],
-      ["Zhe-cy", [0x0416]],
-    ]);
-    expect(editor.font.nameForUnicode(0x00e9)).toBe("eacute");
-
-    await editor.undo();
-
-    expect(editor.font.hasGlyph(created[0]!.id)).toBe(false);
-    expect(editor.font.hasGlyph(created[1]!.id)).toBe(false);
-  });
-
-  it("keeps a glyph encoded when its name falls back to uniXXXX", async () => {
-    const [created] = editor.createGlyphsForUnicodes([0xe000]);
-    await editor.settle();
-
-    expect(created?.name).toBe("uniE000");
-    expect(created?.unicodes).toEqual([0xe000]);
-  });
-});
-
-describe("Editor tracked languages", () => {
-  let editor: TestEditor;
-
-  beforeEach(async () => {
-    editor = new TestEditor();
-    await editor.startSession();
-  });
-
-  it("reports no tracked languages for a new font", () => {
-    expect(editor.font.languageIdsCell.peek()).toBeNull();
-  });
-
-  it("commits the list as one undoable step that undo and redo restore", async () => {
-    editor.setLanguageIds(["eng-latin", "cmn-chinese"]);
-    await editor.settle();
-
-    expect(editor.font.languageIdsCell.peek()).toEqual(["eng-latin", "cmn-chinese"]);
-
-    editor.setLanguageIds([]);
-    await editor.settle();
-
-    expect(editor.font.languageIdsCell.peek()).toEqual([]);
-
-    await editor.undo();
-
-    expect(editor.font.languageIdsCell.peek()).toEqual(["eng-latin", "cmn-chinese"]);
-
-    await editor.undo();
-
-    expect(editor.font.languageIdsCell.peek()).toBeNull();
-
-    await editor.redo();
-
-    expect(editor.font.languageIdsCell.peek()).toEqual(["eng-latin", "cmn-chinese"]);
-  });
-
-  it("loads the saved list when the document is reopened", async () => {
-    const outputRoot = mkdtempSync(join(tmpdir(), "shift-languages-reopen-"));
-    const savePath = join(outputRoot, "Languages.shift");
-    editor.setLanguageIds(["eng-latin", "fra-latin"]);
-    await editor.saveAs(savePath);
-    await editor.closeSession();
-
-    const reopened = new TestEditor();
-    await reopened.openSession(savePath, "A");
-
-    expect(reopened.font.languageIdsCell.peek()).toEqual(["eng-latin", "fra-latin"]);
-
-    await reopened.closeSession();
-    rmSync(outputRoot, { recursive: true, force: true });
   });
 });

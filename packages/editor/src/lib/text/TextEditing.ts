@@ -2,11 +2,32 @@ import { computed, type Signal } from "../signals";
 import type { NodeId } from "@shift/types";
 import type { ShiftStore } from "../store/ShiftStore";
 import type { ShiftEditorRecord } from "../../types/records";
-import { currentTextEditingId, type TextCaret, type TextEditingRecord } from "../../types/text";
-import { Caret, type SelectionRect, type TextItem } from "./layout";
+import {
+  currentTextEditingId,
+  type TextCaret,
+  type TextEditingRecord,
+  type TextSelectionRange,
+} from "../../types/text";
+import {
+  Caret,
+  characterTextItem,
+  lineBreakTextItem,
+  type CaretPosition,
+  type SelectionRect,
+  type TextItem,
+} from "./layout";
 import { TextBuffer } from "./TextBuffer";
 import type { Editor } from "../editor/Editor";
 import type { TextRunNode } from "../../types/node";
+
+/** The caret shown in a text run node; see {@link TextEditing.caretIn}. */
+export interface ShownCaret {
+  /** The focus caret's cluster index in the run. */
+  readonly cluster: number;
+  readonly selection: TextSelectionRange;
+  /** Where the caret draws, in the run's layout units. */
+  readonly position: CaretPosition;
+}
 
 /** Owns the session caret for one placed text node; text content belongs to Text. */
 export class TextEditing {
@@ -84,6 +105,23 @@ export class TextEditing {
     this.#goalX = null;
   }
 
+  /**
+   * The caret Text mode shows in a text run node, with its selection and
+   * where it draws.
+   *
+   * @returns null when that node is not being edited or its run cannot lay out.
+   */
+  caretIn(nodeId: NodeId): ShownCaret | null {
+    if (this.state?.nodeId !== nodeId) return null;
+    const node = this.#node();
+    const buffer = this.#buffer();
+    const layout = node && this.#editor.text.layout(node.runId);
+    if (!buffer || !layout) return null;
+
+    const cluster = buffer.focusCluster;
+    return { cluster, selection: buffer.selection, position: layout.caretAt(cluster).position() };
+  }
+
   get selectedItems(): readonly TextItem[] {
     return this.#buffer()?.selectedItems ?? [];
   }
@@ -91,7 +129,7 @@ export class TextEditing {
   get selectionRects(): readonly SelectionRect[] {
     const node = this.#node();
     const buffer = this.#buffer();
-    const layout = node && this.#editor.text.layoutCell(node.runId).peek();
+    const layout = node && this.#editor.text.layout(node.runId);
     if (!buffer || !layout) return [];
     return layout.selectionRects(buffer.selection);
   }
@@ -101,8 +139,21 @@ export class TextEditing {
     this.#edit("Insert text", (buffer) => buffer.splice(items));
   }
 
+  /** Inserts text as pasted: `/name` picks the glyph named `name`. */
   insertText(text: string): void {
     this.insert(this.#editor.text.itemsFromText(text));
+  }
+
+  /**
+   * Inserts text as typed: every character literally, with each line ending
+   * a line break.
+   */
+  typeText(text: string): void {
+    this.insert(
+      [...text.replaceAll("\r\n", "\n")].map((char) =>
+        char === "\n" ? lineBreakTextItem() : characterTextItem(char.codePointAt(0)!),
+      ),
+    );
   }
   deleteBackward(): void {
     this.#edit("Delete text", (buffer) => buffer.delete(-1));
@@ -146,7 +197,7 @@ export class TextEditing {
   moveVertical(direction: -1 | 1, extend = false): void {
     const node = this.#node();
     const buffer = this.#buffer();
-    const layout = node && this.#editor.text.layoutCell(node.runId).peek();
+    const layout = node && this.#editor.text.layout(node.runId);
     if (!buffer || !layout) return;
     const caret = Caret.atCluster(layout, buffer.focusCluster);
     this.#goalX ??= caret.position().x;

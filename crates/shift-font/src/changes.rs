@@ -1,4 +1,9 @@
+mod compact;
+
+pub use compact::CompactChangeSet;
+
 use indexmap::IndexSet;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use bitflags::bitflags;
@@ -7,9 +12,9 @@ use crate::collection::Identified;
 use crate::error::{CoreError, CoreResult, EntityKind};
 
 use crate::{
-    Axis, AxisMapping, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup, KerningGroupId,
-    KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition, NamedInstance, Source,
-    SourceId, TouchedLayer,
+    Axis, AxisMapping, Component, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup,
+    KerningGroupId, KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition,
+    NamedInstance, Source, SourceId, TouchedLayer,
 };
 
 bitflags! {
@@ -33,7 +38,7 @@ bitflags! {
 }
 
 /// Original and replacement values for one authored scope.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Replacement<T> {
     pub before: T,
     pub after: T,
@@ -89,6 +94,23 @@ impl Replacement<Option<Glyph>> {
             self.after.as_ref().map(Glyph::id),
         )
     }
+
+    /// The layers this replacement writes: every layer of a new glyph, and
+    /// the layers of a replaced glyph that differ from what it had.
+    pub fn changed_layers(&self) -> impl Iterator<Item = &GlyphLayer> {
+        self.after.iter().flat_map(move |glyph| {
+            glyph
+                .layers()
+                .iter()
+                .filter(move |(layer_id, layer)| {
+                    self.before
+                        .as_ref()
+                        .and_then(|before| before.layers().get(*layer_id))
+                        .is_none_or(|before| before != *layer)
+                })
+                .map(|(_, layer)| layer.as_ref())
+        })
+    }
 }
 
 impl Replacement<Option<Arc<GlyphLayer>>> {
@@ -105,6 +127,18 @@ impl Replacement<Option<Arc<GlyphLayer>>> {
             self.before.as_deref().map(GlyphLayer::id),
             self.after.as_deref().map(GlyphLayer::id),
         )
+    }
+
+    /// Whether this replacement changes what its glyph's record lists: the
+    /// glyph's layers and the glyphs its components reference.
+    fn changes_glyph_record(&self) -> bool {
+        match (&self.before, &self.after) {
+            (Some(before), Some(after)) => !before
+                .components_iter()
+                .map(Component::base_glyph_id)
+                .eq(after.components_iter().map(Component::base_glyph_id)),
+            _ => true,
+        }
     }
 }
 
@@ -144,7 +178,7 @@ impl Replacement<SourceCollection> {
 }
 
 /// Ordered sources and the identity of their authored default.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SourceCollection {
     pub sources: Vec<Source>,
     pub default_source_id: Option<SourceId>,
@@ -178,7 +212,7 @@ pub enum FontEntityChange<'a> {
 /// Collection variants retain authored order. A changeset installs every
 /// replacement as one target, so references between variants are never
 /// validated in an intermediate state.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum FontChange {
     Metadata(Box<Replacement<FontMetadata>>),
     LibValue {
@@ -217,7 +251,7 @@ impl FontChange {
             _ => None,
         };
         let owner = match self {
-            Self::Layer { glyph_id, .. } => Some(glyph_id.clone()),
+            Self::Layer { glyph_id, .. } => Some(*glyph_id),
             _ => None,
         };
         replaced.into_iter().flatten().chain(owner)
@@ -247,6 +281,30 @@ impl FontChange {
         )
     }
 
+    /// The layers this change writes: a replaced layer, or the changed
+    /// layers of a replaced glyph.
+    pub fn written_layers(&self) -> impl Iterator<Item = &GlyphLayer> + '_ {
+        let replaced = match self {
+            Self::Glyph(value) => Some(value.changed_layers()),
+            _ => None,
+        };
+        let layer = match self {
+            Self::Layer { layer, .. } => layer.after.as_deref(),
+            _ => None,
+        };
+        replaced.into_iter().flatten().chain(layer)
+    }
+
+    /// Whether this change can take layers out of the font: replacing a
+    /// glyph or the sources, or removing a layer.
+    pub fn can_remove_layers(&self) -> bool {
+        match self {
+            Self::Glyph(_) | Self::Sources(_) => true,
+            Self::Layer { layer, .. } => layer.after.is_none(),
+            _ => false,
+        }
+    }
+
     /// Returns every domain projection invalidated by this replacement.
     pub fn impact(&self) -> FontChangeImpact {
         match self {
@@ -274,10 +332,8 @@ impl FontChange {
                     | FontChangeImpact::SOURCE_METRICS
                     | FontChangeImpact::KERNING
             }
-            Self::Glyph(_)
-            | Self::Layer {
-                structural: true, ..
-            } => FontChangeImpact::GLYPHS,
+            Self::Glyph(_) => FontChangeImpact::GLYPHS,
+            Self::Layer { layer, .. } if layer.changes_glyph_record() => FontChangeImpact::GLYPHS,
             Self::KerningGroup { .. } | Self::KerningValue { .. } => FontChangeImpact::KERNING,
             Self::LibValue { .. } | Self::Layer { .. } => FontChangeImpact::empty(),
         }
@@ -317,12 +373,12 @@ impl FontChange {
                 layer,
                 structural,
             } => Self::Layer {
-                glyph_id: glyph_id.clone(),
+                glyph_id: *glyph_id,
                 layer: Replacement::new(layer.after.clone(), layer.before.clone()),
                 structural: *structural,
             },
             Self::KerningGroup { group_id, group } => Self::KerningGroup {
-                group_id: group_id.clone(),
+                group_id: *group_id,
                 group: Replacement::new(group.after.clone(), group.before.clone()),
             },
             Self::KerningValue {
@@ -330,7 +386,7 @@ impl FontChange {
                 pair,
                 value,
             } => Self::KerningValue {
-                source_id: source_id.clone(),
+                source_id: *source_id,
                 pair: pair.clone(),
                 value: Replacement::new(value.after, value.before),
             },
@@ -359,14 +415,17 @@ impl FontChange {
                 .chain(value.after.iter())
                 .next()
                 .map(Glyph::id),
-            Self::Layer { glyph_id, .. } => Some(glyph_id.clone()),
+            Self::Layer { glyph_id, .. } => Some(*glyph_id),
             _ => None,
         }
     }
 }
 
 /// Reversible authored replacements produced by one atomic edit.
-#[derive(Clone, Debug, Default, PartialEq)]
+///
+/// Serializable so a process that applied it can hand it to another session
+/// over the same font to replay, as undo and redo do for the editor's engine.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct FontChangeSet {
     pub changes: Vec<FontChange>,
 }
@@ -391,6 +450,58 @@ impl FontChangeSet {
             .iter()
             .flat_map(FontChange::glyph_ids)
             .collect()
+    }
+
+    /// Returns the glyphs whose record this changeset changes, in
+    /// first-touched order: glyphs created, deleted or renamed, and glyphs
+    /// given a layer that changes what their record lists.
+    pub fn record_glyph_ids(&self) -> IndexSet<GlyphId> {
+        self.changes
+            .iter()
+            .filter(|change| change.impact().contains(FontChangeImpact::GLYPHS))
+            .flat_map(FontChange::glyph_ids)
+            .collect()
+    }
+
+    /// Every layer this changeset creates, updates or deletes, in change
+    /// order: what replaying it, for undo or redo, reads.
+    pub fn changed_layer_ids(&self) -> IndexSet<LayerId> {
+        self.entity_changes()
+            .into_iter()
+            .filter_map(|entity| match entity {
+                FontEntityChange::Layer { change, .. } => Some(match change {
+                    EntityChange::Created(layer) | EntityChange::Deleted(layer) => layer.id(),
+                    EntityChange::Updated { after, .. } => after.id(),
+                }),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Glyphs this changeset replaces whole: created, deleted or renamed
+    /// with all their layers.
+    pub fn replaced_glyph_ids(&self) -> impl Iterator<Item = GlyphId> {
+        self.changes.iter().filter_map(|change| match change {
+            FontChange::Glyph(glyph) => glyph.sides().next().map(Glyph::id),
+            _ => None,
+        })
+    }
+
+    /// The layers this changeset writes, in change order.
+    pub fn written_layers(&self) -> impl Iterator<Item = &GlyphLayer> {
+        self.changes.iter().flat_map(FontChange::written_layers)
+    }
+
+    /// Whether this changeset can take layers out of the font.
+    pub fn can_remove_layers(&self) -> bool {
+        self.changes.iter().any(FontChange::can_remove_layers)
+    }
+
+    /// Whether this changeset replaces the font's sources.
+    pub fn replaces_sources(&self) -> bool {
+        self.changes
+            .iter()
+            .any(|change| matches!(change, FontChange::Sources(_)))
     }
 
     /// Returns the layers this changeset leaves behind: each replaced layer,
@@ -464,7 +575,7 @@ impl FontChangeSet {
                     )
                     .into_iter()
                     .map(|change| FontEntityChange::Layer {
-                        glyph_id: glyph_id.clone(),
+                        glyph_id: *glyph_id,
                         change,
                     }),
                 ),
@@ -539,7 +650,7 @@ fn glyph_layer_entity_changes<'a>(
         for (layer_id, original_layer) in original.layers() {
             match after.and_then(|glyph| glyph.layers().get(layer_id)) {
                 Some(replacement) if replacement != original_layer => changes.push((
-                    glyph_id.clone().expect("a glyph exists"),
+                    glyph_id.expect("a glyph exists"),
                     EntityChange::Updated {
                         before: original_layer.as_ref(),
                         after: replacement.as_ref(),

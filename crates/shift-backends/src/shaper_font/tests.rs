@@ -285,7 +285,7 @@ fn request_classifies_glyphs_by_category() {
     let mut font = sample_variable_font();
     let glyph_id = font.glyph_by_name("A").unwrap().id();
     font.set_glyph_category(
-        &glyph_id,
+        glyph_id,
         Some(GlyphCategory::Mark),
         Some(GlyphSubcategory::Nonspacing),
     )

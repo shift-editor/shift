@@ -8,6 +8,7 @@ export { PointRuleConstraint } from "./PointRuleConstraint";
 export { PositionEdits } from "./PositionEdits";
 export { PositionList } from "./PositionList";
 export { PositionReference } from "./PositionReference";
+export { PositionTargets } from "./PositionTargets";
 export { RotateEdit } from "./RotateEdit";
 export { ScaleEdit } from "./ScaleEdit";
 export { SnapSet, settleSnap } from "./SnapSet";

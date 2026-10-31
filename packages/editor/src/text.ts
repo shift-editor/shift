@@ -1,4 +1,4 @@
-export { TextEditing } from "./lib/text/TextEditing";
+export { TextEditing, type ShownCaret } from "./lib/text/TextEditing";
 export { TextBuffer } from "./lib/text/TextBuffer";
 export {
   GlyphNameParser,
@@ -16,3 +16,4 @@ export type {
   TextItem,
 } from "./lib/text/layout/types";
 export { fallbackGlyphNameForUnicode, formatCodepointAsUPlus } from "./lib/utils/unicode";
+export { NONSPACING_MARK_EDITOR_ADVANCE } from "./lib/utils/displayAdvance";

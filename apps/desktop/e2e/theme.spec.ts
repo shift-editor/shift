@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { colorThemes } from "../src/renderer/src/lib/themes";
+import { themeById } from "../src/renderer/src/lib/themes";
 import type { Page } from "@playwright/test";
 import type { ThemeId } from "../src/renderer/src/lib/themes";
 import { workspaceTest as test, expect, waitForWorkspaceReady } from "./fixtures/electronApp";
@@ -11,11 +11,12 @@ import {
   glyphCatalogSurface,
   waitForEditorReady,
 } from "./fixtures/appLocators";
+import { configDirectory, imageHasInk, setTheme } from "./fixtures/appearance";
 import { expectCanvasSnapshot, expectPageSnapshot } from "./fixtures/snapshots";
 
 /** Writes a theme selection to config.toml, reloads the workspace, and proves the theme is applied. */
 async function useTheme(page: Page, themeId: ThemeId): Promise<void> {
-  await page.evaluate((id) => window.shiftHost!.config.setTheme(id), themeId);
+  await setTheme(page, themeId);
   await page.reload();
   await waitForWorkspaceReady(page);
   await expect(page.locator("html")).toHaveAttribute("data-color-theme", themeId);
@@ -27,8 +28,7 @@ async function writeThemeFile(
   id: string,
   { name = "Rice", appearance = "dark", changes = {}, colors = {} }: ThemeFileOptions = {},
 ): Promise<void> {
-  const nord = colorThemes.find((theme) => theme.id === "nord");
-  if (!nord) throw new Error("Expected the Nord theme");
+  const nord = themeById("nord");
   const palette = Object.entries({ ...nord.palette, ...changes }).map(
     ([key, color]) => `${key} = "${color}"`,
   );
@@ -55,15 +55,14 @@ interface ThemeFileOptions {
 }
 
 async function cssVariable(page: Page, name: string): Promise<string> {
-  return page.evaluate(
-    (variable) => getComputedStyle(document.documentElement).getPropertyValue(variable).trim(),
-    name,
-  );
+  return page
+    .locator("html")
+    .evaluate((root, variable) => getComputedStyle(root).getPropertyValue(variable).trim(), name);
 }
 
 /** This build's config.toml in the test's isolated user data. */
 async function configFile(page: Page): Promise<string> {
-  const { directory } = await page.evaluate(() => window.shiftHost!.config.state());
+  const directory = await configDirectory(page);
   fs.mkdirSync(directory, { recursive: true });
   return path.join(directory, "config.toml");
 }
@@ -118,17 +117,10 @@ test.describe("Theme", () => {
     await openAppearance(page);
     await chooseTheme(page, "Dark", "Nord");
 
-    const nord = colorThemes.find(({ id }) => id === "nord");
-    if (!nord) throw new Error("Expected the Nord theme");
+    const nord = themeById("nord");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", "nord");
-    await expect
-      .poll(() =>
-        page.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue("--color-background").trim(),
-        ),
-      )
-      .toBe(nord.palette.base00);
+    await expect.poll(() => cssVariable(page, "--color-background")).toBe(nord.palette.base00);
 
     expect(fs.readFileSync(await configFile(page), "utf8")).toBe(`theme = "nord"\n`);
     await page.reload();
@@ -199,10 +191,10 @@ test.describe("Theme", () => {
 
   test("overrides one derived color from a theme file", async ({ page }) => {
     await writeThemeFile(page, "rice", { colors: { accent: "#ff9e64" } });
-    await page.evaluate(() => window.shiftHost!.config.setTheme("rice"));
+    await setTheme(page, "rice");
 
     await expect.poll(() => cssVariable(page, "--color-accent")).toBe("#ff9e64");
-    const nord = colorThemes.find(({ id }) => id === "nord")!;
+    const nord = themeById("nord");
     expect(await cssVariable(page, "--editor-handle-primary-stroke")).toBe(nord.palette.base0D);
   });
 
@@ -229,11 +221,10 @@ test.describe("Theme", () => {
     await editor.waitForCanvasRender();
 
     const bounds = await editor.canvasBounds();
-    const viewport = () =>
-      page.evaluate(() => {
-        const { pan, zoom } = window.shift!.editor;
-        return { pan: { x: pan.x, y: pan.y }, zoom };
-      });
+    const viewport = async () => ({
+      pan: await editor.canvasOffset(),
+      zoom: await editor.zoomLevel(),
+    });
     await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
 
     const beforePan = await viewport();
@@ -252,6 +243,7 @@ test.describe("Theme", () => {
       // Clear of the sidebar dividers, whose grab areas reach 8px into the canvas.
       from: { x: 12, y: 12 },
       to: { x: bounds.width - 12, y: bounds.height - 12 },
+      modifiers: [],
       steps: 5,
     });
     await expect.poll(async () => (await editor.selectionIds()).length).toBeGreaterThan(0);
@@ -276,11 +268,7 @@ test.describe("Theme", () => {
     const sceneBefore = await sceneCanvas.screenshot(sceneScreenshotOptions);
     const markersBefore = await markerCanvas.screenshot(markerScreenshotOptions);
     // Precondition, not a colour oracle: the marker layer must have drawn the selected handles.
-    const markersDrawn = await electronApp.evaluate(({ nativeImage }, png) => {
-      const bitmap = nativeImage.createFromBuffer(Buffer.from(png, "base64")).toBitmap();
-      return bitmap.some((channel) => channel < 250);
-    }, markersBefore.toString("base64"));
-    expect(markersDrawn).toBe(true);
+    expect(await imageHasInk(electronApp, markersBefore)).toBe(true);
 
     await openAppearance(page);
     await chooseTheme(page, "Dark", "Nord");
@@ -299,7 +287,7 @@ test.describe("Theme", () => {
 
   test("redraws the canvas when the selected theme file is edited", async ({ page, editor }) => {
     await writeThemeFile(page, "rice");
-    await page.evaluate(() => window.shiftHost!.config.setTheme("rice"));
+    await setTheme(page, "rice");
     await expect(page.locator("html")).toHaveAttribute("data-color-theme", "rice");
     await editor.openGlyphByUnicode("41");
     await editor.selectAll();

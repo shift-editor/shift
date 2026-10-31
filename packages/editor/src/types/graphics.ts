@@ -58,18 +58,3 @@ export type HandleType =
  * - `interpolated` -- the location is between sources; overrides interaction styling independently of session editability.
  */
 export type HandleState = "idle" | "hovered" | "selected" | "interpolated";
-
-/** Stroke properties for shape rendering. */
-export interface StrokeStyle {
-  strokeStyle?: string;
-  strokeWidth?: number;
-  dashPattern?: number[];
-}
-
-/** Fill properties for shape rendering. */
-export interface FillStyle {
-  fillStyle?: string;
-}
-
-/** Combined stroke and fill properties for shape rendering. */
-export interface ShapeStyle extends StrokeStyle, FillStyle {}

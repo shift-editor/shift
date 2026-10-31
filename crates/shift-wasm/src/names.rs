@@ -45,17 +45,11 @@ fn intern(table: &mut Names, name: &str) -> u32 {
 }
 
 /// Runs `call` with lookups between names and ids.
-pub(crate) fn with_names<R>(call: impl FnOnce(&mut dyn NameTable) -> R) -> R {
+pub(crate) fn with_names<R>(call: impl FnOnce(&mut dyn pack::Names) -> R) -> R {
     NAMES.with_borrow_mut(|table| call(table))
 }
 
-/// Lookups between interned names and their ids.
-pub(crate) trait NameTable {
-    fn name(&self, id: u32) -> Option<&str>;
-    fn id(&mut self, name: &str) -> u32;
-}
-
-impl NameTable for Names {
+impl pack::Names for Names {
     fn name(&self, id: u32) -> Option<&str> {
         self.names.get(id as usize).map(String::as_str)
     }

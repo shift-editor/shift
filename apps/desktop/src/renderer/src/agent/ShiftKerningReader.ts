@@ -1,6 +1,7 @@
 import type {
   AuthoredKerningPair,
   AxisCoordinate,
+  GlyphSelector,
   KerningGlyph,
   KerningGroupSummary,
   KerningMasterValue,
@@ -8,17 +9,19 @@ import type {
   KerningPairQuery,
   KerningPairSide,
   KerningResolution,
-  KerningRule,
   ResolvedKerningPairs,
+  SourceSelector,
 } from "@shift/runtime";
-import { isGlyphId, type GlyphId, type KerningPosition, type SourceId } from "@shift/types";
+import type { GlyphId, KerningGroup, KerningPosition, SourceId } from "@shift/types";
 import {
   isGroupSide,
+  kerningRule,
   type Font,
   type KerningPairSides,
   type KerningSideId,
   type ResolvedKerning,
 } from "@shift/editor/model";
+import { ShiftSelectors } from "./ShiftSelectors";
 
 /**
  * Public kerning reads over one renderer's font.
@@ -31,51 +34,67 @@ import {
  */
 export class ShiftKerningReader {
   readonly #font: Font;
+  readonly #select: ShiftSelectors;
 
   constructor(font: Font) {
     this.#font = font;
+    this.#select = new ShiftSelectors(font);
   }
 
   /** Returns the font's kerning groups, first-position groups first, each side in name order. */
   groups(position?: KerningPosition): KerningGroupSummary[] {
-    const groups = this.#font.kerningCell.peek().groups;
+    const groups = this.#font.kerning.groups;
     const positions: KerningPosition[] = position ? [position] : ["first", "second"];
 
-    return positions.flatMap((at) =>
-      groups.atPosition(at).map((group) => ({
-        groupId: group.id,
-        name: group.name,
-        position: group.position,
-        members: group.glyphIds.map((glyphId) => this.#glyph(glyphId)),
-      })),
-    );
+    return positions.flatMap((at) => groups.atPosition(at).map((group) => this.#group(group)));
+  }
+
+  /** The kerning group named `name` at a position, or null when the font has none. */
+  group(position: KerningPosition, name: string): KerningGroupSummary | null {
+    const group = this.#font.kerning.groups.named(position, name);
+    return group ? this.#group(group) : null;
   }
 
   /**
-   * Lists one page of the pairs authored at a source, ordered by side ids.
+   * The kerning group `glyph` belongs to at a position, or null when it kerns alone there.
+   *
+   * @throws {Error} when the font has no such glyph.
+   */
+  groupOf(position: KerningPosition, glyph: GlyphSelector): KerningGroupSummary | null {
+    const groups = this.#font.kerning.groups;
+    const groupId = groups.groupOf(position, this.#select.glyphId(glyph));
+    const group = groupId ? groups.group(groupId) : null;
+    return group ? this.#group(group) : null;
+  }
+
+  /**
+   * Lists one page of the pairs authored at a source, the default source when
+   * omitted, ordered by side ids.
    *
    * @param glyph - Keeps only pairs naming this glyph, or its group at that pair position.
    * @throws {Error} for an unknown source or glyph, an invalid limit, or a malformed cursor.
    */
   pairs({
-    sourceId,
+    source,
     glyph,
     limit = 100,
     cursor,
   }: {
-    sourceId: SourceId;
-    glyph?: string;
+    source?: SourceSelector;
+    glyph?: GlyphSelector;
     limit?: number;
     cursor?: string;
   }): KerningPairPage {
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
       throw new Error("kerning.pairs limit must be between 1 and 500");
     }
-    if (!this.#font.source(sourceId)) throw new Error(`Source ${sourceId} is not in this font`);
+    const sourceId = this.#select.sourceId(source);
 
-    const kerning = this.#font.kerningCell.peek();
-    const appliesTo = glyph ? this.#pairFilter(this.#glyphId(glyph)) : () => true;
-    const pairs = kerning.authoredPairs(sourceId).filter(appliesTo).sort(comparePairs);
+    const kerning = this.#font.kerning;
+    const authored = glyph
+      ? kerning.pairsNaming(sourceId, this.#select.glyphId(glyph))
+      : kerning.authoredPairs(sourceId);
+    const pairs = authored.sort(comparePairs);
     const after = cursor ? decodeCursor(cursor) : null;
     const start = after ? pairs.findIndex((pair) => comparePairs(pair, after) > 0) : 0;
     const remaining = start < 0 ? [] : pairs.slice(start);
@@ -96,65 +115,87 @@ export class ShiftKerningReader {
    */
   resolve(
     queries: KerningPairQuery[],
-    target: { sourceId?: SourceId; location?: AxisCoordinate[] },
+    // oxlint-disable-next-line shift/no-optional-collection-field -- mirrors the agent protocol request
+    target: { source?: SourceSelector; location?: AxisCoordinate[] },
   ): ResolvedKerningPairs {
     const font = this.#font;
-    const { sourceId, location } = target;
-    if (sourceId && location)
-      throw new Error("kerning.resolve takes sourceId or location, not both");
-    if (sourceId && !font.source(sourceId))
-      throw new Error(`Source ${sourceId} is not in this font`);
+    const { source, location } = target;
+    if (source && location) throw new Error("kerning.resolve takes source or location, not both");
+    const sourceId = source ? this.#select.sourceId(source) : null;
 
     const external = location ? font.designspace.location(location) : font.defaultLocation();
-    const items = queries.map(({ first, second }): KerningResolution => {
-      const firstId = this.#glyphId(first);
-      const secondId = this.#glyphId(second);
+    const select = this.#select;
+    const pairs = queries.flatMap(({ first, second }) => [
+      select.glyphId(first),
+      select.glyphId(second),
+    ]);
+    const amounts = font.kerningRun(pairs, external, sourceId);
+    const items = queries.map((_, index): KerningResolution => {
+      const firstId = pairs[2 * index]!;
+      const secondId = pairs[2 * index + 1]!;
       return {
         first: this.#glyph(firstId),
         second: this.#glyph(secondId),
-        amount: font.kerningBetween(firstId, secondId, external, sourceId ?? null),
+        amount: amounts[index] ?? 0,
         masters: font.sources.map((source) => this.#masterValue(source.id, firstId, secondId)),
       };
     });
     return { items };
   }
 
+  /**
+   * The kerning between two glyphs at one master, the default source when
+   * `source` is omitted.
+   *
+   * @throws {Error} for an unknown glyph or source.
+   */
+  at({
+    first,
+    second,
+    source,
+  }: {
+    first: GlyphSelector;
+    second: GlyphSelector;
+    source?: SourceSelector;
+  }): KerningMasterValue {
+    const select = this.#select;
+    return this.#masterValue(
+      select.sourceId(source),
+      select.glyphId(first),
+      select.glyphId(second),
+    );
+  }
+
   #masterValue(sourceId: SourceId, first: GlyphId, second: GlyphId): KerningMasterValue {
     const font = this.#font;
-    const kerning = font.kerningCell.peek();
     const amount = font.kerningBetween(first, second, font.defaultLocation(), sourceId);
-    const applied = kerning.resolve(sourceId, first, second);
+    const applied = font.kerning.resolve(sourceId, first, second);
     if (applied) {
       return {
         sourceId,
         amount,
         origin: "authored",
-        rule: ruleOf(applied),
+        rule: kerningRule(applied),
         pair: this.#authoredPair(applied),
       };
     }
 
-    const kernsElsewhere = kerning.authors(sourceId) || font.sources.length === 1;
     return {
       sourceId,
       amount,
-      origin: kernsElsewhere ? "unkerned" : "interpolated",
+      origin: font.missingPairOrigin(sourceId),
       rule: "none",
       pair: null,
     };
   }
 
-  /** Whether a pair names `glyphId` on a side, directly or through its group there. */
-  #pairFilter(glyphId: GlyphId): (pair: ResolvedKerning) => boolean {
-    const kerning = this.#font.kerningCell.peek();
-    const firstSides = new Set<KerningSideId>([glyphId]);
-    const secondSides = new Set<KerningSideId>([glyphId]);
-    const firstGroup = kerning.groupOf("first", glyphId);
-    const secondGroup = kerning.groupOf("second", glyphId);
-    if (firstGroup) firstSides.add(firstGroup);
-    if (secondGroup) secondSides.add(secondGroup);
-
-    return (pair) => firstSides.has(pair.first) || secondSides.has(pair.second);
+  #group(group: KerningGroup): KerningGroupSummary {
+    return {
+      groupId: group.id,
+      name: group.name,
+      position: group.position,
+      members: group.glyphIds.map((glyphId) => this.#glyph(glyphId)),
+    };
   }
 
   #authoredPair(pair: ResolvedKerning): AuthoredKerningPair {
@@ -164,30 +205,12 @@ export class ShiftKerningReader {
   #side(side: KerningSideId): KerningPairSide {
     if (!isGroupSide(side)) return { kind: "glyph", ...this.#glyph(side) };
 
-    const group = this.#font.kerningCell.peek().groups.group(side);
-    return { kind: "group", groupId: side, name: group?.name ?? side };
+    return { kind: "group", groupId: side, name: this.#font.kerningSideName(side) ?? side };
   }
 
   #glyph(glyphId: GlyphId): KerningGlyph {
-    return { glyphId, name: this.#font.entryForId(glyphId)?.name ?? null };
+    return { glyphId, name: this.#font.glyphName(glyphId) };
   }
-
-  /** Resolves an exact glyph name, or a stable id when the reference carries the glyph id prefix. */
-  #glyphId(reference: string): GlyphId {
-    const entry = isGlyphId(reference)
-      ? this.#font.entryForId(reference)
-      : this.#font.entryForName(reference);
-    if (!entry) throw new Error(`Glyph ${reference} is not in this font`);
-    return entry.id;
-  }
-}
-
-function ruleOf(pair: ResolvedKerning): KerningRule {
-  const firstIsGroup = isGroupSide(pair.first);
-  const secondIsGroup = isGroupSide(pair.second);
-  if (firstIsGroup && secondIsGroup) return "group";
-  if (firstIsGroup || secondIsGroup) return "exception";
-  return "glyph";
 }
 
 function comparePairs(a: KerningPairSides, b: KerningPairSides): number {

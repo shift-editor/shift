@@ -20,7 +20,7 @@ Read `/writing-tests` first for the general rules (observable state, no mocks, m
 | Hardware rendering, GPU residency, WebGPU presentation                                                    | `gpu` project test                                |
 | Save, quit, crash, recovery, file activation, cross-OS paths                                              | `platform` project test                           |
 
-If most assertions in a draft E2E test read editor state after `page.evaluate`, the behavior probably belongs in `TestEditor`. Keep the E2E test as a thin proof that the real UI reaches it.
+If most assertions in a draft E2E test read editor state, the behavior probably belongs in `TestEditor`. Keep the E2E test as a thin proof that the real UI reaches it.
 
 ## Waiting: never sleep
 
@@ -46,7 +46,7 @@ Never count or sample hard-coded colours from a canvas. Colour oracles break und
 
 Use published state instead:
 
-- geometry: `editor.outline()`, `pointPosition()`, `selectionIds()`, `selectionBounds()`;
+- geometry: `editor.outline()`, `point()`, `selectionIds()`, `selectionBounds()`;
 - interaction: `toolState()`, `hoverId()`, `activeSnapGuides()`;
 - rendering decisions: `visibleOutlines(nodeId)` and `handleStates(node)` on the glyph node definition;
 - UI state: roles, accessible names, `aria-pressed`, `aria-checked`, `aria-disabled`, `data-*` state published for tests;
@@ -57,6 +57,7 @@ If the state you need is not published, publish it from the production code that
 Assertions must be exact enough to fail on the wrong answer:
 
 - assert the exact set or order, not `count() > N` or `not.toEqual(before)`;
+- assert a read whole, as behaviour tests do: `await expect.poll(() => editor.documentState()).toMatchObject({ dirty: true })`, not `.poll(async () => (await editor.documentState())?.dirty)` (see `writing-tests` Test helpers; `shift/no-drill-into-reads` lints it);
 - derive expectations from the fixture or the UI (for example, read the ordered category buttons and compute the expected range) instead of hard-coding one neighbour;
 - run the mental-deletion check: if the feature were a no-op, would this assertion fail?
 
@@ -93,13 +94,16 @@ Updating baselines: only for an intentional appearance change. Run the focused s
 - Every launch environment comes from `shiftTestEnvironment()`. Never spread `process.env` into a launch.
 - Script native dialogs with the fixture options (`dirtyDocumentChoice(s)`, `saveShiftPaths`, `openFontPath`). An unexpected renderer dialog fails the test; opt in with `allowRendererDialogs` only when the dialog is the behavior.
 - Put shared setup in fixtures or `EditorDriver` (`openScratchGlyph()`, `commitInputValue()`, `toolButton()`), not copied helpers in specs. Do not grow `EditorDriver` with one-off helpers.
+- Draw glyph content with `editor.draw(fixture)` and the shapes from `@/testing/fixtures` (`rect`, `square`, …), name the points a test needs, open fonts by `FONTS.<name>` and use `WEIGHT` from `@/testing/fonts`: the same fixture data vitest uses.
+- When a test's setup is a font build (glyphs, axes, sources, source `metrics`, `instances`, the starting `location`), set `test.use({ font: FontFixture })` on `workspaceTest`, `perfApp`'s `test` or `recoveryTest`; it is built before the test, as `useTestEditor` builds it. A test that needs an id reads it through a selector (`source({ name })`, `axis({ tag })`) only where identity is the point.
 - Prefer `getByRole()` / `getByLabel()` and locators from `fixtures/appLocators.ts`. No parent traversal (`locator("..")`), no styling classes, no `toHaveCSS()` unless the style value is the product contract.
 
 ## Structure
 
 - One behavior per test. Split long flows when an early failure would hide unrelated coverage.
 - Do not accumulate state across unrelated steps; start each test from a fixture.
-- Setup may use `page.evaluate` or `insertContent`; the behavior under test must go through the user surface.
+- Setup the font fixture does not cover goes through the driver's surface actions (`addAxis`, `addSource`, `setSourceMetric`, `renameSource`, `addInstance`, `setLocation`, `editSources`, …). They are the vitest surface's actions under the same names, written once in `testing/SurfaceActions.ts`, and each calls the public command the UI calls. The behavior under test must go through the user surface.
+- Specs and fixtures never call `page.evaluate`, `page.evaluateHandle`, `page.waitForFunction` or `electronApp.evaluate` (`shift/no-page-evaluate-in-specs`). The one exempt file is `fixtures/appHooks.ts`: `readsOf(page)` calls the window's app readers (`agent/AppReaders.ts`, the read layer MCP agents also use) and `hooksOf(page)` the renderer's E2E hooks (`testing/e2e/hooks.ts`: the surface actions, canvas targets for aiming the pointer, session facts, perf instrumentation) as typed method calls. Fixtures that only measure the page or drive Electron main mark each evaluation with a reasoned disable; `locator.evaluate` on a provable locator (a `getByRole(…)`/`locator(…)` chain or a binding annotated `: Locator`) is fine. `pnpm --filter @shift/desktop lint:check` enforces it, with `shift/no-lookup-in-tests` and `shift/no-drill-into-reads`; the remaining spec disables wait on the open-glyph refactor's `drawnGlyph` (#824).
 - Name tests after the behavior: "shift-selects glyph categories as a visible range", not "category test".
 
 ## Projects

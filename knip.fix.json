@@ -32,9 +32,6 @@
     "packages/glyph-info": {
       "project": ["src/**/*.ts"]
     },
-    "packages/rules": {
-      "project": ["src/**/*.ts"]
-    },
     "packages/types": {
       "project": ["src/**/*.ts"]
     },

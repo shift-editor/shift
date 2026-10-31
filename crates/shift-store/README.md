@@ -14,6 +14,7 @@ Callers use typed APIs from this crate rather than preparing SQL or opening a se
 - `ShiftStore::open_document` validates the file read-only before opening it with rollback journaling and `synchronous=FULL`. `ShiftStore::verify_document` also runs SQLite integrity and foreign-key checks; `ShiftStore::inspect_document_identity` skips them, for reading which document a path names before it is opened.
 - `ShiftStore::open_document_with_recovery` binds a separate sparse `RecoveryOverlay`, reconciles it by commit identity, and installs connection-local merged views. Directory and payload reads prefer changed overlay rows and fall back to the canonical document without copying unrelated layers.
 - `DocumentMetadata` contains the stable `DocumentId` and current `saved_commit_id`. A raw copy preserves both; Save As mints a new document identity and saved commit.
+- `StoreReader` opens a document with its recovery overlay, or a working store, read-only beside the process that writes it. It installs the same merged views, then sets `query_only`; it never creates, migrates, or reconciles anything. The renderer's preload reads layers through it.
 - Canonical documents never contain app-local `workspace_state` or recovery rows. Working databases retain WAL + NORMAL and their revision/source-binding row.
 
 ## Recovery boundary
@@ -85,6 +86,7 @@ src/
   connection.rs     # canonical, working-WAL, and disposable-import connection postures
   document.rs       # staged create/Save As, validated open/verify, metadata, and durable publication
   recovery/         # schema-catalogued sparse overlays, merged reads, and commit-ID Save
+  reader.rs         # `StoreReader`: read-only layers and component queries for another process
   schema.rs         # canonical and working pre-release version-1 baselines
   font_state.rs     # eager metadata/directory and explicit full materialization
   import_writer.rs  # pipelined Rayon encode/compress plus one SQLite transaction owner

@@ -1,14 +1,15 @@
 use crate::error::{OrMissing, StoreEntity};
 use crate::numeric::sql_int;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
+use rayon::prelude::*;
 use rusqlite::{OptionalExtension, Transaction, params};
 use shift_font as font;
 
 use crate::{
     ShiftStore, StoreError,
     columns::{AxisRoleColumn, KerningPositionColumn, KerningSideColumns, MetricKindColumn},
-    layer::write_layer_in_tx,
+    layer::{StoredLayerPayload, encode_layer, store_stored_layer_in_tx, write_layer_in_tx},
     source::SourceKind,
     workspace_state::{SaveState, mark_workspace_changed_in_tx},
     write_mode::WriteMode,
@@ -31,9 +32,10 @@ impl ShiftStore {
     /// committed post-edit font. This preserves complete clone/materialize
     /// results even when a compact change record only carries directory facts.
     ///
-    /// In a document, [`SaveState::MatchesSaved`] discards the recovery
-    /// overlay instead of writing the change: the document is back to what is
-    /// saved, so there is no unsaved work left to keep.
+    /// In a document, [`SaveState::MatchesSaved`] asks for the recovery
+    /// overlay to be discarded once the change is written. The store checks
+    /// the overlay against the saved document first and discards only when
+    /// they match, so a wrong claim keeps the unsaved work.
     ///
     /// # Errors
     ///
@@ -55,11 +57,6 @@ impl ShiftStore {
         post_font: Option<&font::Font>,
         save_state: SaveState,
     ) -> Result<(), StoreError> {
-        if self.recovery.is_some() && save_state == SaveState::MatchesSaved {
-            self.discard_recovery()?;
-            return Ok(());
-        }
-
         let changes_font_info = change_set.changes.iter().any(|change| {
             matches!(
                 change,
@@ -77,19 +74,26 @@ impl ShiftStore {
 
         if let Some(recovery) = self.recovery.as_mut() {
             let post_font = post_font.ok_or(StoreError::RecoveryRequiresPostFont)?;
-            return recovery.apply_change_set(change_set, post_font, preserved_font_info.as_ref());
+            recovery.apply_change_set(change_set, post_font, preserved_font_info.as_ref())?;
+            // A claim to match the saved document is checked, never trusted:
+            // discarding on a wrong claim would lose every unsaved edit.
+            if save_state == SaveState::MatchesSaved && self.recovery_matches_saved()? {
+                self.discard_recovery()?;
+            }
+            return Ok(());
         }
         if self.kind == crate::store::StoreKind::Document {
             return Err(StoreError::DocumentRequiresRecoveryOverlay);
         }
 
         let tracks_workspace = self.tracks_workspace();
+        let prepared = PreparedLayers::for_change_set(change_set)?;
         let tx = self.conn.transaction()?;
         let writer = StoreWriter::new(&tx);
         for priority in 0..=10 {
             for change in &change_set.changes {
                 if change_priority(change) == priority {
-                    writer.apply_change(change)?;
+                    writer.apply_change(change, &prepared)?;
                 }
             }
             // A glyph is in one group per position, so every changed group's
@@ -97,7 +101,7 @@ impl ShiftStore {
             // never sits in both.
             if priority == KERNING_GROUP_PRIORITY {
                 for (group_id, group) in kerning_groups_after(change_set) {
-                    writer.insert_kerning_group(group_id, group)?;
+                    writer.insert_kerning_group(*group_id, group)?;
                 }
             }
         }
@@ -153,8 +157,8 @@ fn validate_glyph_order(
 
     let first_appended_order = post_font.glyph_count().saturating_sub(appended.len());
     for (offset, glyph_id) in appended.iter().enumerate() {
-        if post_font.glyph_order(glyph_id) != Some(first_appended_order + offset) {
-            return Err(StoreError::AppendedGlyphNotAtTail(glyph_id.clone()));
+        if post_font.glyph_order(*glyph_id) != Some(first_appended_order + offset) {
+            return Err(StoreError::AppendedGlyphNotAtTail(*glyph_id));
         }
     }
     for (offset, glyph_id) in popped.iter().enumerate() {
@@ -168,7 +172,7 @@ fn validate_glyph_order(
             .or_missing(StoreEntity::Glyph, glyph_id)?;
         let expected = post_font.glyph_count() + popped.len() - offset - 1;
         if order_index != sql_int(expected) {
-            return Err(StoreError::PoppedGlyphNotAtTail(glyph_id.clone()));
+            return Err(StoreError::PoppedGlyphNotAtTail(*glyph_id));
         }
     }
     Ok(())
@@ -225,8 +229,8 @@ impl<'a> StoreWriter<'a> {
         self.replace_metric_definitions(font.metric_definitions())?;
 
         for (order_index, source) in font.sources().iter().enumerate() {
-            self.upsert_source(&source.id(), &SourceRow::new(source, sql_int(order_index)))?;
-            self.replace_source_metric_values(&source.id(), source.metric_values().iter())?;
+            self.upsert_source(source.id(), &SourceRow::new(source, sql_int(order_index)))?;
+            self.replace_source_metric_values(source.id(), source.metric_values().iter())?;
             self.replace_lib_data(
                 "source_lib",
                 "source_id",
@@ -236,8 +240,8 @@ impl<'a> StoreWriter<'a> {
 
             for (axis_id, value) in source.location() {
                 // Location entries on undefined axes have no row to reference.
-                if font.axis(axis_id).is_some() {
-                    self.upsert_source_location(&source.id(), axis_id, *value)?;
+                if font.axis(*axis_id).is_some() {
+                    self.upsert_source_location(source.id(), *axis_id, *value)?;
                 }
             }
         }
@@ -253,7 +257,7 @@ impl<'a> StoreWriter<'a> {
         self.write_glyph_directory(glyph, order_index, WriteMode::Upsert)?;
 
         for layer in glyph.layers().values().map(AsRef::as_ref) {
-            write_layer_in_tx(self.tx, &glyph.id(), layer)?;
+            write_layer_in_tx(self.tx, glyph.id(), layer)?;
         }
         Ok(())
     }
@@ -299,7 +303,7 @@ impl<'a> StoreWriter<'a> {
             }
             WriteMode::Upsert => {
                 self.upsert_glyph(glyph, order_index)?;
-                self.replace_glyph_unicodes(&glyph.id(), glyph.unicodes())?;
+                self.replace_glyph_unicodes(glyph.id(), glyph.unicodes())?;
                 self.replace_lib_data(
                     "glyph_lib",
                     "glyph_id",
@@ -310,7 +314,11 @@ impl<'a> StoreWriter<'a> {
         }
     }
 
-    fn apply_change(&self, change: &font::FontChange) -> Result<(), StoreError> {
+    fn apply_change(
+        &self,
+        change: &font::FontChange,
+        prepared: &PreparedLayers,
+    ) -> Result<(), StoreError> {
         match change {
             font::FontChange::Metadata(value) => self.update_font_metadata(&value.after),
             font::FontChange::LibValue { key, value } => {
@@ -323,22 +331,22 @@ impl<'a> StoreWriter<'a> {
             }
             font::FontChange::NamedInstances(value) => self.replace_named_instances(&value.after),
             font::FontChange::Sources(value) => self.replace_sources(&value.after),
-            font::FontChange::Glyph(value) => self.replace_glyph(value),
+            font::FontChange::Glyph(value) => self.replace_glyph(value, prepared),
             font::FontChange::Layer {
                 glyph_id, layer, ..
-            } => self.replace_layer(glyph_id, layer),
-            font::FontChange::KerningGroup { group_id, .. } => self.delete_kerning_group(group_id),
+            } => self.replace_layer(*glyph_id, layer, prepared),
+            font::FontChange::KerningGroup { group_id, .. } => self.delete_kerning_group(*group_id),
             font::FontChange::KerningValue {
                 source_id,
                 pair,
                 value,
-            } => self.write_kerning_value(source_id, pair, value.after),
+            } => self.write_kerning_value(*source_id, pair, value.after),
         }
     }
 
     /// Deletes one kerning group and its members; a changed group's new state is
     /// inserted once every changed group is deleted.
-    fn delete_kerning_group(&self, group_id: &font::KerningGroupId) -> Result<(), StoreError> {
+    fn delete_kerning_group(&self, group_id: font::KerningGroupId) -> Result<(), StoreError> {
         self.tx.execute(
             "DELETE FROM kerning_group_members WHERE group_id = ?1",
             params![group_id.as_str()],
@@ -355,7 +363,7 @@ impl<'a> StoreWriter<'a> {
         self.tx.execute("DELETE FROM kerning_group_members", [])?;
         self.tx.execute("DELETE FROM kerning_groups", [])?;
         for (group_id, group) in kerning.all_groups() {
-            self.insert_kerning_group(group_id, group)?;
+            self.insert_kerning_group(*group_id, group)?;
         }
         Ok(())
     }
@@ -363,7 +371,7 @@ impl<'a> StoreWriter<'a> {
     /// Upserts or deletes one source's value for one kerning pair.
     fn write_kerning_value(
         &self,
-        source_id: &font::SourceId,
+        source_id: font::SourceId,
         pair: &font::KerningPair,
         value: Option<f64>,
     ) -> Result<(), StoreError> {
@@ -421,7 +429,7 @@ impl<'a> StoreWriter<'a> {
     pub(crate) fn replace_source_kerning(
         &self,
         kerning: &font::Kerning,
-        source_id: &font::SourceId,
+        source_id: font::SourceId,
     ) -> Result<(), StoreError> {
         self.tx.execute(
             "DELETE FROM kerning_pairs WHERE source_id = ?1",
@@ -471,6 +479,7 @@ impl<'a> StoreWriter<'a> {
     fn replace_glyph(
         &self,
         value: &font::Replacement<Option<font::Glyph>>,
+        prepared: &PreparedLayers,
     ) -> Result<(), StoreError> {
         let glyph_id = value.glyph_id()?;
         match &value.after {
@@ -483,23 +492,36 @@ impl<'a> StoreWriter<'a> {
                         |row| row.get::<_, i64>(0),
                     )
                     .optional()?;
-                let order_index = existing_order.unwrap_or(self.tx.query_row(
-                    "SELECT COUNT(*) FROM glyphs",
-                    [],
-                    |row| row.get(0),
-                )?);
+                // Only a new glyph needs the count, and counting scans every row.
+                let order_index = match existing_order {
+                    Some(order_index) => order_index,
+                    None => self
+                        .tx
+                        .query_row("SELECT COUNT(*) FROM glyphs", [], |row| row.get(0))?,
+                };
                 self.write_glyph_directory(glyph, order_index, WriteMode::Upsert)?;
 
-                let replaces_layers = value
-                    .before
-                    .as_ref()
-                    .is_none_or(|before| before.layers() != glyph.layers());
-                if replaces_layers {
-                    self.tx
-                        .execute("DELETE FROM glyph_layers WHERE glyph_id = ?1", [&glyph_id])?;
-                    for layer in glyph.layers().values() {
-                        write_layer_in_tx(self.tx, &glyph_id, layer)?;
+                // Delete only the layers that went away and write only the ones
+                // that changed: deleting every layer cascades through payload and
+                // component rows, which was most of a large batch's SQL.
+                match &value.before {
+                    Some(before) => {
+                        for layer_id in before.layers().keys() {
+                            if !glyph.layers().contains_key(layer_id) {
+                                self.tx.execute(
+                                    "DELETE FROM glyph_layers WHERE id = ?1",
+                                    [layer_id],
+                                )?;
+                            }
+                        }
                     }
+                    None => {
+                        self.tx
+                            .execute("DELETE FROM glyph_layers WHERE glyph_id = ?1", [&glyph_id])?;
+                    }
+                }
+                for layer in value.changed_layers() {
+                    prepared.write(self.tx, glyph_id, layer)?;
                 }
             }
             None => {
@@ -523,12 +545,13 @@ impl<'a> StoreWriter<'a> {
 
     fn replace_layer(
         &self,
-        glyph_id: &font::GlyphId,
+        glyph_id: font::GlyphId,
         value: &font::Replacement<Option<std::sync::Arc<font::GlyphLayer>>>,
+        prepared: &PreparedLayers,
     ) -> Result<(), StoreError> {
         let layer_id = value.layer_id()?;
         match &value.after {
-            Some(layer) => write_layer_in_tx(self.tx, glyph_id, layer),
+            Some(layer) => prepared.write(self.tx, glyph_id, layer),
             None => {
                 self.tx
                     .execute("DELETE FROM glyph_layers WHERE id = ?1", [&layer_id])?;
@@ -656,7 +679,7 @@ impl<'a> StoreWriter<'a> {
 
     fn replace_source_metric_values<'v>(
         &self,
-        source_id: &font::SourceId,
+        source_id: font::SourceId,
         values: impl IntoIterator<Item = (&'v font::MetricId, &'v font::MetricValue)>,
     ) -> Result<(), StoreError> {
         self.tx.execute(
@@ -677,8 +700,8 @@ impl<'a> StoreWriter<'a> {
 
     fn upsert_source_location(
         &self,
-        source_id: &font::SourceId,
-        axis_id: &font::AxisId,
+        source_id: font::SourceId,
+        axis_id: font::AxisId,
         value: f64,
     ) -> Result<(), StoreError> {
         self.tx.execute(
@@ -695,7 +718,7 @@ impl<'a> StoreWriter<'a> {
 
     fn upsert_source(
         &self,
-        source_id: &font::SourceId,
+        source_id: font::SourceId,
         row: &SourceRow<'_>,
     ) -> Result<(), StoreError> {
         self.tx.execute(
@@ -739,15 +762,15 @@ impl<'a> StoreWriter<'a> {
         source: &font::Source,
         order_index: i64,
     ) -> Result<(), StoreError> {
-        self.upsert_source(&source.id(), &SourceRow::new(source, order_index))?;
+        self.upsert_source(source.id(), &SourceRow::new(source, order_index))?;
         self.tx.execute(
             "DELETE FROM source_locations WHERE source_id = ?1",
             [source.id()],
         )?;
         for (axis_id, value) in source.location() {
-            self.upsert_source_location(&source.id(), axis_id, *value)?;
+            self.upsert_source_location(source.id(), *axis_id, *value)?;
         }
-        self.replace_source_metric_values(&source.id(), source.metric_values().iter())?;
+        self.replace_source_metric_values(source.id(), source.metric_values().iter())?;
         self.replace_lib_data(
             "source_lib",
             "source_id",
@@ -782,7 +805,7 @@ impl<'a> StoreWriter<'a> {
 
     fn replace_glyph_unicodes(
         &self,
-        glyph_id: &font::GlyphId,
+        glyph_id: font::GlyphId,
         unicodes: &[u32],
     ) -> Result<(), StoreError> {
         self.tx
@@ -851,7 +874,7 @@ impl<'a> StoreWriter<'a> {
     ) -> Result<(), StoreError> {
         let rows_changed = self.tx.execute(
             "UPDATE font_info SET default_source_id = ?1 WHERE id = 1",
-            [source_id.map(font::SourceId::as_str)],
+            [source_id.copied().map(font::SourceId::as_str)],
         )?;
         require_changed(rows_changed, StoreEntity::FontInfo, "1")
     }
@@ -971,7 +994,7 @@ impl<'a> StoreWriter<'a> {
 
         for position in [font::KerningPosition::First, font::KerningPosition::Second] {
             for (group_id, group) in kerning.groups(position) {
-                self.insert_kerning_group(group_id, group)?;
+                self.insert_kerning_group(*group_id, group)?;
             }
         }
         let mut insert_pair = self.tx.prepare(
@@ -1012,7 +1035,7 @@ impl<'a> StoreWriter<'a> {
 
     fn insert_kerning_group(
         &self,
-        group_id: &font::KerningGroupId,
+        group_id: font::KerningGroupId,
         group: &font::KerningGroup,
     ) -> Result<(), StoreError> {
         let position = KerningPositionColumn(group.position);
@@ -1135,6 +1158,48 @@ fn kerning_groups_after(
         }
         _ => None,
     })
+}
+
+/// Every layer a changeset writes, encoded and compressed in parallel before
+/// the transaction opens, so a large batch doesn't encode one layer at a time.
+struct PreparedLayers {
+    payloads: HashMap<font::LayerId, StoredLayerPayload>,
+}
+
+impl PreparedLayers {
+    /// Encodes and compresses the layers `change_set` writes.
+    ///
+    /// # Errors
+    ///
+    /// Returns a layer-encoding or compression error for the first layer that
+    /// fails.
+    fn for_change_set(change_set: &font::FontChangeSet) -> Result<Self, StoreError> {
+        let layers: Vec<&font::GlyphLayer> = change_set.written_layers().collect();
+        let payloads = layers
+            .par_iter()
+            .map(|layer| {
+                let stored = StoredLayerPayload::compress(&encode_layer(layer)?)?;
+                Ok((layer.id(), stored))
+            })
+            .collect::<Result<_, StoreError>>()?;
+        Ok(Self { payloads })
+    }
+
+    /// Writes `layer` from its prepared payload, encoding it now if it wasn't
+    /// prepared.
+    fn write(
+        &self,
+        tx: &Transaction<'_>,
+        glyph_id: font::GlyphId,
+        layer: &font::GlyphLayer,
+    ) -> Result<(), StoreError> {
+        match self.payloads.get(&layer.id()) {
+            Some(stored) => {
+                store_stored_layer_in_tx(tx, glyph_id, layer, stored, WriteMode::Upsert)
+            }
+            None => write_layer_in_tx(tx, glyph_id, layer),
+        }
+    }
 }
 
 /// When kerning group changes apply: after glyphs, before pair values.

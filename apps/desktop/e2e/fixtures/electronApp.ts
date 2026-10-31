@@ -1,4 +1,4 @@
-import { test as base, expect, type ElectronApplication, type Page } from "@playwright/test";
+import { test as base, type ElectronApplication, type Page } from "@playwright/test";
 import { createBridge } from "@shift/bridge";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -14,34 +14,27 @@ import type {
   ShiftWorkerFixtures,
   SharedWorkspace,
 } from "./types";
+import { FONT_FILES, type FontFixture, type FontName } from "@/testing/fonts";
+import { buildFontFixture } from "./buildFontFixture";
 import { EditorDriver } from "./EditorDriver";
+import { expect } from "./matchers";
 import { ElectronProcesses, killApp } from "./electronProcesses";
+import { hooksOf } from "./appHooks";
 
 export type { CanonicalVariableFont, RecoveryApp } from "./types";
 export { killApp, MAIN_JS } from "./electronProcesses";
 
 const APP_ROOT = path.resolve(__dirname, "../..");
-export const FONT_PATH = path.resolve(APP_ROOT, "../../fixtures/fonts/mutatorsans/MutatorSans.ttf");
-export const OTF_FONT_PATH = path.resolve(
-  APP_ROOT,
-  "../../fixtures/fonts/mutatorsans/MutatorSans.otf",
-);
-export const UFO_FONT_PATH = path.resolve(
-  APP_ROOT,
-  "../../fixtures/fonts/mutatorsans/MutatorSansLightCondensed.ufo",
-);
-export const DESIGNSPACE_FONT_PATH = path.resolve(
-  APP_ROOT,
-  "../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace",
-);
-export const GLYPHS_FONT_PATH = path.resolve(
-  APP_ROOT,
-  "../../fixtures/fonts/MutatorSansVariable.glyphs",
-);
-export const GLYPHSPACKAGE_FONT_PATH = path.resolve(
-  APP_ROOT,
-  "../../fixtures/fonts/PackageFont.glyphspackage",
-);
+/**
+ * The font files in the repository's `fixtures/fonts` that tests open, by what they hold, as
+ * absolute paths: the same names vitest's `FONTS` has.
+ */
+export const FONTS = Object.fromEntries(
+  Object.entries(FONT_FILES).map(([name, file]) => [
+    name,
+    path.resolve(APP_ROOT, "../../fixtures/fonts", file),
+  ]),
+) as { readonly [Name in FontName]: string };
 
 /**
  * Builds a software-rendered test environment that inherits no Shift E2E settings.
@@ -79,7 +72,10 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
       const processes = new ElectronProcesses();
       let shared: Promise<SharedWorkspace> | undefined;
       const launch = async (): Promise<SharedWorkspace> => {
-        const workspacePath = createAuthoredDocument(FONT_PATH, path.join(root, "workspace"));
+        const workspacePath = createAuthoredDocument(
+          FONTS.mutatorSansTtf,
+          path.join(root, "workspace"),
+        );
         const app = await processes.launch({
           label: "shared",
           userDataDir: path.join(root, "user-data"),
@@ -115,6 +111,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
   scriptedDialogs: [false, { option: true }],
   openFontPath: [undefined, { option: true }],
   saveShiftPaths: [undefined, { option: true }],
+  font: [undefined, { option: true }],
   dirtyDocumentChoice: ["cancel", { option: true }],
   dirtyDocumentChoices: [undefined, { option: true }],
   dirtyDocumentDelayMs: [0, { option: true }],
@@ -189,7 +186,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
     testInfo,
   ) => {
     if (sharedWorkspace) {
-      if (startupFontPath !== FONT_PATH || scriptedDialogs || electronArgs.length > 0) {
+      if (startupFontPath !== FONTS.mutatorSansTtf || scriptedDialogs || electronArgs.length > 0) {
         throw new Error("sharedWorkspace needs the default MutatorSans workspace fixture.");
       }
       const { app, processes } = await sharedWorkspaceApp();
@@ -243,7 +240,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
     use,
   ) => {
     let launches = 0;
-    await use(async (options = {}) => {
+    await use(async (options = { args: [] }) => {
       launches += 1;
       return electronProcesses.launch({
         label: `relaunch-${launches}`,
@@ -295,8 +292,8 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
     }
   },
 
-  editor: async ({ page }, use) => {
-    await use(new EditorDriver(page));
+  editor: async ({ page, electronApp }, use) => {
+    await use(new EditorDriver(page, electronApp));
   },
 });
 
@@ -307,15 +304,22 @@ export const documentTest = test.extend<ShiftOptions>({
 
 /** Real Electron lifecycle fixture for sparse native recovery tests. */
 export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
-  recoveryApp: async ({ electronProcesses, testRoot, windowSizing, deviceScaleFactor }, use) => {
+  recoveryApp: async (
+    { electronProcesses, testRoot, windowSizing, deviceScaleFactor, font },
+    use,
+  ) => {
     const userDataDir = path.join(testRoot, "user-data");
-    const documentPath = createAuthoredDocument(FONT_PATH, path.join(testRoot, "workspace"));
+    const documentPath = createAuthoredDocument(
+      FONTS.mutatorSansTtf,
+      path.join(testRoot, "workspace"),
+    );
     let launches = 0;
     const launch = async (openDocument: boolean): Promise<ElectronApplication> => {
       launches += 1;
       return electronProcesses.launch({
         label: launches === 1 ? "initial" : `recovery-${launches - 1}`,
         userDataDir,
+        args: [],
         env: shiftTestEnvironment(openDocument ? { SHIFT_E2E_FONT_PATH: documentPath } : {}),
         windowSizing,
         deviceScaleFactor,
@@ -324,8 +328,15 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
 
     let app = await launch(true);
     let page = await readyWorkspacePage(app);
+    await applyFontFixture(page, app, font, false);
     await use({
       page,
+      get app() {
+        return app;
+      },
+      get editor() {
+        return new EditorDriver(page, app);
+      },
       documentPath,
       crashAndRecover: async () => {
         await killApp(app);
@@ -337,6 +348,7 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
         // Chromium writes renderer storage to disk in batches, and a flush only starts the
         // write. Wait until the text is on disk, as if the user had lingered, so the test
         // checks reopen behavior rather than racing that write.
+        // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main, not the renderer
         await app.evaluate(({ session }) => session.defaultSession.flushStorageData());
         await expect.poll(() => localStorageOnDiskContains(userDataDir, persistedText)).toBe(true);
         await killApp(app);
@@ -352,30 +364,48 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
         return page;
       },
       canonicalGlyphNames: () => readCanonicalGlyphNames(documentPath, testRoot),
-      canonicalVariableFont: () => readCanonicalVariableFont(documentPath, testRoot),
+      canonicalVariableFont: () => readCanonicalVariableFont(documentPath, testRoot, page),
     });
   },
 });
 
 /** Workspace fixture that starts directly with MutatorSans instead of visiting the launcher. */
 export const workspaceTest = test.extend<ShiftOptions>({
-  startupFontPath: FONT_PATH,
+  startupFontPath: FONTS.mutatorSansTtf,
 
-  page: async ({ page }, use) => {
+  page: async ({ page, electronApp, font, sharedWorkspace }, use) => {
     await waitForWorkspaceReady(page);
+    await applyFontFixture(page, electronApp, font, sharedWorkspace);
     await use(page);
   },
 });
 
 /** Authored workspace fixture with deterministic native dialog destinations. */
 export const documentWorkspaceTest = documentTest.extend<ShiftOptions>({
-  startupFontPath: FONT_PATH,
+  startupFontPath: FONTS.mutatorSansTtf,
 
-  page: async ({ page }, use) => {
+  page: async ({ page, electronApp, font, sharedWorkspace }, use) => {
     await waitForWorkspaceReady(page);
+    await applyFontFixture(page, electronApp, font, sharedWorkspace);
     await use(page);
   },
 });
+
+/** Builds the `font` option into the ready workspace in `page`, when the test sets one. */
+async function applyFontFixture(
+  page: Page,
+  electronApp: ElectronApplication,
+  font: FontFixture | undefined,
+  sharedWorkspace: boolean,
+): Promise<void> {
+  if (!font) return;
+  if (sharedWorkspace)
+    throw new Error("The `font` option edits the document; drop `sharedWorkspace`.");
+  if (font.mode !== undefined) {
+    throw new Error("The `font` option builds into the launched workspace; it has no `mode`.");
+  }
+  await buildFontFixture(page, electronApp, font);
+}
 
 /** Makes `page` render and report focus as if its window held the OS focus. */
 async function emulateFocus(page: Page): Promise<void> {
@@ -399,17 +429,16 @@ async function resetSharedWorkspace(app: ElectronApplication): Promise<void> {
   }
   const page = windows[0]!;
   // config.toml and themes/ outlive a reload, so a theme from one test would leak into the next.
-  const { directory } = await page.evaluate(() => window.shiftHost!.config.state());
+  const { directory } = await hooksOf(page).session.configState();
   fs.rmSync(path.join(directory, "config.toml"), { force: true });
   fs.rmSync(path.join(directory, "themes"), { recursive: true, force: true });
   await expect
-    .poll(() =>
-      page.evaluate(async () => {
-        const state = await window.shiftHost!.config.state();
-        return state.exists || state.themes.length > 0;
-      }),
-    )
+    .poll(async () => {
+      const state = await hooksOf(page).session.configState();
+      return state.exists || state.themes.length > 0;
+    })
     .toBe(false);
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- resets page storage and the route, not app state
   await page.evaluate(() => {
     localStorage.clear();
     sessionStorage.clear();
@@ -422,6 +451,7 @@ async function resetSharedWorkspace(app: ElectronApplication): Promise<void> {
  * Fails a test that edited the shared document, since every later test would inherit the edit.
  */
 async function expectSharedWorkspaceClean(app: ElectronApplication): Promise<void> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main, not the renderer
   const titles = await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows().map((window) => window.getTitle()),
   );
@@ -432,6 +462,28 @@ async function expectSharedWorkspaceClean(app: ElectronApplication): Promise<voi
   }
 }
 
+/** The platform, architecture and versions the running app reports from main. */
+export async function appRuntime(app: ElectronApplication): Promise<{
+  platform: NodeJS.Platform;
+  architecture: string;
+  electronVersion: string;
+  appVersion: string;
+}> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main, not the renderer
+  return app.evaluate(({ app: electronApp }) => ({
+    platform: process.platform,
+    architecture: process.arch,
+    electronVersion: process.versions.electron,
+    appVersion: electronApp.getVersion(),
+  }));
+}
+
+/** The platform the renderer's host bridge reports to the page. */
+export async function rendererHostPlatform(page: Page): Promise<string | undefined> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads the preload bridge's platform, in windows (the launcher) with no font session to serve E2E hooks
+  return page.evaluate(() => window.shiftHost?.platform);
+}
+
 /**
  * Waits until an authored workspace has published its loaded font and catalog.
  *
@@ -439,9 +491,7 @@ async function expectSharedWorkspaceClean(app: ElectronApplication): Promise<voi
  */
 export async function waitForWorkspaceReady(page: Page): Promise<void> {
   await page.waitForURL(/#\/home/, { timeout: 20_000 });
-  await page.waitForFunction(() => window.shift?.font.loaded === true, undefined, {
-    timeout: 20_000,
-  });
+  await expect.poll(() => hooksOf(page).session.workspaceLoaded(), { timeout: 20_000 }).toBe(true);
   await page.getByLabel("Glyph catalog", { exact: true }).waitFor({ state: "visible" });
 }
 
@@ -455,27 +505,33 @@ async function readyWorkspacePage(app: ElectronApplication): Promise<Page> {
 function readCanonicalGlyphNames(documentPath: string, testRoot: string): string[] {
   const bridge = createBridge();
   const recoveryPath = path.join(testRoot, `${crypto.randomUUID()}.recovery.sqlite`);
-  bridge.openDocument(documentPath, recoveryPath);
+  bridge.workspace.openDocument(documentPath, recoveryPath);
   try {
-    return bridge.getGlyphs().map((glyph) => glyph.name);
+    return bridge.workspace.getGlyphs().map((glyph) => glyph.name);
   } finally {
-    bridge.closeWorkspace();
+    bridge.workspace.closeWorkspace();
     fs.rmSync(recoveryPath, { force: true });
   }
 }
 
-function readCanonicalVariableFont(documentPath: string, testRoot: string): CanonicalVariableFont {
+/**
+ * The saved document's axes, sources and instances: the axes and sources as
+ * an engine in `page`'s window reads them from the document's directory.
+ */
+async function readCanonicalVariableFont(
+  documentPath: string,
+  testRoot: string,
+  page: Page,
+): Promise<CanonicalVariableFont> {
   const bridge = createBridge();
   const recoveryPath = path.join(testRoot, `${crypto.randomUUID()}.recovery.sqlite`);
-  bridge.openDocument(documentPath, recoveryPath);
+  bridge.workspace.openDocument(documentPath, recoveryPath);
   try {
-    return {
-      axes: bridge.getAxes(),
-      sources: bridge.getSources(),
-      namedInstances: bridge.getNamedInstances(),
-    };
+    const directory = Buffer.from(bridge.workspace.encodedDirectory()).toString("base64");
+    const { axes, sources } = await hooksOf(page).session.fontRecordsOf(directory);
+    return { axes, sources, namedInstances: bridge.workspace.getNamedInstances() };
   } finally {
-    bridge.closeWorkspace();
+    bridge.workspace.closeWorkspace();
     fs.rmSync(recoveryPath, { force: true });
   }
 }

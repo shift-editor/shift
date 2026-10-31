@@ -10,8 +10,11 @@ import {
   quitApp,
   dirtyNewFont,
   requestAppQuit,
+  saveDocumentAs,
+  startAppQuit,
   windowTitle,
 } from "./fixtures/documentLifecycle";
+import { EditorDriver } from "./fixtures/EditorDriver";
 import { savedGlyphNames } from "./fixtures/savedDocument";
 
 const discardOnQuitTest = test.extend({
@@ -30,12 +33,7 @@ function processExited(childProcess: ChildProcess): boolean {
 }
 
 async function saveThenDirty(page: Page, savePath: string): Promise<Buffer> {
-  await page.evaluate(async (target) => {
-    const coordinator = window.shift?.editCoordinator;
-    if (!coordinator) throw new Error("Expected edit coordinator");
-
-    await coordinator.save(target);
-  }, savePath);
+  await saveDocumentAs(page, savePath);
   const saved = fs.readFileSync(savePath);
   await page.getByRole("button", { name: "Create glyph", exact: true }).click();
   return saved;
@@ -123,11 +121,8 @@ test.describe("terminal termination", () => {
         const secondPath = path.join(testRoot, "second.shift");
         const secondSaved = await saveThenDirty(secondPage, secondPath);
         for (const workspacePage of [firstPage, secondPage]) {
-          await workspacePage.waitForFunction(
-            () =>
-              window.shift?.applyStatusCell.peek() === "idle" &&
-              window.shift.documentStateCell.peek()?.dirty === true,
-          );
+          const workspace = new EditorDriver(workspacePage, electronApp);
+          await expect.poll(() => workspace.documentState()).toMatchObject({ dirty: true });
         }
 
         const childProcess = electronApp.process();
@@ -146,16 +141,13 @@ test.describe("terminal termination", () => {
         await expect.poll(() => restarted.windows().length).toBe(2);
         for (const recoveredPage of restarted.windows()) {
           await waitForWorkspaceReady(recoveredPage);
+          const recovered = new EditorDriver(recoveredPage, restarted);
           await expect
-            .poll(() =>
-              recoveredPage.evaluate(() => ({
-                recovered: window.shift?.font
-                  .glyphRecords()
-                  .some((glyph) => glyph.name === "newGlyph.1"),
-                dirty: window.shift?.documentStateCell.peek()?.dirty,
-              })),
-            )
-            .toEqual({ recovered: true, dirty: true });
+            .poll(async () => ({
+              recovered: (await recovered.glyphNames()).includes("newGlyph.1"),
+              document: await recovered.documentState(),
+            }))
+            .toMatchObject({ recovered: true, document: { dirty: true } });
         }
       },
     );
@@ -172,14 +164,9 @@ test.describe("terminal termination during quit preparation", () => {
       test.skip(process.platform === "win32", "POSIX terminal signal semantics");
 
       const workspacePage = await dirtyNewFont(page, electronApp);
-      await workspacePage.waitForFunction(() => window.shift?.applyStatusCell.peek() === "idle");
-      await electronApp.evaluate(
-        ({ app }) =>
-          new Promise<void>((resolve) => {
-            app.once("before-quit", () => resolve());
-            app.quit();
-          }),
-      );
+      const workspace = new EditorDriver(workspacePage, electronApp);
+      await expect.poll(async () => (await workspace.editorView()).applyStatus).toBe("idle");
+      await startAppQuit(electronApp);
 
       const childProcess = electronApp.process();
       childProcess.kill("SIGINT");
@@ -190,11 +177,7 @@ test.describe("terminal termination during quit preparation", () => {
       const recoveredPage = await restarted.firstWindow();
       await waitForWorkspaceReady(recoveredPage);
       await expect.poll(() => windowTitle(recoveredPage, restarted)).toContain("Untitled *");
-      expect(
-        await recoveredPage.evaluate(() =>
-          window.shift?.font.glyphRecords().some((glyph) => glyph.name === "newGlyph"),
-        ),
-      ).toBe(true);
+      expect(await new EditorDriver(recoveredPage, restarted).glyphNames()).toContain("newGlyph");
     },
   );
 });

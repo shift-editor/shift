@@ -28,7 +28,7 @@ pub(super) fn check(font: &Font, glyph: &Glyph) -> Vec<Finding> {
     let mut findings = Vec::new();
     if let Some(default) = default
         && encoded
-        && glyph.layer_for_source(&default.id()).is_none()
+        && glyph.layer_for_source(default.id()).is_none()
     {
         findings.push(
             Finding::glyph(
@@ -201,7 +201,7 @@ impl LayerCheck<'_> {
     /// Reports a glyph that can't be drawn, or that should have ink and draws nothing.
     fn resolved(&self, expect_ink: bool) -> Option<Finding> {
         let location: &DesignLocation = self.source.location();
-        let resolved = match self.font.projection(location).glyph(&self.glyph.id()) {
+        let resolved = match self.font.projection(location).glyph(self.glyph.id()) {
             Ok(Some(resolved)) => resolved,
             Ok(None) => return None,
             Err(error) => {

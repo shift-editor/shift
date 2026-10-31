@@ -10,5 +10,3 @@
 //! These are cold calls with structured values, typed with tsify.
 
 mod axis_mapping;
-mod geometry;
-mod kerning;

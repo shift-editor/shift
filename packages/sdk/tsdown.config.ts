@@ -28,7 +28,6 @@ export default defineConfig({
       "@shift/editor",
       "@shift/geo",
       "@shift/glyph-state",
-      "@shift/rules",
       "@shift/types",
       "@shift/ui",
       "@shift/validation",

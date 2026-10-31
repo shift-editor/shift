@@ -15,7 +15,7 @@ pub(crate) trait FontSelectors {
 impl FontSelectors for Font {
     fn glyph_id_for(&self, selector: &str) -> Result<GlyphId> {
         if let Ok(glyph_id) = selector.parse::<GlyphId>()
-            && self.glyph(&glyph_id).is_some()
+            && self.glyph(glyph_id).is_some()
         {
             return Ok(glyph_id);
         }
@@ -26,7 +26,7 @@ impl FontSelectors for Font {
 
     fn source_id_for(&self, selector: &str) -> Result<SourceId> {
         if let Ok(source_id) = selector.parse::<SourceId>()
-            && self.source(&source_id).is_some()
+            && self.source(source_id).is_some()
         {
             return Ok(source_id);
         }

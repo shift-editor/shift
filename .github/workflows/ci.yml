@@ -16,8 +16,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.merge_group.head_ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
 
+# Caches are restored on every run but saved only from pushes to main. A pull
+# request or merge-queue ref can restore only its own caches and main's, so
+# entries they saved were never reused; they filled the 10 GB limit and evicted
+# main's Rust caches, so macOS builds compiled the workspace from scratch.
 env:
   CARGO_INCREMENTAL: 0
+  # Every turbo run writes .turbo/runs/<id>.json (each task's hash, cache hit or
+  # miss, timings and inputs). The ci-telemetry artifacts carry them off the
+  # runner so cache misses and task times can be tracked across runs.
+  TURBO_RUN_SUMMARY: "true"
   CARGO_PROFILE_TEST_DEBUG: 0
   RUSTFLAGS: "-D warnings"
 
@@ -61,14 +69,21 @@ jobs:
               # The editor runs these through packages/wasm.
               - 'crates/shift-font/**'
               - 'crates/shift-wasm/**'
+              # They generate @shift/wasm/protocol.
+              - 'crates/pack/**'
+              - 'crates/pack-derive/**'
               - 'Cargo.lock'
               - '.github/actions/wasm-toolchain/**'
               - 'packages/**'
               - 'pnpm-lock.yaml'
               - 'scripts/run-e2e.mjs'
               - 'scripts/run-with-virtual-desktop.mjs'
+              - 'scripts/oxlint/**'
+              - '.oxlintrc.json'
               - 'tsconfig*.json'
               - 'turbo.json'
+              # A change to this workflow runs the jobs it may have changed.
+              - '.github/workflows/ci.yml'
             release:
               - '.github/workflows/**'
               - '.release-please-manifest.json'
@@ -204,9 +219,9 @@ jobs:
         with:
           node-version: 24
 
-      - name: Cache node_modules
+      - name: Restore node_modules
         id: modules-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -218,6 +233,17 @@ jobs:
       - name: Install dependencies
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Context drift check
         run: python3 scripts/context-drift-check.py --ci
@@ -249,9 +275,9 @@ jobs:
         with:
           node-version: 24
 
-      - name: Cache node_modules
+      - name: Restore node_modules
         id: modules-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -264,12 +290,29 @@ jobs:
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
 
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Lint (oxlint)
         run: pnpm test:lint
+      - name: Test Shift lint rules
+        run: pnpm test:lint-rules
+      - name: Test Shift scanners
+        run: pnpm test:scan
       - name: Tailwind design-system lint
         run: pnpm lint:tailwind
       - name: Format check (oxfmt)
         run: pnpm format:check
+      - name: Task graph (typecheck skips release builds)
+        run: pnpm check:task-graph
 
   typecheck:
     name: Typecheck
@@ -291,9 +334,9 @@ jobs:
         with:
           node-version: 24
 
-      - name: Cache node_modules
+      - name: Restore node_modules
         id: modules-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -306,8 +349,20 @@ jobs:
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Cache Typecheck Turbo results
-        uses: actions/cache@v6
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Restore Typecheck Turbo results
+        id: typecheck-turbo-cache
+        uses: actions/cache/restore@v6
         with:
           path: .turbo/cache
           key: typecheck-turbo-v1-${{ runner.os }}-${{ github.sha }}
@@ -316,6 +371,27 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Upload CI telemetry
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-telemetry-typecheck
+          path: |
+            .turbo/runs/
+            **/vitest-report.json
+            !**/node_modules/**
+          # .turbo/runs is a hidden path, which upload-artifact skips by default.
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Save Typecheck Turbo results
+        if: github.ref == 'refs/heads/main' && steps.typecheck-turbo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .turbo/cache
+          key: typecheck-turbo-v1-${{ runner.os }}-${{ github.sha }}
 
       - name: Check browser editor bundle
         run: pnpm check:browser
@@ -347,9 +423,9 @@ jobs:
         with:
           node-version: 24
 
-      - name: Cache node_modules
+      - name: Restore node_modules
         id: modules-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -362,9 +438,20 @@ jobs:
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Cache native Turbo build
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Restore native Turbo build
         id: native-turbo-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             .turbo/cache
@@ -378,7 +465,30 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Run unit tests
-        run: pnpm test:unit
+        run: pnpm test:unit -- --reporter=default --reporter=json --outputFile.json=vitest-report.json
+
+      - name: Upload CI telemetry
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-telemetry-unit-test
+          path: |
+            .turbo/runs/
+            **/vitest-report.json
+            !**/node_modules/**
+          # .turbo/runs is a hidden path, which upload-artifact skips by default.
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Save native Turbo build
+        if: github.ref == 'refs/heads/main' && steps.native-turbo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            .turbo/cache
+            crates/shift-bridge/*.node
+          key: native-turbo-v1-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'crates/*/Cargo.toml', 'crates/*/build.rs', 'crates/*/src/**', 'crates/shift-bridge/package.json', 'crates/shift-bridge/*.d.ts', 'pnpm-lock.yaml', 'turbo.json') }}
 
   deadcode:
     name: Dead Code
@@ -398,9 +508,9 @@ jobs:
         with:
           node-version: 24
 
-      - name: Cache node_modules
+      - name: Restore node_modules
         id: modules-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -412,6 +522,17 @@ jobs:
       - name: Install dependencies
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Dead code check (knip)
         run: pnpm deadcode:strict
@@ -523,12 +644,12 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Check WebAssembly font core
-        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo check --target wasm32-unknown-unknown -p fontsrc -p rumil -p rumil-build -p shift-backends -p shift-font -p shift-slug -p shift-wasm -p shift-wire
+        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo check --target wasm32-unknown-unknown -p fontsrc -p rumil -p rumil-build -p shift-backends -p shift-engine -p shift-font -p shift-slug -p shift-wasm -p shift-wire
 
       # The workspace clippy run leaves features off, so the test-only
       # reference exports are linted here, for the target they build for.
       - name: Lint the reference module
-        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo clippy -p shift-wasm --features reference --target wasm32-unknown-unknown -- -D warnings
+        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo clippy -p shift-wasm --features reference,engine --target wasm32-unknown-unknown -- -D warnings
 
       - name: Check Shift-independent crate boundaries
         run: |
@@ -575,9 +696,9 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
           shared-key: shift-rust
 
-      - name: Cache node_modules
+      - name: Restore node_modules
         id: modules-cache
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -590,11 +711,36 @@ jobs:
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
 
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Build native module
         run: pnpm build:native
 
       - name: Run shift-bridge tests
-        run: pnpm test:native
+        run: pnpm test:native -- --reporter=default --reporter=json --outputFile.json=vitest-report.json
+
+      - name: Upload CI telemetry
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-telemetry-integration
+          path: |
+            .turbo/runs/
+            **/vitest-report.json
+            !**/node_modules/**
+          # .turbo/runs is a hidden path, which upload-artifact skips by default.
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 90
 
   # ---------------------------------------------------------------------------
   # Required end-to-end correctness
@@ -635,9 +781,12 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: e2e-app-${{ github.run_id }}-${{ runner.os }}
+          # The fixtures open documents through @shift/bridge, whose generated
+          # clients are not committed.
           path: |
             apps/desktop/.vite/
             crates/shift-bridge/*.node
+            packages/types/src/bridge/protocol.ts
           include-hidden-files: true
           retention-days: 1
 
@@ -646,9 +795,12 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: e2e-app-${{ github.run_id }}-${{ runner.os }}
+          # The fixtures open documents through @shift/bridge, whose generated
+          # clients are not committed.
           path: |
             apps/desktop/.vite/
             crates/shift-bridge/*.node
+            packages/types/src/bridge/protocol.ts
           include-hidden-files: true
           retention-days: 1
           overwrite: true
@@ -707,8 +859,9 @@ jobs:
           if (( ${#debs[@]} > 0 )); then sudo dpkg -i "${debs[@]}"; fi
           command -v fluxbox Xvfb
 
-      - name: Cache node_modules
-        uses: actions/cache@v6
+      - name: Restore node_modules
+        id: modules-cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -720,6 +873,17 @@ jobs:
       - name: Install dependencies
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Download E2E app
         uses: actions/download-artifact@v8
@@ -910,8 +1074,9 @@ jobs:
         with:
           node-version: 24
 
-      - name: Cache node_modules
-        uses: actions/cache@v6
+      - name: Restore node_modules
+        id: modules-cache
+        uses: actions/cache/restore@v6
         with:
           path: |
             node_modules
@@ -923,6 +1088,17 @@ jobs:
       - name: Install dependencies
         timeout-minutes: 10
         run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Save node_modules
+        if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+            crates/*/node_modules
+          key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Download blob reports
         uses: actions/download-artifact@v8
@@ -950,7 +1126,8 @@ jobs:
         with:
           name: playwright-report-${{ github.run_id }}
           path: playwright-report/
-          retention-days: 14
+          # results.json is the E2E history the CI dashboard reads; keep a quarter of it.
+          retention-days: 90
 
   # ---------------------------------------------------------------------------
   # Gate: all required checks must pass

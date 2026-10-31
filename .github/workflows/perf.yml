@@ -67,6 +67,10 @@ concurrency:
   group: perf-${{ github.sha }}
   cancel-in-progress: true
 
+env:
+  # Shrink the shipped WebAssembly modules with wasm-opt (packages/wasm/scripts/build.mjs).
+  SHIFT_WASM_OPT: "1"
+
 jobs:
   engine-benchmarks:
     name: Engine Benchmarks
@@ -117,6 +121,7 @@ jobs:
             packages/wasm/src/generated
             packages/wasm/src/generated-reference
             packages/wasm/src/generated-shaping
+            packages/wasm/src/generated-engine
           key: native-module-v3-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'crates/**', 'Cargo.lock') }}
 
       - name: Build native module
@@ -205,6 +210,7 @@ jobs:
             packages/wasm/src/generated
             packages/wasm/src/generated-reference
             packages/wasm/src/generated-shaping
+            packages/wasm/src/generated-engine
           key: native-module-v3-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'crates/**', 'Cargo.lock') }}
 
       - name: Build native module
@@ -220,6 +226,7 @@ jobs:
             packages/wasm/src/generated
             packages/wasm/src/generated-reference
             packages/wasm/src/generated-shaping
+            packages/wasm/src/generated-engine
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
 
       - name: Run Playwright perf tests

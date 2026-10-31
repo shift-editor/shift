@@ -91,7 +91,8 @@ apps/desktop/src/renderer/src/components/kerning/
 - `ToolEvent` — discriminated union of semantic events: `pointerMove`, `click`, `doubleClick`, `dragStart`, `drag`, `dragEnd`, `dragCancel`, `keyDown`, `keyUp`, `selectionChanged`. Pointer events include `coords: Coordinates`.
 - `DragStartEvent` / `DragEvent` / `DragEndEvent` — concrete targeted pointer-event contracts used by drag handlers.
 - `ToolManager` — owns installed manifests, resident tool instances, `GestureDetector`, rAF pointer coalescing, semantic pointer-action history captures, replacement, removal, and temporary tool switching.
-- `ActiveTool<Id>` — editor-facing `{ id, state }` snapshot. `Editor.toolIf(id)` narrows built-in state through `ToolStateMap`; runtime IDs fall back to `ToolState`.
+- `ActiveTool<Id>` — editor-facing `{ id, state }` snapshot published by `Editor.toolCell`; built-in state narrows through `ToolStateMap`, runtime IDs fall back to `ToolState`.
+- `ToolFor<Id>` — the tool class for a built-in ID through `ToolMap`, else `BaseTool<ToolStateFor<Id>>`. `Editor.toolIf(id)` returns `ToolFor<Id> | null` and `Editor.toolCellIf(id)` a cell of it that changes only on tool switches; readers of the tool's state also follow its `stateCell` (the desktop `useToolIf` hook does both), so nothing reaches `toolManager.activeTool` with `instanceof`.
 - `GestureDetector` — stateful recognizer: drag threshold, double-click timing. Fed raw `pointerDown`/`Move`/`Up`, emits `ToolEvent[]`.
 - `ToolManifest` — `{ id, create, icon, tooltip, shortcut?, hidden?, disabled? }`. Registration descriptor passed to `editor.registerTool`. Hidden tools are omitted from the toolbar; disabled tools render as non-interactive controls; both suppress user keyboard shortcuts while remaining programmatically activatable.
 - `ToolRegistration` — exclusive ownership handle returned by `editor.registerTool`; exposes `replace(manifest)` and idempotent `dispose()`.
@@ -341,11 +342,12 @@ onDragCancel(state, ctx) {
 
 ## Verification
 
-- `pnpm test:desktop src/renderer/src/lib/tools/` — real-editor tool tests.
-- `GestureDetector.test.ts` — drag threshold, double-click timing, event emission.
-- `ToolManager.test.ts` — tool activation, temporary override, rAF coalescing, modifier forwarding.
+- `pnpm test:desktop src/renderer/src/behaviour/` — real-editor tool behaviour (`pen/`, `shape/`, `canvas/pan-with-hand.test.ts`).
+- `core/GestureDetector.test.ts` — drag threshold, double-click timing, event emission.
+- `core/ToolManager.test.ts` — temporary override, runtime tool registration, drag rollback, modifier forwarding.
+- `core/BaseTool.test.ts` — state-change notification and disposal.
 - `EditorHistory.test.ts` — click, Shift-click, marquee, Shift-marquee, cancellation, compound selection/document replay, redo branching, and failed workspace apply rebasing through real tools and the real workspace.
-- Per-tool tests: `hand/Hand.test.ts`, `shape/Shape.test.ts`, `Pen.test.ts`, `Select.test.ts`, `Text.test.ts`, `spacing/Spacing.test.ts`.
+- Per-tool tests: `shape/Rectangle.test.ts`, `shape/Ellipse.test.ts`, `Text.test.ts`, `spacing/Spacing.test.ts`. Select behaviour tests live in `apps/desktop/src/renderer/src/behaviour/select/`.
 
 ## Related
 
@@ -356,4 +358,4 @@ onDragCancel(state, ctx) {
 - `Coordinates` — `{ screen, scene }` coordinate bundle on pointer events.
 - `TextTool` — Text mode: suspends glyph editing so every glyph draws filled, edits the page run through `editor.textEditing`, and places the caret with `TextRunNodeDefinition.caretAt`; it never creates runs. The hidden textarea handles native typing.
 - `KeyboardRouter` — binds tool shortcuts registered via `getToolShortcuts`.
-- `SpacingTool` — Spacing mode: suspends glyph editing, measures gaps through `TextRunNodeDefinition.spacingGapAt`, and changes sidebearings through `SidebearingEdit` (drags, previewed and committed as one whole-layer `transformLayer` plus an advance change) or `SpacingHalf.set` (typed values and nudges). Selecting a half makes its glyph the run's current glyph, so the glyph sidebar follows it.
+- `SpacingTool` — Spacing mode: suspends glyph editing, measures gaps through `TextRunNodeDefinition.spacingGapAt`, and changes sidebearings through `SidebearingEdit` (drags, previewed and committed as one `shiftSidebearing` intent) or `SpacingHalf.set` (typed values and nudges). Selecting a half makes its glyph the run's current glyph, so the glyph sidebar follows it.

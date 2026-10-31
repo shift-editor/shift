@@ -10,7 +10,7 @@ import { DocumentOpener } from "./DocumentOpener";
 import { DocumentAddress } from "./types";
 
 function addGlyph(bridge: ShiftBridge, name: string, unicode: number): void {
-  bridge.apply(
+  bridge.workspace.apply(
     [
       {
         kind: "createGlyph",
@@ -43,66 +43,66 @@ describe("native document recovery allocations", () => {
   it("reopens unsaved edits from the same document binding", () => {
     const first = openDocument(documentPath, storage);
     addGlyph(first.bridge, "B", 66);
-    first.bridge.closeWorkspace();
+    first.bridge.workspace.closeWorkspace();
 
     const reopened = openDocument(documentPath, storage);
 
     expect(reopened.workspaceId).toBe(first.workspaceId);
-    expect(reopened.bridge.getGlyphs().map((glyph) => glyph.name)).toEqual(["A", "B"]);
+    expect(reopened.bridge.workspace.getGlyphs().map((glyph) => glyph.name)).toEqual(["A", "B"]);
     expect(canonicalGlyphNames(documentPath, root)).toEqual(["A"]);
-    reopened.bridge.closeWorkspace();
+    reopened.bridge.workspace.closeWorkspace();
   });
 
   it("replaces an exact binding whose recovery file is missing", () => {
     const first = openDocument(documentPath, storage);
     const firstWorkspacePath = path.dirname(first.workspace.recoveryPath);
-    first.bridge.closeWorkspace();
+    first.bridge.workspace.closeWorkspace();
     storage.deleteRecovery(first.workspace.recoveryPath);
 
     const reopened = openDocument(documentPath, storage);
 
     expect(reopened.workspaceId).not.toBe(first.workspaceId);
-    expect(reopened.bridge.getGlyphs().map((glyph) => glyph.name)).toEqual(["A"]);
+    expect(reopened.bridge.workspace.getGlyphs().map((glyph) => glyph.name)).toEqual(["A"]);
     expect(fs.existsSync(firstWorkspacePath)).toBe(false);
-    reopened.bridge.closeWorkspace();
+    reopened.bridge.workspace.closeWorkspace();
   });
 
   it("rebinds recovery when the same document moves to a new path", () => {
-    const identity = createBridge().inspectDocument(documentPath);
+    const identity = createBridge().workspace.inspectDocument(documentPath);
     const first = openDocument(documentPath, storage);
     addGlyph(first.bridge, "B", 66);
-    first.bridge.closeWorkspace();
+    first.bridge.workspace.closeWorkspace();
     const movedPath = path.join(root, "Moved.shift");
     fs.renameSync(documentPath, movedPath);
 
     const moved = openDocument(movedPath, storage);
 
     expect(moved.workspaceId).toBe(first.workspaceId);
-    expect(moved.bridge.getGlyphs().map((glyph) => glyph.name)).toEqual(["A", "B"]);
+    expect(moved.bridge.workspace.getGlyphs().map((glyph) => glyph.name)).toEqual(["A", "B"]);
     expect(storage.documentBinding(DocumentAddress.fromIdentity(identity))).toBeNull();
-    moved.bridge.closeWorkspace();
+    moved.bridge.workspace.closeWorkspace();
   });
 
   it("does not attach recovery to a raw copy while the original path exists", () => {
     const first = openDocument(documentPath, storage);
     addGlyph(first.bridge, "B", 66);
-    first.bridge.closeWorkspace();
+    first.bridge.workspace.closeWorkspace();
     const copyPath = path.join(root, "Copy.shift");
     fs.copyFileSync(documentPath, copyPath);
 
     const copied = openDocument(copyPath, storage);
 
     expect(copied.workspaceId).not.toBe(first.workspaceId);
-    expect(copied.bridge.getGlyphs().map((glyph) => glyph.name)).toEqual(["A"]);
-    copied.bridge.closeWorkspace();
+    expect(copied.bridge.workspace.getGlyphs().map((glyph) => glyph.name)).toEqual(["A"]);
+    copied.bridge.workspace.closeWorkspace();
   });
 
   it("refuses a recovery binding copied to another document identity", () => {
     const first = openDocument(documentPath, storage);
     addGlyph(first.bridge, "B", 66);
-    first.bridge.closeWorkspace();
+    first.bridge.workspace.closeWorkspace();
     const otherPath = createDocument(root, "Other.shift");
-    const otherIdentity = createBridge().inspectDocument(otherPath);
+    const otherIdentity = createBridge().workspace.inspectDocument(otherPath);
     storage.writeDocumentBinding(DocumentAddress.fromIdentity(otherIdentity), first.workspace);
 
     expect(() => openDocument(otherPath, storage)).toThrow("recovery overlay belongs to document");
@@ -111,7 +111,7 @@ describe("native document recovery allocations", () => {
 
   it("refuses a binding whose recovery path escapes its workspace", () => {
     const opened = openDocument(documentPath, storage);
-    opened.bridge.closeWorkspace();
+    opened.bridge.workspace.closeWorkspace();
     corruptRecoveryPath(root, documentPath);
 
     expect(() => openDocument(documentPath, storage)).toThrow("workspace path mismatch");
@@ -121,21 +121,21 @@ describe("native document recovery allocations", () => {
   it("lists saved and unsaved recoverable workspaces", () => {
     const saved = openDocument(documentPath, storage);
     addGlyph(saved.bridge, "B", 66);
-    saved.bridge.closeWorkspace();
+    saved.bridge.workspace.closeWorkspace();
 
     const unsaved = storage.createWorkspace();
     const unsavedBridge = createBridge();
-    unsavedBridge.createUntitledWorkspace(unsaved.storePath);
-    unsavedBridge.setWorkspaceId(unsaved.workspaceId);
+    unsavedBridge.workspace.createUntitledWorkspace(unsaved.storePath);
+    unsavedBridge.workspace.setWorkspaceId(unsaved.workspaceId);
     addGlyph(unsavedBridge, "C", 67);
-    unsavedBridge.closeWorkspace();
+    unsavedBridge.workspace.closeWorkspace();
 
     expect(storage.listRecoveries()).toEqual([
       {
         kind: "saved",
         state: "recoverable",
         workspaceId: saved.workspaceId,
-        documentId: createBridge().inspectDocument(documentPath).documentId,
+        documentId: createBridge().workspace.inspectDocument(documentPath).documentId,
         canonicalPath: fs.realpathSync(documentPath),
       },
       { kind: "unsaved", state: "recoverable", workspaceId: unsaved.workspaceId },
@@ -144,7 +144,7 @@ describe("native document recovery allocations", () => {
 
   it("rejects malformed recovery bindings during discovery", () => {
     const opened = openDocument(documentPath, storage);
-    opened.bridge.closeWorkspace();
+    opened.bridge.workspace.closeWorkspace();
     corruptRecoveryPath(root, documentPath);
 
     expect(() => storage.listRecoveries()).toThrow("workspace path mismatch");
@@ -154,27 +154,27 @@ describe("native document recovery allocations", () => {
   it("resumes a complete unsaved working store without a source path", () => {
     const unsaved = storage.createWorkspace();
     const first = createBridge();
-    first.createUntitledWorkspace(unsaved.storePath);
-    first.setWorkspaceId(unsaved.workspaceId);
+    first.workspace.createUntitledWorkspace(unsaved.storePath);
+    first.workspace.setWorkspaceId(unsaved.workspaceId);
     addGlyph(first, "A", 65);
-    first.closeWorkspace();
+    first.workspace.closeWorkspace();
 
     const resumed = createBridge();
-    resumed.resumeWorkspace(unsaved.storePath);
-    resumed.setWorkspaceId(unsaved.workspaceId);
+    resumed.workspace.resumeWorkspace(unsaved.storePath);
+    resumed.workspace.setWorkspaceId(unsaved.workspaceId);
 
-    expect(resumed.getGlyphs().map((glyph) => glyph.name)).toEqual(["A"]);
-    expect(resumed.documentState()).toMatchObject({
+    expect(resumed.workspace.getGlyphs().map((glyph) => glyph.name)).toEqual(["A"]);
+    expect(resumed.workspace.documentState()).toMatchObject({
       sourceKind: "untitled",
       dirty: true,
       needsSaveAs: true,
     });
-    resumed.closeWorkspace();
+    resumed.workspace.closeWorkspace();
   });
 
   it("refuses a document replaced after identity inspection", () => {
     const bridge = createBridge();
-    const identity = bridge.inspectDocument(documentPath);
+    const identity = bridge.workspace.inspectDocument(documentPath);
     const replacementPath = createDocument(root, "Replacement.shift");
     fs.rmSync(documentPath);
     fs.renameSync(replacementPath, documentPath);
@@ -190,11 +190,11 @@ function createDocument(root: string, fileName = "Font.shift"): string {
   const workspacePath = path.join(root, `${fileName}.working.sqlite`);
   const recoveryPath = path.join(root, `${fileName}.recovery.sqlite`);
   const outputPath = path.join(root, fileName);
-  bridge.createUntitledWorkspace(workspacePath);
-  bridge.setWorkspaceId(crypto.randomUUID());
+  bridge.workspace.createUntitledWorkspace(workspacePath);
+  bridge.workspace.setWorkspaceId(crypto.randomUUID());
   addGlyph(bridge, "A", 65);
-  bridge.saveWorkspaceAsDocument(outputPath, recoveryPath);
-  bridge.closeWorkspace();
+  bridge.workspace.saveWorkspaceAsDocument(outputPath, recoveryPath);
+  bridge.workspace.closeWorkspace();
   return outputPath;
 }
 
@@ -207,7 +207,7 @@ function openDocument(
   workspace: ReturnType<DocumentStorage["workspace"]>;
 } {
   const bridge = createBridge();
-  const identity = bridge.inspectDocument(documentPath);
+  const identity = bridge.workspace.inspectDocument(documentPath);
   const opened = new DocumentOpener(bridge, storage).open(identity);
   return {
     bridge,
@@ -233,10 +233,10 @@ function corruptRecoveryPath(root: string, invalidRecoveryPath: string): void {
 
 function canonicalGlyphNames(documentPath: string, root: string): string[] {
   const bridge = createBridge();
-  bridge.openDocument(documentPath, path.join(root, `${crypto.randomUUID()}.sqlite`));
+  bridge.workspace.openDocument(documentPath, path.join(root, `${crypto.randomUUID()}.sqlite`));
   try {
-    return bridge.getGlyphs().map((glyph) => glyph.name);
+    return bridge.workspace.getGlyphs().map((glyph) => glyph.name);
   } finally {
-    bridge.closeWorkspace();
+    bridge.workspace.closeWorkspace();
   }
 }

@@ -1,11 +1,27 @@
 /**
- * Global test setup — provides browser API polyfills for Node.js test environment
- * and a per-file temporary directory.
+ * Global test setup — provides browser API polyfills for Node.js test environment,
+ * a per-file temporary directory, and the shared matchers.
  */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll } from "vitest";
+import { afterAll, expect } from "vitest";
+import type { Point2D } from "@shift/geo";
+import type { Outline } from "./reads";
+import { toBeNear } from "./toBeNear";
+import { toDrawLike } from "./toDrawLike";
+
+expect.extend({ toBeNear, toDrawLike });
+
+declare module "vitest" {
+  // oxlint-disable-next-line typescript/no-explicit-any -- merging with vitest's `Matchers<T = any>` needs identical type parameters
+  interface Matchers<T = any> {
+    /** Passes when the position's `x` and `y` each round to `expected`'s at `digits` decimal places, 2 by default. */
+    toBeNear(expected: Point2D, digits?: number): void;
+    /** Passes when the outline draws `expected`'s contours and points in order, ids aside. */
+    toDrawLike(expected: Outline): void;
+  }
+}
 
 // Tests write workspaces, documents, and exports under `os.tmpdir()`, and the
 // native bridge does the same through TMPDIR. Point both at one root per test

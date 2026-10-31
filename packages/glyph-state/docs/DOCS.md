@@ -6,7 +6,7 @@ Pure readers and geometry helpers for `GlyphStructure + Float64Array` glyph stat
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** This package has no editor state, signals, command history, bridge calls, source/session selection, DOM APIs, or mutation ownership. It only interprets already-provided glyph state. Its dependency surface is exactly `@shift/types` + `@shift/geo` — enforced by `scripts/check-invariants.py` (`glyph-state-deps`).
+- **Architecture Invariant:** This package has no editor state, signals, command history, bridge calls, source/session selection, DOM APIs, or mutation ownership. It only interprets already-provided glyph state. Its dependency surface is exactly `@shift/types`, `@shift/geo` and `@shift/wasm` (shift-font's geometry rules) — enforced by `scripts/check-invariants.py` (`glyph-state-deps`).
 - **Architecture Invariant:** `GlyphGeometry` is a lazy reader over `GlyphStructure + values`. The renderer may cache an instance per reactive state update; rendering paths should not rebuild it inside inner draw loops.
 - **Architecture Invariant:** The flat values layout is owned by Rust (`crates/shift-font/src/interpolation/values.rs`): xAdvance, contour point positions, anchor positions, then component transforms. Readers take every offset and stride from the generated `@shift/types` layout constants (`GLYPH_*_VALUE_*`, `*_COMPONENT_VALUE_*`), either directly or through the cursor helpers in `valueLayout.ts`; never write a literal offset or stride.
 - **Architecture Invariant:** On-curve predicates accept both `onCurve` and `qCurve`. Point factories preserve the requested endpoint type and smooth flag; only off-curve controls force smoothness off.
@@ -25,7 +25,7 @@ packages/glyph-state/src/
   Component.ts          -- component reader and decomposed transform matrix
   valueLayout.ts        -- value-buffer cursor helpers built on the generated layout constants
   Segment.ts            -- id-aware segment class, hit testing, curve conversion
-  parseContourSegments.ts -- shared traversal retaining supplied points, with or without IDs
+  segmentContour.ts     -- segments and bounds from shift-font (`contourGeometry`), retaining supplied points
   filledContoursContain.ts -- non-zero fill hit testing over segmented contours
   Point.ts              -- id-aware point with on/off-curve predicates and factories
   IdIndex.ts            -- lazy id-to-object map over a supplied list
@@ -34,34 +34,33 @@ packages/glyph-state/src/
 
 ## Key Types
 
-- **`GlyphGeometry`** -- immutable reader over `GlyphStructure + Float64Array`; exposes `xAdvance`, `contours`, `segments`, `anchors`, `components`, `allPoints`, `bounds`, `sidebearings`, id lookups, hit testing (`hitAt`, `hitPoint`, `hitAnchor`, `hitSegment`), position reads (`positionsFor`), and preview updates (`withPositionUpdates`).
+- **`GlyphGeometry`** -- immutable reader over `GlyphStructure + Float64Array`; exposes `xAdvance`, `contours`, `segments`, `anchors`, `components`, `allPoints`, `bounds`, `sidebearings`, id lookups, and hit testing (`hitAt`, `hitPoint`, `hitAnchor`, `hitSegment`). It has no edit methods: edits are engine intents.
 - **`Contour`** -- reader for one contour's point records and point coordinates. Exposes endpoint/on-curve queries, cubic-control ownership, wrapped `pointAt`, `withNeighbors`, `segments`, `selectionBounds`, and `canClose`.
 - **`Anchor`** -- reader for one anchor's metadata and coordinates.
 - **`Component`** -- reader for one component's base glyph and decomposed transform; exposes a simple affine matrix for outline composition.
-- **`Segment`** -- id-aware line/quad/cubic wrapper with `id`, endpoint/control accessors, `bounds`, `toCurve`, `splitAt`, and `hit`.
+- **`composeTransform` / `decomposeMatrix`** -- a placement's matrix and a matrix's placement, as shift-font computes them (`DecomposedTransform::to_matrix` / `from_matrix`), through `@shift/wasm`. `Component` uses them; TypeScript keeps no copy.
+- **`Segment`** -- id-aware line/quad/cubic wrapper with `id`, endpoint/control accessors, `bounds`, `toCurve`, `pointAt`, `closestPoint`, and `hit`. Splitting a segment is shift-font's `SplitSegment` intent.
 - **`Point`** -- id-aware point record (`pointType`, `smooth`, coordinates) with on/off-curve predicates and `NewPoint` factories for authoring flows.
 - **`ContourGeometry<TPoint>`** -- minimal named `points + closed` contract accepted by segment parsing; defaults to authored `Point` but also accepts `NewPoint`.
-- **`parseContourSegments`** -- canonical structural traversal returning `SegmentPoints<TPoint>` descriptions without allocating identity. `Segment.parse` wraps these descriptions in ID-aware segment objects.
+- **`segmentContour`** -- a contour's segments and their tight bounds as shift-font segments and bounds them, in one call into `@shift/wasm` (`contourGeometry`), returning `SegmentPoints<TPoint>` over the supplied points without allocating identity. `Segment.parse` wraps them in ID-aware segment objects; `Contour` segments once for its segments and its `bounds`. TypeScript keeps no segment or bounds rule.
 - **`SegmentedContour`** -- contour geometry that exposes domain-owned segment traversal to renderer path derivation.
 - **`filledContoursContain`** -- pure non-zero winding query over a group of closed segmented contours; open contours do not contribute.
-- **`GlyphPosition` / `GlyphPositionTarget`** -- point/anchor position records used by `positionsFor`, `movePositions`, and `withPositionUpdates` so transform code stays independent of where the geometry came from.
+- **`GlyphPosition` / `GlyphPositionTarget`** -- point/anchor position records the editor's layer buffers read and patch, so transform code stays independent of where the geometry came from.
 
 ## How it works
 
 Rust owns loading, persistence, ID allocation, boolean operations, and authoritative mutation. The bridge returns `GlyphStructure + values` for a source. This package turns that state into useful geometry. The renderer wraps these readers in signals and editor APIs.
 
 ```ts
-import { GlyphGeometry, type GlyphPositions } from "@shift/glyph-state";
+import { GlyphGeometry } from "@shift/glyph-state";
 import type { GlyphStructure, PointId } from "@shift/types";
 
 declare const state: { structure: GlyphStructure; values: Float64Array };
 declare const pointId: PointId;
-declare const positions: GlyphPositions;
 
 const geometry = new GlyphGeometry(state.structure, state.values);
 const point = geometry.point(pointId);
 const bounds = geometry.bounds;
-const preview = geometry.withPositionUpdates(positions);
 ```
 
 `Contour.pointAt` and endpoint getters read individual packed positions without materializing every point in the contour. On-curve endpoint searches inspect metadata first, including quadratic on-curve points; full `points` access remains lazily materialized. `GlyphGeometry.structuresEqual` compares ordered contour, point, anchor and component identities/metadata without coordinates, allowing owners to recognize an unchanged workspace echo independently of object identity.
@@ -81,7 +80,7 @@ Renderer code should keep using cached `GlyphGeometry` instances from the model 
 ### Change the flat value layout (after a Rust layout change)
 
 1. Run `pnpm generate:from-rust` to rewrite `packages/types/src/layout/glyphValues.ts` from the Rust constants. A changed count, offset, or field table then reaches every reader with no TypeScript edit.
-2. If the change reorders sections or adds one, update the cursor helpers in `valueLayout.ts` (`CONTOURS_VALUE_OFFSET`, `anchorsValueOffset`, `componentsValueOffset`, `componentValueCount`). Readers (`Contour`, `Anchor`, `Component`, `GlyphGeometry.xAdvance`, `withPositionUpdates`) start from those helpers and step by `GLYPH_POINT_VALUE_COUNT`, `GLYPH_ANCHOR_VALUE_COUNT`, `GLYPH_POSITION_VALUE_OFFSETS`, `DECOMPOSED_COMPONENT_VALUE_OFFSETS`, and `GLYPH_ADVANCE_VALUE_OFFSET`.
+2. If the change reorders sections or adds one, update the cursor helpers in `valueLayout.ts` (`CONTOURS_VALUE_OFFSET`, `anchorsValueOffset`, `componentsValueOffset`, `componentValueCount`). Readers (`Contour`, `Anchor`, `Component`, `GlyphGeometry.xAdvance`) start from those helpers and step by `GLYPH_POINT_VALUE_COUNT`, `GLYPH_ANCHOR_VALUE_COUNT`, `GLYPH_POSITION_VALUE_OFFSETS`, `DECOMPOSED_COMPONENT_VALUE_OFFSETS`, and `GLYPH_ADVANCE_VALUE_OFFSET`.
 3. A new per-record field needs a Rust constant and an entry in the `generated_file_glyph_value_layout_is_current` test in `values.rs`, then `pnpm generate:from-rust`.
 4. Verify: `cargo test -p shift-font` (fails if the generated file is stale), `pnpm --filter @shift/glyph-state test`, then `pnpm test` so desktop consumers run against the new layout.
 
@@ -97,7 +96,6 @@ Renderer code should keep using cached `GlyphGeometry` instances from the model 
 - `Segment.parse` skips only runs that start with an off-curve point, and only in open contours — those points produce no segments, so they vanish from `Contour.bounds`, `segments`, and segment hit testing. In a closed contour the parser wraps past the end, so leading off-curves become controls of the final wrapped segment instead of being skipped. More than two consecutive off-curves are not skipped either: the cubic branch never checks that its fourth point is on-curve, so onCurve/off/off/off emits a malformed cubic whose `anchor2` is the third off-curve, and that segment participates in segments, bounds, and hit testing as if it were real.
 - `hitAt` has fixed priority -- an anchor hit beats a closer point hit, and a point hit beats a closer segment hit. For nearest-across-kinds behavior, call `hitPoint` / `hitAnchor` / `hitSegment` yourself and compare distances.
 - The `componentTransformKind` passed to the `GlyphGeometry` constructor must match how the value buffer was packed: `"decomposed"` reads `DECOMPOSED_COMPONENT_VALUE_COUNT` values per component, `"affine"` reads `AFFINE_COMPONENT_VALUE_COUNT`. There is no runtime check -- a mismatch silently misreads every component transform. The default is `"decomposed"`.
-- `withPositionUpdates` copies the entire value buffer per call. Batch a frame's updates into one call; unknown point/anchor ids in the update list are skipped without error.
 - `allPoints` returns a fresh array copy on every access. Read it once and reuse the result inside loops.
 - `SegmentId` is imported from `@shift/types` and derived here from endpoint point ids (`segment:<start>:<end>`), so it is stable across re-parses of unchanged geometry -- but any operation that replaces an endpoint produces a different id. Use `parseSegmentId` to recover the endpoints from an id.
 

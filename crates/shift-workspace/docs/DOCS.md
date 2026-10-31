@@ -1,16 +1,16 @@
 # shift-workspace
 
-<!-- reviewed: 2026-10-06 review-every: 90d -->
+<!-- reviewed: 2026-10-24 review-every: 90d -->
 
 Backend runtime object for an open Shift font workspace.
 
 ## Architecture Invariants
 
-- **Architecture Invariant:** `FontWorkspace` composes a directory-complete, payload-lazy `shift-font::Font` with one `shift-store` posture: a canonical SQLite document plus sparse recovery overlay, or an app-owned working database for new/imported content.
+- **Architecture Invariant:** `FontWorkspace` composes a `shift-engine::EngineSession` (a directory-complete, payload-lazy `shift-font::Font`) with one `shift-store` posture: a canonical SQLite document plus sparse recovery overlay, or an app-owned working database for new/imported content.
 - **Architecture Invariant:** Resuming SQLite loads metadata and glyph/layer directory facts only. `acquire_glyphs` performs explicit bounded payload I/O; synchronous `font()` reads never initiate I/O.
 - **Architecture Invariant:** `AcquireScope::ComponentClosure` expands the component graph one deduplicated, cycle-safe frontier at a time. Each frontier is queried in bounded batches against merged canonical/recovery truth; acquisition never issues one store query per root glyph. **WHY:** Graph recursion is expected, but query-per-node traversal multiplies merged-view cost across every fixed atlas page.
 - **Architecture Invariant:** TTF/OTF, UFO, Designspace, and Glyphs imports consume bounded `FontImport` batches and write through one `FontImportWriter`; they never construct a complete geometry-resident Shift `Font`. Glyph conversion, MessagePack encoding, BLAKE3 hashing, and independent per-layer compression use Rayon, while SQLite has one transaction owner. The upstream Glyphs parser still materializes its normalized source model before bounded Shift conversion begins.
-- **Architecture Invariant:** `LayerResidency` is the sole owner of loaded-layer membership and placeholder replacement. A loaded layer is only a cache of already-committed authored state; apply, undo, and redo reacquire their complete layer read sets before mutation, and `evict_glyphs` replaces only committed layers with directory placeholders.
+- **Architecture Invariant:** The engine session owns loaded-layer membership, placeholder replacement, and what an edit must load first (`shift-engine`'s `EngineSession::load_reads`); the workspace supplies the store as its `LayerSource`. A loaded layer is only a cache of already-committed authored state; apply, undo, and redo load their complete read sets before mutation, stage the edit on a copy, persist it, and only then commit it to the session. `evict_glyphs` replaces only committed layers with directory placeholders. **WHY:** the renderer runs the same session through WebAssembly, so the rule for what an edit reads exists once.
 - **Architecture Invariant:** `open_document(document_path, recovery_path)` reads the canonical `.shift` SQLite file directly and exposes merged rows from an app-owned sparse overlay. It never unpacks or copies the canonical document.
 - **Architecture Invariant:** Canonical Save is explicit. Each completed mutation is already durable in the recovery overlay; Save applies only those sparse rows and tombstones, while Discard clears them and reloads the canonical directory.
 - **Architecture Invariant:** Recovery allocation and document-address binding policy remain outside Rust. `FontWorkspace` verifies `DocumentIdentity` and opens the paths selected by the utility process.
@@ -33,7 +33,6 @@ crates/shift-workspace/src/
   document_identity.rs -- canonical `DocumentId` and canonical-path inspection
   import_pipeline.rs -- bounded parser/parallel-packer/single-writer pipeline and progress observer
   import_staging.rs  -- sibling staged-store creation, atomic installation, and parent sync
-  layer_residency.rs -- complete read sets, bounded acquisition, and safe eviction
   ledger.rs        -- bounded reversible-changeset undo/redo entries
   workspace.rs     -- `FontWorkspace` orchestration and workspace errors
 crates/shift-workspace/examples/
@@ -94,7 +93,7 @@ observations rather than CI assertions.
 
 ### Making a new intent undoable
 
-1. Add the intent and reversible change scope in `shift-font`. `FontWorkspace::apply` acquires the intent's `required_layer_ids` and records the returned `FontChangeSet` without mapping it into workspace-specific history types.
+1. Add the intent and reversible change scope in `shift-font`. `FontWorkspace::apply` loads what `shift-engine`'s `EngineSession::load_reads` says the intent reads (its `required_layer_ids` plus component closures) and records the returned `FontChangeSet` without mapping it into workspace-specific history types. If the intent reads other glyphs while applying, teach `load_reads` and the `shift-engine` property test.
 2. Add persistence for a new `FontChange` variant in `shift-store`; recovery should use `FontChangeSet::impact()` for invalidated projections and `entity_changes()` for entity lifecycle. Pure collection reordering still requires rewriting surviving order indices.
 3. Do not add inverse intents or replay helpers. Undo calls `Font::apply_change_set` with `change_set.inverted()`; redo uses the original changeset.
 4. Verify with a workspace test that applies, undoes, and redoes the intent, asserting exact `Font` equality with a reloaded merged store after every transition.

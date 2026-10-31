@@ -38,19 +38,28 @@ pub mod anchor_propagation;
 pub mod changes;
 pub mod check;
 pub mod composite;
+pub mod contour_edit;
 pub mod curve;
+pub mod curve_fit;
+pub mod drag_rules;
 pub mod error;
 pub mod intents;
 pub mod interpolation;
 pub mod ir;
 pub mod layer_edit;
+pub mod naming;
 pub mod placed_blend;
+pub mod point_arrange;
 pub mod projection;
 mod string_enum;
+pub mod svg_path;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 
 pub use changes::*;
+pub use contour_edit::{
+    ContourEditError, ContourEnd, ContourSide, DeleteMode, EditOption, JoinMode, UnknownEditOption,
+};
 pub use error::{CoreError, CoreResult, EntityKind, EntityRef, Require};
 pub use intents::*;
 pub use interpolation::*;
@@ -62,4 +71,5 @@ pub use ir::{
 };
 /// Points, vectors, and affine maps in the font model's signatures.
 pub use kurbo;
+pub use point_arrange::{DistributeAxis, PointAlignment, Sidebearing};
 pub use projection::*;

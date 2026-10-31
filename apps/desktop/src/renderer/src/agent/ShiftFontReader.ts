@@ -1,21 +1,35 @@
 import type {
   AuthoredLayer,
   AxisCoordinate,
+  AxisSelector,
   FontOverview,
   GlyphPage,
   GlyphSelector,
   GlyphSummary,
+  InstanceSelector,
   LayerAppearance,
   LayerOverlays,
+  LayerSelector,
   LayerSvg,
   ResolvedGlyphs,
   ResolvedLayer,
   ResolvedLocation,
   ShiftSessionMode,
+  SourceSelector,
 } from "@shift/runtime";
-import type { GlyphId, LayerId, SourceId } from "@shift/types";
+import {
+  asGlyphId,
+  type Axis,
+  type GlyphId,
+  type GlyphName,
+  type LayerMatch,
+  type NamedInstance,
+  type Source,
+  type Unicode,
+} from "@shift/types";
 import type { Font } from "@shift/editor/model";
 import { ShiftLayer } from "./ShiftLayer";
+import { ShiftSelectors } from "./ShiftSelectors";
 
 /**
  * Public font, location, glyph, and layer reads over one renderer's font.
@@ -27,10 +41,12 @@ import { ShiftLayer } from "./ShiftLayer";
 export class ShiftFontReader {
   readonly #font: Font;
   readonly #mode: ShiftSessionMode;
+  readonly #select: ShiftSelectors;
 
   constructor(font: Font, mode: ShiftSessionMode) {
     this.#font = font;
     this.#mode = mode;
+    this.#select = new ShiftSelectors(font);
   }
 
   getFont(): FontOverview {
@@ -39,11 +55,14 @@ export class ShiftFontReader {
       mode: this.#mode,
       info: font.metadata,
       metrics: font.metrics,
-      metricDefinitions: font.metricDefinitions,
-      glyphCount: font.glyphEntries().length,
-      axes: font.getAxes(),
-      sources: font.sources,
-      instances: font.namedInstances,
+      // The agent API hands out its own arrays; the font's are read-only.
+      metricDefinitions: [...font.metricDefinitions],
+      glyphCount: font.glyphCount,
+      // Records, not the font's Axis objects: the overview is cloned across a port.
+      axes: font.getAxes().map((axis) => axis.record),
+      axisMappings: [...font.getAxisMappings()],
+      sources: [...font.sources],
+      instances: [...font.namedInstances],
     };
   }
 
@@ -60,42 +79,29 @@ export class ShiftFontReader {
   }
 
   /**
-   * Lists one directory page; with `sourceId`, nests each glyph's authored layer.
+   * Lists one directory page; with `source`, nests each glyph's authored layer there.
    *
    * @throws {Error} for an invalid limit or cursor, or an unknown source.
    */
   async listGlyphs({
     limit = 25,
     cursor,
-    sourceId,
+    source,
   }: {
     limit?: number;
     cursor?: string;
-    sourceId?: SourceId;
+    source?: SourceSelector;
   }): Promise<GlyphPage> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new Error("glyphs.list limit must be between 1 and 100");
     }
-    if (sourceId && !this.#font.source(sourceId)) {
-      throw new Error(`Source ${sourceId} is not in this font`);
-    }
+    const sourceId = source ? this.#select.sourceId(source) : null;
 
-    const entries = this.#font.glyphEntries();
-    let start = 0;
-    if (cursor) {
-      let previousId: string;
-      try {
-        previousId = atob(cursor);
-      } catch {
-        throw new Error("Invalid glyph cursor");
-      }
+    const after = cursor ? decodeGlyphCursor(cursor) : null;
+    const directory = this.#font.glyphsAfter(after, limit);
+    if (!directory) throw new Error("Glyph cursor is no longer in this font");
 
-      const previousIndex = entries.findIndex(({ id }) => id === previousId);
-      if (previousIndex < 0) throw new Error("Glyph cursor is no longer in this font");
-      start = previousIndex + 1;
-    }
-
-    const page = entries.slice(start, start + limit);
+    const page = directory.entries;
     const items = page.map((entry) => this.#glyphSummary(entry.id));
     if (sourceId) {
       const font = this.#font;
@@ -112,24 +118,89 @@ export class ShiftFontReader {
     const last = page.at(-1);
     return {
       items,
-      nextCursor: start + page.length < entries.length && last ? btoa(last.id) : null,
+      nextCursor: directory.hasMore && last ? btoa(last.id) : null,
     };
   }
 
   getGlyph(selector: GlyphSelector): GlyphSummary {
-    const entry =
-      selector.name !== undefined
-        ? this.#font.entryForName(selector.name)
-        : this.#font.entryForId(selector.glyphId);
-    if (!entry) throw new Error(`Glyph ${selector.name ?? selector.glyphId} is not in this font`);
-    return this.#glyphSummary(entry.id);
+    return this.#glyphSummary(this.#select.glyphId(selector));
+  }
+
+  /** The glyph named `name`, or null when the font has none. */
+  glyphNamed(name: GlyphName): GlyphSummary | null {
+    const entry = this.#font.entryForName(name);
+    return entry ? this.#glyphSummary(entry.id) : null;
+  }
+
+  /** The glyph the font shows for `unicode`, or null when it has none. */
+  glyphForUnicode(unicode: number): GlyphSummary | null {
+    const font = this.#font;
+    const record = font.recordForName(font.glyphHandleForUnicode(unicode as Unicode).name);
+    return record ? this.#glyphSummary(record.id) : null;
+  }
+
+  /** The font's default source: where every axis sits at its default. */
+  defaultSource(): Source {
+    return this.#font.defaultSource;
+  }
+
+  /**
+   * The source `selector` names, as `sources.get` returns it.
+   *
+   * @throws {Error} when the font has no such source, or several sources share the name.
+   */
+  getSource(selector: SourceSelector): Source {
+    return this.#font.source(this.#select.sourceId(selector))!;
+  }
+
+  /**
+   * The source `selector` names, or null when the font has none.
+   *
+   * @throws {Error} when several sources share the name.
+   */
+  source(selector: SourceSelector): Source | null {
+    const font = this.#font;
+    return selector.name !== undefined
+      ? font.sourceNamed(selector.name)
+      : font.source(selector.sourceId);
+  }
+
+  /**
+   * The named instance `selector` names, as `instances.get` returns it.
+   *
+   * @throws {Error} when the font has no such instance, or several instances share the name.
+   */
+  getInstance(selector: InstanceSelector): NamedInstance {
+    const instance = this.instance(selector);
+    if (!instance) {
+      throw new Error(`Instance ${selector.name ?? selector.instanceId} is not in this font`);
+    }
+    return instance;
+  }
+
+  /**
+   * The named instance `selector` names, or null when the font has none.
+   *
+   * @throws {Error} when several instances share the name.
+   */
+  instance(selector: InstanceSelector): NamedInstance | null {
+    const font = this.#font;
+    return selector.name !== undefined
+      ? font.namedInstanceNamed(selector.name)
+      : font.namedInstance(selector.instanceId);
+  }
+
+  /** The axis `selector` names, by id or tag, or null when the font has none. */
+  axis(selector: AxisSelector): Axis | null {
+    const font = this.#font;
+    const axis =
+      selector.tag !== undefined ? font.axisTagged(selector.tag) : font.axis(selector.axisId);
+    return axis?.record ?? null;
   }
 
   async resolveGlyphs(glyphIds: GlyphId[], location: AxisCoordinate[]): Promise<ResolvedGlyphs> {
     const font = this.#font;
-    for (const glyphId of glyphIds) {
-      if (!font.entryForId(glyphId)) throw new Error(`Glyph ${glyphId} is not in this font`);
-    }
+    for (const glyphId of glyphIds) this.#select.glyphId({ glyphId });
 
     const designspace = font.designspace;
     const design = designspace.toDesign(designspace.location(location));
@@ -146,24 +217,33 @@ export class ShiftFontReader {
     };
   }
 
-  async getLayer(layerId: LayerId): Promise<AuthoredLayer> {
-    return (await ShiftLayer.readAuthored(this.#font, layerId)).authored();
+  /** @throws {Error} for an unknown layer, glyph or source, or a glyph with no layer at that source. */
+  async getLayer(selector: LayerSelector): Promise<AuthoredLayer> {
+    return (await ShiftLayer.readAuthored(this.#font, this.#select.layerId(selector))).authored();
   }
 
-  async resolveLayer(layerId: LayerId): Promise<ResolvedLayer> {
-    return (await ShiftLayer.read(this.#font, layerId)).resolved();
+  /**
+   * How the `target` layer's contours, points, anchors and components
+   * correspond to the `reference` layer's, as the engine matches them.
+   *
+   * @throws {Error} as {@link getLayer} does, for either layer.
+   */
+  async matchLayers(reference: LayerSelector, target: LayerSelector): Promise<LayerMatch> {
+    return this.#font.matchLayers(this.#select.layerId(reference), this.#select.layerId(target));
   }
 
+  /** @throws {Error} as {@link getLayer} does, or when a component cannot resolve. */
+  async resolveLayer(selector: LayerSelector): Promise<ResolvedLayer> {
+    return (await ShiftLayer.read(this.#font, this.#select.layerId(selector))).resolved();
+  }
+
+  /** @throws {Error} as {@link resolveLayer} does. */
   async renderLayer(
-    layerId: LayerId,
+    selector: LayerSelector,
     options: { overlays?: LayerOverlays; appearance?: LayerAppearance } = {},
   ): Promise<LayerSvg> {
-    const layer = await ShiftLayer.read(this.#font, layerId);
-    const { sourceId } = layer.identity;
-    const metrics = this.#font.source(sourceId)
-      ? this.#font.metricsForSource(sourceId)
-      : this.#font.defaultSourceMetrics;
-    return layer.render(metrics, options);
+    const layer = await ShiftLayer.read(this.#font, this.#select.layerId(selector));
+    return layer.render(this.#font.metricsForLayerSource(layer.identity.sourceId), options);
   }
 
   #glyphSummary(glyphId: GlyphId): GlyphSummary {
@@ -175,8 +255,16 @@ export class ShiftFontReader {
       id: entry.id,
       name: entry.name,
       unicodes: [...entry.unicodes],
-      componentBaseGlyphIds: record?.componentBaseGlyphIds ?? [],
+      componentBaseGlyphIds: [...(record?.componentBaseGlyphIds ?? [])],
       layers: record?.layers.map(({ id, sourceId }) => ({ layerId: id, sourceId })) ?? [],
     };
+  }
+}
+
+function decodeGlyphCursor(cursor: string): GlyphId {
+  try {
+    return asGlyphId(atob(cursor));
+  } catch {
+    throw new Error("Invalid glyph cursor");
   }
 }

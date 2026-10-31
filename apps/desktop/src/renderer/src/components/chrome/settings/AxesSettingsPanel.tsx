@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import type { Axis, AxisId } from "@shift/types";
+import type { Axis } from "@shift/editor/model";
+import type { AxisId } from "@shift/types";
 import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTab, Tooltip } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";

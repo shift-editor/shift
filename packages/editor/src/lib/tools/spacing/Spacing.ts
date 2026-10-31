@@ -74,6 +74,30 @@ export class SpacingTool extends BaseTool<SpacingState, SpacingTool> {
     this.setState({ type: "idle" });
   }
 
+  /** The half under the pointer while hovering or dragging, as last hit, or null. */
+  get hovered(): SpacingHalf | null {
+    const state = this.getState();
+    return state.type === "ready" || state.type === "dragging" ? state.hit : null;
+  }
+
+  /** The half selected for the arrow keys while hovering, measured now, or null. */
+  get selected(): SpacingHalf | null {
+    const state = this.getState();
+    return state.type === "ready" && state.selected ? this.runs.refresh(state.selected) : null;
+  }
+
+  /** Whether the pointer is over the hovered half's value pill, which opens on click. */
+  get overValue(): boolean {
+    const state = this.getState();
+    return state.type === "ready" && state.overLabel === true;
+  }
+
+  /** Whether a nudge has hidden every overlay until the pointer moves. */
+  get quiet(): boolean {
+    const state = this.getState();
+    return state.type === "ready" && state.quiet === true;
+  }
+
   /** The half whose value is open for typing, measured now, or null. */
   get editing(): SpacingHalf | null {
     const state = this.getState();
