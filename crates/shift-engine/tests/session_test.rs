@@ -5,12 +5,13 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 
 use proptest::prelude::*;
-use shift_engine::{EditHistory, EngineSession, LayerSource};
+use shift_engine::{EditHistory, EngineSession, LayerSource, RecordSource};
 use shift_font::test_support::sample_font;
 use shift_font::{
     AddComponent, Anchor, AnchorId, Component, ComponentId, DecomposeComponents,
-    DecomposedTransform, Font, FontIntent, FontIntentSet, Glyph, GlyphId, GlyphLayer, LayerId,
-    MoveAnchors, MovePoints, SourceId, contour,
+    DecomposedTransform, Font, FontIntent, FontIntentSet, Glyph, GlyphCategory, GlyphDataCategory,
+    GlyphId, GlyphLayer, GlyphName, GlyphRecord, GlyphSubcategory, LayerId, MoveAnchors,
+    MovePoints, NamedGlyph, SourceId, UpdateGlyph, contour,
 };
 
 const BASES: usize = 4;
@@ -132,6 +133,42 @@ impl LayerSource for Persisted {
                     .any(|layer| bases(layer).any(|base| targets.contains(&base)))
             })
             .map(Glyph::id)
+            .collect())
+    }
+}
+
+impl RecordSource for Persisted {
+    type Error = Infallible;
+
+    fn component_bases(&mut self, glyph_ids: &[GlyphId]) -> Result<Vec<Vec<GlyphId>>, Infallible> {
+        Ok(glyph_ids
+            .iter()
+            .map(|glyph_id| {
+                let bases: BTreeSet<GlyphId> = self
+                    .0
+                    .glyph(*glyph_id)
+                    .into_iter()
+                    .flat_map(Glyph::component_glyph_ids)
+                    .collect();
+                bases.into_iter().collect()
+            })
+            .collect())
+    }
+
+    /// Glyph data that knows only that `mark…` glyphs are nonspacing marks.
+    fn glyph_data_categories(
+        &mut self,
+        glyphs: &[NamedGlyph],
+    ) -> Result<Vec<GlyphDataCategory>, Infallible> {
+        Ok(glyphs
+            .iter()
+            .map(|glyph| match glyph.name.as_str().starts_with("mark") {
+                true => GlyphDataCategory {
+                    category: Some(GlyphCategory::Mark),
+                    sub_category: Some(GlyphSubcategory::Nonspacing),
+                },
+                false => GlyphDataCategory::default(),
+            })
             .collect())
     }
 }
@@ -540,4 +577,55 @@ fn the_history_knows_when_undo_and_redo_reach_the_saved_font() {
     edit(&mut session, &mut history, "branch");
     history.undo(&mut session, &mut persisted).unwrap();
     assert!(!history.matches_saved());
+}
+
+#[test]
+fn a_partly_loaded_session_lists_the_records_a_loaded_font_would() {
+    let font = composite_font();
+    let mut persisted = Persisted(font.clone());
+    let mut session = EngineSession::open_directory(placeholders(&font));
+    session
+        .load_glyphs(&mut persisted, &[GlyphId::from_raw("composite0")])
+        .unwrap();
+    let loaded = EngineSession::open_loaded(font);
+
+    let records = session.glyph_records(&mut persisted).unwrap();
+
+    assert_eq!(records, loaded.glyph_records(&mut persisted).unwrap());
+    let record = |name: &str| {
+        records
+            .iter()
+            .find(|record| record.name.as_str() == name)
+            .unwrap()
+    };
+    assert_eq!(
+        record("composite1").component_base_glyph_ids,
+        [GlyphId::from_raw("base1"), GlyphId::from_raw("mark1")]
+    );
+    assert!(record("mark0").nonspacing_mark);
+    assert!(!record("base0").mark);
+}
+
+#[test]
+fn a_rename_changes_the_glyphs_record_in_the_edit_that_made_it() {
+    let font = composite_font();
+    let mut persisted = Persisted(font.clone());
+    let mut session = EngineSession::open_directory(placeholders(&font));
+    let mark = GlyphId::from_raw("mark0");
+    let rename = FontIntentSet::from(FontIntent::from(UpdateGlyph {
+        glyph_id: mark,
+        new_name: GlyphName::from("dot"),
+        new_unicodes: vec![0x2e],
+    }));
+
+    let applied = session.apply(&mut persisted, &rename).unwrap();
+    let changes = session
+        .glyph_record_changes(&mut persisted, &applied.changes)
+        .unwrap();
+
+    let [record]: [GlyphRecord; 1] = changes.updated.try_into().unwrap();
+    assert_eq!((record.id, record.name.as_str()), (mark, "dot"));
+    assert_eq!(record.unicodes, [0x2e]);
+    assert!(!record.mark, "glyph data no longer calls it a mark");
+    assert!(changes.removed.is_empty());
 }

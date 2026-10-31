@@ -9,8 +9,11 @@ use napi::Env;
 use napi::bindgen_prelude::{Float64ArraySlice, Uint8ArraySlice};
 use napi_derive::napi;
 use pack::Bytes;
+use std::cell::OnceCell;
+
+use shift_backends::GlyphCategories;
 use shift_engine::{StoreReadError, StoreReader, store_reader_request};
-use shift_font::{GlyphId, LayerId};
+use shift_font::{GlyphDataCategory, GlyphId, LayerId, NamedGlyph};
 use shift_store::StoreReader as StoreFiles;
 
 use crate::errors::BridgeError;
@@ -21,6 +24,8 @@ use crate::reply::{PackedReply, answer};
 pub struct LayerReader {
   /// `None` once closed: Windows will not delete a file a reader holds open.
   reader: Option<StoreFiles>,
+  /// Glyphs' glyph data, parsed on the first category read.
+  glyph_data: OnceCell<GlyphCategories>,
 }
 
 #[napi]
@@ -37,6 +42,7 @@ impl LayerReader {
       StoreFiles::open_document(document_path, recovery_path).map_err(BridgeError::from)?;
     Ok(Self {
       reader: Some(reader),
+      glyph_data: OnceCell::new(),
     })
   }
 
@@ -50,6 +56,7 @@ impl LayerReader {
     let reader = StoreFiles::open_working_store(store_path).map_err(BridgeError::from)?;
     Ok(Self {
       reader: Some(reader),
+      glyph_data: OnceCell::new(),
     })
   }
 
@@ -97,6 +104,17 @@ impl StoreReader for LayerReader {
 
   fn composites_of(&self, glyph_ids: Vec<GlyphId>) -> Result<Vec<GlyphId>, StoreReadError> {
     self.open()?.composites_of(&glyph_ids).map_err(unreadable)
+  }
+
+  fn component_bases(&self, glyph_ids: Vec<GlyphId>) -> Result<Vec<Vec<GlyphId>>, StoreReadError> {
+    self.open()?.component_bases(&glyph_ids).map_err(unreadable)
+  }
+
+  fn glyph_data_categories(&self, glyphs: Vec<NamedGlyph>) -> Vec<GlyphDataCategory> {
+    self
+      .glyph_data
+      .get_or_init(GlyphCategories::new)
+      .lookup_all(&glyphs)
   }
 }
 

@@ -1,5 +1,6 @@
 //! What a session reads from its store, as a request protocol, for an engine
-//! that runs apart from the store.
+//! that runs apart from the store: layers, component references, and glyph
+//! data's categories for its glyph records.
 //!
 //! The editor's engine runs in WebAssembly in the window, and the store is
 //! read by a native reader in the window's preload. The engine asks through a
@@ -9,7 +10,7 @@
 //! so ids travel with each message ([`pack::CarriedNames`]).
 
 use pack::{Bytes, Pack};
-use shift_font::{GlyphId, LayerId};
+use shift_font::{GlyphDataCategory, GlyphId, LayerId, NamedGlyph};
 
 /// A store's persisted state, as an engine session reads it: the
 /// [`crate::LayerSource`] questions, asked across a process or module
@@ -42,6 +43,21 @@ pub trait StoreReader {
     /// Returns [`StoreReadError`] when the reader is closed or the store
     /// cannot be read.
     fn composites_of(&self, glyph_ids: Vec<GlyphId>) -> Result<Vec<GlyphId>, StoreReadError>;
+
+    /// The direct component bases of each of `glyph_ids`, as persisted, in
+    /// request order, each list in id order; not the bases of those bases.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreReadError`] when the reader is closed or the store
+    /// cannot be read.
+    fn component_bases(&self, glyph_ids: Vec<GlyphId>)
+    -> Result<Vec<Vec<GlyphId>>, StoreReadError>;
+
+    /// Glyph data's category for each of `glyphs`, by name and codepoints, in
+    /// request order: the Glyphs glyph data the reader holds, which is too
+    /// large to ship with the engine.
+    fn glyph_data_categories(&self, glyphs: Vec<NamedGlyph>) -> Vec<GlyphDataCategory>;
 }
 
 /// Why a [`StoreReader`] could not answer.

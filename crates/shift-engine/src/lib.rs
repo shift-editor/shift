@@ -14,12 +14,14 @@
 #![warn(clippy::unwrap_used, clippy::print_stdout)]
 
 mod history;
+mod records;
 mod residency;
 mod session;
 mod source;
 mod store_reader;
 
 pub use history::EditHistory;
+pub use records::RecordSource;
 pub use residency::LayerResidency;
 pub use session::{ApplyError, EngineError, EngineSession, LoadError, StagedEdit};
 pub use source::LayerSource;
