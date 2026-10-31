@@ -79,7 +79,7 @@ test.describe("retained font source Grid preview", () => {
 
     // A removed source exposes any later filesystem read of the retained projection.
     fs.rmSync(sourcePath);
-    await editorShell(page).getByLabel("Font overview").click();
+    await editorShell(page).getByRole("tab", { name: "Glyphs", exact: true }).click();
     await page.waitForURL(/#\/home$/);
     await expectPaintedGrid(page, glyphCanvas);
     await expect(glyphCanvas).toHaveAttribute("data-fully-resident", "true");
@@ -92,7 +92,7 @@ test.describe("retained font source Grid preview", () => {
   test("shows preview font settings with disabled authoring controls", async ({ page, editor }) => {
     await expect.poll(async () => (await editor.fontOverview()).mode).toBe("preview");
 
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: /font info$/ }).click();
     const settingsDialog = page.getByRole("dialog", { name: "Settings" });
     await expect(settingsDialog).toBeVisible();
     await expect(page.getByText("Read-only preview")).toBeHidden();

@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
+import { GlyphContextMenu } from "./GlyphContextMenu";
 import { GlyphNameInput } from "./GlyphNameInput";
 import { selectGlyphCatalogRenderer } from "./selectGlyphCatalogRenderer";
 import { SlugGlyphCatalogRenderer } from "./SlugGlyphCatalogRenderer";
@@ -22,6 +23,8 @@ export function SlugGlyphCatalogSurface({
   observeAtlasInvalidation,
   canAuthor,
   openGlyph,
+  selectedGlyphId,
+  selectGlyph,
   onPendingGlyphName,
   onSelected,
   onFallback,
@@ -50,8 +53,9 @@ export function SlugGlyphCatalogSurface({
       resolvedTheme,
       active,
       editingGlyphId: editingGlyph?.id ?? null,
+      selectedGlyphId,
     }),
-    [active, editingGlyph, glyphs, location, metrics, resolvedTheme, sourceId],
+    [active, editingGlyph, glyphs, location, metrics, resolvedTheme, selectedGlyphId, sourceId],
   );
   const controllerFrameRef = useRef(controllerFrame);
   controllerFrameRef.current = controllerFrame;
@@ -114,6 +118,7 @@ export function SlugGlyphCatalogSurface({
             onEditGlyph,
             onEditingUnavailable,
             openGlyph,
+            selectGlyph,
             onReadyChange,
             onUnavailable,
             abort.signal,
@@ -155,11 +160,23 @@ export function SlugGlyphCatalogSurface({
     onSelected,
     onUnavailable,
     openGlyph,
+    selectGlyph,
   ]);
 
   useLayoutEffect(() => {
     rendererRef.current?.update(controllerFrame, inputContainerRef.current);
   }, [controllerFrame]);
+
+  // Scrolls a newly selected glyph into view, such as one just created; one already visible stays put.
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container || selectedGlyphId === null) return;
+
+    const index = glyphs.findIndex((glyph) => glyph.id === selectedGlyphId);
+    const scrollTop = layout.scrollTopToReveal(index, container.scrollTop);
+    if (scrollTop !== null) container.scrollTop = scrollTop;
+    // Only a change of selection reveals; scrolling away from the selection is the user's.
+  }, [selectedGlyphId]);
 
   useLayoutEffect(() => {
     if (!editingGlyph) return;
@@ -169,7 +186,12 @@ export function SlugGlyphCatalogSurface({
   }, [editingGlyph]);
 
   return (
-    <>
+    <GlyphContextMenu
+      glyphAt={(event) => rendererRef.current?.glyphAt(event.clientX, event.clientY) ?? null}
+      selectGlyph={selectGlyph}
+      openGlyph={openGlyph}
+      renameGlyph={canAuthor ? setEditingGlyph : undefined}
+    >
       <div
         ref={containerRef}
         className="absolute inset-0 overflow-x-hidden overflow-y-auto"
@@ -207,6 +229,6 @@ export function SlugGlyphCatalogSurface({
           />
         </div>
       ) : null}
-    </>
+    </GlyphContextMenu>
   );
 }

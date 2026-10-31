@@ -11,7 +11,12 @@ import {
   type SourceId,
 } from "@shift/types";
 import type { NodeKind } from "../../../types/node";
-import type { GlyphNodeRecord, ShiftNodeRecord, TextRunNodeRecord } from "../../../types/records";
+import type {
+  GlyphNodeRecord,
+  PageNodeRecord,
+  ShiftNodeRecord,
+  TextRunNodeRecord,
+} from "../../../types/records";
 import type {
   DroppedSceneRecord,
   PersistedSceneRecord,
@@ -136,6 +141,8 @@ class NodeResolver {
         return this.#runs.has(node.runId) ? null : `missing run ${node.runId}`;
       case "glyph":
         return this.#glyphProblem(node);
+      case "page":
+        return node.parentId === null ? null : "page with a parent";
     }
   }
 
@@ -269,6 +276,7 @@ type NodeParser = (base: NodeBase, fields: Fields) => ShiftNodeRecord | null;
 const NODE_PARSERS: { readonly [K in NodeKind]: NodeParser } = {
   textRun: parseRunNode,
   glyph: parseGlyphNode,
+  page: parsePageNode,
 };
 
 function isNodeKind(kind: unknown): kind is NodeKind {
@@ -317,4 +325,14 @@ function parseGlyphNode(base: NodeBase, fields: Fields): GlyphNodeRecord | null 
   if (!isTextItemId(itemId)) return null;
 
   return { ...base, kind: "glyph", glyphId, sourceId, itemId };
+}
+
+function parsePageNode(base: NodeBase, fields: Fields): PageNodeRecord | null {
+  if (typeof fields.name !== "string") return null;
+
+  const role = fields.role;
+  if (role === undefined) return { ...base, kind: "page", name: fields.name };
+  if (role !== "glyph") return null;
+
+  return { ...base, kind: "page", name: fields.name, role };
 }

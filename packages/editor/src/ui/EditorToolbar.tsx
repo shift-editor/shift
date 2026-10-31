@@ -57,37 +57,10 @@ export function EditorToolbar({
   const navigation = host?.navigation;
 
   const leftSidebarToggle = onToggleLeftSidebar ? (
-    <Tooltip>
-      <TooltipTrigger>
-        <Button
-          icon={<ShiftIcon name="sidebar-left" className="h-4.5 w-4.5" />}
-          aria-label={sidebarToggleLabel("left", leftSidebarOpen)}
-          aria-pressed={leftSidebarOpen}
-          variant="toolbar"
-          size="icon-sm"
-          className="h-7 w-7"
-          onClick={onToggleLeftSidebar}
-        />
-      </TooltipTrigger>
-      <TooltipContent side="bottom">Toggle left sidebar</TooltipContent>
-    </Tooltip>
+    <SidebarToggle side="left" open={leftSidebarOpen} onToggle={onToggleLeftSidebar} />
   ) : null;
-
   const rightSidebarToggle = onToggleRightSidebar ? (
-    <Tooltip>
-      <TooltipTrigger>
-        <Button
-          icon={<ShiftIcon name="sidebar-right" className="h-4.5 w-4.5" />}
-          aria-label={sidebarToggleLabel("right", rightSidebarOpen)}
-          aria-pressed={rightSidebarOpen}
-          variant="toolbar"
-          size="icon-sm"
-          className="h-7 w-7"
-          onClick={onToggleRightSidebar}
-        />
-      </TooltipTrigger>
-      <TooltipContent side="bottom">Toggle right sidebar</TooltipContent>
-    </Tooltip>
+    <SidebarToggle side="right" open={rightSidebarOpen} onToggle={onToggleRightSidebar} />
   ) : null;
 
   const familyName = metadata.familyName ?? "Untitled";
@@ -96,7 +69,6 @@ export function EditorToolbar({
       <div className="flex min-w-0 items-center gap-1">
         {host ? host.windowControls : <DecorativeWindowControls />}
         {host ? host.menuBar : null}
-        {leftSidebarToggle}
         {navigation}
       </div>
       <p className="relative flex min-w-0 items-center whitespace-nowrap px-4 text-ui">
@@ -115,7 +87,11 @@ export function EditorToolbar({
           <span className="text-muted"> — {documentTitle}</span>
         </span>
       </p>
-      <div className="flex justify-end pr-2">{rightSidebarToggle}</div>
+      <div className="flex items-center justify-end gap-1 pr-2">
+        {/* Both sidebar toggles sit together, each filled on its side while that sidebar is open. */}
+        {leftSidebarToggle}
+        {rightSidebarToggle}
+      </div>
     </header>
   );
 }
@@ -176,6 +152,37 @@ function TrafficLight({
         </svg>
       ) : null}
     </span>
+  );
+}
+
+interface SidebarToggleProps {
+  side: "left" | "right";
+  /** Current sidebar state, used for the pressed state, label, and icon; omit when unknown. */
+  open?: boolean;
+  onToggle: () => void;
+}
+
+/**
+ * The button that shows or hides a sidebar, its icon filled on its side while
+ * that sidebar is open.
+ */
+function SidebarToggle({ side, open, onToggle }: SidebarToggleProps) {
+  const icon = side === "left" ? "sidebar-left" : "sidebar-right";
+  return (
+    <Tooltip>
+      <TooltipTrigger>
+        <Button
+          icon={<ShiftIcon name={open ? `${icon}-open` : icon} className="h-4.5 w-4.5" />}
+          aria-label={sidebarToggleLabel(side, open)}
+          aria-pressed={open}
+          variant="toolbar"
+          size="icon-sm"
+          className="h-7 w-7"
+          onClick={onToggle}
+        />
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{`Toggle ${side} sidebar`}</TooltipContent>
+    </Tooltip>
   );
 }
 

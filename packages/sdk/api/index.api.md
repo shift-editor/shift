@@ -295,12 +295,15 @@ export class Editor {
     // (undocumented)
     nodeDefinition(kind: "textRun"): TextRunNodeDefinition;
     // (undocumented)
+    nodeDefinition(kind: "page"): PageNodeDefinition;
+    // (undocumented)
     nodeDefinition(kind: NodeKind): NodeDefinition;
     notifyPreviewMutationAttempt(): void;
     object(id: ShiftId): ShiftObject | null;
     objects(ids: readonly ShiftId[]): readonly ShiftObject[];
     on: EventEmitter["on"];
-    openGlyphInText(glyphId: GlyphId): GlyphNode | null;
+    openGlyphInText(glyphId: GlyphId, page?: PageNode): GlyphNode | null;
+    readonly pages: Pages;
     // (undocumented)
     get pan(): Point2D;
     paste(): Promise<boolean>;
@@ -677,6 +680,7 @@ export class Glyph {
     get contours(): readonly Contour[];
     // (undocumented)
     get entry(): GlyphEntry;
+    get entryCell(): Signal<GlyphEntry>;
     // (undocumented)
     geometryAt(externalLocation: ExternalAxisLocation): GlyphGeometry;
     // (undocumented)

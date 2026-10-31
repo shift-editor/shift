@@ -19,6 +19,7 @@ import { getShiftHost } from "@/host/shiftHost";
 import { useSignalState } from "@shift/editor/signals";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { asGlyphId } from "@shift/types";
+import { windowTabs } from "@/lib/tabs/WindowTabs";
 
 export const Editor = () => {
   const { glyphId: glyphIdParam } = useParams();
@@ -27,6 +28,8 @@ export const Editor = () => {
   const glyphId = glyphIdParam ? asGlyphId(glyphIdParam) : null;
   // Route acquisition publishes openedGlyph after materializing the canonical Glyph.
   const glyph = openedGlyph && glyphId ? editor.glyphForId(glyphId) : null;
+  // `/canvas` shows the active page with no glyph opened; `/editor/:glyphId` waits for its glyph.
+  const ready = glyphIdParam === undefined || glyph !== null;
   const activeSourceId = useSignalState(editor.activeSourceIdCell);
 
   const { activeZone, setZone } = useFocusZone();
@@ -36,17 +39,21 @@ export const Editor = () => {
   activeZoneRef.current = activeZone;
 
   useEffect(() => {
-    if (!glyph) return;
+    if (!ready) return;
 
     setZone("canvas");
-  }, [setZone, glyph]);
+  }, [setZone, ready]);
 
-  // GlyphGrid acquires the complete Glyph before navigating.
+  // GlyphGrid acquires the complete Glyph before navigating. The glyph shows in its tab:
+  // a tab already open for it as it was left, else the preview tab, which it replaces.
   useEffect(() => {
     if (!glyph) return undefined;
 
-    const node = editor.openGlyphInText(glyph.id);
-    if (node) editor.fitGlyphFrame(node);
+    // Route hydration is navigation, never a history entry; opening a glyph records none.
+    const opened = windowTabs(editor).openGlyph(glyph.id);
+    // Tools activate against the glyph node they find, so reset after it is placed.
+    editor.toolManager.reset();
+    if (opened.node && opened.placed) editor.fitGlyphFrame(opened.node);
 
     return () => {
       editor.toolManager.reset();
@@ -70,7 +77,7 @@ export const Editor = () => {
   }, [activeSourceId, editor, glyph]);
 
   useEffect(() => {
-    if (!glyph) return undefined;
+    if (!ready) return undefined;
 
     const toolManager = editor.toolManager;
     const keyboardRouter = new KeyboardRouter(
@@ -106,9 +113,9 @@ export const Editor = () => {
       document.removeEventListener("keydown", keyDownHandler);
       document.removeEventListener("keyup", keyUpHandler);
     };
-  }, [editor, glyph]);
+  }, [editor, ready]);
 
-  if (!glyph) return null;
+  if (!ready) return null;
 
   return (
     <EditorLayout>
@@ -129,6 +136,8 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
     sidebarPanelProps,
     toggleLeftSidebar,
     toggleRightSidebar,
+    leftSidebarOpen,
+    rightSidebarOpen,
     resetLeftSidebar,
     resetRightSidebar,
   } = useSidebarLayout("editor");
@@ -152,7 +161,12 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
       data-testid="editor-shell"
       className="shift-editor-shell flex h-screen w-screen min-w-150 flex-col bg-background"
     >
-      <Toolbar toggleLeftSidebar={toggleLeftSidebar} toggleRightSidebar={toggleRightSidebar} />
+      <Toolbar
+        toggleLeftSidebar={toggleLeftSidebar}
+        toggleRightSidebar={toggleRightSidebar}
+        leftSidebarOpen={leftSidebarOpen}
+        rightSidebarOpen={rightSidebarOpen}
+      />
       <ResizablePanelGroup
         id="editor-layout-panels"
         orientation="horizontal"

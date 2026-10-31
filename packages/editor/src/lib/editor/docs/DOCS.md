@@ -10,7 +10,9 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `Editor` is a facade -- it delegates viewport, hover, rendering, and tool dispatch to named subsystem objects. Tools receive `Editor` directly but must not reach into private managers. Its immutable `sessionMode` defines editing and persistence capability: preview is read-only, memory is locally editable without persistence, and workspace is durably editable. In preview, Select consumes geometry hits without publishing hover or selection, marquee gestures publish no selection, and geometry clicks emit `previewMutationAttempted`. Main keeps Edit commands disabled in preview. Authored-layer resolution remains the final mutation boundary in editable sessions.
 
-**Architecture Invariant:** `Scene` owns generic, serializable `ShiftNode` records and placement only. It must not import or retain `Glyph`, `GlyphLayer`, or resolved geometry. Navigation finishes `Font.loadGlyph()` before entering the editor route, and the route synchronously confirms acquisition before publishing the glyph as the canvas run's child node (`TextRunNodeDefinition.editItem`).
+**Architecture Invariant:** `Scene` owns generic, serializable `ShiftNode` records and placement only. It must not import or retain `Glyph`, `GlyphLayer`, or resolved geometry. Navigation finishes `Font.loadGlyph()` before entering the editor route, and the route synchronously confirms acquisition before publishing the glyph as the child node of the active page's run (`TextRunNodeDefinition.editItem`).
+
+**Architecture Invariant:** The scene's roots are pages (`PageNode`, behavior in `PageNodeDefinition`: no bounds, never hit, draws nothing), and every other node descends from exactly one. The canvas shows one page (`Scene.activePageIdCell`, session-only, never undone), so `Scene.cell`, `nodes`, `nodesOfKind`, `only`, and `first` answer for the active page; they are computed once per scene change or page switch, never walked per frame. Lookups by id, `nodesReferencing`, and `allNodes` see every page. A node created without a parent goes on the active page, and `Scene.setNodes`/`ensurePage` move root nodes onto "Page 1" when the scene has none. `editor.pages` (`Pages`) edits pages inside history captures, one undo step each, and `activate` restores each page's session camera.
 
 **Architecture Invariant:** Node definition queries (`unitsTransform`, `bounds`, `hit`, `childPlacement`, `draw`) run during rendering and hit testing and never write. Writes happen only in hooks (`onDoubleClick`, `onContentChange`) and in definition methods documented as writes (`TextRunNodeDefinition.editItem`). The editor calls hooks inside a history capture, so their writes, made through the ordinary `Scene`/`Editing` APIs, are one undo step with the action that triggered them; the rule is a convention, not a capability. `onContentChange` runs as a capture finishes (via `EditorHistory.onCaptureFinishing`) for each node whose record changed or that `references` a changed record (found through `Scene.nodesReferencing`), whoever changed it; edits outside a capture or inside `withoutRecording` do not run it.
 
@@ -64,6 +66,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 editor/
   Editor.ts              -- Facade, wires all subsystems
   MultiSourceEditing.ts  -- Reactive cross-layer matching and target resolution
+  Scene.ts               -- Node records, the page tree, and active-page queries
   lifecycle.ts           -- EventEmitter for destruction and preview mutation notices
   persistence/
     ScenePersistence.ts  -- Debounced canvas writes, flush, and restore through a SceneStateStore
@@ -86,7 +89,8 @@ editor/
 ## Key Types
 
 - **`Editor`** -- Facade class. Owns `Selection`, `Hover`, `Camera`, `Renderer`, `ToolManager`, `Clipboard`, `EventEmitter`, and the workspace transaction facade. Its immutable `sessionMode` lets Select suppress geometry interaction; geometry clicks publish `previewMutationAttempted` for presentation code. The canvas lock is display-only. Passed directly to tools and NodeDefinitions; `glyphForId()` exposes already-acquired canonical Glyphs without exposing FontStore.
-- **`Scene`** -- Owns generic, serializable placed-node records and node-level queries (`nodesOfKind`, `only`, `first`). Node kinds come from the open `SceneNodeKinds` registry. Glyph acquisition and retained object ownership remain outside Scene.
+- **`Scene`** -- Owns generic, serializable placed-node records and node-level queries (`nodesOfKind`, `only`, `first`), scoped to the active page.
+- **`Pages`** (`lib/pages/Pages.ts`) -- `editor.pages`: the ordered page list (`listCell`, `list`), the page shown (`activeCell`), `create`, `rename`, `move`, `delete` (never the last page; deletes the page's subtree), `activate`, and `pageOf`. Node kinds come from the open `SceneNodeKinds` registry. Glyph acquisition and retained object ownership remain outside Scene.
 - **`ShiftStore<ShiftEditorRecord>`** -- Editor-owned generic record store for scene nodes, selection, editing, and text runs. Reactive readers subscribe narrowly: `record(id)` to one record, `recordsOfType(type)` to one record type (the scene reads only node records), and `index(type, keys)` to one key of a reverse lookup that applies each change incrementally (`Scene.nodesReferencing`, `Text.runForItem`). Readers of `cell` rerun on every write.
 - **`EditorHistory`** -- TypeScript action timeline over whole editor records plus ordered workspace markers. Captures finish synchronously; undo and redo await the workspace queue.
 - **`HistoryCapture`** -- One explicit action boundary. `finish()` records its net effects; `cancel()` restores its starting records unless committed workspace effects must remain replayable.
@@ -129,7 +133,7 @@ Tools receive screen and scene coordinates from the pointer pipeline. Scene/node
 
 `Camera` computes the scene-to-screen view as `Translate(pan)·Scale(zoom)`; it never depends on the canvas size. The inverse is lazily computed. Both are computed signals, so any dependent computed/effect auto-invalidates.
 
-`Editor.sceneTransform(node)` is `frameToScene(node)·unitsTransform(node)`. Frames carry placement (each node's `position` in its parent's frame, or the position and size its parent's definition lays it out at via `childPlacement`); units are the node kind's own content transform (glyphs flip Y) and never apply to children. `Scene` builds a `Tree` snapshot (the generic one in `lib/utils/Tree.ts`) once per scene change: `Scene.nodes()` walks it parents first with siblings by `index`, so drawing paints children over their parent and hit testing (in reverse) tries children first; `children` and `parent` are lookups into it.
+`Editor.sceneTransform(node)` is `frameToScene(node)·unitsTransform(node)`. Frames carry placement (each node's `position` in its parent's frame, or the position and size its parent's definition lays it out at via `childPlacement`); units are the node kind's own content transform (glyphs flip Y) and never apply to children. `Scene` builds a `Tree` snapshot (the generic one in `lib/utils/Tree.ts`) once per scene change: `Scene.nodes()` walks the active page's subtree parents first with siblings by `index` (compared numerically, so `a10` follows `a9`), so drawing paints children over their parent and hit testing (in reverse) tries children first; `children` and `parent` are lookups into it.
 
 ### Four canvas layers
 

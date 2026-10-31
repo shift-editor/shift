@@ -122,7 +122,7 @@ export const Titlebar = ({ closeOnly = false, onClose, edited = false }: Titleba
     <div
       role="toolbar"
       aria-label="Window controls"
-      className="titlebar-drag flex shrink-0 items-center gap-2 px-3 py-2"
+      className="titlebar-drag flex shrink-0 items-center gap-2 py-2 pl-3 pr-1"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >

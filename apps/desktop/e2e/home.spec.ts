@@ -10,6 +10,7 @@ import {
   glyphCatalogSurface,
   glyphProperties,
   openFirstCatalogGlyph,
+  glyphSearch,
 } from "./fixtures/appLocators";
 import type { EditorDriver } from "./fixtures/EditorDriver";
 import { afterNextPaint, observeRenameTransition } from "./fixtures/glyphCatalogProbe";
@@ -45,45 +46,21 @@ test.describe("Home view", () => {
     await expectPanelSnapshot(fontNavigation(page), "home-language-filtered.png");
   });
 
-  test("navigation highlights Home or Settings without leaving both active", async ({ page }) => {
-    const grid = page.getByRole("button", {
-      name: "Font overview",
-      exact: true,
-      includeHidden: true,
-    });
-    const info = page.getByRole("button", {
-      name: "Settings",
-      exact: true,
-      includeHidden: true,
-    });
-    await page.mouse.move(0, 0);
-    const activeColor = await grid.evaluate((element) => getComputedStyle(element).color);
-    const inactiveColor = await info.evaluate((element) => getComputedStyle(element).color);
-    expect(activeColor).not.toBe(inactiveColor);
-    await expect(grid).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-    await expect(info).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  test("the font name opens its info, and the Glyphs tab stays current", async ({ page }) => {
+    const glyphs = page.getByRole("tab", { name: "Glyphs", exact: true });
+    await expect(glyphs).toHaveAttribute("aria-selected", "true");
 
-    await info.click();
+    await page.getByRole("button", { name: /font info$/ }).click();
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
-    await page.mouse.move(0, 0);
-    await expect(info).toHaveCSS("color", activeColor);
-    await expect(grid).toHaveCSS("color", inactiveColor);
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
-    await expect(grid).toHaveCSS("color", activeColor);
-    await expect(info).toHaveCSS("color", inactiveColor);
+    await expect(glyphs).toHaveAttribute("aria-selected", "true");
 
+    // A glyph opened from the overview gets a tab of its own, and Glyphs is no longer current.
     await clickFirstCatalogGlyph(page);
     await page.waitForURL(/#\/editor\//);
-    const editorGrid = page.getByRole("button", { name: "Font overview", exact: true });
-    const editorInfo = page.getByRole("button", { name: "Settings", exact: true });
-    await page.mouse.move(0, 0);
-    await expect(editorGrid).toHaveCSS("color", inactiveColor);
-    await expect(editorInfo).toHaveCSS("color", inactiveColor);
-    await expect(editorGrid).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-    await editorGrid.hover();
-    await expect(editorGrid).toHaveCSS("color", inactiveColor);
-    await expect(editorGrid).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(glyphs).toHaveAttribute("aria-selected", "false");
+    await expect(page.getByTestId("tab-glyph")).toHaveAttribute("aria-selected", "true");
   });
 
   test(
@@ -233,7 +210,7 @@ test.describe("Home view", () => {
   });
 
   test("finds encoded characters and unencoded glyph names", async ({ editor, page }) => {
-    const search = page.getByPlaceholder("Search glyphs...");
+    const search = await glyphSearch(page);
     const surface = glyphCatalogSurface(page);
     const encodedId = (await editor.glyphNamed("A"))?.id;
 
@@ -269,7 +246,7 @@ test.describe("Home view", () => {
   }) => {
     const glyph = await createQuickGlyph(page, editor);
     const nextName = `${glyph.name}.renamed`;
-    await page.getByPlaceholder("Search glyphs...").fill(glyph.name);
+    await (await glyphSearch(page)).fill(glyph.name);
     await expect(glyphCatalogSurface(page)).toHaveAttribute("data-filtered-glyph-count", "1");
     await afterNextPaint(page);
     await clickFirstCatalogGlyphName(page);
@@ -297,14 +274,13 @@ test.describe("Home view", () => {
       return { width: bounds.width, height: bounds.height };
     });
 
-    // Waits for the editor to render, not just the URL: until then the hidden catalog's own
-    // Font overview button is still the one a role query finds.
+    // Waits for the editor to render, not just the URL, before using the title bar.
     await openFirstCatalogGlyph(page);
     await afterNextPaint(page);
 
     await expect(renderer).toBeAttached();
 
-    await page.getByRole("button", { name: "Font overview" }).click();
+    await page.getByRole("tab", { name: "Glyphs", exact: true }).click();
     await page.waitForURL(/#\/home/);
     await afterNextPaint(page);
 

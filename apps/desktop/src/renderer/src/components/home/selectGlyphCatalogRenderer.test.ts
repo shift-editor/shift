@@ -4,6 +4,7 @@ import { selectGlyphCatalogRenderer } from "./selectGlyphCatalogRenderer";
 
 const slugRenderer: GlyphCatalogRenderer = {
   update() {},
+  glyphAt: () => null,
   destroy() {},
 };
 

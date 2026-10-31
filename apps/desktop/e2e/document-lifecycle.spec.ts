@@ -28,6 +28,7 @@ import {
   clickFirstCatalogGlyph,
   openFirstCatalogGlyph,
   waitForEditorReady,
+  glyphSearch,
 } from "./fixtures/appLocators";
 
 const discardTest = test.extend({
@@ -518,7 +519,7 @@ test.describe("document lifecycle through the application shell", () => {
       await expect
         .poll(() => new EditorDriver(reopenedPage, relaunchedApp).glyphNames())
         .toContain("newGlyph.1");
-      await reopenedPage.getByPlaceholder("Search glyphs...").fill("newGlyph.1");
+      await (await glyphSearch(reopenedPage)).fill("newGlyph.1");
       await expect(
         reopenedPage.getByRole("region", { name: "Glyph catalog surface", exact: true }),
       ).toHaveAttribute("data-filtered-glyph-count", "1");

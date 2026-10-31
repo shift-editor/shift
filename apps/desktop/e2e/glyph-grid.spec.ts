@@ -124,7 +124,7 @@ test.describe("Resident Glyph Grid", () => {
       )
       .toEqual(initialSize);
 
-    await page.getByRole("button", { name: "Font overview" }).click();
+    await page.getByRole("tab", { name: "Glyphs", exact: true }).click();
     await page.waitForURL(/#\/home/);
     await afterNextPaint(page);
 
@@ -204,7 +204,7 @@ test.describe("Resident Glyph Grid", () => {
 
     await editor.draw({ contours: [square(100)] });
 
-    await page.getByRole("button", { name: "Font overview" }).click();
+    await page.getByRole("tab", { name: "Glyphs", exact: true }).click();
     await page.waitForURL(/#\/home/);
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
     await expectCompleteResidency(glyphCanvas);
@@ -234,7 +234,7 @@ test.describe("Resident Glyph Grid", () => {
     await editor.openGlyphByUnicode("53");
     await editor.draw({ contours: [triangle([0, 0], [80, 0], [40, 80])] });
 
-    await page.getByRole("button", { name: "Font overview" }).click();
+    await page.getByRole("tab", { name: "Glyphs", exact: true }).click();
     await page.waitForURL(/#\/home/);
     await expect(glyphCanvas).toBeVisible({ timeout: 30_000 });
     await expectCompleteResidency(glyphCanvas);
@@ -321,7 +321,7 @@ test.describe("Resident Glyph Grid", () => {
       const catalogSurface = glyphCatalogSurface(page);
       const glyphCanvas: Locator = glyphCatalogCanvas(page);
       // Drawing S opened the editor; the Grid is on Home.
-      await page.getByRole("button", { name: "Font overview" }).click();
+      await page.getByRole("tab", { name: "Glyphs", exact: true }).click();
       await page.waitForURL(/#\/home/);
       await expect(glyphCanvas).toHaveAttribute("data-grid-readiness", "Complete", {
         timeout: 30_000,
