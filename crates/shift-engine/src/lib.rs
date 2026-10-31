@@ -21,7 +21,7 @@ mod source;
 mod store_reader;
 
 pub use history::EditHistory;
-pub use records::RecordSource;
+pub use records::{CachedRecords, RecordCache, RecordSource};
 pub use residency::LayerResidency;
 pub use session::{ApplyError, EngineError, EngineSession, LoadError, StagedEdit};
 pub use source::LayerSource;

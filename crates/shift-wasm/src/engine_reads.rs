@@ -23,7 +23,9 @@
 
 use pack::Pack;
 use shift_engine::StoreReadError;
-use shift_font::{Axis, GlyphRecord, MetricValue, MissingKerningOrigin, ResolvedKerning, Source};
+use shift_font::{
+    Axis, GlyphRecord, MetricValue, MissingKerningOrigin, ResolvedKerning, ShaperFontSource, Source,
+};
 use shift_wire::KerningSnapshot;
 
 /// What the editor reads from one engine session's font. Glyphs and sources
@@ -74,6 +76,16 @@ pub trait EngineReads {
     ///
     /// Returns [`StoreReadError`] when the store's reader cannot answer.
     fn glyph_records(&self) -> Result<Vec<GlyphRecord>, StoreReadError>;
+    /// What the font's shaper font compiles from: units per em, glyph order
+    /// with each glyph's GDEF class, feature source, and axes with their
+    /// mappings. A class reads anchors from the layers the session loaded and
+    /// asks the store's reader about the rest, and glyph data's categories
+    /// from it too; nothing is loaded to answer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreReadError`] when the store's reader cannot answer.
+    fn shaper_font_source(&self) -> Result<ShaperFontSource, StoreReadError>;
     /// One weight per source of the interned source set `set`, in its order,
     /// at a design location, from the basis the session's font gives that
     /// set: `InterpolationBasis::weights_at`. Empty for a set the session
@@ -140,8 +152,8 @@ mod exports {
     use wasm_bindgen::prelude::*;
 
     use super::{
-        Axis, EditablePair, EngineReads, InterpolatedMetrics, KerningSnapshot, Source,
-        engine_reads_request,
+        Axis, EditablePair, EngineReads, InterpolatedMetrics, KerningSnapshot, ShaperFontSource,
+        Source, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::variation::{design_values, external_values, to_location, weights_at};
@@ -401,6 +413,10 @@ mod exports {
 
         fn glyph_records(&self) -> Result<Vec<GlyphRecord>, StoreReadError> {
             Self::glyph_records(self)
+        }
+
+        fn shaper_font_source(&self) -> Result<ShaperFontSource, StoreReadError> {
+            Self::shaper_font_source(self)
         }
 
         fn interpolation_weights(&self, set: usize, location: Vec<f64>) -> Vec<f64> {

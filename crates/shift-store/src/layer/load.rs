@@ -1,6 +1,6 @@
 use crate::error::{OrMissing, StoreEntity};
 use crate::numeric::sql_int;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rayon::prelude::*;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -380,4 +380,36 @@ fn load_glyph_layer_batch_with_directory(
         validate_component_rows(layer, &indexed)?;
     }
     Ok(layers)
+}
+
+/// Those of `layer_ids` the store has, in id order.
+pub(crate) fn present_layer_ids_from_conn(
+    conn: &Connection,
+    layer_ids: &[font::LayerId],
+) -> Result<Vec<font::LayerId>, StoreError> {
+    // One JSON parameter keeps the statement prepared for any count, and an
+    // IN subquery keeps the recovery views searched by key.
+    let mut stmt = conn.prepare_cached(
+        "SELECT id FROM glyph_layers WHERE id IN (SELECT value FROM json_each(?1)) ORDER BY id",
+    )?;
+    let rows = stmt.query_map([serde_json::to_string(layer_ids)?], |row| {
+        row.get::<_, font::LayerId>(0)
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+/// The digest of each stored payload among `layer_ids`, by layer; a layer the
+/// store lacks is left out. Equal digests mean equal decoded content.
+pub(crate) fn layer_payload_digests_from_conn(
+    conn: &Connection,
+    layer_ids: &[font::LayerId],
+) -> Result<BTreeMap<font::LayerId, [u8; 32]>, StoreError> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT layer_id, decoded_blake3 FROM glyph_layer_payloads
+         WHERE layer_id IN (SELECT value FROM json_each(?1))",
+    )?;
+    let rows = stmt.query_map([serde_json::to_string(layer_ids)?], |row| {
+        Ok((row.get::<_, font::LayerId>(0)?, row.get::<_, [u8; 32]>(1)?))
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
 }

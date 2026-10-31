@@ -1,14 +1,14 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use shift_font::{
-    FontChangeSet, Glyph, GlyphDataCategory, GlyphId, GlyphRecord, GlyphRecordChanges, NamedGlyph,
-    OpenTypeCategories,
+    Anchor, FontChangeSet, Glyph, GlyphDataCategory, GlyphId, GlyphRecord, GlyphRecordChanges,
+    LayerId, NamedGlyph, OpenTypeCategories, OpenTypeCategory, ShaperFontSource,
 };
 
 use crate::EngineSession;
 
-/// What a session reads from its store to build glyph records: the parts of
-/// a record its own font cannot answer for a glyph whose layers it has not
+/// What a session reads from its store to build glyph records and the shaper
+/// font's source: the parts its own font cannot answer for layers it has not
 /// loaded, and glyph data's categories, which stay with the store's reader.
 pub trait RecordSource {
     type Error;
@@ -31,6 +31,17 @@ pub trait RecordSource {
         &mut self,
         glyphs: &[NamedGlyph],
     ) -> Result<Vec<GlyphDataCategory>, Self::Error>;
+
+    /// Those of `layer_ids` that carry an anchor marks attach to, as
+    /// persisted.
+    ///
+    /// # Errors
+    ///
+    /// Returns the source's error when the layers cannot be read.
+    fn attaching_anchor_layers(
+        &mut self,
+        layer_ids: &[LayerId],
+    ) -> Result<Vec<LayerId>, Self::Error>;
 }
 
 impl EngineSession {
@@ -113,11 +124,160 @@ impl EngineSession {
         Ok(records)
     }
 
+    /// What the font's shaper font compiles from, as the font stands: unsaved
+    /// edits included. Each glyph's GDEF class reads its anchors from the
+    /// layers the session has loaded and asks `source` about the rest, so
+    /// nothing is loaded to answer.
+    ///
+    /// # Errors
+    ///
+    /// Returns the source's error when it cannot answer.
+    pub fn shaper_font_source<S: RecordSource>(
+        &self,
+        source: &mut S,
+    ) -> Result<ShaperFontSource, S::Error> {
+        let font = self.font();
+        let unloaded: Vec<LayerId> = font
+            .glyphs()
+            .flat_map(|glyph| glyph.layers().keys().copied())
+            .filter(|layer_id| self.residency().is_unloaded(*layer_id))
+            .collect();
+        let persisted_attaching: HashSet<LayerId> = if unloaded.is_empty() {
+            HashSet::new()
+        } else {
+            source
+                .attaching_anchor_layers(&unloaded)?
+                .into_iter()
+                .collect()
+        };
+        let named: Vec<NamedGlyph> = font.glyphs().map(NamedGlyph::from).collect();
+        let glyph_data: HashMap<GlyphId, GlyphDataCategory> = font
+            .glyphs()
+            .map(Glyph::id)
+            .zip(source.glyph_data_categories(&named)?)
+            .collect();
+        let explicit = OpenTypeCategories::of(font.lib());
+
+        Ok(font.shaper_font_source(|glyph| {
+            // A placeholder layer has no anchors, so the store answers for it.
+            let attaching_anchor = glyph.layers().values().any(|layer| {
+                persisted_attaching.contains(&layer.id())
+                    || layer.anchors().iter().any(Anchor::attaches_marks)
+            });
+            OpenTypeCategory::of(
+                glyph,
+                glyph_data.get(&glyph.id()).copied().unwrap_or_default(),
+                explicit.class(glyph.name()),
+                attaching_anchor,
+            )
+        }))
+    }
+
     /// Whether any of `glyph`'s layers is still a placeholder.
     fn has_unloaded_layer(&self, glyph: &Glyph) -> bool {
         glyph
             .layers()
             .values()
             .any(|layer| self.residency().is_unloaded(layer.id()))
+    }
+}
+
+/// Answers a [`RecordSource`] gives that stay true while a session lives,
+/// so each is asked once.
+///
+/// Glyph data's category depends only on a glyph's name and codepoints, so it
+/// is kept by those. Whether a layer the session has not loaded carries an
+/// attaching anchor is kept by layer: the store holds what the layer was when
+/// the session opened until an edit loads it, after which the session's own
+/// layer answers and the store is not asked. A session that evicts layers
+/// forgets them here ([`RecordCache::forget_layers`]).
+#[derive(Debug, Default)]
+pub struct RecordCache {
+    categories: HashMap<NamedGlyph, GlyphDataCategory>,
+    attaching: HashMap<LayerId, bool>,
+}
+
+impl RecordCache {
+    /// Forgets what is kept for `layer_ids`, as after the session evicts them:
+    /// the store's copy may then hold edits made since it opened.
+    pub fn forget_layers(&mut self, layer_ids: &[LayerId]) {
+        for layer_id in layer_ids {
+            self.attaching.remove(layer_id);
+        }
+    }
+
+    /// A source that answers from this cache and asks `source` for the rest,
+    /// keeping its answers.
+    pub fn reading<'a, S: RecordSource>(&'a mut self, source: &'a mut S) -> CachedRecords<'a, S> {
+        CachedRecords {
+            cache: self,
+            source,
+        }
+    }
+}
+
+/// A [`RecordSource`] that answers from a [`RecordCache`] first.
+pub struct CachedRecords<'a, S> {
+    cache: &'a mut RecordCache,
+    source: &'a mut S,
+}
+
+impl<S: RecordSource> RecordSource for CachedRecords<'_, S> {
+    type Error = S::Error;
+
+    fn component_bases(&mut self, glyph_ids: &[GlyphId]) -> Result<Vec<Vec<GlyphId>>, S::Error> {
+        self.source.component_bases(glyph_ids)
+    }
+
+    fn glyph_data_categories(
+        &mut self,
+        glyphs: &[NamedGlyph],
+    ) -> Result<Vec<GlyphDataCategory>, S::Error> {
+        let missing: Vec<NamedGlyph> = glyphs
+            .iter()
+            .filter(|glyph| !self.cache.categories.contains_key(glyph))
+            .cloned()
+            .collect();
+        if !missing.is_empty() {
+            let answers = self.source.glyph_data_categories(&missing)?;
+            self.cache
+                .categories
+                .extend(missing.into_iter().zip(answers));
+        }
+        Ok(glyphs
+            .iter()
+            .map(|glyph| {
+                self.cache
+                    .categories
+                    .get(glyph)
+                    .copied()
+                    .unwrap_or_default()
+            })
+            .collect())
+    }
+
+    fn attaching_anchor_layers(&mut self, layer_ids: &[LayerId]) -> Result<Vec<LayerId>, S::Error> {
+        let missing: Vec<LayerId> = layer_ids
+            .iter()
+            .copied()
+            .filter(|layer_id| !self.cache.attaching.contains_key(layer_id))
+            .collect();
+        if !missing.is_empty() {
+            let attaching: HashSet<LayerId> = self
+                .source
+                .attaching_anchor_layers(&missing)?
+                .into_iter()
+                .collect();
+            self.cache.attaching.extend(
+                missing
+                    .into_iter()
+                    .map(|layer_id| (layer_id, attaching.contains(&layer_id))),
+            );
+        }
+        Ok(layer_ids
+            .iter()
+            .copied()
+            .filter(|layer_id| self.cache.attaching.get(layer_id).copied().unwrap_or(false))
+            .collect())
     }
 }

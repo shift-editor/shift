@@ -14,7 +14,7 @@ use js_sys::{Array, Float64Array, Function, Object, Reflect, Uint8Array};
 use pack::{CarryingNames, Packed};
 use serde::Serialize;
 use shift_engine::{
-    ApplyError, EditHistory, EngineSession, LayerSource, RecordSource, StoreReadError,
+    ApplyError, EditHistory, EngineSession, LayerSource, RecordCache, RecordSource, StoreReadError,
     StoreReaderClient,
 };
 use shift_font::{
@@ -228,6 +228,18 @@ impl RecordSource for HostLayers<'_> {
         }
         self.client().glyph_data_categories(glyphs.to_vec())
     }
+
+    fn attaching_anchor_layers(
+        &mut self,
+        layer_ids: &[LayerId],
+    ) -> Result<Vec<LayerId>, HostError> {
+        if layer_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(self
+            .client()
+            .attaching_anchor_layers(layer_ids.to_vec())??)
+    }
 }
 
 impl From<HostError> for StoreReadError {
@@ -259,6 +271,10 @@ pub(crate) struct Engine {
     /// The interpolation bases and axis mappings the reads evaluate, built
     /// from the session's font when first read.
     pub(crate) variation: VariationCache,
+    /// The store's answers for glyph records and the shaper's source, each
+    /// asked once: glyph data's categories by name and codepoints, and the
+    /// attaching anchors of layers the session has not loaded.
+    records: RefCell<RecordCache>,
 }
 
 impl Engine {
@@ -279,7 +295,13 @@ impl Engine {
         if impact.contains(FontChangeImpact::GLYPHS) {
             let glyph_changes = self
                 .session
-                .glyph_record_changes(&mut HostLayers(&self.source), &applied.changes)
+                .glyph_record_changes(
+                    &mut self
+                        .records
+                        .borrow_mut()
+                        .reading(&mut HostLayers(&self.source)),
+                    &applied.changes,
+                )
                 .map_err(js_error)?;
             replaced
                 .get_or_insert_with(FontReplacement::default)
@@ -291,7 +313,24 @@ impl Engine {
 
     /// Every glyph's record, as the session's font stands.
     pub(crate) fn glyph_records(&self) -> Result<Vec<shift_font::GlyphRecord>, StoreReadError> {
-        Ok(self.session.glyph_records(&mut HostLayers(&self.source))?)
+        Ok(self.session.glyph_records(
+            &mut self
+                .records
+                .borrow_mut()
+                .reading(&mut HostLayers(&self.source)),
+        )?)
+    }
+
+    /// What the font's shaper font compiles from, as the session's font stands.
+    pub(crate) fn shaper_font_source(
+        &self,
+    ) -> Result<shift_font::ShaperFontSource, StoreReadError> {
+        Ok(self.session.shaper_font_source(
+            &mut self
+                .records
+                .borrow_mut()
+                .reading(&mut HostLayers(&self.source)),
+        )?)
     }
 
     /// The intents held for this apply, stage or preview, as one set.
@@ -355,6 +394,7 @@ pub fn engine_open(
             held: Vec::new(),
             replaced: None,
             variation: VariationCache::default(),
+            records: RefCell::new(RecordCache::default()),
         }));
         Ok(handle)
     })
