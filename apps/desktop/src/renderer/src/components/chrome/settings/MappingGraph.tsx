@@ -2,31 +2,25 @@ import { useEffect, useRef, useState } from "react";
 import { drag, type D3DragEvent } from "d3-drag";
 import { scaleLinear } from "d3-scale";
 import { select } from "d3-selection";
-import type { Axis } from "@shift/editor/model";
-import type { AxisMappingPoint } from "@shift/types";
-import { byInput } from "./mappingOrder";
+import type { Axis, AxisMapping } from "@shift/editor/model";
 
 interface MappingGraphProps {
   axis: Axis;
-  points: readonly AxisMappingPoint[];
+  mapping: AxisMapping;
   onPointChange: (index: number, input: number, output: number) => void;
   onPointCommit: () => Promise<void>;
 }
 
-export const MappingGraph = ({ axis, points, onPointChange, onPointCommit }: MappingGraphProps) => {
+export const MappingGraph = ({
+  axis,
+  mapping,
+  onPointChange,
+  onPointCommit,
+}: MappingGraphProps) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [draggingPointIndex, setDraggingPointIndex] = useState<number | null>(null);
   const didDragRef = useRef(false);
-  const coordinates = points
-    .map((point, index) => ({
-      index,
-      input: point.input.values[axis.id],
-      output: point.output.values[axis.id],
-    }))
-    .filter(
-      (point): point is { index: number; input: number; output: number } =>
-        point.input !== undefined && point.output !== undefined,
-    );
+  const coordinates = mapping.coordinates;
 
   const values = coordinates.flatMap((point) => [point.input, point.output]);
   const minimum = Math.min(axis.minimum, ...values);
@@ -38,8 +32,7 @@ export const MappingGraph = ({ axis, points, onPointChange, onPointCommit }: Map
   const bottom = size - 26;
   const xScale = scaleLinear().domain([minimum, maximum]).range([left, right]).clamp(true);
   const yScale = scaleLinear().domain([minimum, maximum]).range([bottom, top]).clamp(true);
-  const path = coordinates
-    .toSorted(byInput)
+  const path = mapping.curve
     .map((point) => `${xScale(point.input)},${yScale(point.output)}`)
     .join(" ");
   const ticks = xScale.ticks(5);
