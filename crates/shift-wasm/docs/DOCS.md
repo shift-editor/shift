@@ -23,7 +23,7 @@ Runs shift-font's rules in the editor through WebAssembly, so the editor calls t
 crates/shift-wasm/src/
   lib.rs         module list
   anchors.rs     anchorKind; Anchors (propagateAnchors, followAnchors)
-  axis.rs        Axes (minimum, maximum, varies, accepts, normalize): an axis kind's range and positions, stateless, read by the editor's `Axis`
+  axis.rs        Axes (minimum, maximum, varies, accepts, normalize, toContinuous, toDiscrete): an axis kind's range, positions and conversion between kinds, stateless, called by the editor's `Axis`
   decomposition.rs   Decomposition (blendDecomposedGlyph): component outlines between masters of a decomposed glyph
   drag.rs        Drag (prepareDrag, dragMoves) and releaseDrag: shift-font's drag rules, matched once per drag behind a handle, one call per frame
   shaping.rs     registerShaper, releaseShaper; Shaping (setShaperGlyphs, shapeParagraphs), answered with the `shaping` feature

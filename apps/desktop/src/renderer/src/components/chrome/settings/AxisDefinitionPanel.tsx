@@ -1,5 +1,5 @@
 import { Axis } from "@shift/editor/model";
-import { ascending, type Axis as AxisRecord, type AxisKind } from "@shift/types";
+import type { AxisKindName } from "@shift/types";
 import {
   Checkbox,
   Input,
@@ -27,10 +27,10 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
   const axis = draft.axis;
   const registeredTag = isRegisteredOpenTypeAxisTag(axis.tag);
 
-  const changeType = async (axisType: AxisKind["kind"] | null): Promise<void> => {
+  const changeType = async (axisType: AxisKindName | null): Promise<void> => {
     if (!axisType || axisType === axis.kind.kind) return;
 
-    await draft.updateAndCommit((current) => axisWithType(current, axisType));
+    await draft.updateAndCommit((current) => new Axis(current).withKind(axisType));
   };
 
   return (
@@ -44,7 +44,7 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
             value={axis.name}
             onChange={(event) => {
               const name = event.currentTarget.value;
-              draft.update((current) => ({ ...current, name }));
+              draft.update((current) => new Axis(current).withName(name));
             }}
             onBlur={async () => {
               await draft.commit();
@@ -61,7 +61,7 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
             disabled={registeredTag}
             onChange={(event) => {
               const tag = event.currentTarget.value;
-              draft.update((current) => ({ ...current, tag }));
+              draft.update((current) => new Axis(current).withTag(tag));
             }}
             onBlur={async () => {
               await draft.commit();
@@ -81,16 +81,14 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
             value={axis.minimum}
             disabled={axis.isDiscrete}
             onChange={(minimum) =>
-              draft.update((current) => withContinuousBound(current, { minimum }))
+              draft.update((current) => new Axis(current).withMinimum(minimum))
             }
             onCommit={draft.commit}
           />
           <DefinitionNumberField
             label="Default"
             value={axis.default}
-            onChange={(value) =>
-              draft.update((current) => ({ ...current, kind: { ...current.kind, default: value } }))
-            }
+            onChange={(value) => draft.update((current) => new Axis(current).withDefault(value))}
             onCommit={draft.commit}
           />
           <DefinitionNumberField
@@ -98,7 +96,7 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
             value={axis.maximum}
             disabled={axis.isDiscrete}
             onChange={(maximum) =>
-              draft.update((current) => withContinuousBound(current, { maximum }))
+              draft.update((current) => new Axis(current).withMaximum(maximum))
             }
             onCommit={draft.commit}
           />
@@ -135,7 +133,7 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
         <Checkbox
           checked={axis.hidden}
           onCheckedChange={async (hidden) => {
-            await draft.updateAndCommit((current) => ({ ...current, hidden }));
+            await draft.updateAndCommit((current) => new Axis(current).withHidden(hidden));
           }}
           aria-label="Hidden axis"
         />
@@ -173,33 +171,3 @@ const DefinitionNumberField = ({
     />
   </label>
 );
-
-/** `axis` with one continuous bound replaced; a discrete axis has no bounds to change. */
-function withContinuousBound(
-  axis: AxisRecord,
-  bound: { readonly minimum: number } | { readonly maximum: number },
-): AxisRecord {
-  if (axis.kind.kind !== "continuous") return axis;
-
-  return { ...axis, kind: { ...axis.kind, ...bound } };
-}
-
-function axisWithType(record: AxisRecord, axisType: AxisKind["kind"]): AxisRecord {
-  const axis = new Axis(record);
-  switch (axisType) {
-    case "continuous":
-      return {
-        ...record,
-        kind: {
-          kind: axisType,
-          minimum: axis.minimum,
-          default: axis.default,
-          maximum: axis.maximum,
-        },
-      };
-    case "discrete": {
-      const values = [...new Set([axis.minimum, axis.default, axis.maximum])].sort(ascending);
-      return { ...record, kind: { kind: axisType, values, default: axis.default } };
-    }
-  }
-}

@@ -91,7 +91,12 @@ export {
   mintSourceId,
 } from "./ids";
 
-export type { AxisDefinition, NamedInstanceDefinition, SourceMetrics } from "./domain";
+export type {
+  AxisDefinition,
+  AxisKindName,
+  NamedInstanceDefinition,
+  SourceMetrics,
+} from "./domain";
 export type {
   FontSessionMode,
   WorkspaceDocumentSourceKind,

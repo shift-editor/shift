@@ -1,4 +1,5 @@
-//! An axis's range and positions, as shift-font's [`AxisKind`] answers them.
+//! An axis's range and positions, and its kind converted, as shift-font's
+//! [`AxisKind`] answers them.
 //!
 //! Every value is in the axis's user space. The calls are stateless: each
 //! carries the axis's kind, so nothing is registered.
@@ -19,6 +20,10 @@ pub trait Axes {
     fn accepts(&self, kind: AxisKind, value: f64) -> bool;
     /// `value` mapped to `-1..=1` around the default: `AxisKind::normalize`.
     fn normalize(&self, kind: AxisKind, value: f64) -> f64;
+    /// The same positions as a continuous range: `AxisKind::to_continuous`.
+    fn to_continuous(&self, kind: AxisKind) -> AxisKind;
+    /// The same positions as discrete values: `AxisKind::to_discrete`.
+    fn to_discrete(&self, kind: AxisKind) -> AxisKind;
 }
 
 /// The axis rules [`Axes`] calls.
@@ -43,6 +48,14 @@ impl Axes for AxisRules {
 
     fn normalize(&self, kind: AxisKind, value: f64) -> f64 {
         kind.normalize(value)
+    }
+
+    fn to_continuous(&self, kind: AxisKind) -> AxisKind {
+        kind.to_continuous()
+    }
+
+    fn to_discrete(&self, kind: AxisKind) -> AxisKind {
+        kind.to_discrete()
     }
 }
 

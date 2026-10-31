@@ -63,6 +63,33 @@ impl AxisKind {
         }
     }
 
+    /// Returns this kind as a continuous range over the same positions: from
+    /// [`Self::minimum`] to [`Self::maximum`], keeping the default. A
+    /// continuous kind comes back unchanged.
+    pub fn to_continuous(&self) -> Self {
+        Self::Continuous {
+            minimum: self.minimum(),
+            default: self.default(),
+            maximum: self.maximum(),
+        }
+    }
+
+    /// Returns this kind as discrete values: a continuous range becomes its
+    /// minimum, default and maximum, ascending, each once. A discrete kind
+    /// comes back unchanged.
+    pub fn to_discrete(&self) -> Self {
+        if let Self::Discrete { .. } = self {
+            return self.clone();
+        }
+        let mut values = vec![self.minimum(), self.default(), self.maximum()];
+        values.sort_by(f64::total_cmp);
+        values.dedup();
+        Self::Discrete {
+            values,
+            default: self.default(),
+        }
+    }
+
     /// Returns whether the axis has more than one position: a range wider
     /// than a point, or more than one discrete value.
     pub fn varies(&self) -> bool {
@@ -884,6 +911,27 @@ mod tests {
         assert!(kind.varies());
         assert!(kind.accepts(2.0));
         assert!(!kind.accepts(0.5));
+    }
+
+    #[test]
+    fn a_range_becomes_its_bounds_and_default_as_discrete_values_and_back() {
+        let range = AxisKind::Continuous {
+            minimum: 100.0,
+            default: 100.0,
+            maximum: 900.0,
+        };
+
+        let discrete = range.to_discrete();
+
+        assert_eq!(
+            discrete,
+            AxisKind::Discrete {
+                values: vec![100.0, 900.0],
+                default: 100.0,
+            }
+        );
+        assert_eq!(discrete.to_continuous(), range);
+        assert_eq!(discrete.to_discrete(), discrete);
     }
 
     #[test]

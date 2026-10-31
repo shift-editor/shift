@@ -23,3 +23,9 @@ export type InstanceCreationIssue =
   | { kind: "name"; message: string }
   | { kind: "axis"; axisId: AxisId; message: string }
   | { kind: "location"; instanceId: NamedInstanceId; message: string };
+
+/** One end of a style label's range: its new minimum or its new maximum. */
+export type AxisLabelBound = { readonly minimum: number } | { readonly maximum: number };
+
+/** Whether a style label names one value or a range around it. */
+export type AxisLabelKind = "value" | "range";
