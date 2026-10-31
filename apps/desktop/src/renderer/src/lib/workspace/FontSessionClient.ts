@@ -31,7 +31,6 @@ import type {
   LayerMatch,
   LayerRead,
   Location,
-  ShaperFont,
   SlugAtlas,
 } from "@shift/types";
 import { signal } from "@shift/editor/signals";
@@ -408,16 +407,6 @@ export class FontSessionClient {
     await this.connect();
 
     return this.#workspace().mapLocation(location);
-  }
-
-  /**
-   * Returns the shaper font compiled from the font's feature code, or null
-   * while `knownRevision` is still current.
-   */
-  async shaperFont(knownRevision: number | null): Promise<ShaperFont | null> {
-    await this.connect();
-
-    return this.#workspace().shaperFont(knownRevision);
   }
 
   async #connect(): Promise<void> {

@@ -4,12 +4,7 @@
 // since it depends on this one.
 import { createRequire } from "module";
 import { carryingNames } from "@shift/pack";
-import {
-  NativeAtlas,
-  NativeShaping,
-  NativeSource,
-  NativeWorkspace,
-} from "@shift/types/native-protocol";
+import { NativeAtlas, NativeSource, NativeWorkspace } from "@shift/types/native-protocol";
 
 const require = createRequire(import.meta.url);
 const { Bridge } = require("../index.js");
@@ -23,7 +18,6 @@ export function nativeBridge() {
     workspace: new NativeWorkspace(transport(addon.workspaceRequest)),
     atlas: new NativeAtlas(transport(addon.atlasRequest)),
     source: new NativeSource(transport(addon.sourceRequest)),
-    shaping: new NativeShaping(transport(addon.shapingRequest)),
     napi: addon,
   };
 }

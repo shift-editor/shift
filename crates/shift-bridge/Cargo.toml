@@ -16,7 +16,6 @@ shift-slug = { workspace = true }
 shift-specimen = { workspace = true }
 shift-wire = { workspace = true, features = ["napi", "pack"] }
 shift-backends = { workspace = true }
-shift-shaper-font = { workspace = true }
 shift-config = { workspace = true }
 shift-store = { workspace = true }
 shift-workspace = { workspace = true }
