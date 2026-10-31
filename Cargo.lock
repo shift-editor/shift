@@ -2421,8 +2421,6 @@ dependencies = [
 name = "shift-backends"
 version = "0.1.0"
 dependencies = [
- "fea-rs",
- "fontbe",
  "fontc",
  "fontdrasil",
  "fontir",
@@ -2437,7 +2435,7 @@ dependencies = [
  "rayon",
  "serde",
  "shift-font",
- "shift-shape",
+ "shift-shaper-font",
  "shift-slug",
  "shift-store",
  "skrifa",
@@ -2565,6 +2563,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "shift-shaper-font"
+version = "0.1.0"
+dependencies = [
+ "fea-rs",
+ "fontbe",
+ "fontdrasil",
+ "fontir",
+ "harfrust",
+ "shift-font",
+ "shift-shape",
+ "thiserror",
+ "write-fonts",
+]
+
+[[package]]
 name = "shift-slug"
 version = "0.1.0"
 dependencies = [
@@ -2616,6 +2629,7 @@ dependencies = [
  "shift-engine",
  "shift-font",
  "shift-shape",
+ "shift-shaper-font",
  "shift-wire",
  "thiserror",
  "wasm-bindgen",

@@ -17,12 +17,20 @@
 //!
 //! Adapted from Fontra's `build-shaper-font` (Apache-2.0).
 
+// Library code returns errors instead of panicking: a panic kills the
+// WebAssembly module the editor compiles with. Tests may unwrap (clippy.toml).
+#![warn(clippy::unwrap_used, clippy::print_stdout)]
+
+mod axes;
 mod diagnostics;
+mod glyph_order;
+mod inputs;
+mod references;
 mod shape;
 mod state;
 mod tables;
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -35,52 +43,64 @@ use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
 use fontdrasil::types::Axis as IrAxis;
 use fontdrasil::variations::VariationModelError;
 use fontir::ir::StaticMetadata;
-use shift_font::{AxisId, GlyphId};
+use shift_font::{AxisId, GlyphId, OpenTypeCategory, ShaperFontSource};
 use shift_shape::AxisNormalization;
 use write_fonts::BuilderError;
 use write_fonts::tables::gdef::GlyphClassDef;
 use write_fonts::types::Tag;
 
+pub use axes::{AxisConversionError, MappingSide, axis_tag, to_ir_axes};
 pub use diagnostics::{DiagnosticSeverity, FeatureDiagnostic};
+pub use glyph_order::ShaperGlyphOrder;
+pub use inputs::UnitsPerEm;
+use inputs::{FeatureSource, GlyphSet, ShaperAxes};
 pub use shape::{
     FeatureSetting, LiveShaper, ParagraphRequest, ShapeError, ShapeRequest, ShapeUnit, ShapedGlyph,
     ShapedRun, TextDirection,
 };
 pub use state::ShaperFontState;
 
-use crate::glyph_category::gdef_classes;
-use crate::shift2fontir::{AxisConversionError, to_ir_axes, units_per_em};
-use crate::traits::FontView;
 use diagnostics::feature_diagnostics;
+use references::FeatureReferences;
 
 /// Path fea-rs reports for the authored feature source.
 const FEATURE_SOURCE_PATH: &str = "features.fea";
 
-/// Glyph that every shaper font places at glyph id 0.
-const NOTDEF: &str = ".notdef";
+/// The `GDEF` glyph class write-fonts writes for a glyph's
+/// [`OpenTypeCategory`]. A trait, since neither type is this crate's to give
+/// a `From`.
+pub trait ToGlyphClassDef {
+    /// The class write-fonts writes.
+    fn to_glyph_class_def(self) -> GlyphClassDef;
+}
 
-/// Everything a shaper font is compiled from.
-///
-/// Two requests compare equal exactly when they compile to the same shaper
-/// font, so a caller can skip rebuilding for an unchanged request.
-#[derive(Clone, Debug, PartialEq)]
+impl ToGlyphClassDef for OpenTypeCategory {
+    fn to_glyph_class_def(self) -> GlyphClassDef {
+        match self {
+            Self::Base => GlyphClassDef::Base,
+            Self::Ligature => GlyphClassDef::Ligature,
+            Self::Mark => GlyphClassDef::Mark,
+            Self::Component => GlyphClassDef::Component,
+        }
+    }
+}
+
+/// Everything a shaper font is compiled from, in parts: units per em, the
+/// feature source, the axes, and the glyph set with each glyph's `GDEF`
+/// class. [`ShaperFontState`] compares a new request part by part to decide
+/// whether it compiles differently.
+#[derive(Clone, Debug)]
 pub struct ShaperFontRequest {
-    units_per_em: u16,
-    glyph_names: Vec<String>,
-    /// The Shift glyph for each name in `glyph_names`; `None` for a `.notdef`
-    /// the font does not have.
-    glyph_ids: Vec<Option<GlyphId>>,
-    feature_source: String,
-    axes: Vec<IrAxis>,
-    /// The Shift axis for each axis in `axes`.
-    axis_ids: Vec<AxisId>,
-    gdef_classes: BTreeMap<String, GlyphClassDef>,
+    units_per_em: UnitsPerEm,
+    feature_source: FeatureSource,
+    axes: ShaperAxes,
+    glyphs: GlyphSet,
 }
 
 impl ShaperFontRequest {
-    /// Collects the shaper-font inputs of a font: its glyph order, authored
-    /// feature source, units per em, axes with their independent mappings,
-    /// and the `GDEF` class each glyph's category resolves to.
+    /// Collects what a shaper font is compiled from out of `source`: its
+    /// glyph order, feature source, units per em, axes with their independent
+    /// mappings, and each glyph's `GDEF` class.
     ///
     /// `.notdef` is moved, or added, to the front of the glyph order.
     ///
@@ -89,37 +109,62 @@ impl ShaperFontRequest {
     /// Returns [`ShaperFontError::InvalidUnitsPerEm`] when units per em is not
     /// a whole number from 16 to 16384, and [`ShaperFontError::InvalidAxes`]
     /// when an axis or its mapping cannot define a coordinate converter.
-    pub fn from_font(font: &impl FontView) -> Result<Self, ShaperFontError> {
-        let value = font.metrics().units_per_em;
-        let units_per_em =
-            units_per_em(value).ok_or(ShaperFontError::InvalidUnitsPerEm { value })?;
-        let axes = to_ir_axes(font.axes(), font.axis_mappings())?;
-        let (glyph_names, glyph_ids) = std::iter::once((
-            NOTDEF.to_string(),
-            font.glyph(NOTDEF).map(shift_font::Glyph::id),
-        ))
-        .chain(
-            font.glyphs()
-                .filter(|glyph| glyph.name() != NOTDEF)
-                .map(|glyph| (glyph.name().to_string(), Some(glyph.id()))),
-        )
-        .unzip();
+    pub fn new(source: &ShaperFontSource) -> Result<Self, ShaperFontError> {
+        let units_per_em = UnitsPerEm::try_from(source.units_per_em)?;
+        let axes = to_ir_axes(&source.axes, &source.axis_mappings)?;
+        let mut glyphs = GlyphSet::default();
+        for glyph in source.glyph_order() {
+            glyphs.names.push(glyph.name.to_string());
+            glyphs.ids.push(glyph.id);
+            if let Some(class) = glyph.gdef_class {
+                glyphs
+                    .gdef_classes
+                    .insert(glyph.name.to_string(), class.to_glyph_class_def());
+            }
+        }
 
         Ok(Self {
             units_per_em,
-            glyph_names,
-            glyph_ids,
-            feature_source: font.features().fea_source().unwrap_or_default().to_string(),
-            axes,
-            axis_ids: font.axes().iter().map(shift_font::Axis::id).collect(),
-            gdef_classes: gdef_classes(font.glyphs(), font.lib()),
+            feature_source: FeatureSource(source.feature_source.clone()),
+            axes: ShaperAxes {
+                axes,
+                ids: source.axes.iter().map(shift_font::Axis::id).collect(),
+            },
+            glyphs,
         })
+    }
+
+    /// Returns the variation model fea-rs needs to resolve variable values, or
+    /// `None` for a static font.
+    fn variation_metadata(&self) -> Result<Option<StaticMetadata>, VariationModelError> {
+        if self.axes.axes.is_empty() {
+            return Ok(None);
+        }
+
+        let default_location: NormalizedLocation = self
+            .axes
+            .axes
+            .iter()
+            .map(|axis| (axis.tag, NormalizedCoord::new(0.0)))
+            .collect();
+        let metadata = StaticMetadata::new(
+            self.units_per_em.get(),
+            Default::default(),
+            self.axes.axes.clone(),
+            Vec::new(),
+            HashSet::from([default_location]),
+            None,
+            0.0,
+            None,
+            false,
+        )?;
+        Ok(Some(metadata))
     }
 
     /// Returns this request with no feature source, which always compiles.
     fn without_features(&self) -> Self {
         Self {
-            feature_source: String::new(),
+            feature_source: FeatureSource::default(),
             ..self.clone()
         }
     }
@@ -130,7 +175,7 @@ impl ShaperFontRequest {
 pub struct ShaperFont {
     bytes: Vec<u8>,
     glyph_names: Vec<String>,
-    glyph_ids: Vec<Option<GlyphId>>,
+    glyph_order: ShaperGlyphOrder,
     axes: Vec<IrAxis>,
     axis_ids: Vec<AxisId>,
     insert_markers: Vec<InsertMarker>,
@@ -149,18 +194,30 @@ impl ShaperFont {
     /// Returns [`ShaperFontError`] when the glyph order has duplicate names,
     /// or the axes or compiled tables cannot be assembled into a font.
     pub fn compile(request: &ShaperFontRequest) -> Result<ShaperFontCompilation, ShaperFontError> {
-        let glyph_map = GlyphMap::new(request.glyph_names.iter().map(String::as_str))?;
+        let glyph_map = GlyphMap::new(request.glyphs.names.iter().map(String::as_str))?;
 
-        let (tree, parse_diagnostics) = parse_feature_source(&request.feature_source, &glyph_map)?;
+        let (tree, parse_diagnostics) =
+            parse_feature_source(request.feature_source.as_str(), &glyph_map)?;
         if parse_diagnostics.has_errors() {
-            return Ok(ShaperFontCompilation::failed(&parse_diagnostics, &tree));
+            // What a source that does not parse names is unknown, so any
+            // glyph change may let it compile.
+            return Ok(ShaperFontCompilation::failed(
+                &parse_diagnostics,
+                &tree,
+                FeatureReferences::every_glyph(),
+            ));
         }
+        let references = FeatureReferences::of(&tree);
 
-        let static_metadata = variation_metadata(request)?;
+        let static_metadata = request.variation_metadata()?;
         let variation_info = static_metadata.as_ref().map(FeaVariationInfo::new);
         let validation = compile::validate(&tree, &glyph_map, variation_info.as_ref());
         if validation.has_errors() {
-            return Ok(ShaperFontCompilation::failed(&validation, &tree));
+            return Ok(ShaperFontCompilation::failed(
+                &validation,
+                &tree,
+                references,
+            ));
         }
 
         let compiled = compile::compile(
@@ -172,16 +229,21 @@ impl ShaperFont {
         );
         let (mut compilation, warnings) = match compiled {
             Ok(compiled) => compiled,
-            Err(errors) => return Ok(ShaperFontCompilation::failed(&errors, &tree)),
+            Err(errors) => {
+                return Ok(ShaperFontCompilation::failed(&errors, &tree, references));
+            }
         };
 
-        tables::add_glyph_classes(&mut compilation, &glyph_map, &request.gdef_classes);
+        tables::add_glyph_classes(&mut compilation, &glyph_map, &request.glyphs.gdef_classes);
         compilation
             .head
             .get_or_insert_with(Default::default)
-            .units_per_em = request.units_per_em;
+            .units_per_em = request.units_per_em.get();
         let fvar = match static_metadata {
-            Some(_) => Some(tables::add_axis_names(&mut compilation, &request.axes)?),
+            Some(_) => Some(tables::add_axis_names(
+                &mut compilation,
+                &request.axes.axes,
+            )?),
             None => None,
         };
 
@@ -193,13 +255,14 @@ impl ShaperFont {
         Ok(ShaperFontCompilation {
             font: Some(Self {
                 bytes: builder.build(),
-                glyph_names: request.glyph_names.clone(),
-                glyph_ids: request.glyph_ids.clone(),
-                axes: request.axes.clone(),
-                axis_ids: request.axis_ids.clone(),
+                glyph_names: request.glyphs.names.clone(),
+                glyph_order: ShaperGlyphOrder::new(request.glyphs.ids.clone())?,
+                axes: request.axes.axes.clone(),
+                axis_ids: request.axes.ids.clone(),
                 insert_markers: tables::insert_markers(&compilation, &tree),
             }),
             diagnostics: feature_diagnostics(&warnings, &tree),
+            references,
         })
     }
 
@@ -216,7 +279,12 @@ impl ShaperFont {
     /// Returns the Shift glyph at each shaper glyph id, in glyph order;
     /// `None` for a `.notdef` the font does not have.
     pub fn glyph_ids(&self) -> &[Option<GlyphId>] {
-        &self.glyph_ids
+        self.glyph_order.as_slice()
+    }
+
+    /// Returns the Shift glyph at each shaper glyph id, both ways.
+    pub fn glyph_order(&self) -> &ShaperGlyphOrder {
+        &self.glyph_order
     }
 
     /// Returns how each axis's user coordinates normalize, in `fvar` order,
@@ -264,13 +332,21 @@ pub struct InsertMarker {
 pub struct ShaperFontCompilation {
     pub font: Option<ShaperFont>,
     pub diagnostics: Vec<FeatureDiagnostic>,
+    /// The glyphs the feature source names, which decide whether a later
+    /// glyph change needs a recompile.
+    references: FeatureReferences,
 }
 
 impl ShaperFontCompilation {
-    fn failed(diagnostics: &DiagnosticSet, tree: &ParseTree) -> Self {
+    fn failed(
+        diagnostics: &DiagnosticSet,
+        tree: &ParseTree,
+        references: FeatureReferences,
+    ) -> Self {
         Self {
             font: None,
             diagnostics: feature_diagnostics(diagnostics, tree),
+            references,
         }
     }
 }
@@ -290,6 +366,9 @@ pub enum ShaperFontError {
 
     #[error("invalid glyph order")]
     GlyphOrder(#[from] GlyphOrderError),
+
+    #[error("more glyphs than a shaper glyph id can number")]
+    TooManyGlyphs,
 
     #[error("cannot load the feature source")]
     SourceLoad(#[from] SourceLoadError),
@@ -324,35 +403,22 @@ fn parse_feature_source(
     )
 }
 
-/// Returns the variation model fea-rs needs to resolve variable values, or
-/// `None` for a static font.
-fn variation_metadata(
-    request: &ShaperFontRequest,
-) -> Result<Option<StaticMetadata>, VariationModelError> {
-    if request.axes.is_empty() {
-        return Ok(None);
-    }
-
-    let default_location: NormalizedLocation = request
-        .axes
-        .iter()
-        .map(|axis| (axis.tag, NormalizedCoord::new(0.0)))
-        .collect();
-    let metadata = StaticMetadata::new(
-        request.units_per_em,
-        Default::default(),
-        request.axes.clone(),
-        Vec::new(),
-        HashSet::from([default_location]),
-        None,
-        0.0,
-        None,
-        false,
-    )?;
-    Ok(Some(metadata))
-}
-
 #[cfg(test)]
 mod shape_tests;
 #[cfg(test)]
 mod tests;
+
+/// Reads requests and character mappings out of test fonts, classing glyphs by
+/// their own categories.
+#[cfg(test)]
+mod test_fonts {
+    use shift_font::{Font, GlyphClasses, GlyphDataCategory};
+
+    use super::{ShaperFontError, ShaperFontRequest};
+
+    pub(crate) fn request_for(font: &Font) -> Result<ShaperFontRequest, ShaperFontError> {
+        let classes =
+            GlyphClasses::of_loaded(font.glyphs(), font.lib(), |_| GlyphDataCategory::default());
+        ShaperFontRequest::new(&font.shaper_font_source(&classes))
+    }
+}

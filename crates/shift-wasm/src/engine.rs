@@ -15,7 +15,7 @@ use js_sys::{Array, Float64Array, Function, Object, Reflect, Uint8Array};
 use pack::{CarryingNames, Packed};
 use serde::Serialize;
 use shift_engine::{
-    ApplyError, EditHistory, EngineSession, LayerSource, RecordSource, StoreReadError,
+    ApplyError, EditHistory, EngineSession, LayerSource, RecordCache, RecordSource, StoreReadError,
     StoreReaderClient,
 };
 use shift_font::{
@@ -27,6 +27,7 @@ use shift_wire::{AnchorData, ComponentData, ContourData, values};
 use wasm_bindgen::prelude::*;
 
 use crate::engine_reads::{FontVariation, InternedIds};
+use crate::shaping::TextShaping;
 
 #[wasm_bindgen(typescript_custom_section)]
 const ENGINE_TYPES: &str = r#"
@@ -63,6 +64,11 @@ export interface StoreReply {
  */
 export interface EngineEditLayers {
   layers: EngineLayer[];
+  /**
+   * What its changes invalidate, as `FontChangeImpact` bits: bit `i` is the
+   * `i`th `FontChangeFlag`, in declaration order.
+   */
+  impact: number;
   /** For an undo or redo: its change set, as named MessagePack, to persist. */
   changeSet?: Uint8Array;
   /** For an undo or redo: whether it left the font as last saved. */
@@ -71,13 +77,12 @@ export interface EngineEditLayers {
 
 /**
  * What applying intents within the open edit did, without the font-level
- * records an `EngineEdit` carries: the layers they touched, and whether they
- * changed what the engine's kerning and source-metric reads return.
+ * records an `EngineEdit` carries: the layers they touched, and what their
+ * changes invalidate, as `EngineEditLayers.impact`.
  */
 export interface EngineStage {
   layers: EngineLayer[];
-  kerning: boolean;
-  sourceMetrics: boolean;
+  impact: number;
 }
 
 /** A contour an edit kept as it was: the one with this id in the structure the edit started from. */
@@ -229,6 +234,18 @@ impl RecordSource for HostLayers<'_> {
         }
         self.client().glyph_data_categories(glyphs.to_vec())
     }
+
+    fn attaching_anchor_layers(
+        &mut self,
+        layer_ids: &[LayerId],
+    ) -> Result<Vec<LayerId>, HostError> {
+        if layer_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(self
+            .client()
+            .attaching_anchor_layers(layer_ids.to_vec())??)
+    }
 }
 
 impl From<HostError> for StoreReadError {
@@ -240,6 +257,19 @@ impl From<HostError> for StoreReadError {
             },
         }
     }
+}
+
+/// What happened to a session's edit, as far as what the reads built from
+/// the font cares ([`Engine::on`]).
+enum EditEvent {
+    /// Intents applied, with the impact of their changes.
+    Applied(FontChangeImpact),
+    /// The session went back to where the open edit began, keeping it open.
+    Rewound,
+    /// The edit closed and stays: committed, or an undo or redo.
+    Committed,
+    /// The edit closed and the session went back to where it began.
+    Cancelled,
 }
 
 /// An open session, the store request it reads through, its undo history, the
@@ -262,6 +292,17 @@ pub(crate) struct Engine {
     /// locations differ from the ones it was derived from; read it through
     /// [`Engine::variation`].
     variation: RefCell<Option<Rc<FontVariation>>>,
+    /// The shaper text shapes with, compiled from the session's font when
+    /// text is first shaped.
+    pub(crate) shaping: TextShaping,
+    /// The store's answers for glyph records and the shaper's source, each
+    /// asked once: glyph data's categories by name and codepoints, and the
+    /// attaching anchors of layers the session has not loaded.
+    records: RefCell<RecordCache>,
+    /// What the open edit's applies changed so far, so that what was built
+    /// from them is dropped when the session goes back to where it began
+    /// ([`EditEvent`]).
+    edit_impact: FontChangeImpact,
 }
 
 impl Engine {
@@ -274,6 +315,8 @@ impl Engine {
         let edit = Object::new();
         set(&edit, "layers", &layers)?;
         let impact = applied.changes.impact();
+        self.on(EditEvent::Applied(impact));
+        set(&edit, "impact", &JsValue::from(impact.bits()))?;
         let mut replaced = FontReplacement::changed_by(
             self.session.font(),
             impact.difference(FontChangeImpact::GLYPHS),
@@ -281,7 +324,13 @@ impl Engine {
         if impact.contains(FontChangeImpact::GLYPHS) {
             let glyph_changes = self
                 .session
-                .glyph_record_changes(&mut HostLayers(&self.source), &applied.changes)
+                .glyph_record_changes(
+                    &mut self
+                        .records
+                        .borrow_mut()
+                        .reading(&mut HostLayers(&self.source)),
+                    &applied.changes,
+                )
                 .map_err(js_error)?;
             replaced
                 .get_or_insert_with(FontReplacement::default)
@@ -291,6 +340,24 @@ impl Engine {
         Ok(edit)
     }
 
+    /// Keeps what the reads built from the font in step with `event`: an
+    /// apply drops what its changes touched and adds them to the open edit's;
+    /// going back to where the edit began drops what the edit's applies
+    /// touched; closing the edit forgets them.
+    fn on(&mut self, event: EditEvent) {
+        match event {
+            EditEvent::Applied(impact) => {
+                self.shaping.forget_if_changed(impact);
+                self.edit_impact |= impact;
+            }
+            EditEvent::Rewound | EditEvent::Cancelled => {
+                self.shaping.forget_if_changed(self.edit_impact);
+                self.edit_impact = FontChangeImpact::empty();
+            }
+            EditEvent::Committed => self.edit_impact = FontChangeImpact::empty(),
+        }
+    }
+
     /// The variation the reads evaluate for the session's font as it stands.
     pub(crate) fn variation(&self) -> Rc<FontVariation> {
         FontVariation::of(&self.variation, self.session.font())
@@ -298,7 +365,24 @@ impl Engine {
 
     /// Every glyph's record, in name order, as the session's font stands.
     pub(crate) fn glyph_records(&self) -> Result<shift_font::GlyphRecords, StoreReadError> {
-        Ok(self.session.glyph_records(&mut HostLayers(&self.source))?)
+        Ok(self.session.glyph_records(
+            &mut self
+                .records
+                .borrow_mut()
+                .reading(&mut HostLayers(&self.source)),
+        )?)
+    }
+
+    /// What the font's shaper font compiles from, as the session's font stands.
+    pub(crate) fn shaper_font_source(
+        &self,
+    ) -> Result<shift_font::ShaperFontSource, StoreReadError> {
+        Ok(self.session.shaper_font_source(
+            &mut self
+                .records
+                .borrow_mut()
+                .reading(&mut HostLayers(&self.source)),
+        )?)
     }
 
     /// The intents held for this apply, stage or preview, as one set.
@@ -362,6 +446,9 @@ pub fn engine_open(
             held: Vec::new(),
             replaced: None,
             variation: RefCell::default(),
+            shaping: TextShaping::default(),
+            records: RefCell::new(RecordCache::default()),
+            edit_impact: FontChangeImpact::empty(),
         }));
         Ok(handle)
     })
@@ -425,6 +512,7 @@ pub fn engine_rewind_edit(handle: u32) -> Result<(), JsError> {
             .clone()
             .ok_or_else(|| JsError::new("no edit is open; begin one first"))?;
         engine.session = before;
+        engine.on(EditEvent::Rewound);
         engine.history.begin();
         Ok(())
     })
@@ -452,20 +540,12 @@ pub fn engine_stage(handle: u32) -> Result<JsValue, JsError> {
             .map_err(apply_error)?;
         let layers = engine_layers(&before, &applied.layers)?;
         let impact = applied.changes.impact();
+        engine.on(EditEvent::Applied(impact));
         engine.history.record(applied.changes);
 
         let stage = Object::new();
         set(&stage, "layers", &layers)?;
-        set(
-            &stage,
-            "kerning",
-            &JsValue::from_bool(impact.intersects(FontChangeImpact::KERNING)),
-        )?;
-        set(
-            &stage,
-            "sourceMetrics",
-            &JsValue::from_bool(impact.intersects(FontChangeImpact::SOURCE_METRICS)),
-        )?;
+        set(&stage, "impact", &JsValue::from(impact.bits()))?;
         Ok(stage.into())
     })
 }
@@ -481,6 +561,7 @@ pub fn engine_stage(handle: u32) -> Result<JsValue, JsError> {
 pub fn engine_end_edit(handle: u32) -> Result<Option<Uint8Array>, JsError> {
     with_engine(handle, |engine| {
         engine.before_edit = None;
+        engine.on(EditEvent::Committed);
         let Some(change_set) = engine.history.end(engine.session.font())? else {
             return Ok(None);
         };
@@ -500,6 +581,7 @@ pub fn engine_cancel_edit(handle: u32) -> Result<(), JsError> {
     with_engine(handle, |engine| {
         if let Some(before) = engine.before_edit.take() {
             engine.session = before;
+            engine.on(EditEvent::Cancelled);
         }
         engine.history.cancel();
         Ok(())
@@ -567,6 +649,8 @@ fn replayed(
         return Ok(JsValue::UNDEFINED);
     };
     let edit = engine.edit_object(before, &applied)?;
+    // An undo or redo is a whole edit of its own.
+    engine.on(EditEvent::Committed);
     let change_set = rmp_serde::to_vec_named(&applied.changes.compact())?;
     set(&edit, "changeSet", &Uint8Array::from(&change_set[..]))?;
     set(

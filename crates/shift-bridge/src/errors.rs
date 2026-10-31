@@ -1,5 +1,4 @@
 use napi::{Error, JsError, Status};
-use shift_backends::shaper_font::{ShapeError, ShaperFontError};
 use shift_backends::{BackendError, FontReadError, SourceAtlasError};
 use shift_font::error::CoreError;
 use shift_slug::{AuthoredSlugError, SlugError};
@@ -52,12 +51,6 @@ pub enum BridgeError {
 
   #[error(transparent)]
   Slug(#[from] SlugError),
-
-  #[error(transparent)]
-  ShaperFont(#[from] ShaperFontError),
-
-  #[error(transparent)]
-  Shape(#[from] ShapeError),
 }
 
 pub(crate) fn to_napi_error(error: BridgeError) -> Error {
@@ -72,13 +65,6 @@ pub(crate) fn to_napi_error(error: BridgeError) -> Error {
       | BackendError::InvalidExtensionUtf8 { .. }
       | BackendError::UnsupportedFormat { .. }
       | BackendError::UnsupportedWriteFormat { .. },
-    )
-    | BridgeError::Shape(
-      ShapeError::TooManyUnits
-      | ShapeError::TooManyInsertedGlyphs
-      | ShapeError::InvalidFeatureTag(_)
-      | ShapeError::UnknownScript(_)
-      | ShapeError::InvalidLanguage(_),
     ) => Status::InvalidArg,
     BridgeError::Core(_)
     | BridgeError::Backend(_)
@@ -89,9 +75,7 @@ pub(crate) fn to_napi_error(error: BridgeError) -> Error {
     | BridgeError::Encoding(_)
     | BridgeError::Decoding(_)
     | BridgeError::AuthoredSlug(_)
-    | BridgeError::Slug(_)
-    | BridgeError::ShaperFont(_)
-    | BridgeError::Shape(_) => Status::GenericFailure,
+    | BridgeError::Slug(_) => Status::GenericFailure,
   };
 
   Error::new(status, error.to_string())
@@ -127,8 +111,6 @@ macro_rules! through_bridge_error {
       rmp_serde::decode::Error,
       shift_slug::AuthoredSlugError,
       shift_slug::SlugError,
-      shift_backends::shaper_font::ShaperFontError,
-      shift_backends::shaper_font::ShapeError,
     );
   };
   ($error:ty: $($source:ty),+ $(,)?) => {

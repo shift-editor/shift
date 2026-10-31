@@ -25,8 +25,12 @@
 
 use pack::Pack;
 use shift_engine::StoreReadError;
-use shift_font::{Axis, GlyphRecords, MetricValue, MissingKerningOrigin, ResolvedKerning, Source};
+use shift_font::{
+    Axis, FontChangeFlag, GlyphRecords, MetricValue, MissingKerningOrigin, ResolvedKerning, Source,
+};
 use shift_wire::KerningSnapshot;
+
+use crate::shaping::{ParagraphRequest, ShapedParagraph};
 
 /// What the editor reads from one engine session's font. Glyphs and sources
 /// are named by the numbers the session interned for them; `glyphs` lists
@@ -76,6 +80,23 @@ pub trait EngineReads {
     ///
     /// Returns [`StoreReadError`] when the store's reader cannot answer.
     fn glyph_records(&self) -> Result<GlyphRecords, StoreReadError>;
+    /// Shapes paragraphs with the font's feature code, through a shaper font
+    /// the session compiles from its own font: each paragraph's runs in
+    /// logical order, or why it could not be shaped.
+    ///
+    /// The session compiles when text is first shaped, and again before the
+    /// next shape after an edit that may change the glyph directory or the
+    /// axes and their mappings, only when something the compile reads
+    /// changed; feature code with errors keeps the last font. What the
+    /// compile reads of layers the session has not loaded (whether they
+    /// carry an anchor marks attach to) and glyph data's categories come from
+    /// the store's reader; nothing is loaded to answer. When the reader
+    /// cannot answer, or the font cannot make a shaper font, every paragraph
+    /// is unshapable with that reason.
+    fn shape_paragraphs(&self, paragraphs: Vec<ParagraphRequest>) -> Vec<ShapedParagraph>;
+    /// The flags whose change may change what [`Self::shape_paragraphs`]
+    /// returns.
+    fn shaping_inputs(&self) -> Vec<FontChangeFlag>;
     /// Every interned source set's weights at a design location, as the
     /// basis the session's font gives each set evaluates them
     /// (`InterpolationBasis::weights_at`): the weights of the sets a frame
@@ -155,10 +176,11 @@ mod exports {
     use wasm_bindgen::prelude::*;
 
     use super::{
-        Axis, EditablePair, EngineReads, InterpolatedMetrics, KerningSnapshot, Source,
-        SourceSetWeights, engine_reads_request,
+        Axis, EditablePair, EngineReads, FontChangeFlag, InterpolatedMetrics, KerningSnapshot,
+        ParagraphRequest, ShapedParagraph, Source, SourceSetWeights, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
+    use crate::shaping::TextShaping;
     use crate::variation::{design_values, external_values, to_location, weights_at};
 
     /// The ids a session's reads name by number, each interned once.
@@ -485,6 +507,18 @@ mod exports {
 
         fn glyph_records(&self) -> Result<GlyphRecords, StoreReadError> {
             Self::glyph_records(self)
+        }
+
+        fn shape_paragraphs(&self, paragraphs: Vec<ParagraphRequest>) -> Vec<ShapedParagraph> {
+            self.shaping.shape_paragraphs(
+                self.session.font(),
+                || self.shaper_font_source(),
+                &paragraphs,
+            )
+        }
+
+        fn shaping_inputs(&self) -> Vec<FontChangeFlag> {
+            FontChangeFlag::of(TextShaping::INPUTS).collect()
         }
 
         fn source_set_weights(&self, location: Vec<f64>) -> SourceSetWeights {

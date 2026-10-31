@@ -32,7 +32,7 @@ packages/types/src/
 
 Import from `@shift/types`.
 
-- `BridgeApi` -- type-only surface of the addon's remaining napi methods: the four area request exports, Slug atlas streams, async export and specimens, and the reads phase f moves into the engine. The workspace, atlas, source and shaping calls are the `@shift/types/native-protocol` classes.
+- `BridgeApi` -- type-only surface of the addon's remaining napi methods: the three area request exports, Slug atlas streams, async export and specimens, and the reads phase f moves into the engine. The workspace, atlas and source calls are the `@shift/types/native-protocol` classes.
 - `FontMetadata` / `FontMetrics` -- independent font-level DTOs; metadata mutation replaces the complete `FontMetadata` snapshot without changing metrics.
 - `GlyphRecord` -- committed glyph list record: stable id, name, unicodes, component base glyph IDs.
 - `DocumentIdentity` -- canonical `DocumentId` and canonical path used by the desktop to deduplicate native document sessions before Open.

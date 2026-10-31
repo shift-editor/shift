@@ -12,32 +12,18 @@ use shift_font::{
     Source as ShiftSource, SourceId,
 };
 
-use crate::glyph_category::{GlyphCategories, gdef_classes};
+use crate::glyph_category::GlyphCategories;
 use crate::traits::FontView;
 use write_fonts::tables::gdef::GlyphClassDef;
 
-use super::axes::{AxisConversionError, normalized_source_location, to_ir_axes};
+use shift_shaper_font::{AxisConversionError, ToGlyphClassDef, UnitsPerEm, to_ir_axes};
+
+use super::axes::normalized_source_location;
 use super::glyph::GlyphWork;
 use super::kerning::{KerningInstanceWork, KerningLocationsWork};
 use super::metadata::{
     ColorGlyphsWork, ColorPaletteWork, FeatureWork, GlobalMetricsWork, StaticMetadataWork,
 };
-
-const MIN_UNITS_PER_EM: f64 = 16.0;
-const MAX_UNITS_PER_EM: f64 = 16_384.0;
-
-/// Converts units per em to the `head` value, or `None` when it is not a
-/// whole number from 16 to 16384.
-pub(crate) fn units_per_em(value: f64) -> Option<u16> {
-    let valid = value.fract() == 0.0 && (MIN_UNITS_PER_EM..=MAX_UNITS_PER_EM).contains(&value);
-    // In range and whole, so the conversion is exact.
-    #[expect(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "checked whole and within 16..=16384 above"
-    )]
-    valid.then_some(value as u16)
-}
 
 /// Describes a Shift font that cannot become an in-memory fontir source.
 #[derive(Debug, thiserror::Error)]
@@ -146,9 +132,9 @@ impl ShiftIrSource {
             .default_source_id()
             .ok_or(ShiftIrSourceError::MissingDefaultSource)?;
         let value = font.metrics().units_per_em;
-        let Some(units_per_em) = units_per_em(value) else {
-            return Err(ShiftIrSourceError::InvalidUnitsPerEm { value });
-        };
+        let units_per_em = UnitsPerEm::try_from(value)
+            .map_err(|_| ShiftIrSourceError::InvalidUnitsPerEm { value })?
+            .get();
 
         let ir_axes = to_ir_axes(font.axes(), font.axis_mappings())?;
 
@@ -165,7 +151,12 @@ impl ShiftIrSource {
                 glyphs: font.glyphs().cloned().collect(),
                 kerning: font.kerning().clone(),
                 features: font.features().clone(),
-                gdef_classes: gdef_classes(font.glyphs(), font.lib()),
+                gdef_classes: GlyphCategories::new()
+                    .classes(font.glyphs(), font.lib())
+                    .gdef_classes(font.glyphs())
+                    .into_iter()
+                    .map(|(name, class)| (name, class.to_glyph_class_def()))
+                    .collect(),
                 nonspacing_marks: {
                     let categories = GlyphCategories::new();
                     font.glyphs()
