@@ -140,8 +140,8 @@ export class WindowEngine implements FontEngine {
   }
 
   /**
-   * The open font's axes, master sources and kerning, as the engine holds
-   * them, unsaved edits included.
+   * The open font's axes, master sources, kerning and glyph records, as the
+   * engine holds them, unsaved edits included.
    *
    * @throws When no session is open.
    */

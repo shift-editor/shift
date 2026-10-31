@@ -1,4 +1,4 @@
-import { ascending, byCodePoint, comparing, EntityMap } from "@shift/types";
+import { ascending, EntityMap } from "@shift/types";
 import type {
   AppliedChange,
   FontReplacement,
@@ -297,15 +297,27 @@ export class FontStore {
 
   /**
    * Shows what the window's engine did for an edit: the font-level records it
-   * changed and the layers it touched.
+   * changed, the records of the glyphs it changed, and the layers it touched.
    *
    * @returns The resident layers' states before, to restore if the edit is undone locally.
    */
   applyEngineEdit(edit: EngineEdit): GlyphState[] {
     return batch(() => {
-      if (edit.next) this.#applyRecords(edit.next);
+      const next = edit.next;
+      if (next) this.#applyRecords(next);
       return this.publishLayers(edit.layers);
     });
+  }
+
+  /**
+   * The glyphs whose layer records `edit` changes, added or removed among
+   * them, read before it is shown: their projections are rebuilt once the
+   * workspace has persisted it.
+   */
+  glyphsRelayeredBy(edit: EngineEdit): GlyphId[] {
+    const glyphChanges = edit.next?.glyphChanges;
+    if (!glyphChanges) return [];
+    return glyphIdsWithChangedLayers(this.#indexCell.peek().recordsById, glyphChanges);
   }
 
   /** The font-level records as they stand, for {@link restoreRecords}; copies nothing. */
@@ -345,22 +357,20 @@ export class FontStore {
 
   /**
    * Confirms an edit the window's engine made and showed, from the workspace's
-   * receipt. The engine already showed the layers it touched and the
-   * font-level records it changed, so only glyph records, which the workspace
-   * alone builds, and layers that had no state to show come from the receipt.
+   * receipt. The engine already showed the layers it touched and every record
+   * it changed, so only layers that had no state to show come from the
+   * receipt.
    *
+   * @param relayered - The glyphs whose layer records the engine changed for
+   * the edit ({@link glyphsRelayeredBy}).
    * @returns The resident glyphs whose projections need rebuilding natively.
    */
-  confirmEdit(applied: AppliedChange): readonly GlyphId[] {
+  confirmEdit(applied: AppliedChange, relayered: readonly GlyphId[] = []): readonly GlyphId[] {
     const current = this.#workspace.peek();
     if (!current) return [];
     const next = applied.next;
-    const glyphChanges = next?.glyphChanges;
-    const glyphsWithNewLayers = glyphChanges
-      ? glyphIdsWithChangedLayers(this.#indexCell.peek().recordsById, glyphChanges)
-      : [];
-    const restructured = new Set(glyphsWithNewLayers);
-    const invalid = new Set<GlyphId>([...glyphsWithNewLayers, ...applied.dependents]);
+    const restructured = new Set(relayered);
+    const invalid = new Set<GlyphId>([...relayered, ...applied.dependents]);
     const { glyphByLayer } = this.#indexCell.peek();
     for (const layer of applied.layers) {
       const glyphId = glyphByLayer.get(layer.layerId);
@@ -369,12 +379,7 @@ export class FontStore {
       if (layer.structure) restructured.add(glyphId);
     }
 
-    batch(() => {
-      if (glyphChanges) {
-        this.#applyRecords({}, withGlyphRecordChanges(current.glyphs, glyphChanges));
-      }
-      this.#showUnshownLayers(applied.layers);
-    });
+    batch(() => this.#showUnshownLayers(applied.layers));
 
     const topologyChanged = Boolean(next?.axes || next?.sources || next?.axisMappingBases);
     if (topologyChanged) this.#invalidGlyphs.set({ glyphIds: null });
@@ -398,18 +403,19 @@ export class FontStore {
   }
 
   /**
-   * Folds `next`'s font-level records into the workspace and drops what they
-   * removed; `glyphs`, when given, is the whole glyph record list.
+   * Folds `next`'s font-level records, and the glyph records it changed,
+   * into the workspace, and drops what they removed.
    */
-  #applyRecords(next: FontReplacement, glyphs: GlyphRecord[] | null = null): void {
+  #applyRecords(next: FontReplacement): void {
     const current = this.#workspace.peek();
     if (!current) return;
     const interpolation = next.sourceMetricsInterpolation;
     const languages = next.languages;
+    const glyphChanges = next.glyphChanges;
     const nextWorkspace: WorkspaceSnapshot = {
       ...current,
       metadata: next.metadata ?? current.metadata,
-      glyphs: glyphs ?? current.glyphs,
+      glyphs: glyphChanges ? this.#recordsAfter(current.glyphs, glyphChanges) : current.glyphs,
       axes: next.axes ?? current.axes,
       axisMappings: next.axisMappings ?? current.axisMappings,
       axisMappingBases: next.axisMappingBases ?? current.axisMappingBases,
@@ -448,6 +454,20 @@ export class FontStore {
       cell.set(null);
       this.#projectionCells.delete(glyphId);
     }
+  }
+
+  /**
+   * The glyph records after `changes`, in the order Rust gives: the new
+   * order when the edit moved a glyph in it, else `records`' own, each
+   * changed record in its glyph's place.
+   */
+  #recordsAfter(records: readonly GlyphRecord[], changes: GlyphRecordChanges): GlyphRecord[] {
+    const updated = new Map(changes.updated.map((record) => [record.id, record]));
+    if (changes.order) {
+      const { recordsById } = this.#indexCell.peek();
+      return changes.order.map((glyphId) => updated.get(glyphId) ?? recordsById.require(glyphId));
+    }
+    return records.map((record) => updated.get(record.id) ?? record);
   }
 
   layerState(layerId: LayerId): GlyphLayerState | null {
@@ -783,37 +803,6 @@ function glyphIdsWithChangedLayers(
     })
     .map((glyph) => glyph.id);
   return [...changed, ...changes.removed];
-}
-
-/** Glyph records in the workspace's order, by name as Rust orders it. */
-const byRecordName = comparing((record: GlyphRecord) => record.name, byCodePoint);
-
-/**
- * `records`, in the workspace's name order, with `changes` applied: each
- * changed record takes its place by name, and removed glyphs leave.
- */
-function withGlyphRecordChanges(
-  records: readonly GlyphRecord[],
-  changes: GlyphRecordChanges,
-): GlyphRecord[] {
-  const leaving = new Set<GlyphId>([
-    ...changes.removed,
-    ...changes.updated.map((record) => record.id),
-  ]);
-  const kept = records.filter((record) => !leaving.has(record.id));
-  const joining = changes.updated.toSorted(byRecordName);
-
-  // Both lists are in name order, so one pass merges them.
-  const merged: GlyphRecord[] = [];
-  let next = 0;
-  for (const record of kept) {
-    while (next < joining.length && byRecordName(joining[next]!, record) < 0) {
-      merged.push(joining[next++]!);
-    }
-    merged.push(record);
-  }
-  merged.push(...joining.slice(next));
-  return merged;
 }
 
 function sameGlyphLayers(left: GlyphRecord, right: GlyphRecord): boolean {

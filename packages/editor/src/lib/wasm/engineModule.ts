@@ -1,5 +1,6 @@
 import type {
   EngineFontRecords,
+  EngineStorelessRecords,
   FontIntent,
   FontReplacement,
   GlyphId,
@@ -65,8 +66,7 @@ export interface EngineKerningPair {
 /**
  * What one edit did: the layers it touched, and each font-level collection it
  * changed, whole, as the workspace's echo carries it (`next`, absent when it
- * changed none). Glyph records never come from the engine: they need the
- * store's component references and glyph categories.
+ * changed none), with the records of the glyphs it changed as they now stand.
  */
 export type EngineEdit = EngineEditLayers & { readonly next?: FontReplacement };
 
@@ -305,8 +305,21 @@ export class EngineSession {
     return this.#reads.sourceMetricsAt(location);
   }
 
-  /** The session's font's axes, master sources and kerning, unsaved edits included. */
+  /**
+   * The session's font's axes, master sources, kerning and glyph records,
+   * unsaved edits included.
+   *
+   * @throws When the store's reader cannot answer for the glyph records.
+   */
   fontRecords(): EngineFontRecords {
+    return { ...this.storelessRecords(), glyphs: this.#reads.glyphRecords() };
+  }
+
+  /**
+   * The session's font's axes, master sources and kerning, unsaved edits
+   * included: the records it reads without asking its store.
+   */
+  storelessRecords(): EngineStorelessRecords {
     return {
       axes: this.#reads.axes(),
       sources: this.#reads.sources(),

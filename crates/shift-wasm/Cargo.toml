@@ -20,7 +20,6 @@ shaping = ["dep:shift-shape"]
 engine = [
     "dep:rmp-serde",
     "dep:serde-wasm-bindgen",
-    "dep:shift-engine",
     "dep:thiserror",
     "engine-protocol",
 ]
@@ -28,7 +27,7 @@ engine = [
 # that answers them: what the editor's generated side is written from. Kept
 # out of the default build, which would otherwise link shift-wire, and with
 # it napi's symbols wherever another crate turns napi on.
-engine-protocol = ["dep:shift-wire"]
+engine-protocol = ["dep:shift-engine", "dep:shift-wire"]
 
 [dependencies]
 fontir = "1.0.0"

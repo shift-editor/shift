@@ -772,7 +772,6 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
       metrics: this.#bridge.workspace.getMetrics(),
       metricDefinitions: this.#bridge.workspace.getMetricDefinitions(),
       sourceMetricsInterpolation: this.#bridge.workspace.getSourceMetricsInterpolation(),
-      glyphs: this.#bridge.workspace.getGlyphs(),
       axisMappings: this.#bridge.workspace.getAxisMappings(),
       axisMappingBases: this.#bridge.workspace.getAxisMappingBases(),
       namedInstances: this.#bridge.workspace.getNamedInstances(),

@@ -66,10 +66,9 @@ describe("FontStore glyph snapshot application", () => {
     });
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
 
-    store.confirmEdit({
+    store.applyEngineEdit({
       next: { glyphChanges: { updated: snapshot("document-a", LAYER_B_ID).glyphs, removed: [] } },
       layers: [],
-      dependents: [],
     });
 
     expect(store.layerState(LAYER_A_ID)).toBeNull();
@@ -97,15 +96,15 @@ describe("FontStore record index", () => {
     });
     const font = new Font({ store });
 
-    store.confirmEdit({
+    store.applyEngineEdit({
       next: {
         glyphChanges: {
           updated: [record("glyph_m", "Z"), record("glyph_b", "B")],
           removed: ["glyph_t" as GlyphId],
+          order: [GLYPH_ID, "glyph_b" as GlyphId, "glyph_m" as GlyphId],
         },
       },
       layers: [],
-      dependents: [],
     });
 
     expect(font.glyphEntries().map(({ name }) => name)).toEqual(["A", "B", "Z"]);
@@ -146,10 +145,9 @@ describe("FontStore record index", () => {
     expect(font.dependentNamesForName("acute" as GlyphName)).toEqual(["Aacute"]);
     expect(font.nameForUnicode(193 as Unicode)).toBe("Aacute");
 
-    store.confirmEdit({
-      next: { glyphChanges: { updated: [], removed: [aacute.id] } },
+    store.applyEngineEdit({
+      next: { glyphChanges: { updated: [], removed: [aacute.id], order: [GLYPH_ID, acute.id] } },
       layers: [],
-      dependents: [],
     });
 
     expect(font.hasGlyph(aacute.id)).toBe(false);
@@ -225,8 +223,11 @@ describe("FontStore glyph object ownership", () => {
       anchorId: NEXT_ANCHOR_ID,
     });
 
-    store.confirmEdit({
+    store.applyEngineEdit({
       next: { glyphChanges: { updated: snapshot("document-a", LAYER_B_ID).glyphs, removed: [] } },
+      layers: [],
+    });
+    store.confirmEdit({
       layers: [
         {
           layerId: LAYER_B_ID,
