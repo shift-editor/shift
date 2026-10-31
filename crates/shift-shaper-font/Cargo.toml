@@ -1,0 +1,24 @@
+[package]
+name = "shift-shaper-font"
+version = "0.1.0"
+edition = "2024"
+description = "Compiles a font's authored OpenType features into a shaper font, natively and in WebAssembly"
+license.workspace = true
+
+[dependencies]
+shift-font = { workspace = true }
+shift-shape = { workspace = true }
+
+fea-rs = "1.0"
+fontbe = "1.0"
+fontdrasil = "1.0"
+fontir = "1.0"
+thiserror = "2.0.18"
+write-fonts = "0.52"
+
+[dev-dependencies]
+harfrust = "0.13.3"
+shift-font = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true

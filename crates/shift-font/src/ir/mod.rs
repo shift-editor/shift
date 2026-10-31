@@ -40,7 +40,7 @@ pub use font::{Font, FontCopyId, FontMetadata, LANGUAGES_LIB_KEY};
 pub use glyph::{Glyph, GlyphLayer};
 pub use glyph_category::{
     GlyphCategory, GlyphDataCategory, GlyphSubcategory, Ligature, NamedGlyph, OpenTypeCategories,
-    OpenTypeCategory, RecordCategory, UnknownGlyphCategory,
+    OpenTypeCategory, RecordCategory, UnknownGlyphCategory, gdef_classes,
 };
 pub use glyph_name::{GlyphName, GlyphNameError};
 pub use guideline::{Guideline, GuidelineOrientation};

@@ -161,13 +161,44 @@ impl GlyphDataCategory {
     }
 }
 
-/// A GDEF class a UFO's `public.openTypeCategories` gives a glyph by name.
+/// An OpenType GDEF glyph class: one a UFO's `public.openTypeCategories`
+/// gives a glyph by name, or the one its category gives it ([`Self::of`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum OpenTypeCategory {
     Base,
     Ligature,
     Mark,
     Component,
+}
+
+impl OpenTypeCategory {
+    /// The GDEF class a glyph compiles with: the class `explicit` gives it,
+    /// else fontc's Glyphs rule over its own category, falling back to glyph
+    /// data's (`glyph_data`). Marks are classed by category and subcategory;
+    /// bases and ligatures only when the glyph carries an anchor marks attach
+    /// to (`attaching_anchor`, [`Glyph::has_attaching_anchor`]).
+    pub fn of(
+        glyph: &Glyph,
+        glyph_data: GlyphDataCategory,
+        explicit: Option<Self>,
+        attaching_anchor: bool,
+    ) -> Option<Self> {
+        if explicit.is_some() {
+            return explicit;
+        }
+
+        let resolved = glyph_data.resolve(glyph);
+        match (resolved.category, resolved.sub_category) {
+            (_, Some(GlyphSubcategory::Ligature)) if attaching_anchor => Some(Self::Ligature),
+            (
+                Some(GlyphCategory::Mark),
+                Some(GlyphSubcategory::Nonspacing | GlyphSubcategory::SpacingCombining),
+            ) => Some(Self::Mark),
+            _ if attaching_anchor => Some(Self::Base),
+            _ => None,
+        }
+    }
 }
 
 /// The classes a font lib's `public.openTypeCategories` gives, by glyph name.
@@ -205,6 +236,32 @@ impl<'a> OpenTypeCategories<'a> {
     pub fn class(&self, name: &str) -> Option<OpenTypeCategory> {
         self.0.get(name).copied()
     }
+}
+
+/// The GDEF class of every glyph that has one, by glyph name, as
+/// [`OpenTypeCategory::of`] gives it: the class `lib`'s
+/// `public.openTypeCategories` gives, else the glyph's category falling back
+/// to glyph data's (`glyph_data`). Every layer of each glyph must be loaded,
+/// because a base or ligature is classed only once one has an anchor marks
+/// attach to.
+pub fn gdef_classes<'a>(
+    glyphs: impl IntoIterator<Item = &'a Glyph>,
+    lib: &LibData,
+    mut glyph_data: impl FnMut(&Glyph) -> GlyphDataCategory,
+) -> BTreeMap<String, OpenTypeCategory> {
+    let explicit = OpenTypeCategories::of(lib);
+    glyphs
+        .into_iter()
+        .filter_map(|glyph| {
+            let class = OpenTypeCategory::of(
+                glyph,
+                glyph_data(glyph),
+                explicit.class(glyph.name()),
+                glyph.has_attaching_anchor(),
+            )?;
+            Some((glyph.name().to_string(), class))
+        })
+        .collect()
 }
 
 /// Why anchor propagation treats a glyph as a ligature.
@@ -329,5 +386,38 @@ mod tests {
 
         assert_eq!(categories.class("f_i"), Some(OpenTypeCategory::Ligature));
         assert_eq!(categories.class("x"), None);
+    }
+
+    #[test]
+    fn bases_and_ligatures_take_a_gdef_class_only_with_an_attaching_anchor() {
+        let category = |category, sub_category| GlyphDataCategory {
+            category: Some(category),
+            sub_category,
+        };
+        let letter = category(GlyphCategory::Letter, None);
+        let ligature = category(GlyphCategory::Letter, Some(GlyphSubcategory::Ligature));
+        let spacing_mark = category(
+            GlyphCategory::Mark,
+            Some(GlyphSubcategory::SpacingCombining),
+        );
+        let glyph = Glyph::new("x");
+        let class = |data, attaching| OpenTypeCategory::of(&glyph, data, None, attaching);
+
+        assert_eq!(
+            [false, true].map(|attaching| class(letter, attaching)),
+            [None, Some(OpenTypeCategory::Base)]
+        );
+        assert_eq!(
+            [false, true].map(|attaching| class(ligature, attaching)),
+            [None, Some(OpenTypeCategory::Ligature)]
+        );
+        assert_eq!(
+            [false, true].map(|attaching| class(spacing_mark, attaching)),
+            [Some(OpenTypeCategory::Mark); 2]
+        );
+        assert_eq!(
+            OpenTypeCategory::of(&glyph, letter, Some(OpenTypeCategory::Component), true),
+            Some(OpenTypeCategory::Component)
+        );
     }
 }

@@ -20,7 +20,6 @@ pub mod import;
 mod import_report;
 mod kerning_import;
 mod numeric;
-pub mod shaper_font;
 mod shift2fontir;
 mod source_glyph_ids;
 mod traits;
@@ -39,9 +38,9 @@ pub use font_source::{
     build_binary_atlas_page, variable_glyph_inputs,
 };
 pub use format::FontFormat;
-pub use glyph_category::GlyphCategories;
 #[cfg(test)]
 pub(crate) use glyph_category::record_categories;
+pub use glyph_category::{GlyphCategories, shaper_font_source};
 pub use glyph_subset::GlyphSubsetView;
 pub use import::{FontImport, GlyphDirectoryEntry, ImportBatchLimit};
 pub(crate) use import_report::distinct_named_instances;

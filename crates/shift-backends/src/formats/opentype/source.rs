@@ -278,7 +278,7 @@ mod tests {
         let optical_size = axes.iter().find(|axis| axis.tag() == "opsz").unwrap();
         assert_eq!(optical_size.minimum(), optical_size.default());
 
-        crate::shift2fontir::to_ir_axes(axes, font.header.axis_mappings()).unwrap();
+        shift_shaper_font::to_ir_axes(axes, font.header.axis_mappings()).unwrap();
         let optical_size_mapping = font
             .header
             .axis_mappings()

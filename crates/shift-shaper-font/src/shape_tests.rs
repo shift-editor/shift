@@ -3,6 +3,7 @@ use std::sync::Arc;
 use shift_font::test_support::sample_variable_font;
 use shift_font::{ExternalLocation, Font, Glyph};
 
+use super::test_fonts::{characters_of, request_for};
 use super::*;
 
 const LIGATURE: &str = "feature liga { sub f i by f_i; } liga;";
@@ -30,13 +31,13 @@ fn ligature_font() -> Font {
 }
 
 fn shaper(font: &Font) -> LiveShaper {
-    let compilation = ShaperFont::compile(&ShaperFontRequest::from_font(font).unwrap()).unwrap();
+    let compilation = ShaperFont::compile(&request_for(font).unwrap()).unwrap();
     assert!(
         compilation.diagnostics.is_empty(),
         "{:?}",
         compilation.diagnostics
     );
-    LiveShaper::new(Arc::new(compilation.font.unwrap()), font).unwrap()
+    LiveShaper::new(Arc::new(compilation.font.unwrap()), characters_of(font)).unwrap()
 }
 
 fn characters(text: &str) -> Vec<ShapeUnit> {
@@ -251,14 +252,10 @@ fn state_shapes_without_features_until_the_source_first_compiles() {
     );
     let mut state = ShaperFontState::default();
 
-    assert!(
-        state
-            .update(ShaperFontRequest::from_font(&font).unwrap())
-            .unwrap()
-    );
+    assert!(state.update(request_for(&font).unwrap()).unwrap());
     assert!(!state.diagnostics().is_empty());
 
-    let shaper = LiveShaper::new(state.font().cloned().unwrap(), &font).unwrap();
+    let shaper = LiveShaper::new(state.font().cloned().unwrap(), characters_of(&font)).unwrap();
     let location = ExternalLocation::new();
     let units = characters("fi");
     let shaped = shaper.shape(&request(&units, &location)).unwrap();
