@@ -201,7 +201,7 @@ export class GlyphLayerState {
   }
 
   /** The layer's positions in `setPositions` order with `updates` applied. */
-  positionsWith(updates: GlyphPositions): number[] {
+  positionsWith(updates: GlyphPositions): Float64Array {
     return this.#buffers.peek().positionsWith(updates);
   }
 

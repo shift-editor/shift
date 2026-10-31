@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 /// its `Second` group kerns its left edge against what precedes it. UFO calls
 /// these `public.kern1` and `public.kern2`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum KerningPosition {
     First,
     Second,
@@ -51,6 +52,9 @@ impl KerningGroup {
 /// A group side only resolves when the group's position matches the side it
 /// occupies in the pair.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+// The editor's kerning records keep the name `KerningSide` until it reads
+// kerning from the engine.
+#[cfg_attr(feature = "pack", derive(pack::Pack), pack(rename = "FontKerningSide"))]
 pub enum KerningSide {
     Glyph(GlyphId),
     Group(KerningGroupId),
@@ -58,6 +62,7 @@ pub enum KerningSide {
 
 /// An ordered kerning pair, independent of any source's value for it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct KerningPair {
     pub first: KerningSide,
     pub second: KerningSide,

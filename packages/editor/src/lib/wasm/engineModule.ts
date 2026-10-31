@@ -6,6 +6,7 @@ import {
   engineDiscardRedo,
   engineEndEdit,
   engineGlyphNumbers,
+  engineIntents,
   engineKerningPairsNaming,
   engineMarkSaved,
   engineMissingKerningOrigin,
@@ -29,7 +30,12 @@ import {
   type EngineStage,
   type MissingKerningOrigin,
 } from "@shift/wasm/engine";
-import type { EditablePair, EngineReads, InterpolatedMetrics } from "@shift/wasm/protocol";
+import type {
+  EditablePair,
+  EngineIntents,
+  EngineReads,
+  InterpolatedMetrics,
+} from "@shift/wasm/protocol";
 
 export { svgPaths } from "@shift/wasm/engine";
 export type { ContourPoints } from "@shift/wasm/protocol";
@@ -51,6 +57,7 @@ const released = new FinalizationRegistry<number>(engineRelease);
 export class EngineSession {
   readonly #handle: number;
   readonly #reads: EngineReads;
+  readonly #intents: EngineIntents;
   // non-reactive: numbers the session interned for each id; an id's number never changes
   readonly #glyphNumbers = new Map<GlyphId, number>();
   // non-reactive: as #glyphNumbers, for sources
@@ -59,6 +66,7 @@ export class EngineSession {
   private constructor(handle: number) {
     this.#handle = handle;
     this.#reads = engineReads(handle);
+    this.#intents = engineIntents(handle);
     released.register(this, handle, this);
   }
 
@@ -80,7 +88,8 @@ export class EngineSession {
    * as loading left it.
    */
   apply(intents: readonly FontIntent[]): EngineEdit {
-    return engineApply(this.#handle, [...intents]);
+    this.#intents.hold(intents);
+    return engineApply(this.#handle);
   }
 
   /**
@@ -100,7 +109,8 @@ export class EngineSession {
    * @throws As {@link EngineSession.apply}.
    */
   preview(intents: readonly FontIntent[]): EngineLayer[] {
-    return enginePreview(this.#handle, [...intents]);
+    this.#intents.hold(intents);
+    return enginePreview(this.#handle);
   }
 
   /**
@@ -130,7 +140,8 @@ export class EngineSession {
    * @throws As {@link EngineSession.apply}.
    */
   stage(intents: readonly FontIntent[]): EngineStage {
-    return engineStage(this.#handle, [...intents]);
+    this.#intents.hold(intents);
+    return engineStage(this.#handle);
   }
 
   /**

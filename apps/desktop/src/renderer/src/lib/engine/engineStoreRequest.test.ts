@@ -111,9 +111,11 @@ describe("the window's engine edits from the store", () => {
           edits: [
             {
               sourceId,
-              first: { kind: "glyph", id: glyphId },
-              second: { kind: "glyph", id: glyphId },
-              amount: -40,
+              pair: {
+                first: { kind: "glyph", glyph: glyphId },
+                second: { kind: "glyph", glyph: glyphId },
+              },
+              value: -40,
             },
           ],
         },

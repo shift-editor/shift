@@ -206,7 +206,7 @@ contour.reverse();
 
 ### Adding a typed glyph-layer editing operation
 
-1. Add the intent in shift-font (and its wire shape in `shift_wire::intents`); the engine and the workspace both run it from there.
+1. Add the intent in shift-font, deriving `Pack`; the engine and the workspace both run it from there, and its TypeScript type is generated from it.
 2. Add the envelope to `LayerIntents` and a public method on `GlyphLayer` that pushes it. The renderer shows the engine's result; there is no local operation to write.
 3. Do not parse `FontIntent.kind` in the renderer or add font-wide validation — Rust interprets and validates the intent.
 4. Verify: `pnpm test:desktop src/renderer/src/lib/model/GlyphLayerState.test.ts` and `pnpm test:desktop src/renderer/src/lib/model/GlyphLayerGeometry.test.ts`

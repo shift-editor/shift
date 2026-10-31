@@ -28,6 +28,7 @@ impl FontMetrics {
 /// authoring data until an exporter explicitly understands its meaning.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum MetricKind {
     Ascender,
     CapHeight,
@@ -83,6 +84,7 @@ impl MetricKind {
 /// reordering a definition never changes which authored values it addresses.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct MetricDefinition {
     id: MetricId,
     kind: MetricKind,
@@ -131,7 +133,6 @@ impl MetricDefinition {
 /// metric line and negative below it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
-#[cfg_attr(feature = "pack", pack(rename = "SourceMetricValue"))]
 #[serde(rename_all = "camelCase")]
 pub struct MetricValue {
     pub position: f64,

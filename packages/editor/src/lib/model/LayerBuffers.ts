@@ -231,7 +231,7 @@ export class LayerBuffers {
    * anchor's, as `x, y` pairs, with `updates` applied: what a `setPositions`
    * intent takes.
    */
-  positionsWith(updates: GlyphPositions): number[] {
+  positionsWith(updates: GlyphPositions): Float64Array {
     const starts = new Map<ContourBuffer, number>();
     let pointsLength = 0;
     for (const contour of this.contours) {
@@ -240,7 +240,7 @@ export class LayerBuffers {
     }
     const length = pointsLength + this.anchors.data.length * 2;
     // The snapshot's leading value is the advance; positions follow it.
-    const positions = Array.from(this.snapshot.subarray(1, 1 + length));
+    const positions = this.snapshot.slice(1, 1 + length);
     for (const update of updates) {
       let start = -1;
       if (update.kind === "point") {

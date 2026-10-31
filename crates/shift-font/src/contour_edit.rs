@@ -57,6 +57,7 @@ impl UnknownEditOption {
 crate::string_enum! {
     /// How deleting points reconnects the points that survive.
     #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    #[cfg_attr(feature = "pack", derive(pack::Pack))]
     pub enum DeleteMode {
         /// Each removed span becomes one segment that approximates it.
         #[default]
@@ -70,6 +71,7 @@ crate::string_enum! {
 crate::string_enum! {
     /// Which end of an open contour.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[cfg_attr(feature = "pack", derive(pack::Pack))]
     pub enum ContourSide {
         Start => "start",
         End => "end",
@@ -80,6 +82,7 @@ crate::string_enum! {
 crate::string_enum! {
     /// How [`GlyphLayer::join_contours`] connects two ends.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[cfg_attr(feature = "pack", derive(pack::Pack))]
     pub enum JoinMode {
         /// `from`'s end point is dropped and `to`'s takes its place, as
         /// dropping one end onto another does.
@@ -92,6 +95,7 @@ crate::string_enum! {
 
 /// One open end of a contour.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct ContourEnd {
     pub contour_id: ContourId,
     pub side: ContourSide,

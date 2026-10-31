@@ -1,35 +1,35 @@
 import type {
-  AddAnchorsIntent,
-  AddComponentIntent,
-  AddContourIntent,
-  AddPointsIntent,
-  BooleanOpIntent,
-  DecomposeComponentsIntent,
+  AddAnchors,
+  AddComponent,
+  AddContour,
+  AddPoints,
+  ApplyBooleanOp,
+  DecomposeComponents,
   FontIntent,
   LayerId,
-  MoveAnchorsIntent,
-  MovePointsIntent,
-  RemoveAnchorsIntent,
-  RenameAnchorsIntent,
-  SetComponentAlignmentIntent,
-  RemoveComponentsIntent,
-  RemovePointsIntent,
-  ReverseContourIntent,
-  SplitSegmentIntent,
-  UpgradeLineToCubicIntent,
-  DeletePointsIntent,
-  JoinContoursIntent,
-  TransformPointsIntent,
-  AlignPointsIntent,
-  DistributePointsIntent,
-  ShiftSidebearingIntent,
-  SetContourClosedIntent,
-  SetComponentTransformsIntent,
-  SetContourStartIntent,
-  SetPointSmoothIntent,
-  SetPositionsIntent,
-  SetXAdvanceIntent,
-  TransformLayerIntent,
+  MoveAnchors,
+  MovePoints,
+  RemoveAnchors,
+  RenameAnchors,
+  SetComponentAlignment,
+  RemoveComponents,
+  RemovePoints,
+  ReverseContour,
+  SplitSegment,
+  UpgradeLineToCubic,
+  DeletePoints,
+  JoinContours,
+  TransformPoints,
+  AlignPoints,
+  DistributePoints,
+  ShiftSidebearing,
+  SetContourClosed,
+  SetComponentTransforms,
+  SetContourStart,
+  SetPointSmooth,
+  SetPositions,
+  SetXAdvance,
+  TransformLayer,
 } from "@shift/types";
 import type { PendingEditId } from "../../types/editing";
 
@@ -49,204 +49,204 @@ export class LayerIntents<TResult = PendingEditId> {
     this.#layerId = layerId;
   }
 
-  addPoints(payload: Payload<AddPointsIntent>): TResult {
+  addPoints(payload: Payload<AddPoints>): TResult {
     return this.#sink({
       kind: "addPoints",
       addPoints: { layerId: this.#layerId, ...payload },
     });
   }
 
-  /** Every point and anchor position at once, naming none: see {@link SetPositionsIntent}. */
-  setPositions(payload: Payload<SetPositionsIntent>): TResult {
+  /** Every point and anchor position at once, naming none: see {@link SetPositions}. */
+  setPositions(payload: Payload<SetPositions>): TResult {
     return this.#sink({
       kind: "setPositions",
       setPositions: { layerId: this.#layerId, ...payload },
     });
   }
 
-  addContour(payload: Payload<AddContourIntent>): TResult {
+  addContour(payload: Payload<AddContour>): TResult {
     return this.#sink({
       kind: "addContour",
       addContour: { layerId: this.#layerId, ...payload },
     });
   }
 
-  setContourClosed(payload: Payload<SetContourClosedIntent>): TResult {
+  setContourClosed(payload: Payload<SetContourClosed>): TResult {
     return this.#sink({
       kind: "setContourClosed",
       setContourClosed: { layerId: this.#layerId, ...payload },
     });
   }
 
-  movePoints(payload: Payload<MovePointsIntent>): TResult {
+  movePoints(payload: Payload<MovePoints>): TResult {
     return this.#sink({
       kind: "movePoints",
       movePoints: { layerId: this.#layerId, ...payload },
     });
   }
 
-  setPointSmooth(payload: Payload<SetPointSmoothIntent>): TResult {
+  setPointSmooth(payload: Payload<SetPointSmooth>): TResult {
     return this.#sink({
       kind: "setPointSmooth",
       setPointSmooth: { layerId: this.#layerId, ...payload },
     });
   }
 
-  removePoints(payload: Payload<RemovePointsIntent>): TResult {
+  removePoints(payload: Payload<RemovePoints>): TResult {
     return this.#sink({
       kind: "removePoints",
       removePoints: { layerId: this.#layerId, ...payload },
     });
   }
 
-  reverseContour(payload: Payload<ReverseContourIntent>): TResult {
+  reverseContour(payload: Payload<ReverseContour>): TResult {
     return this.#sink({
       kind: "reverseContour",
       reverseContour: { layerId: this.#layerId, ...payload },
     });
   }
 
-  deletePoints(payload: Payload<DeletePointsIntent>): TResult {
+  deletePoints(payload: Payload<DeletePoints>): TResult {
     return this.#sink({
       kind: "deletePoints",
       deletePoints: { layerId: this.#layerId, ...payload },
     });
   }
 
-  splitSegment(payload: Payload<SplitSegmentIntent>): TResult {
+  splitSegment(payload: Payload<SplitSegment>): TResult {
     return this.#sink({
       kind: "splitSegment",
       splitSegment: { layerId: this.#layerId, ...payload },
     });
   }
 
-  upgradeLineToCubic(payload: Payload<UpgradeLineToCubicIntent>): TResult {
+  upgradeLineToCubic(payload: Payload<UpgradeLineToCubic>): TResult {
     return this.#sink({
       kind: "upgradeLineToCubic",
       upgradeLineToCubic: { layerId: this.#layerId, ...payload },
     });
   }
 
-  joinContours(payload: Payload<JoinContoursIntent>): TResult {
+  joinContours(payload: Payload<JoinContours>): TResult {
     return this.#sink({
       kind: "joinContours",
       joinContours: { layerId: this.#layerId, ...payload },
     });
   }
 
-  transformPoints(payload: Payload<TransformPointsIntent>): TResult {
+  transformPoints(payload: Payload<TransformPoints>): TResult {
     return this.#sink({
       kind: "transformPoints",
       transformPoints: { layerId: this.#layerId, ...payload },
     });
   }
 
-  alignPoints(payload: Payload<AlignPointsIntent>): TResult {
+  alignPoints(payload: Payload<AlignPoints>): TResult {
     return this.#sink({
       kind: "alignPoints",
       alignPoints: { layerId: this.#layerId, ...payload },
     });
   }
 
-  distributePoints(payload: Payload<DistributePointsIntent>): TResult {
+  distributePoints(payload: Payload<DistributePoints>): TResult {
     return this.#sink({
       kind: "distributePoints",
       distributePoints: { layerId: this.#layerId, ...payload },
     });
   }
 
-  shiftSidebearing(payload: Payload<ShiftSidebearingIntent>): TResult {
+  shiftSidebearing(payload: Payload<ShiftSidebearing>): TResult {
     return this.#sink({
       kind: "shiftSidebearing",
       shiftSidebearing: { layerId: this.#layerId, ...payload },
     });
   }
 
-  setContourStart(payload: Payload<SetContourStartIntent>): TResult {
+  setContourStart(payload: Payload<SetContourStart>): TResult {
     return this.#sink({
       kind: "setContourStart",
       setContourStart: { layerId: this.#layerId, ...payload },
     });
   }
 
-  transformLayer(payload: Payload<TransformLayerIntent>): TResult {
+  transformLayer(payload: Payload<TransformLayer>): TResult {
     return this.#sink({
       kind: "transformLayer",
       transformLayer: { layerId: this.#layerId, ...payload },
     });
   }
 
-  setXAdvance(payload: Payload<SetXAdvanceIntent>): TResult {
+  setXAdvance(payload: Payload<SetXAdvance>): TResult {
     return this.#sink({
       kind: "setXAdvance",
       setXAdvance: { layerId: this.#layerId, ...payload },
     });
   }
 
-  applyBooleanOp(payload: Payload<BooleanOpIntent>): TResult {
+  applyBooleanOp(payload: Payload<ApplyBooleanOp>): TResult {
     return this.#sink({
       kind: "applyBooleanOp",
       applyBooleanOp: { layerId: this.#layerId, ...payload },
     });
   }
 
-  addAnchors(payload: Payload<AddAnchorsIntent>): TResult {
+  addAnchors(payload: Payload<AddAnchors>): TResult {
     return this.#sink({
       kind: "addAnchors",
       addAnchors: { layerId: this.#layerId, ...payload },
     });
   }
 
-  moveAnchors(payload: Payload<MoveAnchorsIntent>): TResult {
+  moveAnchors(payload: Payload<MoveAnchors>): TResult {
     return this.#sink({
       kind: "moveAnchors",
       moveAnchors: { layerId: this.#layerId, ...payload },
     });
   }
 
-  removeAnchors(payload: Payload<RemoveAnchorsIntent>): TResult {
+  removeAnchors(payload: Payload<RemoveAnchors>): TResult {
     return this.#sink({
       kind: "removeAnchors",
       removeAnchors: { layerId: this.#layerId, ...payload },
     });
   }
 
-  renameAnchors(payload: Payload<RenameAnchorsIntent>): TResult {
+  renameAnchors(payload: Payload<RenameAnchors>): TResult {
     return this.#sink({
       kind: "renameAnchors",
       renameAnchors: { layerId: this.#layerId, ...payload },
     });
   }
 
-  setComponentAlignment(payload: Payload<SetComponentAlignmentIntent>): TResult {
+  setComponentAlignment(payload: Payload<SetComponentAlignment>): TResult {
     return this.#sink({
       kind: "setComponentAlignment",
       setComponentAlignment: { layerId: this.#layerId, ...payload },
     });
   }
 
-  addComponent(payload: Payload<AddComponentIntent>): TResult {
+  addComponent(payload: Payload<AddComponent>): TResult {
     return this.#sink({
       kind: "addComponent",
       addComponent: { layerId: this.#layerId, ...payload },
     });
   }
 
-  setComponentTransforms(payload: Payload<SetComponentTransformsIntent>): TResult {
+  setComponentTransforms(payload: Payload<SetComponentTransforms>): TResult {
     return this.#sink({
       kind: "setComponentTransforms",
       setComponentTransforms: { layerId: this.#layerId, ...payload },
     });
   }
 
-  removeComponents(payload: Payload<RemoveComponentsIntent>): TResult {
+  removeComponents(payload: Payload<RemoveComponents>): TResult {
     return this.#sink({
       kind: "removeComponents",
       removeComponents: { layerId: this.#layerId, ...payload },
     });
   }
 
-  decomposeComponents(payload: Payload<DecomposeComponentsIntent>): TResult {
+  decomposeComponents(payload: Payload<DecomposeComponents>): TResult {
     return this.#sink({
       kind: "decomposeComponents",
       decomposeComponents: { layerId: this.#layerId, ...payload },

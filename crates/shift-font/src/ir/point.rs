@@ -28,6 +28,7 @@ impl PointType {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Point {
     id: PointId,
     x: f64,

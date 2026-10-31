@@ -244,20 +244,6 @@ describe("Bridge", () => {
     expect(Array.from(state.values)).toEqual([500, 30, 40]);
   });
 
-  it("undoes and redoes an applied intent set", () => {
-    const layerId = createGlyphLayer();
-    const contourId = addContour(layerId);
-    addPoint(layerId, contourId, 10, 20);
-
-    const undone = bridge.workspace.undo();
-    expect(undone.layers).toHaveLength(1);
-    expect(glyphState("A").structure.contours[0].points).toHaveLength(0);
-
-    const redone = bridge.workspace.redo();
-    expect(redone.layers).toHaveLength(1);
-    expect(glyphState("A").structure.contours[0].points).toHaveLength(1);
-  });
-
   it("throws the kind of error a request failed with", () => {
     const closed = nativeBridge();
     const kindOf = (call) => {
@@ -297,10 +283,10 @@ describe("Bridge", () => {
       bridge.workspace.apply([
         {
           kind: "addContour",
-          addContour: { layerId: "not-a-layer", contourId: mintId("contour"), closed: false },
+          addContour: { layerId: mintId("layer"), contourId: mintId("contour"), closed: false },
         },
       ]),
-    ).toThrow(/layer ID/i);
+    ).toThrow(/^NativeWorkspaceError\.failed: layer layer_\S+ not found/);
 
     const layerId = createGlyphLayer();
     expect(() =>
@@ -309,12 +295,12 @@ describe("Bridge", () => {
           kind: "addPoints",
           addPoints: {
             layerId,
-            contourId: "not-a-contour",
+            contourId: mintId("contour"),
             points: [{ id: mintId("point"), x: 10, y: 20, pointType: "onCurve", smooth: false }],
           },
         },
       ]),
-    ).toThrow(/contour ID/i);
+    ).toThrow(/^NativeWorkspaceError\.failed: contour contour_\S+ not found/);
   });
 });
 

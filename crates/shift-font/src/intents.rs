@@ -33,6 +33,7 @@ pub use layer_intents::*;
 
 /// A point to create, with stable identity minted by a trusted caller.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct PointSeed {
     pub id: PointId,
     pub x: f64,
@@ -49,6 +50,7 @@ impl PointSeed {
 
 /// One kerning pair value to set or remove at one source.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct KerningValueEdit {
     pub source_id: SourceId,
     pub pair: KerningPair,
@@ -58,6 +60,7 @@ pub struct KerningValueEdit {
 
 /// An anchor to create, with stable identity minted by a trusted caller.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AnchorSeed {
     pub id: AnchorId,
     pub name: Option<String>,
@@ -76,6 +79,7 @@ macro_rules! font_intents {
     (layer { $($layer:ident,)* } font { $($font:ident,)* }) => {
         /// An edit a caller asks for. Each variant's struct documents it.
         #[derive(Clone, Debug)]
+        #[cfg_attr(feature = "pack", derive(pack::Pack))]
         pub enum FontIntent {
             $($layer($layer),)*
             $($font($font),)*

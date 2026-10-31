@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum AxisRole {
     #[default]
     External,
@@ -13,6 +14,7 @@ pub enum AxisRole {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum AxisKind {
     Continuous {
         minimum: f64,
@@ -60,6 +62,7 @@ impl AxisKind {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AxisLabelRange {
     pub minimum: f64,
     pub maximum: f64,
@@ -71,6 +74,9 @@ pub struct AxisLabelRange {
 ///
 /// Labels describe values for authoring UI and STAT output. They do not create
 /// products or reference sources.
+// The editor's axis records keep the name `AxisLabel` until it reads axes
+// from the engine.
+#[cfg_attr(feature = "pack", derive(pack::Pack), pack(rename = "FontAxisLabel"))]
 pub struct AxisLabel {
     id: AxisLabelId,
     pub name: String,
@@ -133,6 +139,9 @@ impl AxisLabel {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+// The editor's axis records keep the name `Axis` until it reads axes from the
+// engine.
+#[cfg_attr(feature = "pack", derive(pack::Pack), pack(rename = "FontAxis"))]
 pub struct Axis {
     id: AxisId,
     tag: String,
@@ -459,6 +468,7 @@ impl Axis {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AxisMappingPoint {
     pub description: Option<String>,
     pub input: Location,
@@ -467,6 +477,7 @@ pub struct AxisMappingPoint {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AxisMapping {
     id: AxisMappingId,
     name: String,
@@ -625,6 +636,7 @@ fn has_duplicates(ids: &[AxisId]) -> bool {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Location {
     /// Sorted by axis id, so a location serializes to the same bytes every time.
     values: BTreeMap<AxisId, f64>,
@@ -727,6 +739,7 @@ impl<'a> IntoIterator for &'a Location {
 macro_rules! typed_location {
     ($name:ident) => {
         #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+        #[cfg_attr(feature = "pack", derive(pack::Pack))]
         #[serde(transparent)]
         pub struct $name(Location);
 

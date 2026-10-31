@@ -4,10 +4,9 @@
 //! Layers load on demand from the store, asked through shift-engine's
 //! [`StoreReader`] request protocol: the session encodes each request and
 //! calls the one function the editor passes in, which forwards it unchanged
-//! to the preload's native reader and returns its reply. Intents arrive in
-//! the same shape
-//! the native workspace takes (`shift_wire::intents`), and each touched layer
-//! comes back in the same shape as the workspace's echo.
+//! to the preload's native reader and returns its reply. Intents arrive as
+//! shift-font's own, packed ([`crate::engine_intents`]), and each touched
+//! layer comes back in the same shape as the workspace's echo.
 
 use std::cell::RefCell;
 
@@ -19,10 +18,10 @@ use shift_engine::{
 };
 use shift_font::{
     AppliedIntents, Contour, Font, FontChangeImpact, FontIntent, FontIntentSet, GlyphId,
-    GlyphLayer, LayerId, SetPositions, TouchedLayer,
+    GlyphLayer, LayerId, TouchedLayer,
 };
 use shift_wire::replacement::FontReplacement;
-use shift_wire::{AnchorData, ComponentData, ContourData, intents};
+use shift_wire::{AnchorData, ComponentData, ContourData, values};
 use wasm_bindgen::prelude::*;
 
 use crate::engine_reads::InternedIds;
@@ -32,7 +31,6 @@ const ENGINE_TYPES: &str = r#"
 import type {
   ContourData,
   ContourId,
-  FontIntent,
   FontReplacement,
   GlyphId,
   GlyphStructure,
@@ -224,6 +222,18 @@ pub(crate) struct Engine {
     history: EditHistory,
     before_edit: Option<EngineSession>,
     pub(crate) ids: InternedIds,
+    /// The intents `EngineIntents::hold` sent, which the next apply, stage or
+    /// preview takes.
+    pub(crate) held: Vec<FontIntent>,
+}
+
+impl Engine {
+    /// The intents held for this apply, stage or preview, as one set.
+    fn take_held(&mut self) -> FontIntentSet {
+        FontIntentSet {
+            intents: std::mem::take(&mut self.held),
+        }
+    }
 }
 
 impl Engine {
@@ -276,6 +286,7 @@ pub fn engine_open(
             history: EditHistory::default(),
             before_edit: None,
             ids: InternedIds::default(),
+            held: Vec::new(),
         }));
         Ok(handle)
     })
@@ -297,22 +308,19 @@ pub fn engine_begin_edit(handle: u32) -> Result<(), JsError> {
     })
 }
 
-/// Applies `intents`, in the shape the workspace takes, as part of the open
-/// edit: loads what they read, applies them, and returns every layer they
-/// touched and the font-level records they changed.
+/// Applies the intents `EngineIntents::hold` sent as part of the open edit:
+/// loads what they read, applies them, and returns every layer they touched
+/// and the font-level records they changed. Takes the held intents, so a
+/// second call applies none.
 ///
 /// # Errors
 ///
-/// Fails when no edit is open, when an intent does not decode, when the source
-/// fails, or when the intents are invalid; the session is then as loading left
-/// it.
+/// Fails when no edit is open, when the source fails, or when the intents are
+/// invalid; the session is then as loading left it.
 #[wasm_bindgen(js_name = engineApply, unchecked_return_type = "EngineEdit")]
-pub fn engine_apply(
-    handle: u32,
-    #[wasm_bindgen(unchecked_param_type = "FontIntent[]")] intents: JsValue,
-) -> Result<JsValue, JsError> {
-    let intents = intent_set(&intents)?;
+pub fn engine_apply(handle: u32) -> Result<JsValue, JsError> {
     with_engine(handle, |engine| {
+        let intents = engine.take_held();
         if !engine.history.is_open() {
             return Err(JsError::new("no edit is open; begin one first"));
         }
@@ -347,21 +355,18 @@ pub fn engine_rewind_edit(handle: u32) -> Result<(), JsError> {
     })
 }
 
-/// Applies `intents` as part of the open edit, as [`engine_apply`] does, but
-/// returns only the layers they touched and which reads they changed, not the
-/// font-level records: a gesture's frame, whose records are built once when
-/// it commits.
+/// Applies the held intents as part of the open edit, as [`engine_apply`]
+/// does, but returns only the layers they touched and which reads they
+/// changed, not the font-level records: a gesture's frame, whose records are
+/// built once when it commits.
 ///
 /// # Errors
 ///
 /// As [`engine_apply`].
 #[wasm_bindgen(js_name = engineStage, unchecked_return_type = "EngineStage")]
-pub fn engine_stage(
-    handle: u32,
-    #[wasm_bindgen(unchecked_param_type = "FontIntent[]")] intents: JsValue,
-) -> Result<JsValue, JsError> {
-    let intents = intent_set(&intents)?;
+pub fn engine_stage(handle: u32) -> Result<JsValue, JsError> {
     with_engine(handle, |engine| {
+        let intents = engine.take_held();
         if !engine.history.is_open() {
             return Err(JsError::new("no edit is open; begin one first"));
         }
@@ -532,20 +537,17 @@ fn edit_object(font: &Font, before: &Font, applied: &AppliedIntents) -> Result<O
     Ok(edit)
 }
 
-/// Returns every layer applying `intents` would touch, as they would be,
-/// without keeping the edit: a preview for a gesture under way. What the
+/// Returns every layer applying the held intents would touch, as they would
+/// be, without keeping the edit: a preview for a gesture under way. What the
 /// intents read stays loaded.
 ///
 /// # Errors
 ///
 /// As [`engine_apply`].
 #[wasm_bindgen(js_name = enginePreview, unchecked_return_type = "EngineLayer[]")]
-pub fn engine_preview(
-    handle: u32,
-    #[wasm_bindgen(unchecked_param_type = "FontIntent[]")] intents: JsValue,
-) -> Result<Array, JsError> {
-    let set = intent_set(&intents)?;
+pub fn engine_preview(handle: u32) -> Result<Array, JsError> {
     with_engine(handle, |engine| {
+        let set = engine.take_held();
         let previewed = engine
             .session
             .preview(&mut HostLayers(&engine.source), &set)
@@ -553,50 +555,6 @@ pub fn engine_preview(
         // A preview keeps nothing, so the session's font is what it started from.
         engine_layers(engine.session.font(), &previewed.layers)
     })
-}
-
-/// `intents`, in the shape the workspace takes, as one set.
-fn intent_set(intents: &JsValue) -> Result<FontIntentSet, JsError> {
-    let intents = Array::from(intents)
-        .iter()
-        .map(|intent| {
-            if let Some(intent) = positions_intent(&intent)? {
-                return Ok(intent);
-            }
-            let wire: intents::FontIntent = serde_wasm_bindgen::from_value(plain_arrays(&intent)?)?;
-            Ok(FontIntent::try_from(wire)?)
-        })
-        .collect::<Result<_, JsError>>()?;
-    Ok(FontIntentSet { intents })
-}
-
-/// A `setPositions` intent read straight from its object, or `None` for any
-/// other kind. Its positions, a hundred thousand numbers on a large glyph,
-/// cross as one copied block; through serde they were read one at a time,
-/// which cost ten times the edit.
-fn positions_intent(intent: &JsValue) -> Result<Option<FontIntent>, JsError> {
-    let field = |object: &JsValue, key: &str| Reflect::get(object, &JsValue::from_str(key)).ok();
-    if field(intent, "kind")
-        .and_then(|kind| kind.as_string())
-        .as_deref()
-        != Some("setPositions")
-    {
-        return Ok(None);
-    }
-    let payload =
-        field(intent, "setPositions").ok_or_else(|| JsError::new("setPositions has no payload"))?;
-    let layer_id = field(&payload, "layerId")
-        .and_then(|id| id.as_string())
-        .ok_or_else(|| JsError::new("setPositions has no layer id"))?;
-    let positions = field(&payload, "positions")
-        .ok_or_else(|| JsError::new("setPositions has no positions"))?;
-    Ok(Some(
-        SetPositions {
-            layer_id: intents::parse::<LayerId>(&layer_id)?,
-            positions: Float64Array::new(&positions).to_vec(),
-        }
-        .into(),
-    ))
 }
 
 fn apply_error(error: ApplyError<HostError>) -> JsError {
@@ -614,7 +572,7 @@ fn apply_error(error: ApplyError<HostError>) -> JsError {
 /// Fails on an unknown handle or glyph id, or when the source fails.
 #[wasm_bindgen(js_name = enginePreload)]
 pub fn engine_preload(handle: u32, glyph_ids: Vec<String>) -> Result<(), JsError> {
-    let glyph_ids = intents::parse_id_list::<GlyphId>(&glyph_ids)?;
+    let glyph_ids = values::parse_id_list::<GlyphId>(&glyph_ids)?;
     with_engine(handle, |engine| {
         engine
             .session
@@ -634,30 +592,6 @@ pub fn engine_release(handle: u32) {
             *slot = None;
         }
     });
-}
-
-/// `intent` with its payload's typed-array fields copied into plain arrays.
-///
-/// The wire intent is internally tagged, so serde reads its payload through
-/// `deserialize_any`, which serde-wasm-bindgen cannot take a typed array to.
-/// The caller's intent stays as it was: the workspace reads it next.
-fn plain_arrays(intent: &JsValue) -> Result<JsValue, JsError> {
-    let copy = Object::assign(&Object::new(), &Object::from(intent.clone()));
-    for entry in Object::entries(&copy).iter() {
-        let entry = Array::from(&entry);
-        let Some(payload) = entry.get(1).dyn_ref::<Object>().cloned() else {
-            continue;
-        };
-        let payload = Object::assign(&Object::new(), &payload);
-        for field in Object::entries(&payload).iter() {
-            let field = Array::from(&field);
-            if let Some(values) = field.get(1).dyn_ref::<Float64Array>() {
-                set_value(&payload, &field.get(0), &Array::from(values))?;
-            }
-        }
-        set_value(&copy, &entry.get(0), &payload)?;
-    }
-    Ok(copy.into())
 }
 
 /// Sets `key` on `object`, which fails only on a frozen or proxied object.

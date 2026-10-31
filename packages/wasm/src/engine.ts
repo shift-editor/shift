@@ -13,6 +13,7 @@
  */
 import { syncTransport } from "@shift/pack";
 import {
+  engineIntentsRequest,
   engineReadsRequest,
   initSync,
   internName,
@@ -20,7 +21,7 @@ import {
   svgPathsRequest,
   takeReplyBlobs,
 } from "./generated-engine/shift_wasm.js";
-import { EngineReads, SvgPaths } from "./generated-protocol";
+import { EngineIntents, EngineReads, SvgPaths } from "./generated-protocol";
 import { moduleNames } from "./names";
 
 /** The parts of Node's `process` this module reads, where it runs under Node. */
@@ -56,6 +57,17 @@ export function engineReads(handle: number): EngineReads {
   return new EngineReads(
     syncTransport(
       (method, input, blobs) => engineReadsRequest(handle, method, input, blobs),
+      names,
+      takeReplyBlobs,
+    ),
+  );
+}
+
+/** The intents the engine session `handle` applies next. */
+export function engineIntents(handle: number): EngineIntents {
+  return new EngineIntents(
+    syncTransport(
+      (method, input, blobs) => engineIntentsRequest(handle, method, input, blobs),
       names,
       takeReplyBlobs,
     ),

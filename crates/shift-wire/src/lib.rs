@@ -31,9 +31,9 @@ use shift_font::{
 };
 
 pub mod bridges;
-pub mod intents;
 pub mod replacement;
 pub mod state;
+pub mod values;
 
 /// Flat numeric glyph values ordered to match `GlyphStructure`.
 ///

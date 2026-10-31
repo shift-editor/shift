@@ -79,7 +79,7 @@ mod exports {
     use shift_font::{
         DesignLocation, Font, GlyphId, Kerning, KerningSide, LayerId, ResolvedKerning, SourceId,
     };
-    use shift_wire::intents::{self, WireParse};
+    use shift_wire::values::{self, WireParse};
     use tsify::{Ts, Tsify};
     use wasm_bindgen::prelude::*;
 
@@ -112,7 +112,7 @@ mod exports {
     impl<T: WireParse + Clone + Eq + Hash> IdTable<T> {
         /// Parses each of `ids` and returns its number, interning the new ones.
         fn intern(&mut self, ids: &[String]) -> Result<Vec<u32>, JsError> {
-            intents::parse_id_list::<T>(ids)?
+            values::parse_id_list::<T>(ids)?
                 .into_iter()
                 .map(|id| {
                     if let Some(number) = self.numbers.get(&id) {
@@ -413,7 +413,7 @@ mod exports {
     /// Fails on an unknown handle or layer id, or when the source fails.
     #[wasm_bindgen(js_name = engineNewAnchorName)]
     pub fn engine_new_anchor_name(handle: u32, layer_ids: Vec<String>) -> Result<String, JsError> {
-        let layer_ids = intents::parse_id_list::<LayerId>(&layer_ids)?;
+        let layer_ids = values::parse_id_list::<LayerId>(&layer_ids)?;
         with_engine(handle, |engine| {
             engine.load_layers(layer_ids.clone())?;
             let font = engine.session.font();

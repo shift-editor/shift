@@ -75,6 +75,7 @@ import {
   type KerningSideId,
 } from "./Kerning";
 import { KerningEdit } from "./KerningEdit";
+import { fontAxis, metricValuesById } from "./fontValues";
 import {
   designAxisLocationFromLocation,
   locationFromDesignAxisLocation,
@@ -1482,7 +1483,7 @@ export class Font {
           sourceId,
           name,
           location: designLocation,
-          metricValues: [...metrics.metricValues],
+          metricValues: metricValuesById(metrics.metricValues),
           italicAngle: metrics.italicAngle,
           lineGap: metrics.lineGap,
           underlinePosition: metrics.underlinePosition,
@@ -1522,7 +1523,7 @@ export class Font {
     const axisId = mintAxisId();
     this.editCoordinator.push({
       kind: "createAxis",
-      createAxis: { axis: { id: axisId, ...axis } },
+      createAxis: { axis: fontAxis({ id: axisId, ...axis }) },
     });
 
     return axisId;
@@ -1539,7 +1540,7 @@ export class Font {
       [
         {
           kind: "updateAxis",
-          updateAxis: { axis },
+          updateAxis: { axis: fontAxis(axis) },
         },
       ],
       "Update Axis",
@@ -1597,7 +1598,7 @@ export class Font {
             sourceId: source.id,
             name: source.name,
             location: source.location,
-            metricValues: source.metricValues,
+            metricValues: metricValuesById(source.metricValues),
             italicAngle: source.italicAngle,
             lineGap: source.lineGap,
             underlinePosition: source.underlinePosition,

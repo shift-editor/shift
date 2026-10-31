@@ -3,13 +3,15 @@
 //! font's records.
 
 use pack::{Bytes, Pack};
-use shift_font::{FontChangeImpact, FontChangeSet, FontIntentSet, Glyph, GlyphId, LayerId};
+use shift_font::{
+  FontChangeImpact, FontChangeSet, FontIntent, FontIntentSet, Glyph, GlyphId, LayerId,
+};
 use shift_wire::replacement::FontReplacement;
 use shift_wire::{
   Axis, AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphChangedEntities,
   GlyphLayerRecord, GlyphLayerSnapshot, GlyphRecord, GlyphRecordChanges, GlyphStructure,
   KerningSnapshot, Ligature, MetricDefinition, NamedInstance, Source,
-  SourceMetricsInterpolationSnapshot, intents,
+  SourceMetricsInterpolationSnapshot,
 };
 use shift_workspace::{
   AcquireScope, DocumentIdentity as StoreDocumentIdentity, FontWorkspace, NewWorkspace,
@@ -154,34 +156,19 @@ pub(crate) trait NativeWorkspace {
   fn get_glyphs(&self) -> Result<Vec<GlyphRecord>, NativeWorkspaceError>;
 
   /// Applies `intents` as one atomic edit, one store transaction and one
-  /// undo step, and returns what it changed.
+  /// undo step, and returns what it changed. The editor edits in its window's
+  /// engine and persists the change set; this writes a store from intents
+  /// directly, as tests and tools that seed one do.
   ///
   /// # Errors
   ///
-  /// Returns [`NativeWorkspaceError::InvalidInput`] for an intent that names
-  /// a malformed or missing id, and fails when the edit cannot be applied
-  /// or written; the font is then unchanged.
+  /// Fails when an intent names a missing entity, or the edit cannot be
+  /// applied or written; the font is then unchanged.
   fn apply(
     &mut self,
-    intents: Vec<intents::FontIntent>,
+    intents: Vec<FontIntent>,
     label: Option<String>,
   ) -> Result<AppliedChange, NativeWorkspaceError>;
-
-  /// Undoes the latest edit, and returns what it changed; `None` when there
-  /// is nothing to undo.
-  ///
-  /// # Errors
-  ///
-  /// Fails when no workspace is open or the undo cannot be written.
-  fn undo(&mut self) -> Result<Option<AppliedChange>, NativeWorkspaceError>;
-
-  /// Redoes the latest undone edit, and returns what it changed; `None` when
-  /// there is nothing to redo.
-  ///
-  /// # Errors
-  ///
-  /// Fails when no workspace is open or the redo cannot be written.
-  fn redo(&mut self) -> Result<Option<AppliedChange>, NativeWorkspaceError>;
 
   /// Persists a change set, as named MessagePack, that a session over this
   /// font already applied, and returns its echo: the layers it touched, the
@@ -555,40 +542,19 @@ impl NativeWorkspace for Bridge {
 
   fn apply(
     &mut self,
-    intents: Vec<intents::FontIntent>,
+    intents: Vec<FontIntent>,
     label: Option<String>,
   ) -> Result<AppliedChange, NativeWorkspaceError> {
     if intents.is_empty() {
       return Ok(AppliedChange::default());
     }
 
-    let mut set = FontIntentSet::default();
-    for intent in intents {
-      set.intents.push(shift_font::FontIntent::try_from(intent)?);
-    }
-
-    let outcome = self.workspace_mut()?.apply(&set, label)?;
+    let outcome = self
+      .workspace_mut()?
+      .apply(&FontIntentSet { intents }, label)?;
     self.mark_font_changed();
 
     Ok(self.applied_echo(outcome)?)
-  }
-
-  fn undo(&mut self) -> Result<Option<AppliedChange>, NativeWorkspaceError> {
-    let Some(outcome) = self.workspace_mut()?.undo()? else {
-      return Ok(None);
-    };
-
-    self.mark_font_changed();
-    Ok(Some(self.applied_echo(outcome)?))
-  }
-
-  fn redo(&mut self) -> Result<Option<AppliedChange>, NativeWorkspaceError> {
-    let Some(outcome) = self.workspace_mut()?.redo()? else {
-      return Ok(None);
-    };
-
-    self.mark_font_changed();
-    Ok(Some(self.applied_echo(outcome)?))
   }
 
   fn persist(

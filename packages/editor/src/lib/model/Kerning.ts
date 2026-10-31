@@ -4,8 +4,8 @@ import {
   type GlyphId,
   type KerningGroup,
   type KerningGroupId,
+  type FontKerningSide,
   type KerningPairValue,
-  type KerningSide,
   type KerningSnapshot,
   type KerningValueEdit,
   type SourceId,
@@ -57,19 +57,21 @@ export function kerningRule(pair: KerningPairSides): KerningPairRule {
   return "glyph";
 }
 
-/** A side as the wire spells it, with its kind. */
-export function wireSide(side: KerningSideId): KerningSide {
-  return { kind: isGroupSide(side) ? "group" : "glyph", id: side };
+/** A side as shift-font's kerning edits name it, with its kind. */
+export function fontSide(side: KerningSideId): FontKerningSide {
+  return isGroupSide(side) ? { kind: "group", group: side } : { kind: "glyph", glyph: side };
 }
 
-/** A value edit at one source for a pair, as the wire takes it; no amount removes the pair. */
+/** A value edit at one source for a pair, as the engine takes it; no amount removes the pair. */
 export function kerningValueEdit(
   sourceId: SourceId,
   pair: KerningPairSides,
   amount?: number,
 ): KerningValueEdit {
-  const edit = { sourceId, first: wireSide(pair.first), second: wireSide(pair.second) };
-  return amount === undefined ? edit : { ...edit, amount };
+  const sides = { first: fontSide(pair.first), second: fontSide(pair.second) };
+  return amount === undefined
+    ? { sourceId, pair: sides }
+    : { sourceId, pair: sides, value: amount };
 }
 
 /** The intent that sets each of `edits`' values, or removes the pair where it has no amount. */

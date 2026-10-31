@@ -8,7 +8,7 @@ use shift_font::{
     },
 };
 
-use crate::intents;
+use crate::values;
 use crate::{
     AnchorData, AnchorMatch, ComponentData, ComponentGlyph, ComponentMatch, ComponentTransformKind,
     ContourData, ContourMatch, DesignNormalization, GlyphComponents, GlyphInterpolation,
@@ -141,8 +141,8 @@ pub struct NapiLayerDifference {
     pub target_count: Option<u32>,
     pub reference_closed: Option<bool>,
     pub target_closed: Option<bool>,
-    pub reference_point_type: Option<intents::PointType>,
-    pub target_point_type: Option<intents::PointType>,
+    pub reference_point_type: Option<values::PointType>,
+    pub target_point_type: Option<values::PointType>,
     pub reference_anchor_names: Option<Vec<Option<String>>>,
     pub target_anchor_names: Option<Vec<Option<String>>>,
     #[napi(ts_type = "Array<GlyphId> | undefined")]
@@ -593,7 +593,7 @@ impl From<NapiContourData> for ContourData {
 pub struct NapiPointData {
     #[napi(ts_type = "PointId")]
     pub id: String,
-    pub point_type: intents::PointType,
+    pub point_type: values::PointType,
     pub smooth: bool,
 }
 
@@ -695,7 +695,7 @@ impl From<NapiComponentData> for ComponentData {
             id: component.id,
             base_glyph_id: GlyphId::from_raw(component.base_glyph_id),
             base_glyph_name: component.base_glyph_name.into(),
-            alignment: intents::parse_alignment(Some(&component.alignment)),
+            alignment: values::parse_alignment(Some(&component.alignment)),
         }
     }
 }
@@ -814,7 +814,7 @@ pub struct NapiLayerRead {
     pub resolved: NapiResolvedLayerGeometry,
 }
 
-impl From<Location> for intents::Location {
+impl From<Location> for values::Location {
     fn from(location: Location) -> Self {
         Self {
             values: location
