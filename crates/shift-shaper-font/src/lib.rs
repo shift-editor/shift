@@ -25,6 +25,7 @@ mod axes;
 mod diagnostics;
 mod glyph_order;
 mod inputs;
+mod positioning;
 mod references;
 mod shape;
 mod state;
@@ -54,6 +55,7 @@ pub use diagnostics::{DiagnosticSeverity, FeatureDiagnostic};
 pub use glyph_order::ShaperGlyphOrder;
 pub use inputs::UnitsPerEm;
 use inputs::{FeatureSource, GlyphSet, ShaperAxes};
+pub use positioning::{GeneratedPositioning, PositioningGlyphs};
 pub use shape::{
     FeatureSetting, LiveShaper, ParagraphRequest, ShapeError, ShapeRequest, ShapeUnit, ShapedGlyph,
     ShapedRun, TextDirection,
@@ -235,6 +237,7 @@ impl ShaperFont {
         };
 
         tables::add_glyph_classes(&mut compilation, &glyph_map, &request.glyphs.gdef_classes);
+        tables::ensure_gpos(&mut compilation);
         compilation
             .head
             .get_or_insert_with(Default::default)

@@ -27,7 +27,7 @@ crates/shift-shape/src/
 ## Key Types
 
 - `Unit<G>` — a character, or a glyph inserted by name (as the host's glyph), which shapes as itself and reads as an inline object for line breaking.
-- `Shaper` — one font's parsed layout tables; `shape` shapes a run, `shape_paragraph` splits by script and shapes each run in its script's direction.
+- `Shaper` — one font's parsed layout tables; `shape` shapes a run, `shape_paragraph` splits by script and shapes each run in its script's direction. Both take an optional HarfRust `ShapeHook` (re-exported with `ShapeEvent`, `ShapeTable`, `GlyphInfo` and `GlyphPosition`), told about each `GSUB` and `GPOS` table and lookup as shaping applies them, which may change positions during `GPOS`; it sees shaper glyph ids and run-relative clusters. HarfRust is the shift-editor fork pinned in the workspace `Cargo.toml`, 0.13.3 plus the hook.
 - `GlyphSource` — the host seam: glyph identity both ways, character mapping, and own advances.
 - `ShapedRun<G>` / `ShapedGlyph<G>` — runs in logical order; glyphs in visual order, as host glyphs, with clusters indexing the paragraph's units.
 - `LineBreak` — a unit a line may (or must) start with.

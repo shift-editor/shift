@@ -100,6 +100,14 @@ pub(super) fn add_axis_names(
     Ok(Fvar::new(AxisInstanceArrays::new(records, Vec::new())))
 }
 
+/// Gives the font a `GPOS` table when its feature source positions nothing,
+/// so a shaper still applies `GPOS`: the editor positions generated
+/// features while it does (see [`GeneratedPositioning`](crate::GeneratedPositioning)),
+/// and an exported font with kerning or anchors has one.
+pub(super) fn ensure_gpos(compilation: &mut Compilation) {
+    compilation.gpos.get_or_insert_with(Default::default);
+}
+
 /// Where each generated feature belongs among the authored lookups: at its
 /// `# Automatic Code` marker, ordered by insertion priority, or after every
 /// authored lookup when the source neither marks nor defines the feature.

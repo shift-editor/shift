@@ -25,7 +25,9 @@ mod source;
 
 pub use axis::AxisNormalization;
 pub use breaks::{LineBreak, line_breaks};
-pub use harfrust::{NormalizedCoord, Tag};
+pub use harfrust::{
+    GlyphInfo, GlyphPosition, NormalizedCoord, ShapeEvent, ShapeHook, ShapeTable, Tag,
+};
 pub use shape::{
     FeatureSetting, ParagraphRequest, ShapeError, ShapeRequest, ShapedGlyph, ShapedRun, Shaper,
     TextDirection,
