@@ -1,10 +1,15 @@
 import { asAxisId, type AxisId, type RunId } from "@shift/types";
-import type { AxisCoordinate, ParagraphRequest, ShapedRun, ShapeUnit } from "@shift/wasm/protocol";
+import type {
+  AxisCoordinate,
+  ParagraphRequest,
+  ShapedParagraph,
+  ShapedRun,
+  ShapeUnit,
+} from "@shift/wasm/protocol";
 import { computed, effect, track } from "../signals";
 import type { ComputedSignal, Effect, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
 import type { TextRunRecord } from "../../types/text";
-import type { RegisteredShaper } from "../wasm/shaping";
 import { locationFromExternalAxisLocation } from "../variation/location";
 import { splitParagraphs, TextLayout, type ParagraphItem, type TextItem } from "./layout";
 
@@ -13,10 +18,10 @@ export interface ShapedText {
   /** The shaped content, as {@link shapingKey} gives it. */
   readonly key: string;
   /**
-   * Each paragraph's runs in logical order, indexed like `splitParagraphs`;
-   * null for a paragraph that could not be shaped, which lays out literally.
+   * Each paragraph's runs in logical order, indexed like `splitParagraphs`,
+   * or why it could not be shaped, when it lays out literally.
    */
-  readonly paragraphs: readonly (readonly ShapedRun[] | null)[];
+  readonly paragraphs: readonly ShapedParagraph[];
 }
 
 interface ShapingRequest {
@@ -30,8 +35,6 @@ export interface RunTextOwner {
   run(id: RunId): TextRunRecord | null;
   /** Bumped when a glyph the text shows finishes loading. */
   readonly glyphsLoadedCell: Signal<number>;
-  /** The shaper to shape with; null until it is ready, when text lays out literally. */
-  readonly shaperCell: Signal<RegisteredShaper | null>;
   /** Called with each shaping result, such as to load the glyphs it substituted in. */
   onShaped(shaped: ShapedText): void;
 }
@@ -40,10 +43,11 @@ export interface RunTextOwner {
  * Keeps one run's text shaped and laid out.
  *
  * @remarks
- * Shaping runs synchronously in `@shift/wasm/shaping`, so the layout is
- * shaped as soon as the text changes. Until the owner's shaper is ready the
- * text lays out literally. Construct outside any reactive reader: the effect
- * that reports shaping results starts at once.
+ * Shaping runs synchronously in the window's engine (`Font.shapeParagraphs`),
+ * so the layout is shaped as soon as the text changes, and again after an
+ * edit that may change how it shapes. Without an engine the text lays out
+ * literally. Construct outside any reactive reader: the effect that reports
+ * shaping results starts at once.
  */
 export class RunText {
   readonly #keyCell: ComputedSignal<string | null>;
@@ -85,9 +89,10 @@ export class RunText {
     this.#shapedCell = computed(
       () => {
         const request = this.#requestCell.value;
-        const shaper = owner.shaperCell.value;
-        if (!request || !shaper) return null;
-        return { key: request.key, paragraphs: shaper.shapeParagraphs(request.paragraphs) };
+        if (!request) return null;
+        const paragraphs = editor.font.shapeParagraphs(request.paragraphs);
+        if (!paragraphs) return null;
+        return { key: request.key, paragraphs };
       },
       { name: "text.shaped" },
     );
@@ -114,7 +119,7 @@ export class RunText {
           origin: { x: 0, y: 0 },
           editor,
           externalLocation: editor.externalLocationCell,
-          shaped: this.#shapedCell.value?.paragraphs ?? null,
+          shaped: this.#shapedCell.value?.paragraphs.map(shapedRuns) ?? null,
         });
       },
       { name: "text.layoutForRun" },
@@ -149,6 +154,11 @@ function shapingKey(items: readonly TextItem[]): string {
       return item.kind === "character" ? `c${item.codepoint}` : `g${item.glyphId}`;
     })
     .join(" ");
+}
+
+/** A paragraph's runs, or null for one that lays out literally. */
+function shapedRuns(paragraph: ShapedParagraph): readonly ShapedRun[] | null {
+  return paragraph.kind === "runs" ? paragraph.runs : null;
 }
 
 function shapeUnit(item: ParagraphItem): ShapeUnit {

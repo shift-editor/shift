@@ -45,6 +45,9 @@ import type {
   EngineReads,
   InterpolatedMetrics,
   MissingKerningOrigin,
+  FontChangeFlag,
+  ParagraphRequest,
+  ShapedParagraph,
   SourceSetWeights,
 } from "@shift/wasm/protocol";
 
@@ -313,6 +316,25 @@ export class EngineSession {
    */
   fontRecords(): EngineFontRecords {
     return { ...this.storelessRecords(), glyphs: this.#reads.glyphRecords() };
+  }
+
+  /**
+   * Shapes paragraphs with the font's feature code, through the shaper font
+   * the session compiles from its own font, unsaved edits included. Compiles
+   * when text is first shaped and after an edit that may change what the
+   * compile reads; loads no layers.
+   *
+   * @returns Each paragraph's runs in logical order, in request order, or
+   * why it could not be shaped: the store's reader could not answer, the
+   * font cannot make a shaper font, or the paragraph cannot be shaped.
+   */
+  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): readonly ShapedParagraph[] {
+    return this.#reads.shapeParagraphs(paragraphs);
+  }
+
+  /** The change flags whose change may change what {@link shapeParagraphs} returns. */
+  shapingInputs(): readonly FontChangeFlag[] {
+    return this.#reads.shapingInputs();
   }
 
   /**

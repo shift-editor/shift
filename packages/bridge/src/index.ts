@@ -1,17 +1,12 @@
 import { carryingNames } from "@shift/pack";
 import type { BridgeApi } from "@shift/types";
-import {
-  NativeAtlas,
-  NativeShaping,
-  NativeSource,
-  NativeWorkspace,
-} from "@shift/types/native-protocol";
+import { NativeAtlas, NativeSource, NativeWorkspace } from "@shift/types/native-protocol";
 import { Bridge } from "shift-bridge";
 
 // oxlint-disable-next-line eslint-js/no-restricted-syntax -- the bridge package re-exports every bridge type
 export type * from "@shift/types";
 
-export { NativeAtlas, NativeShaping, NativeSource, NativeWorkspace };
+export { NativeAtlas, NativeSource, NativeWorkspace };
 
 /**
  * The native workspace, as the utility process calls it.
@@ -30,8 +25,6 @@ export interface ShiftBridge {
   readonly atlas: NativeAtlas;
   /** A font file opened for browsing in the glyph catalog. */
   readonly source: NativeSource;
-  /** The shaping tables the window's engine shapes text with. */
-  readonly shaping: NativeShaping;
   /** The addon's remaining napi methods. */
   readonly napi: BridgeApi;
 }
@@ -51,9 +44,6 @@ export function createBridge(): ShiftBridge {
     ),
     source: new NativeSource(
       carryingNames((method, numbers, blobs) => addon.sourceRequest(method, numbers, blobs)),
-    ),
-    shaping: new NativeShaping(
-      carryingNames((method, numbers, blobs) => addon.shapingRequest(method, numbers, blobs)),
     ),
     napi: addon,
   };

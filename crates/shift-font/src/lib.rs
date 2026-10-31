@@ -53,6 +53,7 @@ pub mod naming;
 pub mod placed_blend;
 pub mod point_arrange;
 pub mod projection;
+pub mod shaper_font_source;
 mod string_enum;
 pub mod svg_path;
 #[cfg(any(test, feature = "test-support"))]
@@ -76,3 +77,4 @@ pub use ir::{
 pub use kurbo;
 pub use point_arrange::{DistributeAxis, PointAlignment, Sidebearing};
 pub use projection::*;
+pub use shaper_font_source::{GlyphOrderEntry, NOTDEF, ShaperFontGlyph, ShaperFontSource};

@@ -67,6 +67,7 @@ describe("FontStore glyph snapshot application", () => {
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
 
     store.applyEngineEdit({
+      impact: 0,
       next: { glyphChanges: { updated: snapshot("document-a", LAYER_B_ID).glyphs, removed: [] } },
       layers: [],
     });
@@ -97,6 +98,7 @@ describe("FontStore record index", () => {
     const font = new Font({ store });
 
     store.applyEngineEdit({
+      impact: 0,
       next: {
         glyphChanges: {
           updated: [record("glyph_m", "Z"), record("glyph_b", "B")],
@@ -146,6 +148,7 @@ describe("FontStore record index", () => {
     expect(font.nameForUnicode(193 as Unicode)).toBe("Aacute");
 
     store.applyEngineEdit({
+      impact: 0,
       next: { glyphChanges: { updated: [], removed: [aacute.id], order: [GLYPH_ID, acute.id] } },
       layers: [],
     });
@@ -192,6 +195,7 @@ describe("FontStore glyph object ownership", () => {
       anchorId: NEXT_ANCHOR_ID,
     });
     store.applyEngineEdit({
+      impact: 0,
       layers: [
         {
           layerId: LAYER_A_ID,
@@ -224,6 +228,7 @@ describe("FontStore glyph object ownership", () => {
     });
 
     store.applyEngineEdit({
+      impact: 0,
       next: { glyphChanges: { updated: snapshot("document-a", LAYER_B_ID).glyphs, removed: [] } },
       layers: [],
     });

@@ -7,7 +7,7 @@ use crate::StoreError;
 use crate::connection::configure_common;
 use crate::layer::{
     bases_of_from_conn, component_bases_from_conn, composites_of_from_conn,
-    load_glyph_layers_from_conn,
+    load_glyph_layers_from_conn, present_layer_ids_from_conn,
 };
 use crate::recovery::attach_merged_views;
 use crate::schema;
@@ -94,6 +94,31 @@ impl StoreReader {
         self.read(|conn| component_bases_from_conn(conn, glyph_ids))
     }
 
+    /// Those of `layer_ids` that carry an anchor marks attach to
+    /// ([`font::Anchor::attaches_marks`]), in id order; a layer the store
+    /// lacks is left out. Anchors are inside each layer's payload, so every
+    /// layer is decoded.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::load_glyph_layers`], except that a missing layer is not an
+    /// error.
+    pub fn attaching_anchor_layers(
+        &self,
+        layer_ids: &[font::LayerId],
+    ) -> Result<Vec<font::LayerId>, StoreError> {
+        self.read(|conn| {
+            let present = present_layer_ids_from_conn(conn, layer_ids)?;
+            let mut attaching: Vec<font::LayerId> = load_glyph_layers_from_conn(conn, &present)?
+                .iter()
+                .filter(|layer| layer.anchors().iter().any(font::Anchor::attaches_marks))
+                .map(font::GlyphLayer::id)
+                .collect();
+            attaching.sort();
+            Ok(attaching)
+        })
+    }
+
     /// As [`crate::ShiftStore::composites_of`].
     ///
     /// # Errors
@@ -154,6 +179,32 @@ mod tests {
             store.load_glyph_layers(&layer_ids).unwrap().len(),
             layer_ids.len()
         );
+    }
+
+    #[test]
+    fn a_reader_lists_the_layers_marks_attach_to_and_skips_missing_ones() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("working.sqlite");
+        let font = shift_font::test_support::sample_font();
+        let mut store = ShiftStore::open(&path).unwrap();
+        store.replace_font_state(&font).unwrap();
+        let reader = StoreReader::open_working_store(&path).unwrap();
+        let mut layer_ids: Vec<font::LayerId> = font.layer_ids().collect();
+        let mut expected: Vec<font::LayerId> = layer_ids
+            .iter()
+            .copied()
+            .filter(|layer_id| {
+                let layer = font.layer(*layer_id).unwrap();
+                layer.anchors().iter().any(font::Anchor::attaches_marks)
+            })
+            .collect();
+        expected.sort();
+        layer_ids.push(font::LayerId::from_raw("missing"));
+
+        let attaching = reader.attaching_anchor_layers(&layer_ids).unwrap();
+
+        assert!(!expected.is_empty(), "the sample font has a base anchor");
+        assert_eq!(attaching, expected);
     }
 
     #[test]

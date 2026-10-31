@@ -14,7 +14,10 @@ use shift_font::{GlyphCategory, GlyphSubcategory};
 
 use write_fonts::types::Tag;
 
+use super::test_fonts::request_for;
 use super::*;
+use shift_font::NOTDEF;
+use std::collections::BTreeMap;
 
 /// Shapes `text` the way Shift shapes live text: characters map through the
 /// font's glyph names and every base advance is zero, so positions carry only
@@ -86,13 +89,14 @@ impl FontFuncs for LiveFuncs {
 
 fn request(glyph_names: &[&str], feature_source: &str) -> ShaperFontRequest {
     ShaperFontRequest {
-        units_per_em: 1000,
-        glyph_names: glyph_names.iter().map(ToString::to_string).collect(),
-        glyph_ids: vec![None; glyph_names.len()],
-        feature_source: feature_source.to_string(),
-        axes: Vec::new(),
-        axis_ids: Vec::new(),
-        gdef_classes: BTreeMap::new(),
+        units_per_em: UnitsPerEm::try_from(1000.0).unwrap(),
+        feature_source: FeatureSource(feature_source.to_string()),
+        axes: ShaperAxes::default(),
+        glyphs: GlyphSet {
+            names: glyph_names.iter().map(ToString::to_string).collect(),
+            ids: vec![None; glyph_names.len()],
+            gdef_classes: BTreeMap::new(),
+        },
     }
 }
 
@@ -121,7 +125,7 @@ fn variable_kerning_resolves_at_the_shaped_location() {
     font.features_mut().set_fea_source(Some(
         "feature kern { pos A A (wght=400:-50 wght=900:-90); } kern;".to_string(),
     ));
-    let shaper_font = compiled(&ShaperFontRequest::from_font(&font).unwrap());
+    let shaper_font = compiled(&request_for(&font).unwrap());
 
     let kern_at = |variation| shape(&shaper_font, "AA", &[variation])[0].2;
 
@@ -193,20 +197,21 @@ fn request_puts_notdef_first_and_reads_the_font() {
     font.features_mut()
         .set_fea_source(Some(LIGATURE.to_string()));
 
-    let request = ShaperFontRequest::from_font(&font).unwrap();
+    let request = request_for(&font).unwrap();
 
-    assert_eq!(request.glyph_names[0], NOTDEF);
+    assert_eq!(request.glyphs.names[0], NOTDEF);
     assert_eq!(
         request
-            .glyph_names
+            .glyphs
+            .names
             .iter()
             .filter(|name| *name == NOTDEF)
             .count(),
         1
     );
-    assert!(request.glyph_names.iter().any(|name| name == "A"));
-    assert_eq!(request.feature_source, LIGATURE);
-    assert_eq!(request.axes.len(), font.axes().len());
+    assert!(request.glyphs.names.iter().any(|name| name == "A"));
+    assert_eq!(request.feature_source.as_str(), LIGATURE);
+    assert_eq!(request.axes.axes.len(), font.axes().len());
 }
 
 #[test]
@@ -255,6 +260,7 @@ fn categorized_marks_are_skipped_by_lookups_that_ignore_marks() {
     let glyphs = [".notdef", "f", "i", "f_i", "x"];
     let mut classified = request(&glyphs, MARK_SKIPPING_LIGATURE);
     classified
+        .glyphs
         .gdef_classes
         .insert("x".to_string(), GlyphClassDef::Mark);
 
@@ -272,6 +278,7 @@ fn authored_glyph_classes_win_over_categories() {
         format!("table GDEF {{ GlyphClassDef [uni0301], , , ; }} GDEF;\n{MARK_SKIPPING_LIGATURE}");
     let mut classified = request(&glyphs, &source);
     classified
+        .glyphs
         .gdef_classes
         .insert("uni0301".to_string(), GlyphClassDef::Mark);
 
@@ -291,9 +298,12 @@ fn request_classifies_glyphs_by_category() {
     )
     .unwrap();
 
-    let request = ShaperFontRequest::from_font(&font).unwrap();
+    let request = request_for(&font).unwrap();
 
-    assert_eq!(request.gdef_classes.get("A"), Some(&GlyphClassDef::Mark));
+    assert_eq!(
+        request.glyphs.gdef_classes.get("A"),
+        Some(&GlyphClassDef::Mark)
+    );
 }
 
 #[test]
@@ -303,7 +313,7 @@ fn request_rejects_fractional_or_out_of_range_units_per_em() {
         font.metrics_mut().units_per_em = value;
 
         assert!(matches!(
-            ShaperFontRequest::from_font(&font),
+            request_for(&font),
             Err(ShaperFontError::InvalidUnitsPerEm { value: rejected }) if rejected == value
         ));
     }
@@ -333,7 +343,7 @@ fn request_rejects_axes_whose_mapping_cannot_convert() {
     font.set_axis_mappings(vec![mapping]).unwrap();
 
     assert!(matches!(
-        ShaperFontRequest::from_font(&font),
+        request_for(&font),
         Err(ShaperFontError::InvalidAxes(
             AxisConversionError::MappingMissingBounds { .. }
         ))
