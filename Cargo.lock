@@ -2464,9 +2464,11 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
+ "pack",
  "rmp-serde",
  "shift-backends",
  "shift-config",
+ "shift-engine",
  "shift-font",
  "shift-slug",
  "shift-specimen",
@@ -2513,6 +2515,7 @@ dependencies = [
 name = "shift-engine"
 version = "0.1.0"
 dependencies = [
+ "pack",
  "proptest",
  "shift-font",
  "thiserror",

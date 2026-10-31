@@ -6,7 +6,9 @@ edition = "2024"
 description = "Shift's editing session over a partly loaded font, shared by the native workspace and the renderer."
 
 [dependencies]
-shift-font = { workspace = true }
+# The `StoreReader` request protocol, for an engine that runs apart from its store.
+pack = { workspace = true }
+shift-font = { workspace = true, features = ["pack"] }
 thiserror = "2"
 
 [dev-dependencies]

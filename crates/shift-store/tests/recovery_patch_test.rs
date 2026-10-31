@@ -705,28 +705,27 @@ fn component_document(temp: &tempfile::TempDir) -> (ShiftStore, StoreReader) {
     (document, reader)
 }
 
-/// The glyphs drawing the glyph that owns `layer`, as the writer and the
-/// reader both answer.
-fn dependents(
-    document: &ShiftStore,
-    reader: &StoreReader,
-    layer: &str,
-) -> Vec<shift_font::GlyphId> {
-    let layer_ids = [shift_font::LayerId::from_raw(layer)];
-    let dependents = document.dependent_glyph_ids_for_layers(&layer_ids).unwrap();
+/// The glyphs drawing `base` directly, as the writer and the reader both
+/// answer, and as the writer answers for `base`'s layer.
+fn composites(document: &ShiftStore, reader: &StoreReader, base: &str) -> Vec<shift_font::GlyphId> {
+    let bases = [shift_font::GlyphId::from_raw(base)];
+    let composites = document.composites_of(&bases).unwrap();
+    assert_eq!(reader.composites_of(&bases).unwrap(), composites);
+    let layer_ids = [shift_font::LayerId::from_raw(format!("{base}_regular"))];
     assert_eq!(
-        reader.dependent_glyph_ids_for_layers(&layer_ids).unwrap(),
-        dependents
+        document.dependent_glyph_ids_for_layers(&layer_ids).unwrap(),
+        composites
     );
-    dependents
+    composites
 }
 
-/// The component closure of `root`, as the writer and the reader both answer.
-fn closure(document: &ShiftStore, reader: &StoreReader, root: &str) -> Vec<shift_font::GlyphId> {
+/// The glyphs `root`'s components use, transitively, without `root`, as the
+/// writer and the reader both answer.
+fn bases(document: &ShiftStore, reader: &StoreReader, root: &str) -> Vec<shift_font::GlyphId> {
     let roots = [shift_font::GlyphId::from_raw(root)];
-    let closure = document.referenced_glyph_closure(roots).unwrap();
-    assert_eq!(reader.referenced_glyph_closure(roots).unwrap(), closure);
-    closure
+    let bases = document.bases_of(&roots).unwrap();
+    assert_eq!(reader.bases_of(&roots).unwrap(), bases);
+    bases
 }
 
 fn glyph_ids(ids: &[&str]) -> Vec<shift_font::GlyphId> {
@@ -740,11 +739,8 @@ fn glyph_ids(ids: &[&str]) -> Vec<shift_font::GlyphId> {
 fn component_queries_see_composites_added_and_changed_in_the_overlay() {
     let temp = tempfile::tempdir().expect("temp dir");
     let (mut document, reader) = component_document(&temp);
-    assert_eq!(
-        dependents(&document, &reader, "acute_regular"),
-        glyph_ids(&["A"])
-    );
-    assert_eq!(closure(&document, &reader, "A"), glyph_ids(&["A", "acute"]));
+    assert_eq!(composites(&document, &reader, "acute"), glyph_ids(&["A"]));
+    assert_eq!(bases(&document, &reader, "A"), glyph_ids(&["acute"]));
 
     let mut added = shift_font::Glyph::with_id(shift_font::GlyphId::from_raw("Aring"), "Aring");
     let mut added_layer = shift_font::GlyphLayer::with_width(
@@ -763,13 +759,15 @@ fn component_queries_see_composites_added_and_changed_in_the_overlay() {
         .apply_change_set_with_font(&glyph_created(&added).into(), &post, SaveState::Unsaved)
         .unwrap();
 
+    assert_eq!(composites(&document, &reader, "A"), glyph_ids(&["Aring"]));
     assert_eq!(
-        dependents(&document, &reader, "A_regular"),
-        glyph_ids(&["Aring"])
+        composites(&document, &reader, "acute"),
+        glyph_ids(&["A"]),
+        "only the composites that use a glyph directly"
     );
     assert_eq!(
-        closure(&document, &reader, "Aring"),
-        glyph_ids(&["Aring", "A", "acute"])
+        bases(&document, &reader, "Aring"),
+        glyph_ids(&["A", "acute"])
     );
 
     let mut changed = document
@@ -779,11 +777,8 @@ fn component_queries_see_composites_added_and_changed_in_the_overlay() {
     changed.clear_components();
     document.replace_glyph_layer(&changed).unwrap();
 
-    assert!(dependents(&document, &reader, "acute_regular").is_empty());
-    assert_eq!(
-        closure(&document, &reader, "Aring"),
-        glyph_ids(&["Aring", "A"])
-    );
+    assert!(composites(&document, &reader, "acute").is_empty());
+    assert_eq!(bases(&document, &reader, "Aring"), glyph_ids(&["A"]));
 }
 
 #[test]
@@ -798,6 +793,6 @@ fn component_queries_hide_a_composite_deleted_in_the_overlay() {
         .apply_change_set_with_font(&glyph_deleted(&composite).into(), &post, SaveState::Unsaved)
         .unwrap();
 
-    assert!(dependents(&document, &reader, "acute_regular").is_empty());
-    assert_eq!(closure(&document, &reader, "A"), glyph_ids(&["A"]));
+    assert!(composites(&document, &reader, "acute").is_empty());
+    assert!(bases(&document, &reader, "A").is_empty());
 }

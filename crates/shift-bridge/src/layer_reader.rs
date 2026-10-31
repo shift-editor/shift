@@ -1,21 +1,35 @@
 //! Read-only layer access for a process that does not own the workspace.
 //!
 //! The editor's preload opens one beside the workspace's utility process, so
-//! the renderer's engine can load layers synchronously within an edit.
+//! the renderer's engine can load layers synchronously within an edit. The
+//! engine asks through shift-engine's [`StoreReader`] request protocol: the
+//! preload passes each encoded request to [`LayerReader::request`] unchanged.
 
-use napi::bindgen_prelude::Buffer;
+use napi::Env;
+use napi::bindgen_prelude::{Buffer, BufferSlice, Float64Array, Float64ArraySlice, Uint8ArraySlice};
 use napi_derive::napi;
+use pack::{Bytes, Packed};
+use shift_engine::{StoreReadError, StoreReader, store_reader_request};
 use shift_font::{GlyphId, LayerId};
-use shift_store::StoreReader;
+use shift_store::StoreReader as StoreFiles;
 
 use crate::errors::{BridgeError, BridgeResult};
 use crate::input::parse_id_list;
+
+/// A [`StoreReader`] reply: its numbers, and its blobs, the last of them the
+/// names it uses.
+#[napi(object, object_from_js = false)]
+pub struct StoreReply<'env> {
+  pub numbers: Float64Array,
+  #[napi(ts_type = "Uint8Array[]")]
+  pub blobs: Vec<BufferSlice<'env>>,
+}
 
 /// A read-only view of a workspace's store.
 #[napi]
 pub struct LayerReader {
   /// `None` once closed: Windows will not delete a file a reader holds open.
-  reader: Option<StoreReader>,
+  reader: Option<StoreFiles>,
 }
 
 #[napi]
@@ -29,7 +43,7 @@ impl LayerReader {
   #[napi(factory)]
   pub fn open_document(document_path: String, recovery_path: String) -> napi::Result<Self> {
     let reader =
-      StoreReader::open_document(document_path, recovery_path).map_err(BridgeError::from)?;
+      StoreFiles::open_document(document_path, recovery_path).map_err(BridgeError::from)?;
     Ok(Self {
       reader: Some(reader),
     })
@@ -42,7 +56,7 @@ impl LayerReader {
   /// Fails when the store cannot be opened read-only.
   #[napi(factory)]
   pub fn open_working_store(store_path: String) -> napi::Result<Self> {
-    let reader = StoreReader::open_working_store(store_path).map_err(BridgeError::from)?;
+    let reader = StoreFiles::open_working_store(store_path).map_err(BridgeError::from)?;
     Ok(Self {
       reader: Some(reader),
     })
@@ -79,6 +93,44 @@ impl LayerReader {
     Ok(self.dependent_glyphs(&layer_ids)?)
   }
 
+  /// Answers one [`StoreReader`] request, as the engine's `StoreReaderClient`
+  /// encoded it: the method's index, its numbers, and its blobs, the last of
+  /// them the names it uses. A failure is in the reply, as the method's
+  /// error.
+  ///
+  /// The request is read in place, and the reply copied once into
+  /// JavaScript memory: an external buffer costs more than copying a small
+  /// reply, and Electron's V8 sandbox refuses external buffers, so napi would
+  /// copy them anyway.
+  ///
+  /// # Errors
+  ///
+  /// Fails only when JavaScript cannot allocate the reply.
+  #[napi(ts_return_type = "{ numbers: Float64Array; blobs: Uint8Array[] }")]
+  pub fn request<'env>(
+    &self,
+    env: &'env Env,
+    method: u32,
+    numbers: Float64ArraySlice<'_>,
+    blobs: Vec<Uint8ArraySlice<'_>>,
+  ) -> napi::Result<StoreReply<'env>> {
+    let request = Packed {
+      numbers: numbers.to_vec(),
+      blobs: blobs.iter().map(|blob| blob.to_vec()).collect(),
+    };
+    let reply = request.answer_carrying_names(|input, blobs, names| {
+      store_reader_request(self, method, input, blobs, names)
+    });
+    Ok(StoreReply {
+      numbers: reply.numbers.into(),
+      blobs: reply
+        .blobs
+        .iter()
+        .map(|blob| BufferSlice::copy_from(env, blob))
+        .collect::<napi::Result<_>>()?,
+    })
+  }
+
   /// Closes the store's files now rather than when the reader is collected,
   /// so the workspace can delete them. Reads after this fail.
   #[napi]
@@ -87,8 +139,38 @@ impl LayerReader {
   }
 }
 
+impl StoreReader for LayerReader {
+  fn layers(&self, layer_ids: Vec<LayerId>) -> Result<Bytes, StoreReadError> {
+    let layers = self
+      .open()?
+      .load_glyph_layers(&layer_ids)
+      .map_err(unreadable)?;
+    Ok(Bytes(rmp_serde::to_vec_named(&layers).map_err(unreadable)?))
+  }
+
+  fn bases_of(&self, glyph_ids: Vec<GlyphId>) -> Result<Vec<GlyphId>, StoreReadError> {
+    self.open()?.bases_of(&glyph_ids).map_err(unreadable)
+  }
+
+  fn composites_of(&self, glyph_ids: Vec<GlyphId>) -> Result<Vec<GlyphId>, StoreReadError> {
+    self.open()?.composites_of(&glyph_ids).map_err(unreadable)
+  }
+}
+
+/// A store failure as the error that crosses to the engine, as its text.
+fn unreadable(error: impl std::fmt::Display) -> StoreReadError {
+  StoreReadError::Unreadable {
+    detail: error.to_string(),
+  }
+}
+
 impl LayerReader {
-  fn reader(&self) -> BridgeResult<&StoreReader> {
+  /// The store, for a [`StoreReader`] method.
+  fn open(&self) -> Result<&StoreFiles, StoreReadError> {
+    self.reader.as_ref().ok_or(StoreReadError::Closed)
+  }
+
+  fn reader(&self) -> BridgeResult<&StoreFiles> {
     self.reader.as_ref().ok_or(BridgeError::ReaderClosed)
   }
 

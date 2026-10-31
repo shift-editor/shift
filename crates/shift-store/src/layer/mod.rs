@@ -21,7 +21,8 @@ pub(crate) use format::encode_layer;
 pub(crate) use load::load_glyph_layers_from_conn;
 pub(crate) use payload::StoredLayerPayload;
 pub(crate) use references::{
-    dependent_glyph_ids_for_layers_from_conn, referenced_glyph_closure_from_conn,
+    bases_of_from_conn, composites_of_from_conn, dependent_glyph_ids_for_layers_from_conn,
+    referenced_glyph_closure_from_conn,
 };
 #[cfg(test)]
 pub(crate) use write::rewrite_layer_in_tx;

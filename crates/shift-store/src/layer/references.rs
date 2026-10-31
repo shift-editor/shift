@@ -93,6 +93,30 @@ impl ShiftStore {
         referenced_glyph_closure_from_conn(&self.conn, roots)
     }
 
+    /// Every glyph the components of `glyph_ids` use, transitively, other
+    /// than `glyph_ids` themselves: [`Self::referenced_glyph_closure`]
+    /// without its roots.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when a read fails.
+    pub fn bases_of(&self, glyph_ids: &[font::GlyphId]) -> Result<Vec<font::GlyphId>, StoreError> {
+        bases_of_from_conn(&self.conn, glyph_ids)
+    }
+
+    /// Glyphs with a component whose base is one of `glyph_ids`, directly;
+    /// not the composites of those composites.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
+    pub fn composites_of(
+        &self,
+        glyph_ids: &[font::GlyphId],
+    ) -> Result<Vec<font::GlyphId>, StoreError> {
+        composites_of_from_conn(&self.conn, glyph_ids)
+    }
+
     /// Reverse-reference lookup used for dependent invalidation.
     ///
     /// # Errors
@@ -207,6 +231,46 @@ pub(crate) fn referenced_glyph_closure_from_conn(
         pending.extend(referenced_glyph_ids_for_glyphs_from_conn(conn, &glyph_ids)?);
     }
     Ok(result)
+}
+
+pub(crate) fn bases_of_from_conn(
+    conn: &Connection,
+    glyph_ids: &[font::GlyphId],
+) -> Result<Vec<font::GlyphId>, StoreError> {
+    let roots: HashSet<font::GlyphId> = glyph_ids.iter().copied().collect();
+    let mut closure = referenced_glyph_closure_from_conn(conn, glyph_ids.iter().copied())?;
+    closure.retain(|glyph_id| !roots.contains(glyph_id));
+    Ok(closure)
+}
+
+pub(crate) fn composites_of_from_conn(
+    conn: &Connection,
+    glyph_ids: &[font::GlyphId],
+) -> Result<Vec<font::GlyphId>, StoreError> {
+    if glyph_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    // As in `dependent_glyph_ids_for_layers_from_conn`, with the bases given
+    // directly rather than found from their layers.
+    let mut stmt = conn.prepare_cached(
+        "WITH users AS MATERIALIZED (
+             SELECT c.layer_id FROM glyph_components AS c
+             WHERE c.base_glyph_id IN (SELECT value FROM json_each(?1))
+         )
+         SELECT DISTINCT owner.glyph_id
+         FROM glyph_layers AS owner
+         WHERE owner.id IN users",
+    )?;
+    let mut result = BTreeSet::new();
+    for count_batch in glyph_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
+        let rows = stmt.query_map([serde_json::to_string(count_batch)?], |row| {
+            row.get::<_, font::GlyphId>(0)
+        })?;
+        for row in rows {
+            result.insert(row?);
+        }
+    }
+    Ok(result.into_iter().collect())
 }
 
 pub(crate) fn dependent_glyph_ids_for_layers_from_conn(
