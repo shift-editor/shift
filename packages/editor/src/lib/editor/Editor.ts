@@ -50,6 +50,7 @@ import {
   invertTransform,
   localBounds,
   sceneBounds,
+  sceneVector,
   spaceTransform,
   transformBounds,
 } from "./spaces";
@@ -58,7 +59,14 @@ import {
   cloneExternalAxisLocation,
   emptyExternalAxisLocation,
 } from "../variation/location";
-import type { ActiveTool, ToolName, ToolRegistration } from "../tools/core";
+import type {
+  ActiveTool,
+  BaseTool,
+  ToolFor,
+  ToolName,
+  ToolRegistration,
+  ToolState,
+} from "../tools/core";
 import { ToolManager } from "../tools/core/ToolManager";
 import { Bounds, Mat, type Bounds as BoundsType, type Point2D, type Rect2D } from "@shift/geo";
 
@@ -114,7 +122,7 @@ import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { ShiftObject } from "../../types/object";
 import type { ShiftEditorRecord, ShiftRecordId } from "../../types/records";
-import type { GlyphNode, NodeKind, ShiftNode } from "../../types/node";
+import type { GlyphNode, NodeKind, ShiftNode, TextRunNode } from "../../types/node";
 import {
   AnchorObject,
   ComponentObject,
@@ -129,6 +137,7 @@ import { GlyphNodeDefinition } from "../nodes/GlyphNodeDefinition";
 import { TextRunNodeDefinition } from "../nodes/TextRunNodeDefinition";
 import type { NodeDefinitionByKind, NodeDefinitionConstructors } from "../../types/nodeDefinition";
 import { MultiSourceEditing } from "./MultiSourceEditing";
+import { SelectedPoints } from "./SelectedPoints";
 import { PositionTargets } from "../model/positions/PositionTargets";
 
 interface EditorOptions {
@@ -210,9 +219,11 @@ export class Editor {
   #toolRegistry: Signal<ReadonlyMap<ToolName, ToolRegistryItem>>;
   #tool: Signal<ActiveTool | null>;
   #toolId: Signal<ToolName | null>;
-  readonly #toolCellsById = new Map<ToolName, Signal<ActiveTool | null>>();
+  readonly #toolCellsById = new Map<ToolName, Signal<BaseTool<ToolState> | null>>();
   #dragging: Signal<boolean>;
   #isEditing: Signal<boolean>;
+  /** The selection resolved once into one layer's points, when it is only that. */
+  #selectedPoints: Signal<SelectedPoints | null>;
   #selectionBounds: Signal<LocalBounds | null>;
   #selectionSceneBounds: Signal<SceneBounds | null>;
   readonly #handlesCell = signal<ReadonlyMap<symbol, PointId | ContourId>>(new Map(), {
@@ -315,6 +326,10 @@ export class Editor {
     this.history.onCaptureFinishing((changed) => this.#runContentHooks(changed));
     this.hover = new Hover();
     this.snapping = new Snapping(this);
+    this.#selectedPoints = computed(
+      () => this.#resolveSelectedPoints(this.selection.stateCell.value.ids),
+      { name: "editor.selection.points" },
+    );
     this.#selectionBounds = computed(
       () => {
         track(this.selection.stateCell);
@@ -357,7 +372,7 @@ export class Editor {
                 shortcut,
                 selected,
                 onSelect,
-                ...(toolId ? { toolId } : {}),
+                toolId,
               }),
             );
           }
@@ -478,44 +493,44 @@ export class Editor {
   }
 
   /**
-   * Exposes one tool's live state while that tool is active.
+   * Exposes one tool while that tool is active.
    *
    * @remarks
-   * Holds null while another tool is active, so readers that follow one tool
-   * ignore every other tool's state changes. The cell is created on first
-   * request and reused for the editor's lifetime.
+   * Holds null while another tool is active and changes only when the tool is
+   * switched, so readers that follow one tool ignore every other tool. Readers
+   * that follow the tool's state as well subscribe to its `stateCell`. The cell
+   * is created on first request and reused for the editor's lifetime.
    *
-   * @param id - Tool identity whose state the reader follows.
-   * @returns A cell holding the active tool snapshot when its identity matches; otherwise null.
+   * @param id - Tool identity the reader follows.
+   * @returns A cell holding the active tool when its identity matches; otherwise null.
    */
-  public toolCellIf<Id extends ToolName>(id: Id): Signal<ActiveTool<Id> | null> {
+  public toolCellIf<Id extends ToolName>(id: Id): Signal<ToolFor<Id> | null> {
     let cell = this.#toolCellsById.get(id);
     if (!cell) {
       cell = computed(
         () => {
-          if (this.#toolId.value !== id) return null;
-
-          return this.#tool.value;
+          const tool = this.#toolManager.activeToolCell.value;
+          return tool?.id === id ? tool : null;
         },
         { name: `editor.tool.${id}` },
       );
       this.#toolCellsById.set(id, cell);
     }
 
-    return cell as Signal<ActiveTool<Id> | null>;
+    return cell as Signal<ToolFor<Id> | null>;
   }
 
   /**
    * Returns the active tool narrowed to the requested identity.
    *
-   * @param id - Tool identity whose current state the caller needs.
-   * @returns The active tool snapshot when its identity matches; otherwise null.
+   * @param id - Tool identity the caller needs.
+   * @returns The active tool, typed by its identity, when it matches; otherwise null.
    */
-  public toolIf<Id extends ToolName>(id: Id): ActiveTool<Id> | null {
-    const tool = this.#tool.peek();
+  public toolIf<Id extends ToolName>(id: Id): ToolFor<Id> | null {
+    const tool = this.#toolManager.activeTool;
     if (tool?.id !== id) return null;
 
-    return tool as ActiveTool<Id>;
+    return tool as ToolFor<Id>;
   }
 
   /** Returns whether a pointer drag gesture is currently in flight. */
@@ -542,6 +557,22 @@ export class Editor {
     }
 
     this.toolManager.activate(toolName);
+  }
+
+  /**
+   * Picks an item from a tool's toolbar menu, as the toolbar's dropdown does:
+   * the item applies its choice, then its tool becomes active.
+   *
+   * @param tool - The toolbar tool whose menu holds the item.
+   * @param itemId - The menu item's id.
+   * @throws {Error} when the tool has no menu item with that id.
+   */
+  public chooseToolMenuItem(tool: ToolName, itemId: string): void {
+    const item = this.toolRegistry.get(tool)?.menuItems?.find(({ id }) => id === itemId);
+    if (!item) throw new Error(`The ${tool} tool has no menu item ${itemId}`);
+
+    item.onSelect();
+    this.setActiveTool(item.toolId ?? tool);
   }
 
   public get toolManager(): ToolManager {
@@ -735,6 +766,15 @@ export class Editor {
    */
   public get editingLayerMatchesCell(): Signal<ReadonlyMap<LayerId, LayerMatch>> {
     return this.#multiSourceEditing.matchesCell;
+  }
+
+  /**
+   * Resolves once the layer matches for the current editing sources are
+   * derived, which happens in the background after the sources or a layer's
+   * structure change.
+   */
+  public editingLayersMatched(): Promise<void> {
+    return this.#multiSourceEditing.matched();
   }
 
   /** Current external user-space coordinate used for displayed font data. */
@@ -1078,6 +1118,30 @@ export class Editor {
     return glyphId ? (this.glyphForId(glyphId)?.layerForId(layerId) ?? null) : null;
   }
 
+  /**
+   * The resolved current selection when `ids` are exactly it, so a per-frame
+   * read of its bounds or node skips resolving an object per id.
+   */
+  #selectedPointsFor(ids: readonly SelectableId[]): SelectedPoints | null {
+    track(this.#selectedPoints);
+    const selected = this.#selectedPoints.peek();
+    return selected?.matches(ids) ? selected : null;
+  }
+
+  /** `ids` as one authored layer's points, or null when they are anything else. */
+  #resolveSelectedPoints(ids: readonly SelectableId[]): SelectedPoints | null {
+    const first = ids[0];
+    if (first === undefined || !isPointId(first)) return null;
+
+    track(this.scene.cell);
+    const layer = this.#layerForPoint(first);
+    const node = layer ? this.#placedGlyphNodeForLayer(layer) : null;
+    if (!layer || !node) return null;
+
+    track(layer.structureCell);
+    return SelectedPoints.resolve(ids, layer, node);
+  }
+
   /** Returns the glyph node showing a layer: one placing the layer's glyph at the layer's source. */
   #placedGlyphNodeForLayer(layer: GlyphLayer): GlyphNode | null {
     const glyphId = this.font.glyphIdForLayer(layer.id);
@@ -1181,6 +1245,12 @@ export class Editor {
    * @returns null when no supplied object has bounds, or when the objects belong to different nodes.
    */
   public selectionBounds(ids: readonly SelectableId[] = this.selection.ids): LocalBounds | null {
+    const selected = this.#selectedPointsFor(ids);
+    if (selected) {
+      const bounds = selected.bounds();
+      return bounds ? localBounds(bounds) : null;
+    }
+
     let nodeId: NodeId | null = null;
     let bounds: BoundsType | null = null;
 
@@ -1206,6 +1276,9 @@ export class Editor {
    * @returns null when nothing resolves or the objects belong to different nodes.
    */
   public selectionNode(ids: readonly SelectableId[] = this.selection.ids): ShiftNode | null {
+    const selected = this.#selectedPointsFor(ids);
+    if (selected) return selected.node;
+
     let node: ShiftNode | null = null;
     for (const id of ids) {
       const object = this.object(id);
@@ -1229,6 +1302,12 @@ export class Editor {
   public selectionSceneBounds(
     ids: readonly SelectableId[] = this.selection.ids,
   ): SceneBounds | null {
+    const selected = this.#selectedPointsFor(ids);
+    if (selected) {
+      const bounds = selected.bounds(this.sceneTransform(selected.node));
+      return bounds ? sceneBounds(bounds) : null;
+    }
+
     let bounds: BoundsType | null = null;
 
     for (const id of ids) {
@@ -1640,16 +1719,20 @@ export class Editor {
    * position, nested in its parent's frame.
    *
    * @remarks
-   * Frames carry placement only. Each node's units apply to its own content and
-   * never to its children's frames. A parent that lays out its children
-   * supplies their positions through `NodeDefinition.childPosition`.
+   * Frames carry placement: where a node sits in its parent's frame and, for a
+   * child its parent lays out, at what size. Each node's units apply to its own
+   * content and never to its children's frames. A parent that lays out its
+   * children supplies both through `NodeDefinition.childPlacement`.
    */
   #frameToScene(node: ShiftNode): Mat {
     const parent = this.scene.node(node.parentId);
     if (!parent) return Mat.Translate(node.position.x, node.position.y);
 
-    const position = this.nodeDefinition(parent.kind).childPosition(parent, node) ?? node.position;
-    return Mat.Compose(this.#frameToScene(parent), Mat.Translate(position.x, position.y));
+    const placement = this.nodeDefinition(parent.kind).childPlacement(parent, node);
+    const position = placement?.position ?? node.position;
+    const scale = placement?.scale ?? 1;
+    const placed = Mat.Compose(Mat.Translate(position.x, position.y), Mat.Scale(scale, scale));
+    return Mat.Compose(this.#frameToScene(parent), placed);
   }
 
   /**
@@ -1822,6 +1905,20 @@ export class Editor {
     return this.#camera.hitRadius;
   }
 
+  /**
+   * Returns the pointer hit radius in a node's own units.
+   *
+   * @remarks
+   * The radius is constant on screen, so a glyph edited inside small text has
+   * a larger radius in its units than one edited at the font's own size.
+   *
+   * @param node - the node whose units the radius is measured in.
+   */
+  public hitRadiusIn(node: ShiftNode): number {
+    const radius = this.toLocalVector(node, sceneVector(this.hitRadius, 0));
+    return Math.hypot(radius.x, radius.y);
+  }
+
   /** @knipclassignore Indirectly consumed through Renderer. */
   public getCameraTransform(): CameraTransform {
     return {
@@ -1865,6 +1962,47 @@ export class Editor {
    */
   public fitInitialBounds(bounds: SceneBounds): void {
     this.#camera.fitInitialBounds(bounds);
+  }
+
+  /**
+   * Opens a glyph for editing in place in the canvas's text run, as choosing it
+   * in the glyph grid does.
+   *
+   * @remarks
+   * Until pages exist the canvas has one text run at the scene origin, created
+   * on the first open and kept after; opening replaces its text with the glyph.
+   * Opening is navigation, never a history entry. Tools reset afterwards, since
+   * they activate against the glyph node they find.
+   *
+   * @param glyphId - A glyph whose model is already loaded.
+   * @returns the glyph node now being edited, or null when the glyph cannot be placed.
+   */
+  public openGlyphInText(glyphId: GlyphId): GlyphNode | null {
+    const runs = this.nodeDefinition("textRun");
+    const run =
+      this.scene.first("textRun") ??
+      this.scene.createNode<TextRunNode>({
+        kind: "textRun",
+        runId: this.text.createRun([]).id,
+        size: this.font.metricsCell.peek().unitsPerEm,
+        position: { x: 0, y: 0 },
+      });
+    const previous = runs.childGlyph(run);
+    const open = (): GlyphNode | null => {
+      if (previous?.glyphId === glyphId) {
+        this.enterNode(previous.id);
+        return previous;
+      }
+      const item = this.text.glyphItem(glyphId);
+      if (!item) return null;
+      this.text.setItems(run.runId, [item]);
+      const child = runs.editItem(run, item.id);
+      if (child) this.enterNode(child.id);
+      return child;
+    };
+    const node = this.history.withoutRecording(open);
+    this.toolManager.reset();
+    return node;
   }
 
   /** Frames a glyph node's editing frame (`GlyphNodeDefinition.frameBounds`) until the user moves the camera. */
@@ -2019,28 +2157,31 @@ export class Editor {
 
     const inserted: SelectableId[] = [];
 
-    this.transaction("Insert content", () => {
-      for (const contour of content.contours) {
-        if (contour.points.length === 0) continue;
+    // One engine call for every contour: one at a time, each costs the whole layer.
+    this.transaction("Insert content", () =>
+      layer.together(() => {
+        for (const contour of content.contours) {
+          if (contour.points.length === 0) continue;
 
-        const contourId = layer.addContour();
+          const contourId = layer.addContour();
 
-        for (const pointId of layer.addPoints(
-          contourId,
-          contour.points.map((point) => ({
-            ...point,
-            x: point.x + options.offset.x,
-            y: point.y + options.offset.y,
-          })),
-        )) {
-          inserted.push(pointId);
+          for (const pointId of layer.addPoints(
+            contourId,
+            contour.points.map((point) => ({
+              ...point,
+              x: point.x + options.offset.x,
+              y: point.y + options.offset.y,
+            })),
+          )) {
+            inserted.push(pointId);
+          }
+
+          if (contour.closed) {
+            layer.closeContour(contourId);
+          }
         }
-
-        if (contour.closed) {
-          layer.closeContour(contourId);
-        }
-      }
-    });
+      }),
+    );
 
     return inserted.length === 0 ? null : inserted;
   }
@@ -2146,7 +2287,8 @@ export class Editor {
     const layers = node ? this.#multiSourceEditing.layersFor(node.glyphId) : null;
     if (!layers || !activeSourceId) return false;
 
-    const added = this.transaction("Add Anchor", () => AnchorEdits.add(layers, position));
+    const name = this.font.newAnchorName(layers.map((layer) => layer.layerId));
+    const added = this.transaction("Add Anchor", () => AnchorEdits.add(layers, name, position));
     const activeAnchorId = added.get(activeSourceId);
     if (activeAnchorId) this.selection.select([activeAnchorId]);
     return true;

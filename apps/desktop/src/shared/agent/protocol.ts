@@ -7,19 +7,25 @@ import type {
   GlyphPage,
   GlyphSelector,
   GlyphSummary,
+  KerningAtInput,
   KerningGroupSummary,
+  KerningMasterValue,
   KerningPairPage,
   KerningPairQuery,
   LayerAppearance,
   LayerOverlays,
+  LayerSelector,
   LayerSvg,
   ResolvedGlyphs,
   ResolvedKerningPairs,
   ResolvedLayer,
   ResolvedLocation,
   ShiftObservation,
+  ShiftReadInput,
+  SourceSelector,
+  InstanceSelector,
 } from "@shift/runtime";
-import type { GlyphId, KerningPosition, LayerId, SourceId } from "@shift/types";
+import type { GlyphId, KerningPosition, NamedInstance, Source } from "@shift/types";
 
 /** Main-to-renderer calls for live agent inspection of one explicit window. */
 export interface EditorCaptureBounds {
@@ -54,10 +60,18 @@ export type AgentCallMap = {
     request: {
       limit?: number;
       cursor?: string;
-      sourceId?: SourceId;
+      source?: SourceSelector;
       ifFontRevision?: FontRevision;
     };
     response: ShiftObservation<GlyphPage>;
+  };
+  "instances.get": {
+    request: { selector: InstanceSelector; ifFontRevision?: FontRevision };
+    response: ShiftObservation<NamedInstance>;
+  };
+  "sources.get": {
+    request: { selector: SourceSelector; ifFontRevision?: FontRevision };
+    response: ShiftObservation<Source>;
   };
   "glyphs.get": {
     request: { selector: GlyphSelector; ifFontRevision?: FontRevision };
@@ -77,8 +91,8 @@ export type AgentCallMap = {
   };
   "kerning.pairs": {
     request: {
-      sourceId: SourceId;
-      glyph?: string;
+      source?: SourceSelector;
+      glyph?: GlyphSelector;
       limit?: number;
       cursor?: string;
       ifFontRevision?: FontRevision;
@@ -88,30 +102,63 @@ export type AgentCallMap = {
   "kerning.resolve": {
     request: {
       pairs: KerningPairQuery[];
-      sourceId?: SourceId;
-      // oxlint-disable-next-line shift/no-optional-collection-field -- absent means "use sourceId or the default location"
+      source?: SourceSelector;
+      // oxlint-disable-next-line shift/no-optional-collection-field -- absent means "use source or the default location"
       location?: AxisCoordinate[];
       ifFontRevision?: FontRevision;
     };
     response: ShiftObservation<ResolvedKerningPairs>;
   };
+  "kerning.at": {
+    request: ShiftReadInput<KerningAtInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<KerningMasterValue>;
+  };
   "layers.get": {
-    request: { layerId: LayerId; ifFontRevision?: FontRevision };
+    request: LayerSelector & { ifFontRevision?: FontRevision };
     response: ShiftObservation<AuthoredLayer>;
   };
   "layers.resolve": {
-    request: { layerId: LayerId; ifFontRevision?: FontRevision };
+    request: LayerSelector & { ifFontRevision?: FontRevision };
     response: ShiftObservation<ResolvedLayer>;
   };
   "layers.render": {
-    request: {
-      layerId: LayerId;
+    request: LayerSelector & {
       overlays?: LayerOverlays;
       appearance?: LayerAppearance;
       ifFontRevision?: FontRevision;
     };
     response: ShiftObservation<LayerSvg>;
   };
+  /**
+   * Calls one agent reader's method with `args` once pending edits settle,
+   * returning its plain result. Only the E2E read hook sends it.
+   */
+  "agent.read": {
+    request: { reader: string; method: string; args: unknown[] };
+    response: unknown;
+  };
 };
+
+/**
+ * Test actions the renderer serves on the agent lane only when main enables
+ * them on connect, for E2E launches (`NODE_ENV=test`). Only the E2E actions
+ * hook sends them; agents and MCP never can.
+ */
+export type AgentE2ECallMap = {
+  /**
+   * Calls `method` of the renderer's E2E hook named `hook` (`testing/e2e/hooks.ts`:
+   * setup actions, which settle, and probes) with `args`, returning its plain result.
+   */
+  "e2e.call": {
+    request: { hook: string; method: string; args: unknown[] };
+    response: unknown;
+  };
+};
+
+/** What main tells a renderer when it connects the agent lane. */
+export interface AgentConnection {
+  /** Whether this is an E2E launch, so the renderer serves {@link AgentE2ECallMap}. */
+  readonly e2eActions: boolean;
+}
 
 export type AgentEventMap = Record<string, never>;

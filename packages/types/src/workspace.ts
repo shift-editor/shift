@@ -19,18 +19,28 @@ export interface WorkspaceSnapshot {
   workspaceId: string;
   metadata: FontMetadata;
   metrics: FontMetrics;
-  metricDefinitions: MetricDefinition[];
+  metricDefinitions: readonly MetricDefinition[];
   sourceMetricsInterpolation: SourceMetricsInterpolationSnapshot | null;
-  glyphs: GlyphRecord[];
-  sources: Source[];
-  axes: Axis[];
-  axisMappings: AxisMapping[];
-  axisMappingBases: AxisMappingBasis[];
-  namedInstances: NamedInstance[];
+  glyphs: readonly GlyphRecord[];
+  sources: readonly Source[];
+  axes: readonly Axis[];
+  axisMappings: readonly AxisMapping[];
+  axisMappingBases: readonly AxisMappingBasis[];
+  namedInstances: readonly NamedInstance[];
   /** Tracked Hyperglot language ids; `null` when the font stores no list. */
-  languageIds: string[] | null;
+  languageIds: readonly string[] | null;
   kerning: KerningSnapshot;
 }
+
+/**
+ * What the workspace's store answers at open: a {@link WorkspaceSnapshot}
+ * without the axes, sources and kerning, which the window reads from its
+ * engine.
+ */
+export type StoredWorkspaceSnapshot = Omit<WorkspaceSnapshot, "axes" | "sources" | "kerning">;
+
+/** The axes, sources and kerning of an open font, as the window's engine reads them. */
+export type EngineFontRecords = Pick<WorkspaceSnapshot, "axes" | "sources" | "kerning">;
 
 export interface WorkspaceGlyphLayerSnapshot {
   glyphId: GlyphId;

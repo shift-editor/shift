@@ -132,14 +132,18 @@ describe("getAllGlyph", () => {
   });
 
   it("every entry has required fields", () => {
-    const all = db.getAllGlyph();
-    for (const g of all) {
-      expect(g.codepoint).toBeTypeOf("number");
-      expect(g.name).toBeTypeOf("string");
-      expect(g.name.length).toBeGreaterThan(0);
-      expect(g.category).toBeTypeOf("string");
-      expect(g.category.length).toBeGreaterThan(0);
-    }
+    const incomplete = db
+      .getAllGlyph()
+      .filter(
+        (g) =>
+          typeof g.codepoint !== "number" ||
+          typeof g.name !== "string" ||
+          g.name.length === 0 ||
+          typeof g.category !== "string" ||
+          g.category.length === 0,
+      );
+
+    expect(incomplete).toEqual([]);
   });
 
   it("contains no duplicate codepoints", () => {
@@ -150,11 +154,11 @@ describe("getAllGlyph", () => {
   });
 
   it("codepoints are all non-negative integers", () => {
-    const all = db.getAllGlyph();
-    for (const g of all) {
-      expect(g.codepoint).toBeGreaterThanOrEqual(0);
-      expect(Number.isInteger(g.codepoint)).toBe(true);
-    }
+    const invalid = db
+      .getAllGlyph()
+      .filter((g) => !Number.isInteger(g.codepoint) || g.codepoint < 0);
+
+    expect(invalid).toEqual([]);
   });
 });
 

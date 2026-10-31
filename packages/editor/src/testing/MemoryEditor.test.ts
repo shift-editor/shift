@@ -170,7 +170,7 @@ describe("memory font editing", () => {
     });
     editor.toolManager.flushPointerMoves();
 
-    expect(select.peek()).toBe(editor.toolCell.peek());
+    expect(select.peek()).toBe(editor.toolManager.activeTool);
     expect(select.peek()?.state.type).not.toBe("idle");
     expect(toolId.peek()).toBe("select");
     expect(hand.peek()).toBeNull();
@@ -267,13 +267,15 @@ function fixture(): {
           id: regularSourceId,
           name: "Regular",
           location: { values: { [axisId]: 0 } as Record<AxisId, number> },
-          metricValues: [],
+          metricValues: {},
+          role: "master",
         },
         {
           id: boldSourceId,
           name: "Bold",
           location: { values: { [axisId]: 1000 } as Record<AxisId, number> },
-          metricValues: [],
+          metricValues: {},
+          role: "master",
         },
       ],
       axes: [
@@ -282,10 +284,7 @@ function fixture(): {
           tag: "wght",
           name: "Weight",
           role: "external",
-          axisType: "continuous",
-          minimum: 0,
-          default: 0,
-          maximum: 1000,
+          kind: { kind: "continuous", minimum: 0, default: 0, maximum: 1000 },
           labels: [],
           hidden: false,
         },
@@ -304,6 +303,8 @@ function fixture(): {
           { id: regularLayerId, sourceId: regularSourceId },
           { id: boldLayerId, sourceId: boldSourceId },
         ],
+        mark: false,
+        nonspacingMark: false,
       },
     ],
     glyph: {

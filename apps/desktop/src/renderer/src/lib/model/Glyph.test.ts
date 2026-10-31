@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   mintPointId,
@@ -5,13 +8,21 @@ import {
   type GlyphName,
   type GlyphRecord,
   type PointId,
+  type SourceId,
+  type Unicode,
 } from "@shift/types";
 import { Point } from "@shift/glyph-state";
 import { Curve } from "@shift/geo";
 import { effect, signal, track } from "@shift/editor/signals";
 import { emptyExternalAxisLocation } from "@shift/editor/variation";
-import { TestEditor } from "@/testing/TestEditor";
-import type { GlyphLayer } from "@shift/editor/model";
+import {
+  addWorkspaceGlyph,
+  createWorkspaceStack,
+  drawPoints,
+  startWorkspaceGlyph,
+  type WorkspaceStack,
+} from "@/testing/workspaceStack";
+import type { Glyph, GlyphLayer, GlyphRenderModel } from "@shift/editor/model";
 import { RenderGlyph } from "@shift/editor/model";
 
 /**
@@ -22,40 +33,21 @@ import { RenderGlyph } from "@shift/editor/model";
  * Not restored yet (blocked on workspace vocabulary):
  * - "Glyph variation interpolation" — needs multi-source/axes vocabulary.
  */
-async function addTriangle(editor: TestEditor, layer: GlyphLayer): Promise<readonly Point[]> {
-  const contourId = layer.addContour();
-
-  layer.addPoint(contourId, {
-    x: 0,
-    y: 0,
-    pointType: "onCurve",
-    smooth: false,
-  });
-  layer.addPoint(contourId, {
-    x: 100,
-    y: 0,
-    pointType: "onCurve",
-    smooth: false,
-  });
-  layer.addPoint(contourId, {
-    x: 50,
-    y: 100,
-    pointType: "onCurve",
-    smooth: false,
-  });
-  layer.closeContour(contourId);
-  await editor.settle();
+async function addTriangle(stack: WorkspaceStack, layer: GlyphLayer): Promise<readonly Point[]> {
+  const { contourId } = drawPoints(
+    layer,
+    [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 50, y: 100 },
+    ],
+    { closed: true },
+  );
+  await stack.editCoordinator.settled();
 
   const contour = layer.contour(contourId);
   if (!contour) throw new Error("Expected created contour");
   return contour.points;
-}
-
-function pointPosition(layer: GlyphLayer, pointId: PointId): { x: number; y: number } {
-  const point = layer.point(pointId);
-  if (!point) throw new Error("Expected point");
-
-  return { x: point.x, y: point.y };
 }
 
 function sourcePosition(layer: GlyphLayer, pointId: PointId): { x: number; y: number } {
@@ -66,17 +58,18 @@ function sourcePosition(layer: GlyphLayer, pointId: PointId): { x: number; y: nu
 }
 
 describe("Glyph", () => {
-  let editor: TestEditor;
+  let stack: WorkspaceStack;
   let record: GlyphRecord;
   let layer: GlyphLayer;
+  let renderModel: GlyphRenderModel;
 
   beforeEach(async () => {
-    editor = new TestEditor();
-    await editor.startSession();
-    layer = editor.glyphLayer!;
-    const glyphRecord = editor.glyphRecord;
-    if (!glyphRecord) throw new Error("Expected scene glyph record");
-    record = glyphRecord;
+    ({ stack, record, layer, renderModel } = await startWorkspaceGlyph());
+  });
+
+  afterEach(async () => {
+    await stack.editCoordinator.settled();
+    stack.dispose();
   });
 
   it("loads identity and state from the workspace", () => {
@@ -86,7 +79,7 @@ describe("Glyph", () => {
   });
 
   it("applies structural edits echoed by the workspace", async () => {
-    const points = await addTriangle(editor, layer);
+    const points = await addTriangle(stack, layer);
 
     expect(layer.contours.at(-1)?.closed).toBe(true);
     expect(points.map((point) => [point.x, point.y])).toEqual([
@@ -99,7 +92,7 @@ describe("Glyph", () => {
   it("adds a complete cubic segment with a corner endpoint", async () => {
     const contourId = layer.addContour();
     layer.addOnCurvePoint(contourId, { x: 0, y: 0 });
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
     const curve = Curve.cubic(
       { x: 0, y: 0 },
@@ -108,7 +101,7 @@ describe("Glyph", () => {
       { x: 100, y: 0 },
     );
     const endpointId = layer.addCubic(contourId, curve);
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
     expect(layer.contour(contourId)?.segments()[0]?.asCubic()).toMatchObject({
       start: curve.p0,
@@ -119,14 +112,11 @@ describe("Glyph", () => {
   });
 
   it("updates positions synchronously and keeps them after the echo folds", async () => {
-    const [first] = await addTriangle(editor, layer);
-    const renderModel = editor.sceneGlyphRenderModel;
-    if (!renderModel) throw new Error("Expected Glyph render model");
-
+    const [first] = await addTriangle(stack, layer);
     layer.applyPositionPatch([{ kind: "point", id: first!.id, x: 25, y: 75 }]);
     expect(renderModel.point(first!.id)).toMatchObject({ x: 25, y: 75 });
 
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(renderModel.point(first!.id)).toMatchObject({ x: 25, y: 75 });
   });
 
@@ -136,12 +126,12 @@ describe("Glyph", () => {
 
     expect(layer.contour(contourId)?.points[0]).toMatchObject({ id: pointId, x: 10, y: 20 });
 
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.contour(contourId)?.points[0]).toMatchObject({ id: pointId, x: 10, y: 20 });
   });
 
   it("reverses point metadata and packed coordinates as one contour", async () => {
-    const points = await addTriangle(editor, layer);
+    const points = await addTriangle(stack, layer);
     const contourId = layer.contours.at(-1)!.id;
 
     layer.reverseContour(contourId);
@@ -149,30 +139,30 @@ describe("Glyph", () => {
       [...points].reverse().map((point) => [point.id, point.x, point.y]),
     );
 
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.contour(contourId)?.points.map((point) => point.id)).toEqual(
       [...points].reverse().map((point) => point.id),
     );
   });
 
   it("publishes deletions before their workspace echo", async () => {
-    const [first] = await addTriangle(editor, layer);
+    const [first] = await addTriangle(stack, layer);
 
     layer.removePoints([first!.id]);
     expect(layer.point(first!.id)).toBeNull();
 
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.point(first!.id)).toBeNull();
   });
 
   it("prunes a contour locally when its final points are removed", async () => {
-    const points = await addTriangle(editor, layer);
+    const points = await addTriangle(stack, layer);
     const contourId = layer.contours.at(-1)!.id;
 
     layer.removePoints(points.map(({ id }) => id));
     expect(layer.contour(contourId)).toBeNull();
 
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.contour(contourId)).toBeNull();
   });
 
@@ -180,7 +170,7 @@ describe("Glyph", () => {
     layer.setXAdvance(640);
     expect(layer.xAdvance).toBe(640);
 
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.xAdvance).toBe(640);
   });
 
@@ -191,12 +181,12 @@ describe("Glyph", () => {
     layer.toggleSmooth(pointId);
     expect(layer.point(pointId)?.smooth).toBe(true);
 
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.point(pointId)?.smooth).toBe(true);
   });
 
   it("never republishes an older position while rapid edits confirm", async () => {
-    const [first] = await addTriangle(editor, layer);
+    const [first] = await addTriangle(stack, layer);
     const observedX: number[] = [];
     const subscription = effect(() => {
       track(layer.buffersChangedCell);
@@ -205,7 +195,7 @@ describe("Glyph", () => {
 
     layer.movePointTo(first!.id, { x: 10, y: 0 });
     layer.movePointTo(first!.id, { x: 20, y: 0 });
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
     expect(observedX).toEqual([0, 10, 20]);
     subscription.dispose();
@@ -218,7 +208,7 @@ describe("Glyph", () => {
     });
 
     const transactionReads: number[] = [];
-    editor.transaction("Create line", () => {
+    stack.editCoordinator.transaction("Create line", () => {
       const contourId = layer.addContour();
       transactionReads.push(layer.pointCount);
       layer.addOnCurvePoint(contourId, { x: 0, y: 0 });
@@ -230,50 +220,93 @@ describe("Glyph", () => {
     expect(transactionReads).toEqual([0, 1, 2]);
     expect(pointCounts).toEqual([0, 2]);
 
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(pointCounts.every((count) => count === 0 || count === 2)).toBe(true);
     expect(pointCounts.at(-1)).toBe(2);
     subscription.dispose();
   });
 
-  it("resyncs local geometry when the workspace rejects an edit", async () => {
-    const [first] = await addTriangle(editor, layer);
-    await editor.addGlyph("B", 66);
-    const otherRecord = editor.font.recordForName("B" as GlyphName);
-    const otherGlyph = otherRecord ? editor.glyphForId(otherRecord.id) : null;
-    const otherLayer = otherGlyph?.layerForSource(editor.font.defaultSource.id);
-    if (!otherLayer) throw new Error("Expected second glyph layer");
+  it("refuses an edit the engine rejects, leaving the layer and the store as they were", async () => {
+    const [first] = await addTriangle(stack, layer);
+    const { layer: otherLayer } = await addWorkspaceGlyph(stack, 66 as Unicode);
     const duplicateContourId = otherLayer.addContour();
-    await editor.settle();
+    await stack.editCoordinator.settled();
+    const contours = layer.contours.length;
 
-    layer.previewPositionPatch([{ kind: "point", id: first!.id, x: 999, y: 999 }]);
-    editor.font.editCoordinator.push({
-      kind: "addContour",
-      addContour: { layerId: layer.layerId, contourId: duplicateContourId, closed: false },
-    });
-    await editor.settle();
+    expect(() =>
+      stack.font.editCoordinator.push({
+        kind: "addContour",
+        addContour: { layerId: layer.layerId, contourId: duplicateContourId, closed: false },
+      }),
+    ).toThrow("already exists");
+    await stack.editCoordinator.settled();
 
-    const refreshedGlyph = await editor.font.loadGlyph(record.id);
+    expect(layer.contours).toHaveLength(contours);
+    const refreshedGlyph = await stack.font.loadGlyph(record.id);
+    expect(refreshedGlyph.layerForSource(layer.source.id)?.contours).toHaveLength(contours);
     expect(refreshedGlyph.layerForSource(layer.source.id)?.point(first!.id)).toMatchObject({
       x: 0,
       y: 0,
     });
   });
 
+  it("moves the point it names after points are inserted before it", async () => {
+    const [first, second, third] = await addTriangle(stack, layer);
+    const inserted = layer.insertPointBefore(second!.id, {
+      x: 40,
+      y: 0,
+      pointType: "onCurve",
+      smooth: false,
+    });
+    layer.movePointTo(second!.id, { x: 110, y: 0 });
+    await stack.editCoordinator.settled();
+
+    expect(layer.contours[0]?.points.map((point) => point.id)).toEqual([
+      first!.id,
+      inserted,
+      second!.id,
+      third!.id,
+    ]);
+    expect(layer.point(inserted)).toMatchObject({ x: 40, y: 0 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 110, y: 0 });
+  });
+
+  it("moves the point it names after earlier points are removed", async () => {
+    const [first, second, third] = await addTriangle(stack, layer);
+    layer.removePoints([first!.id]);
+    layer.movePointTo(third!.id, { x: 60, y: 120 });
+    await stack.editCoordinator.settled();
+
+    expect(layer.point(first!.id)).toBeNull();
+    expect(layer.point(second!.id)).toMatchObject({ x: 100, y: 0 });
+    expect(layer.point(third!.id)).toMatchObject({ x: 60, y: 120 });
+  });
+
+  it("moves the point it names after the contour is reversed", async () => {
+    const [first, second] = await addTriangle(stack, layer);
+    const contourId = layer.contours[0]!.id;
+    layer.reverseContour(contourId);
+    layer.movePointTo(first!.id, { x: -10, y: 0 });
+    await stack.editCoordinator.settled();
+
+    expect(layer.point(first!.id)).toMatchObject({ x: -10, y: 0 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 100, y: 0 });
+  });
+
   it("discards every transaction intent when its body throws", async () => {
     expect(() =>
-      editor.transaction("Rejected contour", () => {
+      stack.editCoordinator.transaction("Rejected contour", () => {
         layer.addContour();
         throw new Error("reject edit");
       }),
     ).toThrow("reject edit");
 
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.contours).toHaveLength(0);
   });
 
   it("feeds consumers that track source coordinate changes before reading geometry", async () => {
-    const [first] = await addTriangle(editor, layer);
+    const [first] = await addTriangle(stack, layer);
     let pointX = first!.x;
 
     const subscription = effect(() => {
@@ -289,20 +322,23 @@ describe("Glyph", () => {
 });
 
 describe("anchors edit through the workspace", () => {
-  let editor: TestEditor;
+  let stack: WorkspaceStack;
   let layer: GlyphLayer;
 
   beforeEach(async () => {
-    editor = new TestEditor();
-    await editor.startSession();
-    layer = editor.glyphLayer!;
+    ({ stack, layer } = await startWorkspaceGlyph());
+  });
+
+  afterEach(async () => {
+    await stack.editCoordinator.settled();
+    stack.dispose();
   });
 
   it("addAnchor is readable before confirmation and remains after its echo", async () => {
     const anchorId = layer.addAnchor("top", { x: 250, y: 700 });
     expect(layer.anchor(anchorId)).toMatchObject({ name: "top", x: 250, y: 700 });
 
-    await editor.settle();
+    await stack.editCoordinator.settled();
     const anchor = layer.anchor(anchorId);
     expect(anchor?.name).toBe("top");
     expect(anchor).toMatchObject({ x: 250, y: 700 });
@@ -311,12 +347,12 @@ describe("anchors edit through the workspace", () => {
 
   it("commits anchor moves through the moveAnchors intent", async () => {
     const anchorId = layer.addAnchor("top", { x: 250, y: 700 });
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
     layer.applyPositionPatch([{ kind: "anchor", id: anchorId, x: 300, y: 650 }]);
     expect(layer.anchor(anchorId)).toMatchObject({ x: 300, y: 650 });
 
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.anchor(anchorId)).toMatchObject({ x: 300, y: 650 });
   });
 
@@ -324,96 +360,97 @@ describe("anchors edit through the workspace", () => {
     const contourId = layer.addContour();
     layer.addOnCurvePoint(contourId, { x: 0, y: 0 });
     const anchorId = layer.addAnchor("top", { x: 250, y: 700 });
-    await editor.settle();
+    await stack.editCoordinator.settled();
     const pointId = layer.allPoints[0]!.id;
 
     layer.applyPositionPatch([
       { kind: "point", id: pointId, x: 10, y: 20 },
       { kind: "anchor", id: anchorId, x: 300, y: 650 },
     ]);
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.point(pointId)).toMatchObject({ x: 10, y: 20 });
     expect(layer.anchor(anchorId)).toMatchObject({ x: 300, y: 650 });
 
-    await editor.undo();
+    await stack.editCoordinator.undo();
     expect(layer.point(pointId)).toMatchObject({ x: 0, y: 0 });
     expect(layer.anchor(anchorId)).toMatchObject({ x: 250, y: 700 });
   });
 
   it("undo removes an added anchor and redo restores it", async () => {
     const anchorId = layer.addAnchor(null, { x: 100, y: 100 });
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.anchors.length).toBe(1);
 
-    await editor.undo();
+    await stack.editCoordinator.undo();
     expect(layer.anchors.length).toBe(0);
 
-    await editor.redo();
+    await stack.editCoordinator.redo();
     expect(layer.anchor(anchorId)).toMatchObject({ x: 100, y: 100 });
   });
 
   it("removeAnchors deletes through the workspace", async () => {
     const anchorId = layer.addAnchor("top", { x: 250, y: 700 });
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
     layer.removeAnchors([anchorId]);
     expect(layer.anchor(anchorId)).toBeNull();
 
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.anchors.length).toBe(0);
     expect(layer.anchor(anchorId)).toBeNull();
   });
 });
 
 describe("glyph layers keep public geometry coherent across position edits", () => {
-  let editor: TestEditor;
+  let stack: WorkspaceStack;
   let record: GlyphRecord;
   let layer: GlyphLayer;
+  let renderModel: GlyphRenderModel;
 
   beforeEach(async () => {
-    editor = new TestEditor();
-    await editor.startSession();
-    layer = editor.glyphLayer!;
-    const glyphRecord = editor.glyphRecord;
-    if (!glyphRecord) throw new Error("Expected scene glyph record");
-    record = glyphRecord;
+    ({ stack, record, layer, renderModel } = await startWorkspaceGlyph());
+  });
+
+  afterEach(async () => {
+    await stack.editCoordinator.settled();
+    stack.dispose();
   });
 
   it("previews point patches through every public layer geometry view", async () => {
-    const [, second] = await addTriangle(editor, layer);
+    const [, second] = await addTriangle(stack, layer);
 
     layer.previewPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
 
     expect(sourcePosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
-    expect(pointPosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 25, y: 75 });
     expect(layer.contours.at(-1)?.points[1]).toMatchObject({ x: 25, y: 75 });
     expect(layer.allPoints.find((point) => point.id === second!.id)).toMatchObject({
       x: 25,
       y: 75,
     });
-    expect(layer.bounds).toEqual(editor.sceneGlyphRenderModel?.bounds);
+    expect(layer.bounds).toEqual(renderModel.bounds);
   });
 
   it("applies committed point patches to the source and owning glyph geometry", async () => {
-    const [, second] = await addTriangle(editor, layer);
+    const [, second] = await addTriangle(stack, layer);
 
     layer.applyPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
     expect(sourcePosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
-    expect(pointPosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
-    expect(editor.sceneGlyphRenderModel?.point(second!.id)).toMatchObject({ x: 25, y: 75 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 25, y: 75 });
+    expect(renderModel.point(second!.id)).toMatchObject({ x: 25, y: 75 });
   });
 
   it("commits a preview without double-applying local positions", async () => {
-    const [, second] = await addTriangle(editor, layer);
+    const [, second] = await addTriangle(stack, layer);
 
     layer.previewPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
     layer.applyPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
     expect(sourcePosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
-    expect(pointPosition(layer, second!.id)).toEqual({ x: 25, y: 75 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 25, y: 75 });
 
     const committed = layer.positionsFor([{ kind: "point", id: second!.id }])[0];
     if (!committed) throw new Error("Expected committed position");
@@ -427,23 +464,23 @@ describe("glyph layers keep public geometry coherent across position edits", () 
       },
     ]);
 
-    expect(pointPosition(layer, second!.id)).toEqual({ x: 35, y: 80 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 35, y: 80 });
   });
 
   it("keeps the source-independent RenderGlyph view live", async () => {
-    await addTriangle(editor, layer);
-    const glyph = editor.glyphForId(record.id);
+    await addTriangle(stack, layer);
+    const glyph = stack.store.glyphForId(record.id);
     if (!glyph) throw new Error("Expected Glyph");
     const rendered = new RenderGlyph(glyph.renderModelAt(signal(emptyExternalAxisLocation())));
 
     layer.setXAdvance(530);
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
     expect(rendered.xAdvance).toBe(530);
   });
 
   it("publishes render advance changes reactively", async () => {
-    const glyph = editor.glyphForId(record.id);
+    const glyph = stack.store.glyphForId(record.id);
     if (!glyph) throw new Error("Expected Glyph");
     const renderModel = glyph.renderModelAt(signal(emptyExternalAxisLocation()));
     const observed: number[] = [];
@@ -452,20 +489,20 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     });
 
     layer.setXAdvance(530);
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
     expect(observed).toEqual([500, 530]);
     subscription.dispose();
   });
 
   it("keeps source-backed render contours fresh after position edits", async () => {
-    const [, second] = await addTriangle(editor, layer);
-    const glyph = editor.glyphForId(record.id);
+    const [, second] = await addTriangle(stack, layer);
+    const glyph = stack.store.glyphForId(record.id);
     if (!glyph) throw new Error("Expected Glyph");
     const renderModel = glyph.renderModelAt(signal(emptyExternalAxisLocation()));
 
     layer.applyPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
     expect(renderModel.point(second!.id)).toMatchObject({ x: 25, y: 75 });
     expect(renderModel.allPoints.find((point) => point.id === second!.id)).toMatchObject({
@@ -478,8 +515,8 @@ describe("glyph layers keep public geometry coherent across position edits", () 
   });
 
   it("invalidates source-backed render contours read before a position edit", async () => {
-    const [, second] = await addTriangle(editor, layer);
-    const glyph = editor.glyphForId(record.id);
+    const [, second] = await addTriangle(stack, layer);
+    const glyph = stack.store.glyphForId(record.id);
     if (!glyph) throw new Error("Expected Glyph");
     const renderModel = glyph.renderModelAt(signal(emptyExternalAxisLocation()));
 
@@ -488,7 +525,7 @@ describe("glyph layers keep public geometry coherent across position edits", () 
     ).toMatchObject({ x: 100, y: 0 });
 
     layer.applyPositionPatch([{ kind: "point", id: second!.id, x: 25, y: 75 }]);
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
     expect(renderModel.point(second!.id)).toMatchObject({ x: 25, y: 75 });
     expect(
@@ -498,18 +535,16 @@ describe("glyph layers keep public geometry coherent across position edits", () 
 });
 
 describe("workspace confirmation preserves unchanged live geometry", () => {
-  let editor: TestEditor;
+  let stack: WorkspaceStack;
   let layer: GlyphLayer;
 
   beforeEach(async () => {
-    editor = new TestEditor();
-    await editor.startSession();
-    layer = editor.requireGlyphLayer();
+    ({ stack, layer } = await startWorkspaceGlyph());
   });
 
   afterEach(async () => {
-    await editor.settle();
-    editor.destroy();
+    await stack.editCoordinator.settled();
+    stack.dispose();
   });
 
   it("keeps the local geometry when structural edits receive identical echoes", async () => {
@@ -519,7 +554,7 @@ describe("workspace confirmation preserves unchanged live geometry", () => {
       Point.onCurve({ x: 300, y: 200 }),
     ]);
     const geometry = layer.geometry;
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.geometry).toBe(geometry);
     expect(layer.contours[0]!.points.map((point) => point.id)).toEqual(ids);
   });
@@ -527,11 +562,11 @@ describe("workspace confirmation preserves unchanged live geometry", () => {
   it("keeps newer local positions while multiple FIFO confirmations drain", async () => {
     const contourId = layer.addContour();
     const ids = layer.addPoints(contourId, [Point.onCurve({ x: 100, y: 200 })]);
-    await editor.settle();
+    await stack.editCoordinator.settled();
     layer.movePoints(ids, { x: 10, y: 20 });
     layer.movePoints(ids, { x: 30, y: 40 });
     const geometry = layer.geometry;
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.geometry).toBe(geometry);
     expect(layer.point(ids[0]!)).toMatchObject({ x: 140, y: 260 });
   });
@@ -539,29 +574,27 @@ describe("workspace confirmation preserves unchanged live geometry", () => {
   it("still publishes authoritative value changes through undo and redo", async () => {
     const contourId = layer.addContour();
     const ids = layer.addPoints(contourId, [Point.onCurve({ x: 100, y: 200 })]);
-    await editor.settle();
+    await stack.editCoordinator.settled();
     layer.movePoints(ids, { x: 10, y: 20 });
-    await editor.settle();
-    await editor.undo();
+    await stack.editCoordinator.settled();
+    await stack.editCoordinator.undo();
     expect(layer.point(ids[0]!)).toMatchObject({ x: 100, y: 200 });
-    await editor.redo();
+    await stack.editCoordinator.redo();
     expect(layer.point(ids[0]!)).toMatchObject({ x: 110, y: 220 });
   });
 });
 
 describe("point insertion preserves layer ownership", () => {
-  let editor: TestEditor;
+  let stack: WorkspaceStack;
   let layer: GlyphLayer;
 
   beforeEach(async () => {
-    editor = new TestEditor();
-    await editor.startSession();
-    layer = editor.requireGlyphLayer();
+    ({ stack, layer } = await startWorkspaceGlyph());
   });
 
   afterEach(async () => {
-    await editor.settle();
-    editor.destroy();
+    await stack.editCoordinator.settled();
+    stack.dispose();
   });
 
   it("appends ordered geometry with fresh identities before and after confirmation", async () => {
@@ -579,7 +612,7 @@ describe("point insertion preserves layer ownership", () => {
     );
     expect(pointIds.map((id) => layer.contourIdOfPoint(id))).toEqual(Array(4).fill(contourId));
 
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.contour(contourId)?.points).toMatchObject(
       points.map((point, index) => ({ ...point, id: pointIds[index] })),
     );
@@ -588,27 +621,27 @@ describe("point insertion preserves layer ownership", () => {
 
   it("does not create an undo entry for an empty insertion", async () => {
     const contourId = layer.addContour();
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.addPoints(contourId, [])).toEqual([]);
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
-    await editor.undo();
+    await stack.editCoordinator.undo();
     expect(layer.contour(contourId)).toBeNull();
   });
 
   it("removes ownership immediately and restores it through undo and redo", async () => {
     const contourId = layer.addContour();
     const [pointId] = layer.addPoints(contourId, [Point.onCurve({ x: 10, y: 20 })]);
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
     layer.removePoints([pointId!]);
     expect(layer.contourIdOfPoint(pointId!)).toBeNull();
     expect(layer.contour(contourId)).toBeNull();
-    await editor.settle();
-    await editor.undo();
+    await stack.editCoordinator.settled();
+    await stack.editCoordinator.undo();
     expect(layer.contourIdOfPoint(pointId!)).toBe(contourId);
     expect(layer.positionsFor([{ kind: "point", id: pointId! }])).toMatchObject([{ x: 10, y: 20 }]);
-    await editor.redo();
+    await stack.editCoordinator.redo();
     expect(layer.contourIdOfPoint(pointId!)).toBeNull();
   });
 
@@ -634,7 +667,7 @@ describe("point insertion preserves layer ownership", () => {
     const contourId = layer.addContour();
     let pointIds: PointId[] = [];
     expect(() =>
-      editor.transaction("Rejected points", () => {
+      stack.editCoordinator.transaction("Rejected points", () => {
         pointIds = layer.addPoints(contourId, [Point.onCurve({ x: 10, y: 20 })]);
         throw new Error("reject insertion");
       }),
@@ -650,7 +683,7 @@ describe("point insertion preserves layer ownership", () => {
     const otherContourId = layer.addContour();
     const point = layer.point(pointId!)!;
 
-    expect(layer.buffers.addPoints([point], otherContourId)).toBe(false);
+    expect(() => layer.addPointSeeds(otherContourId, [point])).toThrow();
     expect(layer.contourIdOfPoint(pointId!)).toBe(contourId);
     expect(layer.contour(otherContourId)?.points).toEqual([]);
   });
@@ -661,10 +694,60 @@ describe("point insertion preserves layer ownership", () => {
     const [before] = layer.addPoints(otherContourId, [Point.onCurve({ x: 0, y: 0 })]);
     const point = { id: mintPointId(), ...Point.onCurve({ x: 10, y: 20 }) };
 
-    expect(layer.buffers.addPoints([point], contourId, before)).toBe(false);
+    expect(() => layer.addPointSeeds(contourId, [point], before)).toThrow();
     expect(layer.contourIdOfPoint(point.id)).toBeNull();
     layer.addPointSeeds(contourId, [point]);
     expect(layer.contourIdOfPoint(point.id)).toBe(contourId);
     expect(layer.point(point.id)).toMatchObject({ x: 10, y: 20 });
+  });
+});
+
+describe("GlyphLayer.addComponent with a base not yet loaded this session", () => {
+  const outputRoots: string[] = [];
+
+  afterEach(() => {
+    for (const root of outputRoots.splice(0)) rmSync(root, { recursive: true, force: true });
+  });
+
+  /** Saves a font whose `base` glyph has one contour, then reopens it and loads `root` without loading `base`. */
+  async function reopenedWithUnloadedBase(): Promise<{ stack: WorkspaceStack; root: Glyph }> {
+    const outputRoot = mkdtempSync(join(tmpdir(), "shift-unloaded-component-"));
+    outputRoots.push(outputRoot);
+    const savePath = join(outputRoot, "Components.shift");
+
+    const setup = createWorkspaceStack();
+    await setup.createWorkspace();
+    await addWorkspaceGlyph(setup, "root");
+    const { layer: baseLayer } = await addWorkspaceGlyph(setup, "base");
+    drawPoints(baseLayer, [
+      { x: 0, y: 0 },
+      { x: 100, y: 100 },
+    ]);
+    await setup.editCoordinator.save(savePath);
+    await setup.closeWorkspace();
+    setup.dispose();
+
+    const stack = createWorkspaceStack();
+    await stack.openWorkspace(savePath);
+    const rootRecord = stack.font.recordForName("root" as GlyphName)!;
+    return { stack, root: await stack.font.loadGlyph(rootRecord.id) };
+  }
+
+  it("draws the outline of a component added at the layer level once its base loads", async () => {
+    const { stack, root } = await reopenedWithUnloadedBase();
+    const sourceId = stack.font.defaultSource.id;
+    const baseId = stack.font.recordForName("base" as GlyphName)!.id;
+    const model = root.renderModelAt(
+      signal(emptyExternalAxisLocation()),
+      signal<SourceId | null>(sourceId),
+    );
+    expect(stack.store.glyphForId(baseId)).toBeFalsy();
+
+    root.layerForSource(sourceId)!.addComponent(baseId);
+    await stack.editCoordinator.settled();
+
+    await expect.poll(() => model.contours.length).toBe(1);
+    expect(model.components).toHaveLength(1);
+    stack.dispose();
   });
 });

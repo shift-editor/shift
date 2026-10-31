@@ -1,8 +1,9 @@
 import type { Page } from "@playwright/test";
-import type { PointId, SourceId } from "@shift/types";
-import type { ExternalAxisLocation } from "@shift/editor/types";
+import type { PointId } from "@shift/types";
 import type { EditorDriver } from "./fixtures/EditorDriver";
-import { test, expect, generateContourData, computeStats } from "./fixtures/perfApp";
+import { test, expect, drawBenchmarkGlyph, computeStats } from "./fixtures/perfApp";
+import { offsetMatchedSourcePoints } from "./fixtures/perfProbe";
+import { localPoint } from "@shift/editor/spaces";
 
 const GLYPH_POINTS = 50_000;
 const PREVIEW_FRAMES = 10;
@@ -13,91 +14,39 @@ async function prepareFourSourceGlyph(
   selectedPointCount: number,
 ): Promise<PointId[]> {
   await editor.openGlyphByUnicode("53");
-  const selectedPointIds = await page.evaluate(
-    ({ contours, count }) => {
-      const inserted = window.shift!.editor.insertContent({ contours });
-      if (!inserted || inserted.length < count) throw new Error("Expected inserted points");
-      const pointIds = inserted as PointId[];
-      return Array.from(
-        { length: count },
-        (_, index) => pointIds[Math.floor((index * pointIds.length) / count)]!,
-      );
-    },
-    { contours: generateContourData(GLYPH_POINTS), count: selectedPointCount },
+  const inserted = await drawBenchmarkGlyph(editor, GLYPH_POINTS);
+  if (inserted.length < selectedPointCount) throw new Error("Expected inserted points");
+  const selectedPointIds = Array.from(
+    { length: selectedPointCount },
+    (_, index) => inserted[Math.floor((index * inserted.length) / selectedPointCount)]!,
   );
   await editor.waitForIdle();
 
-  const axisId = await page.evaluate(() =>
-    window.shift!.editor.font.createAxis({
-      tag: "bch1",
-      name: "Benchmark Weight",
-      role: "external",
-      axisType: "continuous",
-      minimum: 100,
-      default: 400,
-      maximum: 900,
-      labels: [],
-      hidden: false,
-    }),
-  );
-  await editor.waitForIdle();
-
-  const referenceId = await page.evaluate(() => window.shift!.editor.font.defaultSource.id);
-  const sourceIds: SourceId[] = [];
-  for (const [name, value] of [
+  await editor.addAxis({
+    tag: "bch1",
+    name: "Benchmark Weight",
+    minimum: 100,
+    default: 400,
+    maximum: 900,
+  });
+  const reference = (await editor.source("default"))!.name;
+  const sources = [
     ["Benchmark Medium", 500],
     ["Benchmark Semibold", 700],
     ["Benchmark Bold", 900],
-  ] as const) {
-    const sourceId = await page.evaluate(
-      ({ axisId, name, value }) => {
-        const location = new Map([[axisId, value]]) as unknown as ExternalAxisLocation;
-        return window.shift!.editor.font.createSource(name, location);
-      },
-      { axisId, name, value },
-    );
-    await editor.waitForIdle();
-    await expect
-      .poll(() => page.evaluate((id) => Boolean(window.shift!.editor.font.source(id)), sourceId))
-      .toBe(true);
-    sourceIds.push(sourceId);
-  }
-
-  for (const sourceId of sourceIds) {
-    await page.evaluate((id) => window.shift!.editor.selectSourceForEditing(id), sourceId);
-    await editor.waitForIdle();
-  }
-  await page.evaluate(
-    ({ referenceId, sourceIds }) => {
-      const runtime = window.shift!.editor;
-      runtime.selectSourceForEditing(referenceId);
-      for (const sourceId of sourceIds) runtime.selectSourceForEditing(sourceId, "toggle");
-    },
-    { referenceId, sourceIds },
-  );
+  ] as const;
+  for (const [name, value] of sources) await editor.addSource(name, { bch1: value });
+  await editor.editSources([reference, ...sources.map(([name]) => name)]);
   await editor.waitForIdle();
   await expect
-    .poll(
-      () =>
-        page.evaluate(
-          (ids) => window.shift!.editor.positionSelection(ids)?.additionalLayers.length,
-          selectedPointIds,
-        ),
-      { timeout: 20_000 },
-    )
-    .toBe(3);
+    .poll(async () => (await editor.matchedPoints(selectedPointIds[0]!)).length, {
+      timeout: 20_000,
+    })
+    .toBe(4);
 
-  await page.evaluate((ids) => {
-    const targets = window.shift!.editor.positionSelection(ids)?.additionalLayers;
-    if (targets?.length !== 3) throw new Error("Expected three matched source layers");
-    for (const [index, target] of targets.entries()) {
-      const points = target.targets.points;
-      if (points?.length !== ids.length) throw new Error("Expected a complete point match");
-      target.layer.movePoints(points, { x: 40 * (index + 1), y: 25 * (index + 1) });
-    }
-    window.shift!.editor.selection.select(ids);
-    window.shift!.editor.zoomToFit();
-  }, selectedPointIds);
+  await offsetMatchedSourcePoints(page, selectedPointIds, 3);
+  await editor.selectObjects(selectedPointIds);
+  await editor.zoomToFit();
   await editor.waitForCanvasRender();
   expect(await editor.selectionIds()).toHaveLength(selectedPointCount);
   return selectedPointIds;
@@ -110,33 +59,26 @@ async function measureTransformGesture(
   operation: "scale" | "rotate",
   cancel: boolean,
 ) {
-  const positions = () =>
-    page.evaluate((ids) => {
-      const selection = window.shift!.editor.positionSelection(ids);
-      if (!selection || selection.additionalLayers.length !== 3) {
-        throw new Error("Expected four editable source layers");
-      }
-      const groups = [selection, ...selection.additionalLayers];
-      return groups.map(({ layer, targets }) => {
-        const id = targets.points?.[0];
-        if (!id) throw new Error("Expected a matched point in each source");
-        const point = layer.point(id);
-        if (!point) throw new Error("Expected editable point geometry");
-        return { x: point.x, y: point.y };
-      });
-    }, pointIds);
+  const positions = async () => {
+    const found = await editor.matchedPoints(pointIds[0]!);
+    if (found.length !== 4) throw new Error("Expected four editable source layers");
+    return found.map(({ x, y }) => ({ x, y }));
+  };
 
   const before = await positions();
   const bounds = await editor.selectionBounds();
   // Grab the upper-right corner: the floating tools dock to the canvas's bottom edge and cover
   // the lower corners of a zoomed-to-fit selection. Glyph y points up, so `bottom` is the top.
-  const upperRight = await editor.projectGlyphToPage({ x: bounds.right, y: bounds.bottom });
+  const upperRight = await editor.projectGlyphToPage(localPoint(bounds.right, bounds.bottom));
   const from = operation === "scale" ? upperRight : { x: upperRight.x + 8, y: upperRight.y - 8 };
   const state = operation === "scale" ? "resizing" : "rotating";
-  const occludedByFloatingUi = await page.evaluate(
-    ({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest("[data-floating-toolbar]")),
-    from,
-  );
+  const occludedByFloatingUi = await page
+    .locator(":root")
+    .evaluate(
+      (_root, { x, y }) =>
+        Boolean(document.elementFromPoint(x, y)?.closest("[data-floating-toolbar]")),
+      from,
+    );
   expect(occludedByFloatingUi, "transform handle is not under the floating tools").toBe(false);
   await editor.pointerDown(from);
   await editor.pointerMove({ x: from.x + 12, y: from.y - 6 });

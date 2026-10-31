@@ -45,7 +45,7 @@ export const CreateInstanceMenu = ({
   const handleOpenChange = (nextOpen: boolean) => {
     const fresh = {
       name: suggestedInstanceName(instances),
-      location: Object.fromEntries(axes.map((axis) => [axis.id, String(axis.default)])),
+      location: Object.fromEntries(axes.map((axis) => [axis.id, String(axis.kind.default)])),
     };
     form.reset(nextOpen ? fresh : null);
     setOpen(nextOpen);

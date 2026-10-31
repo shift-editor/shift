@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
-import type { Axis, AxisLabel, AxisLabelId } from "@shift/types";
-import { ascending, mintAxisLabelId } from "@shift/types";
+import { Axis } from "@shift/editor/model";
+import type { AxisLabel } from "@shift/types";
+import type { AxisLabelKind } from "@shift/editor/types";
+import { ascending } from "@shift/types";
 import { Button, Checkbox, Input, Tooltip } from "@shift/ui";
 import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
@@ -30,7 +32,7 @@ export const AxisStylesPanel = ({ draft }: AxisStylesPanelProps) => {
       <StyleSection
         title="Value"
         onAdd={async () => {
-          await addLabel(draft, false);
+          await addLabel(draft, "value");
         }}
         disabled={labelsDisabled || !canAddLabel}
       >
@@ -40,7 +42,7 @@ export const AxisStylesPanel = ({ draft }: AxisStylesPanelProps) => {
       <StyleSection
         title="Range"
         onAdd={async () => {
-          await addLabel(draft, true);
+          await addLabel(draft, "range");
         }}
         disabled={labelsDisabled || !canAddLabel}
       >
@@ -87,7 +89,7 @@ const ValueLabelsTable = ({ labels, draft }: { labels: AxisLabel[]; draft: AxisD
             value={labelValue}
             onChange={(value) => {
               if (value !== null) {
-                updateLabelDraft(draft, label.id, (item) => ({ ...item, value }));
+                draft.update((current) => new Axis(current).withLabelValue(label.id, value));
               }
             }}
             onCommit={draft.commit}
@@ -97,10 +99,9 @@ const ValueLabelsTable = ({ labels, draft }: { labels: AxisLabel[]; draft: AxisD
             value={label.linkedValue ?? null}
             optional
             onChange={(linkedValue) =>
-              updateLabelDraft(draft, label.id, (item) => ({
-                ...item,
-                linkedValue: linkedValue ?? undefined,
-              }))
+              draft.update((current) =>
+                new Axis(current).withLabelLinkedValue(label.id, linkedValue),
+              )
             }
             onCommit={draft.commit}
           />
@@ -124,27 +125,27 @@ const RangeLabelsTable = ({ labels, draft }: { labels: AxisLabel[]; draft: AxisD
             value={labelValue}
             onChange={(value) => {
               if (value !== null) {
-                updateLabelDraft(draft, label.id, (item) => ({ ...item, value }));
+                draft.update((current) => new Axis(current).withLabelValue(label.id, value));
               }
             }}
             onCommit={draft.commit}
           />
           <NumberCell
             label={`${label.name} minimum`}
-            value={label.minimum ?? labelValue}
+            value={label.range?.minimum ?? labelValue}
             onChange={(minimum) => {
               if (minimum !== null) {
-                updateLabelDraft(draft, label.id, (item) => ({ ...item, minimum }));
+                draft.update((current) => new Axis(current).withLabelRange(label.id, { minimum }));
               }
             }}
             onCommit={draft.commit}
           />
           <NumberCell
             label={`${label.name} maximum`}
-            value={label.maximum ?? labelValue}
+            value={label.range?.maximum ?? labelValue}
             onChange={(maximum) => {
               if (maximum !== null) {
-                updateLabelDraft(draft, label.id, (item) => ({ ...item, maximum }));
+                draft.update((current) => new Axis(current).withLabelRange(label.id, { maximum }));
               }
             }}
             onCommit={draft.commit}
@@ -180,7 +181,7 @@ const NameCell = ({ label, draft }: { label: AxisLabel; draft: AxisDraft }) => (
       value={label.name}
       onChange={(event) => {
         const name = event.currentTarget.value;
-        updateLabelDraft(draft, label.id, (item) => ({ ...item, name }));
+        draft.update((current) => new Axis(current).withLabelName(label.id, name));
       }}
       onBlur={async () => {
         await draft.commit();
@@ -220,7 +221,9 @@ const ElidableCell = ({ label, draft }: { label: AxisLabel; draft: AxisDraft }) 
       <Checkbox
         checked={label.elidable}
         onCheckedChange={async (elidable) => {
-          await draft.updateAndCommit((axis) => setElidableLabel(axis, label.id, elidable));
+          await draft.updateAndCommit((current) =>
+            new Axis(current).withLabelElidable(label.id, elidable),
+          );
         }}
         aria-label={`${label.name} elidable`}
       />
@@ -238,10 +241,7 @@ const RemoveCell = ({ label, draft }: { label: AxisLabel; draft: AxisDraft }) =>
         className="mx-auto h-5 w-5 text-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-icon-button-hover"
         aria-label={`Remove ${label.name}`}
         onClick={async () => {
-          await draft.updateAndCommit((axis) => ({
-            ...axis,
-            labels: axis.labels.filter((item) => item.id !== label.id),
-          }));
+          await draft.updateAndCommit((current) => new Axis(current).withoutLabel(label.id));
         }}
       >
         <MinusIcon className="h-2.5 w-2.5" />
@@ -251,54 +251,16 @@ const RemoveCell = ({ label, draft }: { label: AxisLabel; draft: AxisDraft }) =>
 );
 
 function isRangeLabel(label: AxisLabel): boolean {
-  return label.minimum !== undefined || label.maximum !== undefined;
+  return label.range != null;
 }
 
-function updateLabelDraft(
-  draft: AxisDraft,
-  labelId: AxisLabelId,
-  transform: (label: AxisLabel) => AxisLabel,
-): void {
-  draft.update((axis) => replaceLabel(axis, labelId, transform));
-}
-
-function replaceLabel(
-  axis: Axis,
-  labelId: AxisLabelId,
-  transform: (label: AxisLabel) => AxisLabel,
-): Axis {
-  return {
-    ...axis,
-    labels: axis.labels.map((label) => (label.id === labelId ? transform(label) : label)),
-  };
-}
-
-function setElidableLabel(axis: Axis, labelId: AxisLabelId, elidable: boolean): Axis {
-  return {
-    ...axis,
-    labels: axis.labels.map((label) => {
-      if (label.id === labelId) return { ...label, elidable };
-      if (!elidable || !label.elidable) return label;
-
-      return { ...label, elidable: false };
-    }),
-  };
-}
-
-async function addLabel(draft: AxisDraft, range: boolean): Promise<void> {
-  await draft.updateAndCommit((axis) => {
+async function addLabel(draft: AxisDraft, kind: AxisLabelKind): Promise<void> {
+  await draft.updateAndCommit((current) => {
+    const axis = new Axis(current);
     const value = nextLabelValue(axis);
-    if (value === null) return axis;
+    if (value === null) return current;
 
-    const label: AxisLabel = {
-      id: mintAxisLabelId(),
-      name: "New style",
-      value,
-      minimum: range ? value : undefined,
-      maximum: range ? value : undefined,
-      elidable: false,
-    };
-    return { ...axis, labels: [...axis.labels, label] };
+    return axis.withNewLabel(value, kind);
   });
 }
 
@@ -306,16 +268,15 @@ function nextLabelValue(axis: Axis): number | null {
   const used = new Set(axis.labels.map(({ value }) => value));
   if (!used.has(axis.default)) return axis.default;
 
-  if (axis.axisType === "discrete") {
-    return axis.values?.find((value) => !used.has(value)) ?? null;
+  if (axis.isDiscrete) {
+    return axis.values.find((value) => !used.has(value)) ?? null;
   }
 
-  const minimum = axis.minimum ?? axis.default;
-  const maximum = axis.maximum ?? axis.default;
+  const { minimum, maximum } = axis;
   if (!used.has(minimum)) return minimum;
   if (!used.has(maximum)) return maximum;
 
-  const values = [...used].filter((value) => minimum <= value && value <= maximum).sort(ascending);
+  const values = [...used].filter((value) => axis.accepts(value)).sort(ascending);
   let largestGap = 0;
   let available: number | null = null;
 

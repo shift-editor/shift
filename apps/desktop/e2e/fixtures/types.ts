@@ -1,19 +1,9 @@
+import type { LocalPoint, ScreenPoint } from "@shift/editor/spaces";
 import type { ElectronApplication, Page } from "@playwright/test";
 import type { Point2D } from "@shift/geo";
-import type { SegmentType } from "@shift/glyph-state";
-import type {
-  Axis,
-  ContourId,
-  GlyphId,
-  NamedInstance,
-  NodeId,
-  PointId,
-  PointSeed,
-  PointType,
-  Source,
-  SourceId,
-} from "@shift/types";
+import type { Axis, GlyphId, NamedInstance, NodeId, PointId, Source, SourceId } from "@shift/types";
 import type { DirtyDocumentChoice } from "../../src/main/document/types";
+import type { FontFixture } from "@/testing/fonts";
 import type { EditorDriver } from "./EditorDriver";
 import type { ElectronProcesses } from "./electronProcesses";
 
@@ -61,12 +51,20 @@ export type ShiftOptions = {
   documentCrashChoice: "reopen" | "close";
   /** Permits renderer alert, confirm, prompt, or beforeunload dialogs during the test. */
   allowRendererDialogs: boolean;
+  /**
+   * Builds this font fixture into the launched document once the workspace is ready, before the
+   * test body runs, through the same commands vitest's `useTestEditor` uses: glyphs the font has
+   * are drawn into, others are added; then axes, then sources. Only the workspace fixtures
+   * (`workspaceTest`, `documentWorkspaceTest`) apply it; `mode` is not supported, and it cannot
+   * be combined with `sharedWorkspace`.
+   */
+  font: FontFixture | undefined;
 };
 
 export interface CanonicalVariableFont {
-  axes: Axis[];
-  sources: Source[];
-  namedInstances: NamedInstance[];
+  axes: readonly Axis[];
+  sources: readonly Source[];
+  namedInstances: readonly NamedInstance[];
 }
 
 export interface ActiveGlyph {
@@ -89,14 +87,14 @@ export type PointerModifier = "Alt" | "Control" | "ControlOrMeta" | "Meta" | "Sh
 export interface CanvasDrag {
   readonly from: Point2D;
   readonly to: Point2D;
-  readonly modifiers?: readonly PointerModifier[];
+  readonly modifiers: readonly PointerModifier[];
   readonly steps?: number;
 }
 
 export interface PointTarget {
   readonly id: PointId;
-  readonly glyphPosition: Point2D;
-  readonly canvasPosition: Point2D;
+  readonly glyphPosition: LocalPoint;
+  readonly canvasPosition: ScreenPoint;
   readonly pagePosition: Point2D;
 }
 
@@ -104,21 +102,15 @@ export interface PointDrag {
   readonly id: PointId;
   readonly startPagePosition: Point2D;
   readonly endPagePosition: Point2D;
-  readonly expectedGlyphPosition: Point2D;
+  readonly expectedGlyphPosition: LocalPoint;
 }
-
-export interface OutlineContour {
-  readonly id: ContourId;
-  readonly closed: boolean;
-  readonly points: readonly Readonly<PointSeed>[];
-  readonly onCurvePoints: readonly Readonly<PointSeed>[];
-  readonly segments: readonly SegmentType["type"][];
-}
-
-export type Outline = readonly OutlineContour[];
 
 export type RecoveryApp = {
   page: Page;
+  /** The driver for the window open now; after a crash, the recovered one. */
+  readonly editor: EditorDriver;
+  /** The app running now: the first launch until a crash, then the launch that recovered. */
+  readonly app: ElectronApplication;
   documentPath: string;
   crashAndRecover: () => Promise<Page>;
   /**
@@ -128,22 +120,8 @@ export type RecoveryApp = {
   crashAndRecoverWindow: (persistedText: string) => Promise<Page>;
   crashAndReopenDocument: () => Promise<Page>;
   canonicalGlyphNames: () => string[];
-  canonicalVariableFont: () => CanonicalVariableFont;
+  canonicalVariableFont: () => Promise<CanonicalVariableFont>;
 };
-
-/** Point inserted by a scratch-glyph fixture; the editor mints its identity. */
-export interface ScratchPoint {
-  readonly x: number;
-  readonly y: number;
-  readonly pointType: PointType;
-  readonly smooth: boolean;
-}
-
-/** Contour inserted into a scratch glyph. */
-export interface ScratchContour {
-  readonly closed: boolean;
-  readonly points: readonly ScratchPoint[];
-}
 
 /** One Electron launch owned by {@link ElectronProcesses}. */
 export interface ElectronLaunch {
@@ -151,8 +129,8 @@ export interface ElectronLaunch {
   readonly label: string;
   /** Isolated user-data directory the application must adopt. */
   readonly userDataDir: string;
-  /** Arguments after the main script, such as a document path. */
-  readonly args?: readonly string[];
+  /** Arguments after the main script, such as a document path; empty for none. */
+  readonly args: readonly string[];
   /** Environment for the launch; build it with `shiftTestEnvironment()`. */
   readonly env: Record<string, string>;
   /** Window geometry policy applied to the first window. */
@@ -167,8 +145,8 @@ export interface ElectronLaunch {
 
 /** Launches the application again with the test's user-data directory and dialog script. */
 export type RelaunchApp = (options?: {
-  /** Additional arguments, such as a document to open on launch. */
-  readonly args?: readonly string[];
+  /** Additional arguments, such as a document to open on launch; empty for none. */
+  readonly args: readonly string[];
   /** Additional Shift E2E variables for this launch. */
   readonly env?: Record<string, string>;
 }) => Promise<ElectronApplication>;

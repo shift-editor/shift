@@ -13,6 +13,7 @@ import {
 } from "@shift/ui";
 import { useCheckboxRange } from "@/hooks/useCheckboxRange";
 import type { LanguageGlyph } from "@/types/glyphCatalog";
+import { useMemberSet } from "@/hooks/useMemberSet";
 
 const ROW_HEIGHT = 40;
 const VIEWPORT_HEIGHT = 320;
@@ -39,7 +40,8 @@ export const MissingGlyphsPopover = ({
   onClose,
   onGenerate,
 }: MissingGlyphsPopoverProps) => {
-  const [selectedCodepoints, setSelectedCodepoints] = useState<readonly number[]>([]);
+  const selection = useMemberSet<number>();
+  const selected = selection.values;
   const [scrollTop, setScrollTop] = useState(0);
   const codepoints = useMemo(() => glyphs?.map(({ codepoint }) => codepoint) ?? [], [glyphs]);
   const firstRow = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN_ROWS);
@@ -48,7 +50,6 @@ export const MissingGlyphsPopover = ({
     Math.ceil((scrollTop + VIEWPORT_HEIGHT) / ROW_HEIGHT) + OVERSCAN_ROWS,
   );
   const visibleGlyphs = glyphs?.slice(firstRow, lastRow) ?? [];
-  const selected = useMemo(() => new Set(selectedCodepoints), [selectedCodepoints]);
   const { onMouseDown, itemsToChange, resetRange } = useCheckboxRange(codepoints);
   const missingCodepoints = useMemo(
     () => glyphs?.filter(({ present }) => !present).map(({ codepoint }) => codepoint) ?? [],
@@ -58,7 +59,7 @@ export const MissingGlyphsPopover = ({
 
   const handleOpenChange = (open: boolean) => {
     if (open) return;
-    setSelectedCodepoints([]);
+    selection.clear();
     setScrollTop(0);
     resetRange();
     onClose();
@@ -66,15 +67,10 @@ export const MissingGlyphsPopover = ({
 
   const setChecked = (target: number, checked: boolean) => {
     const missing = new Set(missingCodepoints);
-    const affected = new Set(itemsToChange(target).filter((codepoint) => missing.has(codepoint)));
-    setSelectedCodepoints((previous) => {
-      const next = new Set(previous);
-      for (const codepoint of affected) {
-        if (checked) next.add(codepoint);
-        else next.delete(codepoint);
-      }
-      return [...next];
-    });
+    selection.setMany(
+      itemsToChange(target).filter((codepoint) => missing.has(codepoint)),
+      checked,
+    );
   };
 
   const generate = () => {
@@ -135,7 +131,10 @@ export const MissingGlyphsPopover = ({
                   type="button"
                   className="h-7.5 text-ui"
                   disabled={!canGenerate || missingCodepoints.length === 0}
-                  onClick={() => setSelectedCodepoints(allSelected ? [] : missingCodepoints)}
+                  onClick={() => {
+                    selection.clear();
+                    if (!allSelected) selection.setMany(missingCodepoints, true);
+                  }}
                 >
                   {allSelected ? "Deselect All" : "Select All"}
                 </Button>

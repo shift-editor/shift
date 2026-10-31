@@ -21,8 +21,9 @@
     "lint:check": "oxlint --deny-warnings src/"
   },
   "dependencies": {
+    "@shift/geo": "workspace:*",
     "@shift/types": "workspace:*",
-    "@shift/geo": "workspace:*"
+    "@shift/wasm": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.5.4",

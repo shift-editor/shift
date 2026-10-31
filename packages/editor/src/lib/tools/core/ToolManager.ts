@@ -1,4 +1,5 @@
-import type { ScreenPoint } from "../../../types/coordinates";
+import type { ScenePoint, ScreenPoint } from "../../../types/coordinates";
+import type { PointerTarget } from "../../../types/target";
 import type { Editor } from "../../editor/Editor";
 import type { ToolSwitchHandler, TemporaryToolOptions } from "../../../types/editor";
 import type { ToolName } from "./createContext";
@@ -387,21 +388,35 @@ export class ToolManager implements ToolSwitchHandler {
       case "doubleClick":
       case "drag":
       case "dragEnd":
-        return {
-          ...event,
-          target: this.editor.getPointerTarget(event.coords.scene),
-        };
+        return this.#withLazyTarget(event, event.coords.scene);
       case "dragStart":
-        return {
-          ...event,
-          target: this.editor.getPointerTarget(event.origin.scene),
-        };
+        return this.#withLazyTarget(event, event.origin.scene);
       case "dragCancel":
       case "keyDown":
       case "keyUp":
       case "selectionChanged":
         return event;
     }
+  }
+
+  /**
+   * `event` with the pointer target at `point`, hit-tested when a tool first
+   * reads it. A drag's moves rarely do, and hit-testing a large glyph on every
+   * move cost ~19 ms per frame at 50K points.
+   */
+  #withLazyTarget<TEvent extends GestureEvent>(
+    event: TEvent,
+    point: ScenePoint,
+  ): TEvent & { readonly target: PointerTarget } {
+    const editor = this.editor;
+    let target: PointerTarget | undefined;
+    return {
+      ...event,
+      get target() {
+        target ??= editor.getPointerTarget(point);
+        return target;
+      },
+    };
   }
 
   private createToolInstance(id: ToolName): ToolInstance | null {

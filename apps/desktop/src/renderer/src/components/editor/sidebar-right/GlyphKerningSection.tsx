@@ -26,7 +26,7 @@ export const GlyphKerningSection = ({ anchorRef }: GlyphKerningSectionProps) => 
   if (!node) return null;
 
   const glyphId = node.glyphId;
-  const glyphName = editor.font.entryForId(glyphId)?.name ?? glyphId;
+  const glyphName = editor.font.glyphName(glyphId) ?? glyphId;
   const disabled = editor.sessionMode !== "workspace";
 
   return (

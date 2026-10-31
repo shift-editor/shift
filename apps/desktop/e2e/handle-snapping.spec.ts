@@ -1,7 +1,6 @@
-import type { LocalPoint } from "@shift/editor/spaces";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
-import { openScratchGlyph } from "./fixtures/scratchGlyph";
-import { activeSnapGuides } from "./fixtures/snapGuides";
+import { openScratchGlyph, SMOOTH_JOIN_CONTOUR } from "./fixtures/scratchGlyph";
+import { localPoint, screenPoint, type ScreenPoint } from "@shift/editor/spaces";
 
 // Geometry, guides, and mouseup modifier reporting are owned by SelectHandleSnap.test.ts.
 // This test keeps the browser-only ordering: Shift keyup arrives before mouseup.
@@ -9,53 +8,35 @@ test("keeps a 15-degree handle snap when Shift is released before mouseup", asyn
   page,
   editor,
 }) => {
-  await openScratchGlyph(page, editor, "snapHandles", [
-    {
-      closed: false,
-      points: [
-        { x: 100, y: 100, pointType: "onCurve", smooth: false },
-        { x: 200, y: 100, pointType: "offCurve", smooth: false },
-        { x: 300, y: 100, pointType: "offCurve", smooth: false },
-        { x: 400, y: 100, pointType: "onCurve", smooth: true },
-        { x: 500, y: 100, pointType: "offCurve", smooth: false },
-        { x: 600, y: 100, pointType: "offCurve", smooth: false },
-        { x: 700, y: 100, pointType: "onCurve", smooth: false },
-      ],
-    },
-  ]);
+  await openScratchGlyph(editor, "snapHandles", [SMOOTH_JOIN_CONTOUR]);
 
   const canvas = editor.canvas;
   const bounds = await editor.canvasBounds();
-  const drag = await page.evaluate(() => {
-    const editor = window.shift!.editor;
-    const node = editor.scene.nodesOfKind("glyph")[0]!;
-    const layer = editor.glyphForId(node.glyphId)!.layerForSource(node.sourceId)!;
-    const cubic = layer.contours[0]!.segments()[0]!.asCubic()!;
-    const down = editor.sceneToScreen(
-      editor.toScene(node, { x: cubic.controlStart.x, y: cubic.controlStart.y } as LocalPoint),
-    );
-    const end = editor.sceneToScreen(editor.toScene(node, { x: 180, y: 160 } as LocalPoint));
-    down.x = Math.round(down.x);
-    down.y = Math.round(down.y);
-    end.x = Math.round(end.x);
-    end.y = Math.round(end.y);
-    const startPos = editor.screenToScene(down);
-    const endPos = editor.screenToScene(end);
-    const length = Math.hypot(
-      cubic.controlStart.x + endPos.x - startPos.x - cubic.start.x,
-      cubic.controlStart.y + endPos.y - startPos.y - cubic.start.y,
-    );
-    return {
-      id: cubic.controlStart.id,
-      pivot: cubic.start.id,
-      down,
-      end,
-      expected: {
-        x: cubic.start.x + length * Math.cos(Math.PI / 6),
-        y: cubic.start.y + length * Math.sin(Math.PI / 6),
-      },
-    };
-  });
+  // Drag the first segment's outgoing handle toward (180, 160), in whole canvas pixels. A
+  // Shift-constrained drag leaves it snapped to 30 degrees around the segment's start, at the
+  // dragged length.
+  const [start, handle] = (await editor.drawnOutline())[0]!.points;
+  const round = ({ x, y }: ScreenPoint) => screenPoint(Math.round(x), Math.round(y));
+  const down = round(await editor.projectGlyphToCanvas(localPoint(handle!.x, handle!.y)));
+  const end = round(await editor.projectGlyphToCanvas(localPoint(180, 160)));
+  const [downGlyph, endGlyph] = await Promise.all([
+    editor.projectCanvasToGlyph(down),
+    editor.projectCanvasToGlyph(end),
+  ]);
+  const length = Math.hypot(
+    handle!.x + endGlyph.x - downGlyph.x - start!.x,
+    handle!.y + endGlyph.y - downGlyph.y - start!.y,
+  );
+  const drag = {
+    id: handle!.id,
+    pivot: start!.id,
+    down,
+    end,
+    expected: {
+      x: start!.x + length * Math.cos(Math.PI / 6),
+      y: start!.y + length * Math.sin(Math.PI / 6),
+    },
+  };
   for (const point of [drag.down, drag.end]) {
     expect(point.x).toBeGreaterThan(0);
     expect(point.y).toBeGreaterThan(0);
@@ -67,18 +48,18 @@ test("keeps a 15-degree handle snap when Shift is released before mouseup", asyn
   await editor.pointerDown({ x: bounds.x + drag.down.x, y: bounds.y + drag.down.y });
   try {
     await editor.pointerMove({ x: bounds.x + drag.end.x, y: bounds.y + drag.end.y }, 3);
-    const preview = await editor.livePointPosition(drag.id);
+    const preview = (await editor.drawnPoint(drag.id))!;
     expect(preview.x).toBeCloseTo(drag.expected.x, 4);
     expect(preview.y).toBeCloseTo(drag.expected.y, 4);
-    expect(await editor.livePointPosition(drag.pivot)).toEqual({ x: 100, y: 100 });
+    expect(await editor.drawnPoint(drag.pivot)).toMatchObject({ x: 100, y: 100 });
     await expect
-      .poll(() => activeSnapGuides(page))
+      .poll(() => editor.drawnSnapGuides())
       .toEqual([expect.objectContaining({ kind: "direction" })]);
     await page.keyboard.up("Shift");
     await editor.pointerUp();
-    expect(await editor.pointPosition(drag.id)).toEqual(preview);
+    expect(await editor.point(drag.id)).toMatchObject({ x: preview.x, y: preview.y });
     await expect(editor.shell).toHaveAttribute("data-gesture", "idle");
-    expect(await activeSnapGuides(page)).toEqual([]);
+    expect(await editor.drawnSnapGuides()).toEqual([]);
   } finally {
     await page.mouse.up();
     await page.keyboard.up("Shift");

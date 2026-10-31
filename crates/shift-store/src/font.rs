@@ -107,37 +107,7 @@ impl ShiftStore {
     ///
     /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn get_font_info(&self) -> Result<Option<FontInfo>, StoreError> {
-        let mut stmt = self.conn.prepare(
-            "
-            SELECT
-                family_name,
-                style_name,
-                copyright,
-                trademark,
-                description,
-                note,
-                sample_text,
-                designer,
-                designer_url,
-                manufacturer,
-                manufacturer_url,
-                license_description,
-                license_info_url,
-                vendor_id,
-                version_major,
-                version_minor,
-                units_per_em,
-                default_source_id
-            FROM font_info
-            WHERE id = 1
-            ",
-        )?;
-
-        match stmt.query_row([], map_font_info_row) {
-            Ok(font_info) => Ok(Some(font_info)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(err) => Err(err.into()),
-        }
+        font_info_from_conn(&self.conn)
     }
 }
 
@@ -162,4 +132,40 @@ fn map_font_info_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<FontInfo> {
         units_per_em: row.get(16)?,
         default_source_id: row.get(17)?,
     })
+}
+
+pub(crate) fn font_info_from_conn(
+    conn: &rusqlite::Connection,
+) -> Result<Option<FontInfo>, StoreError> {
+    let mut stmt = conn.prepare(
+        "
+        SELECT
+            family_name,
+            style_name,
+            copyright,
+            trademark,
+            description,
+            note,
+            sample_text,
+            designer,
+            designer_url,
+            manufacturer,
+            manufacturer_url,
+            license_description,
+            license_info_url,
+            vendor_id,
+            version_major,
+            version_minor,
+            units_per_em,
+            default_source_id
+        FROM font_info
+        WHERE id = 1
+        ",
+    )?;
+
+    match stmt.query_row([], map_font_info_row) {
+        Ok(font_info) => Ok(Some(font_info)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(err) => Err(err.into()),
+    }
 }

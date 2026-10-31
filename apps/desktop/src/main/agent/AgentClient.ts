@@ -8,26 +8,32 @@ import type {
   GlyphSelector,
   GlyphSummary,
   KerningGroupSummary,
+  KerningMasterValue,
   KerningPairPage,
-  LayerAppearance,
-  LayerOverlays,
   LayerSvg,
   ResolvedGlyphs,
   ResolvedKerningPairs,
   ResolvedLayer,
   ResolvedLocation,
   ShiftObservation,
+  SourceSelector,
+  InstanceSelector,
 } from "@shift/runtime";
-import type { GlyphId, LayerId, SourceId } from "@shift/types";
+import type { GlyphId, NamedInstance, Source } from "@shift/types";
 import type { MessagePortMain } from "electron";
-import type { AgentCallMap, AgentEventMap, EditorCaptureBounds } from "../../shared/agent/protocol";
+import type {
+  AgentCallMap,
+  AgentE2ECallMap,
+  AgentEventMap,
+  EditorCaptureBounds,
+} from "../../shared/agent/protocol";
 import { Channel, electronPortTransport } from "../../shared/workspace/channel";
 import { createShiftLogger, type ShiftLogger } from "../logging";
 
 /** Calls the agent inspection lane served by one renderer window. */
 export class AgentClient {
   readonly #log: ShiftLogger;
-  #channel: Channel<AgentCallMap, AgentEventMap> | null = null;
+  #channel: Channel<AgentCallMap & AgentE2ECallMap, AgentEventMap> | null = null;
 
   constructor(log: ShiftLogger = createShiftLogger("agent.client")) {
     this.#log = log;
@@ -40,7 +46,9 @@ export class AgentClient {
   /** Replaces the inspection lane after a renderer connects or reloads. */
   connect(port: MessagePortMain): void {
     this.#channel?.dispose();
-    this.#channel = new Channel<AgentCallMap, AgentEventMap>(electronPortTransport(port));
+    this.#channel = new Channel<AgentCallMap & AgentE2ECallMap, AgentEventMap>(
+      electronPortTransport(port),
+    );
     this.#log.info("agent renderer connected");
   }
 
@@ -73,7 +81,7 @@ export class AgentClient {
   listGlyphs(input: {
     limit?: number;
     cursor?: string;
-    sourceId?: SourceId;
+    source?: AgentCallMap["glyphs.list"]["request"]["source"];
     ifFontRevision?: FontRevision;
   }): Promise<ShiftObservation<GlyphPage>> {
     return this.#call("glyphs.list", input);
@@ -84,6 +92,20 @@ export class AgentClient {
     ifFontRevision?: FontRevision,
   ): Promise<ShiftObservation<GlyphSummary>> {
     return this.#call("glyphs.get", { selector, ifFontRevision });
+  }
+
+  getSource(
+    selector: SourceSelector,
+    ifFontRevision?: FontRevision,
+  ): Promise<ShiftObservation<Source>> {
+    return this.#call("sources.get", { selector, ifFontRevision });
+  }
+
+  getInstance(
+    selector: InstanceSelector,
+    ifFontRevision?: FontRevision,
+  ): Promise<ShiftObservation<NamedInstance>> {
+    return this.#call("instances.get", { selector, ifFontRevision });
   }
 
   resolveGlyphs(
@@ -112,33 +134,48 @@ export class AgentClient {
     return this.#call("kerning.resolve", input);
   }
 
-  getLayer(
-    layerId: LayerId,
-    ifFontRevision?: FontRevision,
-  ): Promise<ShiftObservation<AuthoredLayer>> {
-    return this.#call("layers.get", { layerId, ifFontRevision });
+  kerningAt(
+    input: AgentCallMap["kerning.at"]["request"],
+  ): Promise<ShiftObservation<KerningMasterValue>> {
+    return this.#call("kerning.at", input);
+  }
+
+  getLayer(input: AgentCallMap["layers.get"]["request"]): Promise<ShiftObservation<AuthoredLayer>> {
+    return this.#call("layers.get", input);
   }
 
   resolveLayer(
-    layerId: LayerId,
-    ifFontRevision?: FontRevision,
+    input: AgentCallMap["layers.resolve"]["request"],
   ): Promise<ShiftObservation<ResolvedLayer>> {
-    return this.#call("layers.resolve", { layerId, ifFontRevision });
+    return this.#call("layers.resolve", input);
   }
 
   renderLayer(
-    layerId: LayerId,
-    overlays?: LayerOverlays,
-    appearance?: LayerAppearance,
-    ifFontRevision?: FontRevision,
+    input: AgentCallMap["layers.render"]["request"],
   ): Promise<ShiftObservation<LayerSvg>> {
-    return this.#call("layers.render", { layerId, overlays, appearance, ifFontRevision });
+    return this.#call("layers.render", input);
   }
 
-  #call<K extends keyof AgentCallMap>(
+  /**
+   * Calls `reader`'s `method` with `args` in the window's renderer once
+   * pending edits settle, as the E2E read hook does.
+   */
+  read(reader: string, method: string, args: unknown[]): Promise<unknown> {
+    return this.#call("agent.read", { reader, method, args });
+  }
+
+  /**
+   * Calls `method` of the renderer's E2E hook `hook` with `args`, as the E2E
+   * hooks do; the renderer serves it only for E2E launches.
+   */
+  callHook(hook: string, method: string, args: unknown[]): Promise<unknown> {
+    return this.#call("e2e.call", { hook, method, args });
+  }
+
+  #call<K extends keyof (AgentCallMap & AgentE2ECallMap)>(
     operation: K,
-    input: AgentCallMap[K]["request"],
-  ): Promise<AgentCallMap[K]["response"]> {
+    input: (AgentCallMap & AgentE2ECallMap)[K]["request"],
+  ): Promise<(AgentCallMap & AgentE2ECallMap)[K]["response"]> {
     if (!this.#channel) return Promise.reject(new Error("agent renderer is not connected"));
     return this.#channel.call(operation, input);
   }

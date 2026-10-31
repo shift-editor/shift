@@ -1,6 +1,5 @@
 import { Mat, type DecomposedTransform, type MatModel, type Point2D } from "@shift/geo";
 import type { ComponentId, GlyphId } from "@shift/types";
-import { batch } from "../signals";
 import type { GlyphLayer } from "./Glyph";
 import type { GlyphLayerState } from "./GlyphLayerState";
 
@@ -25,8 +24,8 @@ export interface GlyphTransformOptions {
  * glyph's own units through `origin`. With `keepRightSidebearing`, the outline
  * lands exactly where the delta puts it and the advance follows its right
  * edge, so the right sidebearing survives a scale; otherwise the advance never
- * changes. Previews restore the layer values captured at construction and
- * apply the same transform the commit sends, so preview and result agree.
+ * changes. Each preview asks the window's engine for the same steps the commit
+ * sends, applied to the layer as the edit began, so preview and result agree.
  * Construction opens the layer's exclusive local-edit slot; finish with
  * {@link commit} or {@link discard}.
  */
@@ -35,7 +34,6 @@ export class GlyphTransformEdit {
   readonly #state: GlyphLayerState;
   readonly #origin: Point2D;
   readonly #keepRightSidebearing: boolean;
-  readonly #base: Float64Array;
   readonly #xAdvance: number;
   /** Components that follow a transformed base glyph, with the placement they keep. */
   readonly #followerIds: readonly ComponentId[];
@@ -58,7 +56,6 @@ export class GlyphTransformEdit {
     this.#state = state;
     this.#origin = options.origin;
     this.#keepRightSidebearing = options.keepRightSidebearing;
-    this.#base = buffers.snapshot;
     this.#xAdvance = buffers.xAdvance;
     this.#followerIds = followers.map((component) => component.data.id);
     this.#followerTransforms = followers.map((component) => component.transform);
@@ -92,13 +89,7 @@ export class GlyphTransformEdit {
 
     const xAdvance = this.#xAdvanceFor(matrix);
     this.#layer.transaction("Transform glyph", () => {
-      this.#state.finishEdit(() => {
-        this.#layer.transformLayer(matrix);
-        if (this.#followerIds.length > 0) {
-          this.#layer.setComponentTransforms(this.#followerIds, this.#followerTransforms);
-        }
-        if (xAdvance !== this.#xAdvance) this.#layer.setXAdvance(xAdvance);
-      });
+      this.#state.finishEdit(() => this.#steps(matrix, xAdvance));
     });
   }
 
@@ -118,18 +109,20 @@ export class GlyphTransformEdit {
     return Math.max(left, right) + (this.#xAdvance - edges.right);
   }
 
+  /** Shows the latest transform as the window's engine applies it to the base. */
   #reapply(): void {
     const matrix = this.#matrix;
-    const buffers = this.#state.buffers;
-    batch(() => {
-      buffers.replaceValues(this.#base);
-      if (!matrix) return;
-
-      buffers.transformLayer(matrix);
-      if (!buffers.setComponentTransforms(this.#followerIds, this.#followerTransforms)) {
-        throw new Error("cannot reapply glyph component transforms");
-      }
-      buffers.setXAdvance(this.#xAdvanceFor(matrix));
+    this.#layer.preview(() => {
+      if (matrix) this.#steps(matrix, this.#xAdvanceFor(matrix));
     });
+  }
+
+  /** The transform as the commit sends it: followers keep their placement. */
+  #steps(matrix: MatModel, xAdvance: number): void {
+    this.#layer.transformLayer(matrix);
+    if (this.#followerIds.length > 0) {
+      this.#layer.setComponentTransforms(this.#followerIds, this.#followerTransforms);
+    }
+    if (xAdvance !== this.#xAdvance) this.#layer.setXAdvance(xAdvance);
   }
 }

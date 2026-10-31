@@ -14,8 +14,9 @@ runs:
       with:
         node-version: 24
 
-    - name: Cache node_modules
-      uses: actions/cache@v6
+    - name: Restore node_modules
+      id: modules-cache
+      uses: actions/cache/restore@v6
       with:
         path: |
           node_modules
@@ -28,15 +29,27 @@ runs:
       shell: bash
       run: pnpm install --frozen-lockfile --prefer-offline
 
-    - name: Cache native module binary
+    - name: Save node_modules
+      if: github.ref == 'refs/heads/main' && steps.modules-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: |
+          node_modules
+          apps/*/node_modules
+          packages/*/node_modules
+          crates/*/node_modules
+        key: node-modules-v3-node24-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+    - name: Restore native module binary
       id: native-cache
-      uses: actions/cache@v6
+      uses: actions/cache/restore@v6
       with:
         path: |
           crates/shift-bridge/*.node
           packages/wasm/src/generated
           packages/wasm/src/generated-reference
           packages/wasm/src/generated-shaping
+          packages/wasm/src/generated-engine
         key: native-module-e2e-v3-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'Cargo.toml', 'crates/**', 'Cargo.lock', 'rust-toolchain.toml') }}
 
     # A cache saved on a pull request or merge-queue ref can be restored only by
@@ -53,10 +66,29 @@ runs:
       shell: bash
       run: pnpm build:native:e2e
 
+    - name: Save native module binary
+      if: github.ref == 'refs/heads/main' && steps.native-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: |
+          crates/shift-bridge/*.node
+          packages/wasm/src/generated
+          packages/wasm/src/generated-reference
+          packages/wasm/src/generated-shaping
+          packages/wasm/src/generated-engine
+        key: native-module-e2e-v3-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'Cargo.toml', 'crates/**', 'Cargo.lock', 'rust-toolchain.toml') }}
+
     - name: Generate glyph info
       if: github.event_name != 'push'
       shell: bash
       run: pnpm generate:glyph-info
+
+    # The app bundles the native workspace's generated clients, which are
+    # not committed.
+    - name: Generate bridge types
+      if: github.event_name != 'push'
+      shell: bash
+      run: pnpm generate:bridge-types
 
     - name: Build E2E app
       if: github.event_name != 'push'

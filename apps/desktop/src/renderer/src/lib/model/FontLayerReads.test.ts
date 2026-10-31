@@ -21,7 +21,7 @@ describe("Font reads exact authored layers from accepted workspace state", () =>
 
   function layerFor(glyphName: string, sourceName: string): LayerId {
     const record = stack.font.recordForName(glyphName as GlyphName);
-    const source = stack.font.sources.find((candidate) => candidate.name === sourceName);
+    const source = stack.font.sourceNamed(sourceName);
     const layer = record?.layers.find((candidate) => candidate.sourceId === source?.id);
     if (!layer) throw new Error(`Expected ${glyphName} in ${sourceName}`);
     return layer.id;

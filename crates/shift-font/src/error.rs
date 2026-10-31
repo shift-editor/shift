@@ -48,6 +48,12 @@ pub enum CoreError {
     #[error("anchor {0} not found")]
     AnchorNotFound(AnchorId),
 
+    #[error("{0}")]
+    ContourEdit(#[from] crate::contour_edit::ContourEditError),
+
+    #[error("a glyph's interpolation sources have no values or differ in length")]
+    InterpolationSourcesMismatch,
+
     #[error("boolean operation failed: {0}")]
     BooleanOperationFailed(#[source] linesweeper::Error),
 

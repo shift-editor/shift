@@ -15,9 +15,11 @@ TypeScript makes `{ points?: … }`, `?.` and `?? []` free to write, so a vague 
 
 - **A collection field is never optional.** An empty collection means "none". `PositionTargets` carries `points` and `anchors` always, so readers write `targets.points`, not `targets.points ?? []`, and ask `targets.hasAnchors`. Keep an optional collection only where absence differs from empty (an option that falls back to a default, a wire field mirroring Rust's `Option<Vec<_>>`), and say why in the disable comment. Enforced by `shift/no-optional-collection-field`.
 - **Lookups return `T | null`, never `undefined`.** Hold id-keyed collections in `EntityMap` from `@shift/types`: `get` returns `null`, `require` throws a named `EntityNotFoundError` when absence is a bug for that caller, and `where(predicate)` filters in insertion order. Expose indexes as `ReadonlyEntityMap`. Enforced by `shift/no-map-get-to-null`; `no-mutable-collection-field` treats `EntityMap` fields like `Map` fields.
+- **Ask first: does Rust already compute this, or could another consumer need the same answer?** Rust means shift-font and its libraries (fontc, fea-rs, fontdrasil, harfrust, line breaking); the other consumers are the CLI, export, the window's engine, the utility process, the SDK and agents. If yes, it has one implementation, in Rust, and every consumer calls it: expose it from shift-font through the engine and make the TypeScript method a one-line call (`Kerning.between` → `engine.kerningRun`; shaping → harfrust through the shaping module; feature compiling → fea-rs; interpolation → fontdrasil). Never write it in TypeScript "for now": two copies drift. If no (a lookup by id or name, a count, stored order, reactivity, UI state), the TypeScript model owns it, beside its siblings: before writing `font.sources.find(({ name }) => name === n)` outside the owner, look for the query there (`Font.entryForName`, `recordForId`, `source(id)`, `layerIdFor`), and if none exists add it (`Font.sourceNamed(name)` next to `source(id)`) and point every caller at it. Unsure → Rust. `scan:ts --kind model-rule` lists model methods that compute without the engine; `--kind repeated-filter` lists predicates repeated across files.
 - **Prove "at least one" in the type.** When a list is never empty, type it `readonly [T, ...T[]]` and read `list[0]` without a fallback.
 - **Use the built-ins before spreading.** Query an iterator directly (`map.values().filter(…).toArray()`; `.some`/`.every`/`.find` need no array), copy-sort with `toSorted`, merge sets with `union`/`intersection`/`difference`, group with `Map.groupBy`. Enforced by `shift/prefer-iterator-helpers`.
 - **A combined collection used in several places is a type.** `ThemeCatalog` builds the shipped-then-user theme list once; `KerningGroups.atPosition` sorts once per change. Spread to build a value once, not at every read.
+- **Pass a maybe-value straight through.** Write `x: v === undefined ? undefined : f(v)`; never spread conditionally to leave a key out, and don't add a helper function to build it. Where a stored shape must tell a missing key from an undefined one, keep the spread with a disable comment giving the reason. Enforced by `shift/no-conditional-spread`.
 
 ## Order and subsets
 
@@ -38,7 +40,30 @@ const axes = useExternalAxes(); // font.externalAxesCell, a computed
 ```
 
 - **Name every order.** Pass a named comparator to `sort`/`toSorted`: `ascending`, `descending`, `alphabetical`, `byName`, `comparing(key, order)` and `orderBy(...)` from `@shift/types`, `byAxis(axis)` from `@shift/geo`, or a comparator named next to the type it orders (`newestFirst`, `byMappingInput(axis)`). Enforced by `shift/no-inline-comparator`.
+- **Match typed names through `NameQuery`.** A search field's text becomes `NameQuery.from(text)` (trimmed; an empty query matches everything; `{ prefix: "@" }` drops a typed marker), and the list asks `query.filter(items)`, `query.matches(item)` or `query.filterBy(items, (item) => [item.displayName])`, never `x.name.toLowerCase().includes(lower)`.
 - **Sort once, where the collection changes,** not at every read. An immutable owner sorts in its constructor (`KerningGroups`); a reactive owner sorts in a `computed`.
+
+## List and set invariants
+
+**When an edit to a list or set must re-establish an invariant (unique, ordered, capped, keyed), the invariant belongs to a type or named function, not to each call site.**
+
+```ts
+// Before: every edit filters, re-adds, sorts and slices to keep the list valid.
+const remaining = entries.filter((entry) => !sameDocument(entry, visit));
+entries = [{ ...visit, openedAt }, ...remaining].sort(newestFirst).slice(0, LIMIT);
+
+// After: the list keeps one entry per document, newest first, capped.
+entries = entries.touch(visit, (previous) => ({
+  ...previous,
+  ...visit,
+  openedAt,
+}));
+```
+
+- **Recency lists** use `RecentList` from `@shift/types`: `of(items, rules)`, `find`, `touch`, `update`, `remove`, `where`.
+- **Keyed lists** use `upsertBy`, `replaceBy` and `removeBy` from `@shift/types` instead of `findIndex`, copy and assign, or `map((x) => (x.id === id ? f(x) : x))`. A domain rule beyond the key gets a named function, such as `withIndependentMapping` in `@shift/editor/variation`.
+- **Sets in React state** use `useMemberSet`, never a copied `Set` toggled in each handler.
+- **Stored JSON lists** read through `parseEach(schema, text)`, which keeps each valid entry and reads anything malformed as empty.
 
 ## Owners answer questions
 

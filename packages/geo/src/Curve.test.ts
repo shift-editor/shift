@@ -61,13 +61,6 @@ describe("Curve", () => {
       expect(Curve.length(line)).toBe(10);
     });
 
-    it("computes bounds", () => {
-      const diagonalLine = Curve.line({ x: 0, y: 0 }, { x: 10, y: 20 });
-      const bounds = Curve.bounds(diagonalLine);
-      expect(bounds.min).toEqual({ x: 0, y: 0 });
-      expect(bounds.max).toEqual({ x: 10, y: 20 });
-    });
-
     it("splits at parameter t", () => {
       const [left, right] = Curve.splitAt(line, 0.3);
       expect(left.type).toBe("line");
@@ -125,14 +118,6 @@ describe("Curve", () => {
       // The closest point should be near the peak
       expect(result.t).toBeCloseTo(0.5, 1);
       expect(result.point.x).toBeCloseTo(5, 1);
-    });
-
-    it("computes bounds", () => {
-      const bounds = Curve.bounds(quad);
-      expect(bounds.min.x).toBeCloseTo(0);
-      expect(bounds.min.y).toBeCloseTo(0);
-      expect(bounds.max.x).toBeCloseTo(10);
-      expect(bounds.max.y).toBeCloseTo(5); // Peak of quadratic
     });
 
     it("splits at parameter t", () => {
@@ -197,15 +182,6 @@ describe("Curve", () => {
       const result = Curve.closestPoint(cubic, { x: 0, y: 5 });
       expect(result.t).toBeLessThan(0.5);
       expect(result.distance).toBeLessThan(5);
-    });
-
-    it("computes bounds", () => {
-      const bounds = Curve.bounds(cubic);
-      expect(bounds.min.x).toBeCloseTo(0);
-      expect(bounds.max.x).toBeCloseTo(10);
-      // Y bounds depend on extrema
-      expect(bounds.min.y).toBeLessThan(0);
-      expect(bounds.max.y).toBeGreaterThan(0);
     });
 
     it("splits at parameter t", () => {

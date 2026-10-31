@@ -11,8 +11,8 @@ import {
 import { useSignalState } from "@shift/editor/signals";
 import LeftSidebearingIcon from "@/assets/spacing/lsb.svg";
 import RightSidebearingIcon from "@/assets/spacing/rsb.svg";
-import { SpacingTool } from "@shift/editor/tools";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import { useToolIf } from "@/hooks/useToolIf";
 
 interface SpacingValuePopoverProps {
   /** The canvas stack the tool's screen pixels are measured from. */
@@ -30,14 +30,13 @@ interface SpacingValuePopoverProps {
  */
 export function SpacingValuePopover({ container }: SpacingValuePopoverProps) {
   const editor = useEditor();
-  const tool = useSignalState(editor.toolCellIf("spacing"));
+  const spacing = useToolIf("spacing");
   useSignalState(editor.camera.viewCell);
   const cancelled = useRef(false);
 
-  const spacing = editor.toolManager.activeTool;
-  const hit = spacing instanceof SpacingTool ? spacing.editing : null;
+  const hit = spacing?.editing ?? null;
   const half = hit ? hit.gap[hit.side] : null;
-  if (!tool || !(spacing instanceof SpacingTool) || !hit || !half) return null;
+  if (!spacing || !hit || !half) return null;
 
   const anchor = {
     getBoundingClientRect: () => {

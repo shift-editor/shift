@@ -2,6 +2,7 @@ import type { Glyph as GlyphInfoGlyph, GlyphInfo } from "@shift/glyph-info";
 import { EntityMap, type GlyphId, type GlyphName, type GlyphRecord } from "@shift/types";
 import type { ComponentCandidate } from "@/types/componentPicker";
 import type { GlyphCatalogItem } from "@/types/glyphCatalog";
+import { NameQuery } from "@/lib/utils/NameQuery";
 
 interface ComponentPickerIndex {
   readonly glyphInfo: GlyphInfo;
@@ -111,18 +112,16 @@ export class ComponentPicker {
 
   #search(query: string): ComponentCandidate[] {
     const { eligibleByUnicode, glyphInfo } = this.#index;
-    const normalizedQuery = query.trim().toLowerCase();
+    const search = NameQuery.from(query);
     const queryUnicode = unicodeFromQuery(query);
     const nameMatches = this.#index.eligibleGlyphs.filter(
       (glyph) =>
-        glyph.name.toLowerCase().includes(normalizedQuery) ||
-        glyph.displayName.toLowerCase().includes(normalizedQuery) ||
+        search.matchesText(glyph.name) ||
+        search.matchesText(glyph.displayName) ||
         (queryUnicode !== null && glyph.unicode === queryUnicode),
     );
     const exactMatches = nameMatches.filter(
-      (glyph) =>
-        glyph.name.toLowerCase() === normalizedQuery ||
-        glyph.displayName.toLowerCase() === normalizedQuery,
+      (glyph) => search.isExactly(glyph.name) || search.isExactly(glyph.displayName),
     );
     const resolvedGlyph = glyphInfo.getGlyphByName(glyphInfo.resolveGlyphName(query.trim()));
     const matchingCodepoints = [

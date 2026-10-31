@@ -59,7 +59,7 @@ pub(crate) fn export_glyphs(
             .ok_or_else(|| miette!("glyph {name:?} does not exist in {}", path.display()))?;
         let mut wrote_layer = false;
         for source_id in &source_ids {
-            let Some(layer) = glyph.layer_for_source(source_id) else {
+            let Some(layer) = glyph.layer_for_source(*source_id) else {
                 continue;
             };
             for (_, component) in layer.components().iter() {
@@ -67,7 +67,7 @@ pub(crate) fn export_glyphs(
             }
             let source_name = named
                 .then(|| {
-                    font.source(source_id)
+                    font.source(*source_id)
                         .map(|source| source.name().to_string())
                 })
                 .flatten();

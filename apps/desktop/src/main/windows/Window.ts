@@ -17,13 +17,12 @@ export interface WindowOptions {
   titleBarHeight?: number;
 }
 
-const WINDOW_DEFAULT_OPTIONS: Omit<WindowOptions, "preloadPath"> = {
+const WINDOW_DEFAULT_OPTIONS = {
   width: 800,
   height: 600,
   title: "Shift",
   minWidth: 1200,
   maximised: false,
-  autoShow: false,
 };
 
 /** Chrome zoom steps, matching the browser-conventional ladder. */
@@ -91,33 +90,32 @@ export class Window {
   readonly #titleBarHeight: number;
 
   constructor(options: WindowOptions) {
-    const windowOptions = { ...WINDOW_DEFAULT_OPTIONS, ...options };
-    this.#maximiseOnPresent = windowOptions.maximised ?? false;
-    this.#titleBarHeight = windowOptions.titleBarHeight ?? TITLE_BAR_HEIGHT;
+    this.#maximiseOnPresent = options.maximised ?? WINDOW_DEFAULT_OPTIONS.maximised;
+    this.#titleBarHeight = options.titleBarHeight ?? TITLE_BAR_HEIGHT;
     const browserWindowOptions = {
       ...platformChrome(this.#titleBarHeight),
       ...BROWSER_WINDOW_DEFAULT_OPTIONS,
-      ...windowOptions.browserWindowOptions,
+      ...options.browserWindowOptions,
     };
 
     this.#window = new BrowserWindow({
       ...browserWindowOptions,
-      width: windowOptions.width,
-      height: windowOptions.height,
-      title: windowOptions.title,
-      minWidth: windowOptions.minWidth,
+      width: options.width ?? WINDOW_DEFAULT_OPTIONS.width,
+      height: options.height ?? WINDOW_DEFAULT_OPTIONS.height,
+      title: options.title ?? WINDOW_DEFAULT_OPTIONS.title,
+      minWidth: options.minWidth ?? WINDOW_DEFAULT_OPTIONS.minWidth,
       show: false,
       webPreferences: {
         ...BROWSER_WINDOW_DEFAULT_OPTIONS.webPreferences,
-        ...windowOptions.browserWindowOptions?.webPreferences,
-        preload: windowOptions.preloadPath,
+        ...options.browserWindowOptions?.webPreferences,
+        preload: options.preloadPath,
       },
     });
 
     // The native menu stays installed for its accelerators but is never shown.
     if (process.platform !== "darwin") this.#window.setMenuBarVisibility(false);
 
-    if (windowOptions.autoShow) {
+    if (options.autoShow) {
       this.#window.once("ready-to-show", () => {
         this.present();
       });

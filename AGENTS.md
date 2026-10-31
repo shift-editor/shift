@@ -96,6 +96,8 @@ This project uses **pnpm** (v11) as its package manager.
 - `cargo clippy` - Lint Rust code (run after any Rust changes)
 - `cargo deny check` - Check Rust dependency licenses, advisories and sources against `deny.toml` (run after changing dependencies)
 - `cargo machete` - Find Rust dependencies no code uses
+- `pnpm scan:rust [--since <rev>]` - Report Rust structure worth a look (free functions that read as methods, method names several types share, long chains); report-only, never fails
+- `pnpm scan:ts [--since <rev>]` - Report TypeScript that computes what a same-named Rust function does, free functions that read as methods, and wrapper-named classes; report-only
 
 Use repository scripts when a matching command exists; they encode the intended tool, scope, and version. Run all TypeScript/JavaScript formatting through `pnpm format`, `pnpm format:check`, or `pnpm format:files`; never invoke Oxfmt directly and never use Prettier in this repository.
 
@@ -112,7 +114,7 @@ Use these root commands instead of invoking a package's Vitest script directly. 
 
 - `pnpm build:native` - Build Rust native modules (the NAPI addon and the WebAssembly module)
 - `pnpm build:native:debug` - Build native modules in debug mode
-- `pnpm build:wasm` - Build the editor's WebAssembly module (`crates/shift-wasm`) into `packages/wasm/src/generated/` (gitignored). `build:native` and the turbo typecheck, test, and desktop build tasks build it first; see `crates/shift-wasm/docs/DOCS.md`
+- `pnpm build:wasm` - Build the editor's WebAssembly module (`crates/shift-wasm`) into `packages/wasm/src/generated/` (gitignored). `build:native` and the turbo test and desktop build tasks build it first, and typecheck builds only its declarations (`@shift/wasm#types`); see `crates/shift-wasm/docs/DOCS.md`
 - `pnpm package` - Package the application
 - `pnpm make` - Build and create distribution
 
@@ -147,7 +149,7 @@ Use these root commands instead of invoking a package's Vitest script directly. 
 - NEVER duplicate package code in app layer
 - If you need functionality from a package, import it; don't copy it
 - Do not synthesize fake point IDs for geometry-only operations
-- Canonical glyph geometry APIs: `parseContourSegments`, `deriveGlyphTightBounds`, `deriveGlyphXBounds`
+- Canonical glyph geometry APIs: `segmentContour` (segments and bounds from shift-font through `@shift/wasm`), `Contour.bounds`, `GlyphGeometry.bounds`
 
 ### Import Conventions
 
@@ -168,7 +170,7 @@ Use these root commands instead of invoking a package's Vitest script directly. 
 
 ### Generated and domain types
 
-- **Generated types** live ONLY in `packages/types/src/bridge/generated.ts`, generated from shift-bridge's NAPI declarations. Run `pnpm generate:bridge-types` to regenerate. They are the single source of truth for shapes and field names (e.g. `familyName`, `versionMajor`, not `family` or `version`).
+- **Generated types** live ONLY in `packages/types/src/bridge/generated.ts`, generated from shift-bridge's NAPI declarations and not committed. Turbo typecheck, test and build tasks and `pnpm install` write it; run `pnpm generate:bridge-types` to regenerate by hand. They are the single source of truth for shapes and field names (e.g. `familyName`, `versionMajor`, not `family` or `version`).
 - **Generated layouts** (glyph value, source metric, and Slug atlas offsets and strides) live in `packages/types/src/layout/` and are exported from `@shift/types`. Rust tests in `shift-font` and `shift-slug` render them and fail when the checked-in copy is stale; run `pnpm generate:from-rust` after changing a Rust layout. Never hard-code these offsets in TypeScript.
 - **WebAssembly call layouts** are declared in `crates/shift-wasm` and generated into `packages/editor/src/lib/wasm/generated/layouts.ts` by the same command. Never hand-pack a `Float64Array` for a `@shift/wasm` call.
 - **Domain types** derived from generated shapes (definitions before an id is assigned, resolved metrics) live in `packages/types/src/domain.ts` and MUST derive from generated types (`Pick`, `Omit`, composition): same field names, no re-declaration of structure. The glyph model classes (`Point`, `Contour`, `Segment`, `Component`) live in `@shift/glyph-state`, and `Glyph` and `Font` in `packages/editor/src/lib/model/`.
@@ -183,6 +185,7 @@ Use these root commands instead of invoking a package's Vitest script directly. 
 
 ## Architectural Constraints
 
+- **Rust owns every answer; TypeScript asks.** shift-font and its libraries (fontc, fea-rs, fontdrasil, harfrust, line breaking) compute anything another consumer could need too (the CLI, export, the window's engine, the utility process, the SDK, agents), once, and every consumer calls it; never keep a second TypeScript copy in sync. The TypeScript model looks things up (by id or name, counts, stored order), holds reactivity and delegates the rest to the engine; readers translate; tools and UI ask the model.
 - **NEVER construct variation models in TypeScript.** Rust/Fontdrasil exclusively owns sample ordering, support construction, master influence, and delta decomposition. TypeScript evaluates transported compiled bases only through `@shift/wasm`, which runs shift-font's evaluators.
 - **NEVER port a Rust rule to TypeScript.** When the editor needs a shift-font rule synchronously, export it from `crates/shift-wasm` and call it, rather than keeping a copy checked by an oracle. Where a rule must stay in TypeScript (per-frame geometry, kerning precedence over the pending-edit overlay), test it against the Rust directly through the test-only `@shift/wasm/reference` module, never against a fixture Rust writes. Before writing TypeScript that mirrors shift-font geometry or variation logic, read "Choosing a route" in `crates/shift-wasm/docs/DOCS.md`.
 - **Raw axis-mapping points stop at authoring boundaries.** `AxisMapping.points` may be read by Rust compilation and TypeScript mapping-authoring UI/model code only. Glyph, interpolation, source matching, metrics, editability, and atlas-weight evaluation must consume `AxisMappingBasis`, never `AxisMapping` or `AxisMappingPoint`.

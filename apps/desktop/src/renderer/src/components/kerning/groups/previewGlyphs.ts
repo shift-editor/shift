@@ -35,5 +35,5 @@ export function fillGlyph(
 }
 
 export function glyphName(editor: Editor, glyphId: GlyphId): string {
-  return editor.font.entryForId(glyphId)?.name ?? glyphId;
+  return editor.font.glyphName(glyphId) ?? glyphId;
 }

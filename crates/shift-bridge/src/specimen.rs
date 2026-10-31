@@ -106,7 +106,7 @@ pub(crate) fn acquire_specimen_glyphs(
     let font = workspace.font();
     drawn += batch
       .iter()
-      .filter(|glyph_id| font.glyph(glyph_id).is_some_and(Glyph::has_outline))
+      .filter(|glyph_id| font.glyph(**glyph_id).is_some_and(Glyph::has_outline))
       .count();
     if drawn >= LEADING_DRAWN_GLYPHS {
       break;

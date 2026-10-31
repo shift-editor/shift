@@ -1,9 +1,11 @@
 import type {
   FontMetrics,
   MetricDefinition,
+  MetricId,
   MetricKind,
+  MetricValue,
   FontMetadata,
-  Axis,
+  Axis as AxisRecord,
   AxisDefinition,
   AxisMapping,
   AxisMappingBasis,
@@ -28,8 +30,6 @@ import type {
   LayerMatch,
   LayerRead,
   Location,
-  ParagraphRequest,
-  ShapedRun,
   ShaperFont,
   PointId,
   SegmentId,
@@ -46,6 +46,7 @@ import {
   mintNamedInstanceId,
   mintSourceId,
 } from "@shift/types";
+import type { Axis } from "./Axis";
 import {
   batch,
   computed,
@@ -56,19 +57,33 @@ import {
   type Effect,
   type Signal,
 } from "../signals/signal";
-import type { FontOptions, FontRecordIndex, WorkspaceEditCoordinator } from "../../types/font";
+import type {
+  FontEngine,
+  FontOptions,
+  FontRecordIndex,
+  KerningPlace,
+  WorkspaceEditCoordinator,
+} from "../../types/font";
+import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
+import { locationValues } from "../wasm/variation";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
-import type { Kerning, KerningPairPosition } from "./Kerning";
+import {
+  isGroupSide,
+  setKerningValuesIntent,
+  type Kerning,
+  type KerningPairPosition,
+  type KerningSideId,
+} from "./Kerning";
 import { KerningEdit } from "./KerningEdit";
-import { SourceMetricsInterpolation } from "./SourceMetricsInterpolation";
 import {
   designAxisLocationFromLocation,
   locationFromDesignAxisLocation,
 } from "../variation/location";
 import { Designspace } from "../variation/Designspace";
+import { withIndependentMapping } from "../variation/independentMapping";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import { uniqueInOrder } from "../utils/utils";
 import { fallbackGlyphNameForUnicode } from "../utils/unicode";
@@ -215,6 +230,15 @@ const DEFAULT_FONT_METRICS: FontMetrics = {
   unitsPerEm: 1000,
 };
 
+export type { MissingKerningOrigin };
+
+/** One page of a font's glyph directory, in font order. */
+export interface GlyphDirectoryPage {
+  readonly entries: readonly GlyphEntry[];
+  /** Whether more glyphs follow the page's last entry. */
+  readonly hasMore: boolean;
+}
+
 /**
  * Reactive facade for the loaded font.
  *
@@ -232,22 +256,22 @@ export class Font {
   readonly #loadedCell: Signal<boolean>;
 
   readonly #metricsCell: Signal<FontMetrics>;
-  readonly #metricDefinitionsCell: Signal<MetricDefinition[]>;
+  readonly #metricDefinitionsCell: Signal<readonly MetricDefinition[]>;
 
-  readonly #sourceMetricsInterpolationCell: Signal<SourceMetricsInterpolation | null>;
+  readonly #sourceMetricsRevisionCell: Signal<number>;
   readonly #kerningCell: Signal<Kerning>;
   readonly #defaultSourceMetricsCell: Signal<SourceMetrics>;
 
   readonly #metadataCell: Signal<FontMetadata>;
-  readonly #sourcesCell: Signal<Source[]>;
+  readonly #sourcesCell: Signal<readonly Source[]>;
 
-  readonly #axesCell: Signal<Axis[]>;
+  readonly #axesCell: ComputedSignal<readonly Axis[]>;
   readonly #externalAxesCell: Signal<readonly Axis[]>;
-  readonly #axisMappingsCell: Signal<AxisMapping[]>;
-  readonly #axisMappingBasesCell: Signal<AxisMappingBasis[]>;
+  readonly #axisMappingsCell: Signal<readonly AxisMapping[]>;
+  readonly #axisMappingBasesCell: Signal<readonly AxisMappingBasis[]>;
   readonly #designspace: Designspace;
 
-  readonly #namedInstancesCell: Signal<NamedInstance[]>;
+  readonly #namedInstancesCell: Signal<readonly NamedInstance[]>;
   readonly #languageIdsCell: Signal<readonly string[] | null>;
 
   readonly #unicodesCell: Signal<Unicode[]>;
@@ -285,30 +309,22 @@ export class Font {
     this.#metricsCell = computed(() => fontCell.value?.metrics ?? DEFAULT_FONT_METRICS);
     this.#metricDefinitionsCell = computed(() => fontCell.value?.metricDefinitions ?? []);
 
-    this.#sourceMetricsInterpolationCell = computed(() => {
-      const font = fontCell.value;
-      return SourceMetricsInterpolation.from(
-        font?.sourceMetricsInterpolation ?? null,
-        font?.metricDefinitions ?? [],
-        font?.metrics ?? DEFAULT_FONT_METRICS,
-      );
-    });
-
-    this.#kerningCell = store.kerning.cell;
+    this.#sourceMetricsRevisionCell = store.engine?.sourceMetricsRevisionCell ?? NO_REVISIONS;
+    this.#kerningCell = store.kerningCell;
 
     this.#metadataCell = computed(() => fontCell.value?.metadata ?? {});
     this.#sourcesCell = computed(() => fontCell.value?.sources ?? []);
-    this.#axesCell = computed(() => fontCell.value?.axes ?? []);
-    this.#externalAxesCell = computed(() =>
-      this.#axesCell.value.filter((axis) => axis.role === "external"),
-    );
     this.#axisMappingsCell = computed(() => fontCell.value?.axisMappings ?? []);
     this.#axisMappingBasesCell = computed(() => fontCell.value?.axisMappingBases ?? []);
     this.#designspace = new Designspace({
-      axesCell: this.#axesCell,
+      axesCell: computed(() => fontCell.value?.axes ?? NO_AXES),
       mappingBasesCell: this.#axisMappingBasesCell,
       sourcesCell: this.#sourcesCell,
     });
+    this.#axesCell = this.#designspace.axesCell;
+    this.#externalAxesCell = computed(() =>
+      this.#axesCell.value.filter((axis) => axis.role === "external"),
+    );
     this.#defaultSourceMetricsCell = computed(() => {
       const designspace = this.#designspace;
       track(this.#metricsCell);
@@ -376,18 +392,26 @@ export class Font {
   }
 
   /** Reactive font-owned identities for authored metric rows. */
-  get metricDefinitionsCell(): Signal<MetricDefinition[]> {
+  get metricDefinitionsCell(): Signal<readonly MetricDefinition[]> {
     return this.#metricDefinitionsCell;
   }
 
-  /** Reactive decoder for the Rust-built source-metric interpolation model. */
-  get sourceMetricsInterpolationCell(): Signal<SourceMetricsInterpolation | null> {
-    return this.#sourceMetricsInterpolationCell;
+  /**
+   * Changes whenever {@link metricsAtLocation} may answer differently between
+   * sources; track it with the location and the sources it reads.
+   */
+  get sourceMetricsRevisionCell(): Signal<number> {
+    return this.#sourceMetricsRevisionCell;
   }
 
-  /** Reactive kerning groups and per-source pair values. */
+  /** Reactive kerning groups and pair reads; a new value whenever kerning may have changed. */
   get kerningCell(): Signal<Kerning> {
     return this.#kerningCell;
+  }
+
+  /** The font's kerning now, without subscribing; reactive readers use {@link kerningCell}. */
+  get kerning(): Kerning {
+    return this.#kerningCell.peek();
   }
 
   /** Reactive committed authored font metadata. */
@@ -406,7 +430,7 @@ export class Font {
   }
 
   /** Reactive committed variation axes for sidebar controls. */
-  get axesCell(): Signal<Axis[]> {
+  get axesCell(): Signal<readonly Axis[]> {
     return this.#axesCell;
   }
 
@@ -422,12 +446,12 @@ export class Font {
   }
 
   /** Reactive font-owned independent and cross-axis mappings. */
-  get axisMappingsCell(): Signal<AxisMapping[]> {
+  get axisMappingsCell(): Signal<readonly AxisMapping[]> {
     return this.#axisMappingsCell;
   }
 
   /** Reactive authored product presets in external axis coordinates. */
-  get namedInstancesCell(): Signal<NamedInstance[]> {
+  get namedInstancesCell(): Signal<readonly NamedInstance[]> {
     return this.#namedInstancesCell;
   }
 
@@ -444,7 +468,7 @@ export class Font {
   }
 
   /** Reactive committed variation sources for sidebar controls. */
-  get sourcesCell(): Signal<Source[]> {
+  get sourcesCell(): Signal<readonly Source[]> {
     return this.#sourcesCell;
   }
 
@@ -542,6 +566,28 @@ export class Font {
 
   glyphRecords(): readonly GlyphRecord[] {
     return this.#directoryCell.peek().records;
+  }
+
+  /** How many glyphs the font's directory holds. */
+  get glyphCount(): number {
+    return this.#directoryCell.peek().entries.length;
+  }
+
+  /**
+   * One page of the glyph directory, in font order.
+   *
+   * @param after - The glyph the page follows; null starts at the first glyph.
+   * @param limit - The most entries the page holds.
+   * @returns null when `after` is not in the font.
+   */
+  glyphsAfter(after: GlyphId | null, limit: number): GlyphDirectoryPage | null {
+    const entries = this.#directoryCell.peek().entries;
+    const afterIndex = after === null ? -1 : entries.findIndex(({ id }) => id === after);
+    if (after !== null && afterIndex < 0) return null;
+
+    const start = afterIndex + 1;
+    const page = entries.slice(start, start + limit);
+    return { entries: page, hasMore: start + page.length < entries.length };
   }
 
   /**
@@ -779,6 +825,8 @@ export class Font {
       unicodes,
       componentBaseGlyphIds: [],
       layers: [{ id: layerId, sourceId }],
+      mark: false,
+      nonspacingMark: false,
     };
   }
 
@@ -867,16 +915,27 @@ export class Font {
    * Finds the next unused glyph name for an auto-incrementing base name.
    *
    * @param name - Preferred base name. Blank input falls back to `newGlyph`.
-   * @returns The base name when unused, otherwise `base.1`, `base.2`, and so on.
+   * @returns The base name when unused, otherwise `base.1`, `base.2`, and so on, as the window's engine names it.
+   * @throws When the window's engine is not open.
    */
   nextAvailableGlyphName(name: GlyphName): GlyphName {
-    const baseName = (name.trim() || "newGlyph") as GlyphName;
-    if (!this.recordForName(baseName)) return baseName;
+    return this.#requireEngine().nextGlyphName(name);
+  }
 
-    for (let index = 1; ; index += 1) {
-      const candidate = `${baseName}.${index}` as GlyphName;
-      if (!this.recordForName(candidate)) return candidate;
-    }
+  /**
+   * The name a new anchor added to every one of `layerIds` takes, as the
+   * window's engine names it.
+   *
+   * @returns `new`, or `new.1`, `new.2`, … when taken in any of the layers.
+   */
+  newAnchorName(layerIds: readonly LayerId[]): string {
+    return this.#requireEngine().newAnchorName(layerIds);
+  }
+
+  #requireEngine(): FontEngine {
+    const engine = this.#store.engine;
+    if (!engine) throw new Error("naming a new glyph or anchor needs the window's editing engine");
+    return engine;
   }
 
   /**
@@ -907,6 +966,11 @@ export class Font {
    */
   entryForId(glyphId: GlyphId): GlyphEntry | null {
     return this.#directoryCell.peek().entryForId(glyphId);
+  }
+
+  /** The glyph's name, or null when the font has no such glyph. */
+  glyphName(glyphId: GlyphId): GlyphName | null {
+    return this.#directoryCell.peek().entryForId(glyphId)?.name ?? null;
   }
 
   recordForId(glyphId: GlyphId): GlyphRecord | null {
@@ -1258,6 +1322,48 @@ export class Font {
     return this.#peekDesignspace((designspace) => designspace.source(sourceId));
   }
 
+  /** The axis with id `axisId`, or null when the font has none. */
+  axis(axisId: AxisId): Axis | null {
+    return this.#peekDesignspace((designspace) => designspace.axis(axisId));
+  }
+
+  /** The axis tagged `tag`, or null when the font has none. */
+  axisTagged(tag: string): Axis | null {
+    return this.#peekDesignspace((designspace) => designspace.axisTagged(tag));
+  }
+
+  /** The named instance with id `instanceId`, or null when the font has none. */
+  namedInstance(instanceId: NamedInstanceId): NamedInstance | null {
+    return this.namedInstances.find((instance) => instance.id === instanceId) ?? null;
+  }
+
+  /**
+   * The named instance called exactly `name`.
+   *
+   * @remarks
+   * Instance names are not unique, as source names are not (see {@link Designspace.sourceNamed}).
+   *
+   * @returns null when no instance has the name.
+   * @throws {Error} when more than one instance has it.
+   */
+  namedInstanceNamed(name: string): NamedInstance | null {
+    const named = this.namedInstances.filter((instance) => instance.name === name);
+    if (named.length > 1) {
+      throw new Error(`Instance name ${name} is ambiguous: ${named.length} instances have it`);
+    }
+    return named[0] ?? null;
+  }
+
+  /**
+   * Find a source by its exact name; see {@link Designspace.sourceNamed}.
+   *
+   * @returns null when no source has the name.
+   * @throws {Error} when more than one source has it.
+   */
+  sourceNamed(name: string): Source | null {
+    return this.#peekDesignspace((designspace) => designspace.sourceNamed(name));
+  }
+
   /**
    * Resolves the external user-control location representing an authored source.
    *
@@ -1321,19 +1427,6 @@ export class Font {
   }
 
   /**
-   * Shapes paragraphs with the font's feature code, after pending edits settle.
-   *
-   * @remarks
-   * Glyph advances, kerning, and mark attachment are not applied; shaped
-   * glyphs carry only what the feature code positions.
-   *
-   * @returns Each paragraph's runs in logical order, in request order.
-   */
-  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]> {
-    return this.editCoordinator.shapeParagraphs(paragraphs);
-  }
-
-  /**
    * Returns the shaper font compiled from the font's feature code, after
    * pending edits settle, or null while `knownRevision` is still current.
    * The editor shapes with it itself, in `@shift/wasm/shaping`.
@@ -1385,14 +1478,14 @@ export class Font {
       kind: "createSource",
       createSource: { sourceId, name, location: designLocation },
     });
-    if (metrics.metricValues.length === this.#metricDefinitionsCell.peek().length) {
+    if (Object.keys(metrics.metricValues).length === this.#metricDefinitionsCell.peek().length) {
       this.editCoordinator.push({
         kind: "updateSource",
         updateSource: {
           sourceId,
           name,
           location: designLocation,
-          metricValues: [...metrics.metricValues],
+          metricValues: metrics.metricValues,
           italicAngle: metrics.italicAngle,
           lineGap: metrics.lineGap,
           underlinePosition: metrics.underlinePosition,
@@ -1444,7 +1537,7 @@ export class Font {
    * @param axis - Complete replacement axis returned from the current font model.
    * @throws {Error} when the definition is invalid or cannot be persisted.
    */
-  async updateAxis(axis: Axis): Promise<void> {
+  async updateAxis(axis: AxisRecord): Promise<void> {
     await this.editCoordinator.apply(
       [
         {
@@ -1472,6 +1565,16 @@ export class Font {
       ],
       "Update Axis Mappings",
     );
+  }
+
+  /**
+   * Replaces `axis`'s own mapping (one that maps only that axis to itself)
+   * with `mapping`, keeping its place, or adds it when the axis has none.
+   *
+   * @throws {Error} when the resulting collection is invalid or cannot be persisted.
+   */
+  async setIndependentAxisMapping(axis: AxisRecord, mapping: AxisMapping): Promise<void> {
+    await this.setAxisMappings(withIndependentMapping(this.getAxisMappings(), axis, mapping));
   }
 
   /** Replaces the font-owned metric row definitions as one undoable edit. */
@@ -1572,27 +1675,27 @@ export class Font {
   }
 
   /** @knipclassignore — used by VariationPanel component */
-  getAxes(): Axis[] {
+  getAxes(): readonly Axis[] {
     return this.#axesCell.peek();
   }
 
   /** Returns the current font-owned mapping collection. */
-  getAxisMappings(): AxisMapping[] {
+  getAxisMappings(): readonly AxisMapping[] {
     return this.#axisMappingsCell.peek();
   }
 
   /** Returns the Rust-compiled mapping bases for external-to-design evaluation. */
-  getAxisMappingBases(): AxisMappingBasis[] {
+  getAxisMappingBases(): readonly AxisMappingBasis[] {
     return this.#axisMappingBasesCell.peek();
   }
 
   /** Returns font-owned identities and semantics for authored metric rows. */
-  get metricDefinitions(): MetricDefinition[] {
+  get metricDefinitions(): readonly MetricDefinition[] {
     return this.#metricDefinitionsCell.peek();
   }
 
   /** Returns the current explicit named product presets. */
-  get namedInstances(): NamedInstance[] {
+  get namedInstances(): readonly NamedInstance[] {
     return this.#namedInstancesCell.peek();
   }
 
@@ -1607,7 +1710,7 @@ export class Font {
   }
 
   /** @knipclassignore — used by VariationPanel component */
-  get sources(): Source[] {
+  get sources(): readonly Source[] {
     return this.#sourcesCell.peek();
   }
 
@@ -1620,14 +1723,23 @@ export class Font {
   }
 
   /**
+   * The metrics a layer at `sourceId` draws against: that source's, or the
+   * default source's once the source is gone and the layer outlives it.
+   */
+  metricsForLayerSource(sourceId: SourceId): SourceMetrics {
+    const source = this.source(sourceId);
+    return source ? this.#metricsForSource(source) : this.defaultSourceMetrics;
+  }
+
+  /**
    * Resolves source-owned metrics at a design-space location.
    *
    * @remarks
    * Exact source locations return their authored values. Intermediate
-   * locations evaluate the Rust-built variation model used by the glyph
-   * interpolation path. Sparse optional technical fields remain undefined
-   * between sources; the model includes them only when every master authors a
-   * value.
+   * locations read the window's engine, which interpolates the masters with
+   * the variation model export uses. Sparse optional technical fields remain
+   * undefined between sources; the model includes them only when every master
+   * authors a value.
    *
    * @param location - External location displayed by editor controls.
    * @returns Resolved standard and technical metrics in font units.
@@ -1643,22 +1755,17 @@ export class Font {
     });
     if (exactSource) return this.#metricsForSource(exactSource);
 
-    return (
-      this.#sourceMetricsInterpolationCell.peek()?.resolve(designLocation, axes) ??
-      this.defaultSourceMetrics
+    const interpolated = this.#store.engine?.sourceMetricsAt(
+      Array.from(locationValues(axes, designLocation)),
     );
+    return (interpolated && this.#interpolatedMetrics(interpolated)) ?? this.defaultSourceMetrics;
   }
 
   /**
    * Resolves the kerning between `first` followed by `second`.
    *
    * @remarks
-   * A variable font blends the sources kerning is authored at, evaluated at
-   * the active source's location when one is being edited and at `location`
-   * otherwise, so every location shows what the compiled font kerns there.
-   * A source without pairs of its own, such as a sparse intermediate master,
-   * therefore shows the blended value. A static font reads the active or
-   * default source.
+   * As {@link kerningRun} reads it, for one pair.
    *
    * @param location - External location displayed by editor controls.
    * @param sourceId - Source being edited, which takes precedence over `location`.
@@ -1670,37 +1777,67 @@ export class Font {
     location: ExternalAxisLocation,
     sourceId: SourceId | null,
   ): number {
-    const kerning = this.#kerningCell.peek();
-    // An authoring source reads its own values, including ones not echoed yet,
-    // whose source the Rust-built basis may not cover until the echo arrives.
-    if (sourceId && kerning.authors(sourceId)) {
-      return kerning.valueAtSource(sourceId, first, second);
-    }
-    const { designLocation, staticSourceId, axes } = this.#peekDesignspace((designspace) => {
-      const source = sourceId ? designspace.source(sourceId) : null;
-      const staticSource = source ?? designspace.sourceAt(designspace.defaultLocation());
-      return {
-        designLocation: source
-          ? designAxisLocationFromLocation(source.location)
-          : designspace.toDesign(location),
-        staticSourceId: staticSource?.id ?? null,
-        axes: designspace.axes,
-      };
-    });
-
-    const interpolated = kerning.valueAtLocation(designLocation, axes, first, second);
-    if (interpolated !== null) return interpolated;
-    return staticSourceId ? kerning.valueAtSource(staticSourceId, first, second) : 0;
+    return this.kerningRun([first, second], location, sourceId)[0] ?? 0;
   }
 
   /**
-   * Opens a kerning edit: previews show at once, and committing submits one
-   * undoable change whose values stay visible until the workspace confirms them.
+   * Resolves the kerning of every glyph pair in `pairs`, in one engine call.
    *
-   * @throws {Error} When another kerning edit is open, or editing is not wired.
+   * @remarks
+   * The window's engine reads it, so it is what the compiled font kerns. A
+   * variable font blends the sources kerning is authored at, evaluated at the
+   * edited source's location when one is being edited and at `location`
+   * otherwise; a source that authors pairs of its own reads them as they are.
+   * A source without pairs of its own, such as a sparse intermediate master,
+   * therefore shows the blended value. A static font reads the edited or
+   * default source.
+   *
+   * @param pairs - Each pair's first glyph then its second.
+   * @param location - External location displayed by editor controls.
+   * @param sourceId - Source being edited, which takes precedence over `location`.
+   * @returns One value per pair, in font units added after its first glyph's advance.
+   */
+  kerningRun(
+    pairs: readonly GlyphId[],
+    location: ExternalAxisLocation,
+    sourceId: SourceId | null,
+  ): readonly number[] {
+    const place = this.#peekDesignspace((designspace): KerningPlace => {
+      if (sourceId && designspace.source(sourceId)) return { kind: "source", sourceId };
+      return {
+        kind: "location",
+        location: Array.from(locationValues(designspace.axes, designspace.toDesign(location))),
+      };
+    });
+    return this.#kerningCell.peek().between(pairs, place);
+  }
+
+  /**
+   * Where a pair's value at a source comes from when that source authors no
+   * pair for it.
+   *
+   * @returns `unkerned` when the source authors pairs of its own, or the font
+   * has one source, so the missing pair kerns zero; `interpolated` when the
+   * value blends the sources that do author kerning.
+   */
+  missingPairOrigin(sourceId: SourceId): MissingKerningOrigin {
+    return this.#store.engine?.missingKerningOrigin(sourceId) ?? "unkerned";
+  }
+
+  /** A kerning side as people know it: the group's name, or the glyph's; null when unknown. */
+  kerningSideName(side: KerningSideId): string | null {
+    if (isGroupSide(side)) return this.#kerningCell.peek().groups.group(side)?.name ?? null;
+    return this.glyphName(side);
+  }
+
+  /**
+   * Opens a kerning edit: each preview applies in the window's engine at
+   * once, and committing persists one undoable change.
+   *
+   * @throws {Error} When another edit is open, or editing is not wired.
    */
   beginKerningEdit(): KerningEdit {
-    return new KerningEdit(this.#store.kerning, this.editCoordinator);
+    return new KerningEdit(this.editCoordinator);
   }
 
   /**
@@ -1710,9 +1847,35 @@ export class Font {
    * @param label - Undo label.
    */
   setKerningValues(edits: readonly KerningValueEdit[], label: string): void {
-    const edit = this.beginKerningEdit();
-    edit.preview(edits);
-    edit.commit(label);
+    if (edits.length === 0) return;
+    const coordinator = this.editCoordinator;
+    coordinator.transaction(label, () => coordinator.push(setKerningValuesIntent(edits)));
+  }
+
+  /**
+   * Locks one side of the pair between two glyphs to its glyph at a source,
+   * making it an exception to its group, or unlocks it back to the group, as
+   * one undo step. The kern does not move.
+   *
+   * @param exception - true to lock the side to its glyph; false to return it to its group.
+   * @returns false when that side has no group, or is already locked or unlocked.
+   */
+  setKerningException(
+    sourceId: SourceId,
+    first: GlyphId,
+    second: GlyphId,
+    position: KerningPairPosition,
+    exception: boolean,
+  ): boolean {
+    const kerning = this.#kerningCell.peek();
+    const pair = kerning.editablePair(sourceId, first, second);
+    const edit = kerning.exceptionEdit(sourceId, first, second, pair, position, exception);
+    if (!edit) return false;
+    this.setKerningValues(
+      [edit],
+      exception ? "Make kerning exception" : "Remove kerning exception",
+    );
+    return true;
   }
 
   /**
@@ -1772,6 +1935,34 @@ export class Font {
     );
   }
 
+  /** The engine's interpolated metrics as source metrics; null when they no longer match the definitions. */
+  #interpolatedMetrics(interpolated: InterpolatedMetrics): SourceMetrics | null {
+    const unitsPerEm = this.#metricsCell.peek().unitsPerEm;
+    const definitions = this.#metricDefinitionsCell.peek();
+    if (interpolated.metrics.length !== definitions.length) return null;
+
+    const metricValues: Record<MetricId, MetricValue> = Object.fromEntries(
+      definitions.map((definition, index) => [definition.id, interpolated.metrics[index]!]),
+    );
+    const position = (kind: MetricKind): number | undefined => {
+      const definition = definitions.find((candidate) => candidate.kind === kind);
+      return definition ? metricValues[definition.id]?.position : undefined;
+    };
+    return {
+      unitsPerEm,
+      metricValues,
+      ascender: position("ascender") ?? unitsPerEm * 0.8,
+      descender: position("descender") ?? unitsPerEm * -0.2,
+      baseline: position("baseline") ?? 0,
+      capHeight: position("capHeight"),
+      xHeight: position("xHeight"),
+      italicAngle: interpolated.italicAngle ?? undefined,
+      lineGap: interpolated.lineGap ?? undefined,
+      underlinePosition: interpolated.underlinePosition ?? undefined,
+      underlineThickness: interpolated.underlineThickness ?? undefined,
+    };
+  }
+
   #metricsForSource(source: Source | null): SourceMetrics {
     const unitsPerEm = this.#metricsCell.peek().unitsPerEm;
     const definitions = this.#metricDefinitionsCell.peek();
@@ -1779,22 +1970,22 @@ export class Font {
       const definition = definitions.find((candidate) => candidate.kind === kind);
       if (!definition) return undefined;
 
-      return source?.metricValues.find((value) => value.metricId === definition.id)?.position;
+      return source?.metricValues[definition.id]?.position;
     };
     const unloaded = source === null;
 
     return {
       unitsPerEm,
-      metricValues: source?.metricValues ?? [],
+      metricValues: source?.metricValues ?? {},
       ascender: position("ascender") ?? unitsPerEm * 0.8,
       descender: position("descender") ?? unitsPerEm * -0.2,
       baseline: position("baseline") ?? 0,
       capHeight: position("capHeight") ?? (unloaded ? unitsPerEm * 0.7 : undefined),
       xHeight: position("xHeight") ?? (unloaded ? unitsPerEm * 0.5 : undefined),
-      lineGap: source?.lineGap,
-      italicAngle: source?.italicAngle,
-      underlinePosition: source?.underlinePosition,
-      underlineThickness: source?.underlineThickness,
+      lineGap: source?.lineGap ?? undefined,
+      italicAngle: source?.italicAngle ?? undefined,
+      underlinePosition: source?.underlinePosition ?? undefined,
+      underlineThickness: source?.underlineThickness ?? undefined,
     };
   }
 
@@ -1821,6 +2012,10 @@ export class Font {
   }
 }
 
+/** Never changes: the revision of reads a font without an engine answers. */
+const NO_REVISIONS: Signal<number> = computed(() => 0);
+const NO_AXES: readonly AxisRecord[] = [];
+
 /** The intent that moves one glyph into a kerning group, or out of its group with null. */
 function memberIntent(
   position: KerningPairPosition,
@@ -1829,6 +2024,10 @@ function memberIntent(
 ): FontIntent {
   return {
     kind: "setKerningGroupMember",
-    setKerningGroupMember: { position, glyphId, ...(groupId === null ? {} : { groupId }) },
+    setKerningGroupMember: {
+      position,
+      glyphId,
+      groupId: groupId === null ? undefined : groupId,
+    },
   };
 }

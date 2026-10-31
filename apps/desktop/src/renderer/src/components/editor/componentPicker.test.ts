@@ -259,5 +259,7 @@ function record(id: GlyphId, componentBaseGlyphIds: GlyphId[] = []): GlyphRecord
     unicodes: [],
     componentBaseGlyphIds,
     layers: [],
+    mark: false,
+    nonspacingMark: false,
   };
 }

@@ -60,7 +60,7 @@ pub(crate) fn add_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     let set = FontIntentSet {
         intents: vec![
             CreateGlyphLayer {
-                layer_id: layer_id.clone(),
+                layer_id,
                 glyph_id,
                 source_id,
             }
@@ -85,13 +85,13 @@ pub(crate) fn set_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     let glyph_id = font.glyph_id_for(&args.glyph)?;
     let source_id = font.source_id_for(&args.source)?;
     let input = read_json_input::<LayerInput>(&args.input, "layer payload")?;
-    let existing = font.layer_id_for_glyph_source(glyph_id.clone(), source_id.clone());
-    let layer_id = existing.clone().unwrap_or_default();
+    let existing = font.layer_id_for_glyph_source(glyph_id, source_id);
+    let layer_id = existing.unwrap_or_default();
     let mut intents = Vec::new();
     if existing.is_none() {
         intents.push(
             CreateGlyphLayer {
-                layer_id: layer_id.clone(),
+                layer_id,
                 glyph_id,
                 source_id,
             }
@@ -119,7 +119,7 @@ pub(crate) fn copy_layer(args: &CopyLayerArgs) -> Result<AuthoringReport> {
     let from_source_id = font.source_id_for(&args.from_source)?;
     let source_id = font.source_id_for(&args.source)?;
     let from_layer_id = font
-        .layer_id_for_glyph_source(glyph_id.clone(), from_source_id)
+        .layer_id_for_glyph_source(glyph_id, from_source_id)
         .ok_or_else(|| {
             miette!(
                 "glyph {:?} has no authored layer at source {:?}",

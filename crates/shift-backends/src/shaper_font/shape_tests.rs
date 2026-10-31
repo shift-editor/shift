@@ -67,7 +67,7 @@ fn names_and_clusters(font: &Font, shaped: &[ShapedGlyph]) -> Vec<(Option<String
             let name = glyph
                 .glyph_id
                 .as_ref()
-                .map(|id| font.glyph(id).unwrap().name().to_string());
+                .map(|id| font.glyph(*id).unwrap().name().to_string());
             (name, glyph.cluster)
         })
         .collect()
@@ -106,6 +106,40 @@ fn turning_a_feature_off_keeps_the_characters() {
     assert_eq!(
         names_and_clusters(&font, &shaped),
         vec![named("f", 0), named("i", 1)]
+    );
+}
+
+#[test]
+fn turning_on_a_feature_that_is_off_by_default_applies_it() {
+    let font = font_with(
+        &[
+            ("one", Some('1')),
+            ("slash", Some('/')),
+            ("two", Some('2')),
+            ("onehalf", None),
+        ],
+        "feature frac { sub one slash two by onehalf; } frac;",
+    );
+    let location = ExternalLocation::new();
+    let units = characters("1/2");
+    let features = [FeatureSetting::parse("frac", 1).unwrap()];
+    let shaper = shaper(&font);
+
+    let plain = shaper.shape(&request(&units, &location)).unwrap();
+    let fraction = shaper
+        .shape(&ShapeRequest {
+            features: &features,
+            ..request(&units, &location)
+        })
+        .unwrap();
+
+    assert_eq!(
+        names_and_clusters(&font, &plain),
+        vec![named("one", 0), named("slash", 1), named("two", 2)]
+    );
+    assert_eq!(
+        names_and_clusters(&font, &fraction),
+        vec![named("onehalf", 0)]
     );
 }
 

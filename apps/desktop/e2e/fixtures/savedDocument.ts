@@ -13,12 +13,12 @@ import path from "node:path";
 export function savedGlyphNames(documentPath: string, testRoot: string): string[] {
   const bridge = createBridge();
   const recoveryPath = path.join(testRoot, `${crypto.randomUUID()}.recovery.sqlite`);
-  bridge.openDocument(documentPath, recoveryPath);
+  bridge.workspace.openDocument(documentPath, recoveryPath);
 
   try {
-    return bridge.getGlyphs().map((glyph) => glyph.name);
+    return bridge.workspace.getGlyphs().map((glyph) => glyph.name);
   } finally {
-    bridge.closeWorkspace();
+    bridge.workspace.closeWorkspace();
     fs.rmSync(recoveryPath, { force: true });
   }
 }
@@ -32,8 +32,8 @@ export function savedGlyphNames(documentPath: string, testRoot: string): string[
 export function exportedGlyphNames(fontPath: string): string[] {
   const bridge = createBridge();
   try {
-    return bridge.openFontSource(fontPath).glyphs.map((glyph) => glyph.name);
+    return bridge.source.openFontSource(fontPath).glyphs.map((glyph) => glyph.name);
   } finally {
-    bridge.closeFontSource();
+    bridge.source.closeFontSource();
   }
 }

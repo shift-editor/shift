@@ -21,10 +21,10 @@ impl ShiftStore {
     /// [`StoreError::DocumentRequiresRecoveryOverlay`] in a document opened without one, and
     /// [`StoreError::Sqlite`] or a layer-encoding error when the write fails.
     pub fn replace_glyph_layer(&mut self, layer: &font::GlyphLayer) -> Result<(), StoreError> {
-        let owner = layer_owner(&self.conn, &layer.id())?
+        let owner = layer_owner(&self.conn, layer.id())?
             .or_missing(StoreEntity::GlyphLayer, &layer.id())?;
         if let Some(recovery) = self.recovery.as_mut() {
-            return recovery.replace_layer(&owner, layer);
+            return recovery.replace_layer(owner, layer);
         }
         if self.kind == crate::store::StoreKind::Document {
             return Err(StoreError::DocumentRequiresRecoveryOverlay);
@@ -32,7 +32,7 @@ impl ShiftStore {
 
         let tracks_workspace = self.tracks_workspace();
         let tx = self.conn.transaction()?;
-        write_layer_in_tx(&tx, &owner, layer)?;
+        write_layer_in_tx(&tx, owner, layer)?;
         if tracks_workspace {
             mark_workspace_dirty_in_tx(&tx)?;
         }
@@ -43,7 +43,7 @@ impl ShiftStore {
 
 pub(crate) fn write_layer_in_tx(
     tx: &Transaction<'_>,
-    glyph_id: &font::GlyphId,
+    glyph_id: font::GlyphId,
     layer: &font::GlyphLayer,
 ) -> Result<(), StoreError> {
     let encoded = encode_layer(layer)?;
@@ -53,7 +53,7 @@ pub(crate) fn write_layer_in_tx(
 
 pub(crate) fn store_stored_layer_in_tx(
     tx: &Transaction<'_>,
-    glyph_id: &font::GlyphId,
+    glyph_id: font::GlyphId,
     layer: &font::GlyphLayer,
     stored: &StoredLayerPayload,
     mode: WriteMode,
@@ -131,8 +131,8 @@ pub(crate) fn rewrite_layer_in_tx(
     tx: &Transaction<'_>,
     layer: &font::GlyphLayer,
 ) -> Result<(), StoreError> {
-    let owner = layer_owner(tx, &layer.id())?.or_missing(StoreEntity::GlyphLayer, &layer.id())?;
-    write_layer_in_tx(tx, &owner, layer)
+    let owner = layer_owner(tx, layer.id())?.or_missing(StoreEntity::GlyphLayer, &layer.id())?;
+    write_layer_in_tx(tx, owner, layer)
 }
 
 fn write_component_index(
@@ -164,7 +164,7 @@ fn write_component_index(
 
 fn layer_owner(
     conn: &Connection,
-    layer_id: &font::LayerId,
+    layer_id: font::LayerId,
 ) -> Result<Option<font::GlyphId>, StoreError> {
     conn.query_row(
         "SELECT glyph_id FROM glyph_layers WHERE id = ?1",

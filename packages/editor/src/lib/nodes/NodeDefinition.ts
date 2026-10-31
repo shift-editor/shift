@@ -9,6 +9,14 @@ import type { SelectableId } from "@shift/types";
 import type { TransformTarget } from "../../types/transformTarget";
 import type { TextItem } from "../text/layout/types";
 
+/** Where a parent lays out one of its children, and at what size. */
+export interface ChildPlacement {
+  /** The child's frame origin in the parent's frame. */
+  readonly position: Point2D;
+  /** How many parent frame units one unit of the child's frame spans. */
+  readonly scale: number;
+}
+
 /**
  * Defines behavior shared by every scene node of one kind.
  *
@@ -18,7 +26,7 @@ import type { TextItem } from "../text/layout/types";
  * still resolve through `ShiftObject` references.
  *
  * Two kinds of method, kept apart:
- * - Queries (`unitsTransform`, `bounds`, `hit`, `selectableInRect`, `childPosition`,
+ * - Queries (`unitsTransform`, `bounds`, `hit`, `selectableInRect`, `childPlacement`,
  *   `transformTarget`, `draw`) run during rendering, hit testing, and gesture
  *   starts and must never write. A transform target writes only once begun.
  * - Hooks (`onDoubleClick`, `onContentChange`) may write. The editor calls
@@ -79,17 +87,18 @@ export abstract class NodeDefinition<N extends ShiftNode = ShiftNode> {
   }
 
   /**
-   * Returns where this node lays out one of its children.
+   * Returns where this node lays out one of its children, and at what size.
    *
    * @remarks
    * Kinds that lay out their children (text runs) override this. The result
-   * replaces the child's authored `position` as its frame origin.
+   * replaces the child's authored `position` as its frame origin and scales its
+   * frame, so a child sized by its parent needs no knowledge of that parent.
    *
    * @param _parent - scene node handled by this definition.
    * @param _child - a node whose `parentId` is `_parent`.
-   * @returns the child's frame origin in the parent's frame, or null to use the child's own position.
+   * @returns the child's placement in the parent's frame, or null to use the child's own position at scale 1.
    */
-  childPosition(_parent: N, _child: ShiftNode): Point2D | null {
+  childPlacement(_parent: N, _child: ShiftNode): ChildPlacement | null {
     return null;
   }
 

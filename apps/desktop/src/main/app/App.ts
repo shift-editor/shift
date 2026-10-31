@@ -51,6 +51,7 @@ import type { RecentDocumentVisit } from "../../shared/recents";
 import { RecentDocuments } from "../recents/RecentDocuments";
 import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
 import { AgentConnections } from "../agent/AgentConnections";
+import { publishE2EHooks } from "../agent/e2eHooks";
 import { AppConfig } from "../config/AppConfig";
 import { configDirectory } from "../config/configDirectory";
 import { NO_DEBUG_OVERLAYS, type DebugOverlayId, type DebugOverlays } from "../../shared/debug";
@@ -273,6 +274,7 @@ export class App {
       this.#recents.onChanged(() => this.#publishRecents());
       await this.#startSandbox();
       await this.#startAgentConnections();
+      publishE2EHooks((windowId) => this.#windowForAgentRequest(windowId).agent);
       void this.#requireCommandLineTool()
         .refresh()
         .catch((error) => {
@@ -349,15 +351,11 @@ export class App {
       preloadPath: path.join(__dirname, "preload.js"),
       autoShow,
       maximised,
-      ...(minWidth === undefined ? {} : { minWidth }),
-      ...(titleBarHeight === undefined ? {} : { titleBarHeight }),
-      ...(bounds
-        ? {
-            width: bounds.width,
-            height: bounds.height,
-            browserWindowOptions: { x: bounds.x, y: bounds.y },
-          }
-        : {}),
+      minWidth,
+      titleBarHeight,
+      width: bounds?.width,
+      height: bounds?.height,
+      browserWindowOptions: bounds === undefined ? undefined : { x: bounds.x, y: bounds.y },
     });
     this.#windows.add(window);
     window.window.webContents.on("render-process-gone", (_event, details) => {
@@ -539,7 +537,7 @@ export class App {
     this.#log.info("loading build file at", { path: source.source });
     window.window.loadFile(source.source, {
       hash,
-      ...(SLUG_ATLAS_PROFILING_ENABLED ? { query: { shiftProfileSlugAtlas: "1" } } : {}),
+      query: SLUG_ATLAS_PROFILING_ENABLED ? { shiftProfileSlugAtlas: "1" } : undefined,
     });
   }
 
@@ -569,6 +567,7 @@ export class App {
       const { port1, port2 } = new MessageChannelMain();
       window.agent.connect(port1);
       event.sender.postMessage("agent.port", null, [port2]);
+      return { e2eActions: process.env.NODE_ENV === "test" };
     });
     ipc.handle(ipcMain, "commands.run", async (event, id) => {
       const window = this.#requireWindowForWebContents(event.sender);
@@ -1127,13 +1126,8 @@ export class App {
           this.#windowForAgentRequest(windowId).agent.resolveLocation(location, ifFontRevision),
       },
       glyphs: {
-        list: ({ windowId, limit, cursor, sourceId, ifFontRevision }) =>
-          this.#windowForAgentRequest(windowId).agent.listGlyphs({
-            limit,
-            cursor,
-            sourceId,
-            ifFontRevision,
-          }),
+        list: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.listGlyphs(input),
         get: ({ windowId, ifFontRevision, ...selector }) =>
           this.#windowForAgentRequest(windowId).agent.getGlyph(selector, ifFontRevision),
         resolve: ({ windowId, glyphIds, location, ifFontRevision }) =>
@@ -1143,18 +1137,21 @@ export class App {
             ifFontRevision,
           ),
       },
+      sources: {
+        get: ({ windowId, ifFontRevision, ...selector }) =>
+          this.#windowForAgentRequest(windowId).agent.getSource(selector, ifFontRevision),
+      },
+      instances: {
+        get: ({ windowId, ifFontRevision, ...selector }) =>
+          this.#windowForAgentRequest(windowId).agent.getInstance(selector, ifFontRevision),
+      },
       layers: {
-        get: ({ windowId, layerId, ifFontRevision }) =>
-          this.#windowForAgentRequest(windowId).agent.getLayer(layerId, ifFontRevision),
-        resolve: ({ windowId, layerId, ifFontRevision }) =>
-          this.#windowForAgentRequest(windowId).agent.resolveLayer(layerId, ifFontRevision),
-        render: ({ windowId, layerId, overlays, appearance, ifFontRevision }) =>
-          this.#windowForAgentRequest(windowId).agent.renderLayer(
-            layerId,
-            overlays,
-            appearance,
-            ifFontRevision,
-          ),
+        get: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.getLayer(input),
+        resolve: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.resolveLayer(input),
+        render: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.renderLayer(input),
       },
       kerning: {
         groups: ({ windowId, ...input }) =>
@@ -1163,6 +1160,8 @@ export class App {
           this.#windowForAgentRequest(windowId).agent.kerningPairs(input),
         resolve: ({ windowId, ...input }) =>
           this.#windowForAgentRequest(windowId).agent.resolveKerning(input),
+        at: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.kerningAt(input),
       },
     });
     this.#sandbox = sandbox;

@@ -42,6 +42,7 @@ export async function prepareWindow(
             },
             { w: WINDOW_WIDTH, h: WINDOW_HEIGHT },
           );
+          // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron windows and the page viewport, not app state
           return page.evaluate(() => [window.innerWidth, window.innerHeight]);
         },
         { timeout: 30_000 },
@@ -62,6 +63,7 @@ export async function collectWindowDiagnostics(app: ElectronApplication): Promis
   const diagnostics: string[] = [];
 
   try {
+    // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron windows and the page viewport, not app state
     const windows = await app.evaluate(({ BrowserWindow, screen }) =>
       BrowserWindow.getAllWindows().map((window) => ({
         id: window.id,
@@ -83,6 +85,7 @@ export async function collectWindowDiagnostics(app: ElectronApplication): Promis
 
   for (const [index, page] of app.windows().entries()) {
     try {
+      // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron windows and the page viewport, not app state
       const viewport = await page.evaluate(() => ({
         title: document.title,
         url: location.href,
@@ -98,4 +101,28 @@ export async function collectWindowDiagnostics(app: ElectronApplication): Promis
   }
 
   return diagnostics;
+}
+
+/** The primary display's work area, the screen space windows open into, in main's units. */
+export async function primaryWorkArea(
+  app: ElectronApplication,
+): Promise<{ x: number; y: number; width: number; height: number }> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron windows and the page viewport, not app state
+  return app.evaluate(({ screen }) => screen.getPrimaryDisplay().workArea);
+}
+
+/** The device pixels per CSS pixel the page renders at. */
+export async function devicePixelRatio(page: Page): Promise<number> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron windows and the page viewport, not app state
+  return page.evaluate(() => window.devicePixelRatio);
+}
+
+/** Grows the app's first window's content area by `delta` CSS pixels in width, as a user resize does. */
+export async function resizeWindowContent(app: ElectronApplication, delta: number): Promise<void> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads Electron windows and the page viewport, not app state
+  await app.evaluate(({ BrowserWindow }, change) => {
+    const window = BrowserWindow.getAllWindows()[0]!;
+    const [width, height] = window.getContentSize();
+    window.setContentSize(width! + change, height!);
+  }, delta);
 }

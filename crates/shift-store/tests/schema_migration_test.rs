@@ -64,7 +64,7 @@ fn glyph_categories_round_trip_through_a_document() {
         .load_font_state()
         .unwrap();
 
-    let mark = loaded.glyph(&id).unwrap();
+    let mark = loaded.glyph(id).unwrap();
     assert_eq!(mark.category(), Some(GlyphCategory::Mark));
     assert_eq!(mark.sub_category(), Some(GlyphSubcategory::Nonspacing));
 }
@@ -75,12 +75,12 @@ fn rewriting_a_glyph_clears_a_removed_category() {
     let (mut font, id) = font_with_mark();
     store.replace_font_state(&font).unwrap();
 
-    font.set_glyph_category(&id, None, None).unwrap();
+    font.set_glyph_category(id, None, None).unwrap();
     store.replace_font_state(&font).unwrap();
 
     let loaded = store.load_font_state().unwrap();
-    assert_eq!(loaded.glyph(&id).unwrap().category(), None);
-    assert_eq!(loaded.glyph(&id).unwrap().sub_category(), None);
+    assert_eq!(loaded.glyph(id).unwrap().category(), None);
+    assert_eq!(loaded.glyph(id).unwrap().sub_category(), None);
 }
 
 #[test]

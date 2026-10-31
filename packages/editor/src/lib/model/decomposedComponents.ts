@@ -1,7 +1,8 @@
 import { Point } from "@shift/glyph-state";
 import type { ContourId } from "@shift/types";
 import type { GlyphRenderContour, PlacedContours } from "../../types/glyphRender";
-import { blendDecomposedGlyph as blend, type BlendedPoint } from "../wasm/generated/layouts";
+import { decomposition } from "@shift/wasm";
+import type { BlendedPoint } from "@shift/wasm/protocol";
 import { RenderContour } from "./GlyphRenderModel";
 
 /**
@@ -28,7 +29,10 @@ export function blendDecomposedGlyph(
   occurrences: readonly (readonly PlacedContours[])[],
   weights: readonly number[],
 ): (readonly RenderContour[])[] | null {
-  const blended = blend({ occurrences: occurrences.map((masters) => ({ masters })), weights });
+  const blended = decomposition.blendDecomposedGlyph({
+    occurrences: occurrences.map((masters) => ({ masters })),
+    weights,
+  });
   if (!blended) return null;
 
   return occurrences.map((masters, index) => {

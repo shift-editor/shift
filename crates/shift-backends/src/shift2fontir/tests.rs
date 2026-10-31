@@ -56,12 +56,12 @@ fn kerning_pairs_with_missing_sides_are_skipped() {
     let first_a = KerningGroupId::from_raw("first_A");
     let second_a = KerningGroupId::from_raw("second_A");
     kerning.set_value(
-        source_id.clone(),
-        KerningPair::groups(first_a.clone(), KerningGroupId::from_raw("missing")),
+        source_id,
+        KerningPair::groups(first_a, KerningGroupId::from_raw("missing")),
         -30.0,
     );
     kerning.set_value(
-        source_id.clone(),
+        source_id,
         KerningPair::new(
             KerningSide::Glyph(GlyphId::from_raw("missing")),
             KerningSide::Group(second_a),

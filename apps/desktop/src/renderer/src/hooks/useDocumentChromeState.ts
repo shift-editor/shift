@@ -3,7 +3,7 @@ import { useMemo, useSyncExternalStore } from "react";
 import { effect, useSignalState } from "@shift/editor/signals";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 
-import type { WorkspaceDocumentState } from "@shared/workspace/protocol";
+import type { WorkspaceDocumentState } from "@shared/workspace/lanes";
 import type { WorkspaceApplyStatus } from "@/lib/workspace/WorkspaceEditCoordinator";
 
 export type DocumentActivity = "clean" | "editing" | "committing" | "dirty";

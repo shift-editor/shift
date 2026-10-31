@@ -46,7 +46,7 @@ fn create_glyph_layer(
     workspace
         .apply(
             &FontIntentSet::from(CreateGlyphLayer {
-                layer_id: layer_id.clone(),
+                layer_id,
                 glyph_id,
                 source_id,
             }),
@@ -172,7 +172,7 @@ fn non_default_source_delete_undo_redo_survives_recovery_and_save() {
     let mut font = Font::empty();
     let axis_id = AxisId::from_raw("weight");
     font.add_axis(Axis::with_id(
-        axis_id.clone(),
+        axis_id,
         "wght".to_string(),
         "Weight".to_string(),
         100.0,
@@ -184,18 +184,18 @@ fn non_default_source_delete_undo_redo_survives_recovery_and_save() {
     let middle_id = SourceId::from_raw("middle");
     let fallback_id = SourceId::from_raw("fallback");
     for (source_id, name, value) in [
-        (primary_id.clone(), "Primary", 400.0),
-        (middle_id.clone(), "Middle", 700.0),
-        (fallback_id.clone(), "Fallback", 900.0),
+        (primary_id, "Primary", 400.0),
+        (middle_id, "Middle", 700.0),
+        (fallback_id, "Fallback", 900.0),
     ] {
         font.add_source(Source::with_id(
             source_id,
             name.to_string(),
-            weight_location(axis_id.clone(), value),
+            weight_location(axis_id, value),
             Some(format!("{name}.ufo")),
         ));
     }
-    font.set_default_source_id(primary_id.clone());
+    font.set_default_source_id(primary_id);
     let original = font.clone();
     drop(ShiftStore::create_document(&document_path, &font).unwrap());
 
@@ -208,10 +208,7 @@ fn non_default_source_delete_undo_redo_survives_recovery_and_save() {
             Some("Delete Middle".to_string()),
         )
         .unwrap();
-    assert_eq!(
-        workspace.font().default_source_id(),
-        Some(primary_id.clone())
-    );
+    assert_eq!(workspace.font().default_source_id(), Some(primary_id));
     assert_eq!(
         workspace
             .font()
@@ -219,7 +216,7 @@ fn non_default_source_delete_undo_redo_survives_recovery_and_save() {
             .iter()
             .map(Source::id)
             .collect::<Vec<_>>(),
-        [primary_id.clone(), fallback_id]
+        [primary_id, fallback_id]
     );
     assert_persisted_font_matches_workspace(&mut workspace);
 
@@ -233,10 +230,7 @@ fn non_default_source_delete_undo_redo_survives_recovery_and_save() {
         .redo()
         .unwrap()
         .expect("source delete should redo");
-    assert_eq!(
-        workspace.font().default_source_id(),
-        Some(primary_id.clone())
-    );
+    assert_eq!(workspace.font().default_source_id(), Some(primary_id));
     assert_persisted_font_matches_workspace(&mut workspace);
     let edited = workspace.font().clone();
     drop(workspace);
@@ -264,7 +258,7 @@ fn default_source_delete_is_rejected_without_live_or_durable_mutation() {
     let default_source_id = font.default_source_id().unwrap();
     let axis_id = AxisId::from_raw("weight");
     font.add_axis(Axis::with_id(
-        axis_id.clone(),
+        axis_id,
         "wght".to_string(),
         "Weight".to_string(),
         100.0,
@@ -282,7 +276,7 @@ fn default_source_delete_is_rejected_without_live_or_durable_mutation() {
     let mut workspace = FontWorkspace::open_document(&document_path, &recovery_path).unwrap();
     let Err(error) = workspace.apply(
         &FontIntentSet::from(DeleteSource {
-            source_id: default_source_id.clone(),
+            source_id: default_source_id,
         }),
         Some("Delete Default".to_string()),
     ) else {
@@ -465,7 +459,7 @@ fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
         .flat_map(|glyph_id| {
             workspace
                 .font()
-                .glyph(glyph_id)
+                .glyph(*glyph_id)
                 .unwrap()
                 .layers()
                 .values()
@@ -486,7 +480,7 @@ fn large_ttf_reopens_directory_first_and_acquires_only_requested_layers() {
     assert_eq!(resumed.loaded_layer_count(), expected.len());
     assert!(resumed.loaded_layer_count() < total_layers);
     for (layer_id, layer) in expected {
-        assert_eq!(resumed.font().layer(&layer_id).unwrap(), &layer);
+        assert_eq!(resumed.font().layer(layer_id).unwrap(), &layer);
     }
 }
 
@@ -544,7 +538,7 @@ fn configured_large_corpus_streams_resumes_and_acquires() {
     workspace.undo().unwrap().expect("glyph append should undo");
     let undo_elapsed = undo_started.elapsed();
     assert_eq!(workspace.font().glyph_count(), glyph_count);
-    assert!(workspace.font().glyph(&appended_id).is_none());
+    assert!(workspace.font().glyph(appended_id).is_none());
     assert_eq!(
         workspace
             .store()
@@ -591,20 +585,17 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
         .find(|glyph| {
             !workspace
                 .store()
-                .referenced_glyph_ids_for_glyph(&glyph.id())
+                .referenced_glyph_ids_for_glyph(glyph.id())
                 .unwrap()
                 .is_empty()
         })
         .expect("fixture should contain a composite glyph")
         .id();
-    let closure = workspace
-        .store()
-        .referenced_glyph_closure([root.clone()])
-        .unwrap();
+    let closure = workspace.store().referenced_glyph_closure([root]).unwrap();
     assert!(closure.len() > 1);
     let closure_layer_count = closure
         .iter()
-        .map(|glyph_id| workspace.font().glyph(glyph_id).unwrap().layers().len())
+        .map(|glyph_id| workspace.font().glyph(*glyph_id).unwrap().layers().len())
         .sum::<usize>();
     assert_eq!(workspace.loaded_layer_count(), 0);
     workspace
@@ -612,7 +603,7 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
         .unwrap();
     let expected_root_layers = workspace
         .font()
-        .glyph(&root)
+        .glyph(root)
         .unwrap()
         .layers()
         .values()
@@ -629,7 +620,7 @@ fn designspace_and_ufo_sources_roundtrip_through_lazy_component_acquisition() {
     assert_eq!(resumed.loaded_layer_count(), closure_layer_count);
     assert!(resumed.loaded_layer_count() < total_layers);
     for (layer_id, layer) in expected_root_layers {
-        assert_eq!(resumed.font().layer(&layer_id).unwrap(), &layer);
+        assert_eq!(resumed.font().layer(layer_id).unwrap(), &layer);
     }
 }
 
@@ -644,13 +635,10 @@ fn glyphs_source_imports_directory_first_and_acquires_component_closure() {
         .font()
         .glyph_id_by_name("Aacute")
         .expect("Homenaje should contain Aacute");
-    let closure = workspace
-        .store()
-        .referenced_glyph_closure([root.clone()])
-        .unwrap();
+    let closure = workspace.store().referenced_glyph_closure([root]).unwrap();
     let closure_layer_count = closure
         .iter()
-        .map(|glyph_id| workspace.font().glyph(glyph_id).unwrap().layers().len())
+        .map(|glyph_id| workspace.font().glyph(*glyph_id).unwrap().layers().len())
         .sum::<usize>();
 
     assert!(closure.len() > 1);
@@ -658,7 +646,7 @@ fn glyphs_source_imports_directory_first_and_acquires_component_closure() {
     assert!(
         workspace
             .font()
-            .glyph(&root)
+            .glyph(root)
             .unwrap()
             .layers()
             .values()
@@ -672,7 +660,7 @@ fn glyphs_source_imports_directory_first_and_acquires_component_closure() {
     assert_eq!(
         workspace
             .font()
-            .glyph(&root)
+            .glyph(root)
             .unwrap()
             .layers()
             .values()
@@ -691,7 +679,7 @@ fn glyphs_source_imports_directory_first_and_acquires_component_closure() {
     assert_eq!(
         resumed
             .font()
-            .glyph(&root)
+            .glyph(root)
             .unwrap()
             .layers()
             .values()
@@ -722,7 +710,7 @@ fn ufo_source_roundtrips_through_lazy_acquisition() {
         .unwrap();
     let expected = workspace
         .font()
-        .glyph(&glyph_id)
+        .glyph(glyph_id)
         .unwrap()
         .layers()
         .values()
@@ -739,7 +727,7 @@ fn ufo_source_roundtrips_through_lazy_acquisition() {
 
     assert_eq!(resumed.loaded_layer_count(), expected.len());
     for (layer_id, layer) in expected {
-        assert_eq!(resumed.font().layer(&layer_id).unwrap(), &layer);
+        assert_eq!(resumed.font().layer(layer_id).unwrap(), &layer);
     }
 }
 
@@ -827,15 +815,14 @@ fn failed_acquisition_keeps_placeholders_and_allows_an_unrelated_retry() {
         .map(Glyph::id)
         .collect::<Vec<_>>();
     assert_eq!(requested.len(), 2);
-    let corrupt_layer_id = workspace
+    let corrupt_layer_id = *workspace
         .font()
-        .glyph(&requested[0].clone())
+        .glyph(requested[0])
         .unwrap()
         .layers()
         .keys()
         .next()
-        .unwrap()
-        .clone();
+        .unwrap();
     let conn = rusqlite::Connection::open(&store_path).unwrap();
     conn.execute(
         "UPDATE glyph_layer_payloads
@@ -855,13 +842,7 @@ fn failed_acquisition_keeps_placeholders_and_allows_an_unrelated_retry() {
         WorkspaceError::Store(shift_store::StoreError::LayerDecompression(_))
     ));
     assert_eq!(workspace.loaded_layer_count(), 0);
-    assert!(
-        workspace
-            .font()
-            .layer(&corrupt_layer_id)
-            .unwrap()
-            .is_empty()
-    );
+    assert!(workspace.font().layer(corrupt_layer_id).unwrap().is_empty());
 
     workspace
         .acquire_glyphs(std::slice::from_ref(&requested[1]), AcquireScope::Glyphs)
@@ -938,31 +919,29 @@ fn resumed_layers_are_acquired_and_evictable_without_losing_authored_state() {
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let source_id = workspace.font().default_source_id().unwrap();
     let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
-    let layer_id = create_glyph_layer(&mut workspace, glyph_id.clone(), source_id);
-    add_square_contour(&mut workspace, &layer_id, (10.0, 20.0), 100.0);
+    let layer_id = create_glyph_layer(&mut workspace, glyph_id, source_id);
+    add_square_contour(&mut workspace, layer_id, (10.0, 20.0), 100.0);
     drop(workspace);
 
     let mut workspace = FontWorkspace::resume(&store_path).unwrap();
     assert_eq!(workspace.loaded_layer_count(), 0);
-    assert!(workspace.font().layer(&layer_id).unwrap().is_empty());
+    assert!(workspace.font().layer(layer_id).unwrap().is_empty());
 
     workspace
         .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
         .unwrap();
     assert_eq!(workspace.loaded_layer_count(), 1);
-    let authored = workspace.font().layer(&layer_id).unwrap().clone();
+    let authored = workspace.font().layer(layer_id).unwrap().clone();
     assert_eq!(authored.contours_iter().next().unwrap().points().len(), 4);
 
-    workspace
-        .evict_glyphs(&[glyph_id.clone(), glyph_id.clone()])
-        .unwrap();
+    workspace.evict_glyphs(&[glyph_id, glyph_id]).unwrap();
     assert_eq!(workspace.loaded_layer_count(), 0);
-    assert!(workspace.font().layer(&layer_id).unwrap().is_empty());
+    assert!(workspace.font().layer(layer_id).unwrap().is_empty());
 
     workspace
         .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
         .unwrap();
-    assert_eq!(workspace.font().layer(&layer_id).unwrap(), &authored);
+    assert_eq!(workspace.font().layer(layer_id).unwrap(), &authored);
 }
 
 #[test]
@@ -972,8 +951,8 @@ fn intent_on_directory_layer_acquires_before_persisting() {
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let source_id = workspace.font().default_source_id().unwrap();
     let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
-    let layer_id = create_glyph_layer(&mut workspace, glyph_id.clone(), source_id);
-    add_square_contour(&mut workspace, &layer_id, (10.0, 20.0), 100.0);
+    let layer_id = create_glyph_layer(&mut workspace, glyph_id, source_id);
+    add_square_contour(&mut workspace, layer_id, (10.0, 20.0), 100.0);
     drop(workspace);
 
     let mut workspace = FontWorkspace::resume(&store_path).unwrap();
@@ -981,14 +960,14 @@ fn intent_on_directory_layer_acquires_before_persisting() {
     workspace
         .apply(
             &FontIntentSet::from(SetXAdvance {
-                layer_id: layer_id.clone(),
+                layer_id,
                 width: 777.0,
             }),
             None,
         )
         .unwrap();
 
-    let layer = workspace.font().layer(&layer_id).unwrap();
+    let layer = workspace.font().layer(layer_id).unwrap();
     assert_eq!(workspace.loaded_layer_count(), 1);
     assert_eq!(layer.width(), 777.0);
     assert_eq!(layer.contours_iter().next().unwrap().points().len(), 4);
@@ -998,7 +977,7 @@ fn intent_on_directory_layer_acquires_before_persisting() {
     resumed
         .acquire_glyphs(std::slice::from_ref(&glyph_id), AcquireScope::Glyphs)
         .unwrap();
-    let layer = resumed.font().layer(&layer_id).unwrap();
+    let layer = resumed.font().layer(layer_id).unwrap();
     assert_eq!(layer.width(), 777.0);
     assert_eq!(layer.contours_iter().next().unwrap().points().len(), 4);
 }
@@ -1010,14 +989,14 @@ fn undo_after_eviction_reacquires_and_tracks_restored_layer_as_loaded() {
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let source_id = workspace.font().default_source_id().unwrap();
     let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
-    let layer_id = create_glyph_layer(&mut workspace, glyph_id.clone(), source_id);
-    add_square_contour(&mut workspace, &layer_id, (10.0, 20.0), 100.0);
-    let original_width = workspace.font().layer(&layer_id).unwrap().width();
+    let layer_id = create_glyph_layer(&mut workspace, glyph_id, source_id);
+    add_square_contour(&mut workspace, layer_id, (10.0, 20.0), 100.0);
+    let original_width = workspace.font().layer(layer_id).unwrap().width();
 
     workspace
         .apply(
             &FontIntentSet::from(SetXAdvance {
-                layer_id: layer_id.clone(),
+                layer_id,
                 width: 777.0,
             }),
             Some("Change advance".to_string()),
@@ -1030,7 +1009,7 @@ fn undo_after_eviction_reacquires_and_tracks_restored_layer_as_loaded() {
 
     workspace.undo().unwrap().expect("advance edit should undo");
 
-    let layer = workspace.font().layer(&layer_id).unwrap();
+    let layer = workspace.font().layer(layer_id).unwrap();
     assert_eq!(workspace.loaded_layer_count(), 1);
     assert_eq!(layer.width(), original_width);
     assert_eq!(layer.contours_iter().next().unwrap().points().len(), 4);
@@ -1050,11 +1029,11 @@ fn apply_set_x_advance_updates_existing_layer() {
     let layer_id = create_glyph_layer(&mut workspace, glyph_id, source_id);
 
     let outcome = workspace
-        .apply(&set_x_advance_intents(layer_id.clone(), 640.0), None)
+        .apply(&set_x_advance_intents(layer_id, 640.0), None)
         .unwrap();
 
     assert_eq!(outcome.layers[0].layer.width(), 640.0);
-    assert_eq!(workspace.font().layer(&layer_id).unwrap().width(), 640.0);
+    assert_eq!(workspace.font().layer(layer_id).unwrap().width(), 640.0);
 }
 
 #[test]
@@ -1075,7 +1054,7 @@ fn create_glyph_undo_redo_removes_and_restores_glyph_identity() {
     assert!(
         workspace
             .font()
-            .glyph(&glyph_id)
+            .glyph(glyph_id)
             .unwrap()
             .layers()
             .is_empty()
@@ -1097,7 +1076,7 @@ fn create_glyph_undo_redo_removes_and_restores_glyph_identity() {
     let redone = workspace.redo().unwrap().expect("createGlyph should redo");
     assert_eq!(workspace.font().glyph_count(), 1);
     assert!(redone.layers.is_empty());
-    assert!(workspace.font().glyph(&glyph_id).is_some());
+    assert!(workspace.font().glyph(glyph_id).is_some());
 }
 
 #[test]
@@ -1112,9 +1091,9 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
     let applied = workspace
         .apply(
             &FontIntentSet::from(CreateGlyphLayer {
-                layer_id: layer_id.clone(),
-                glyph_id: glyph_id.clone(),
-                source_id: source_id.clone(),
+                layer_id,
+                glyph_id,
+                source_id,
             }),
             Some("Create Layer".to_string()),
         )
@@ -1124,8 +1103,8 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
     assert_eq!(
         workspace
             .font()
-            .layer_id_for_glyph_source(glyph_id.clone(), source_id.clone()),
-        Some(layer_id.clone())
+            .layer_id_for_glyph_source(glyph_id, source_id),
+        Some(layer_id)
     );
 
     let undone = workspace
@@ -1148,7 +1127,7 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
     assert_eq!(
         workspace
             .font()
-            .layer_id_for_glyph_source(glyph_id.clone(), source_id.clone()),
+            .layer_id_for_glyph_source(glyph_id, source_id),
         None
     );
 
@@ -1177,7 +1156,7 @@ fn create_glyph_layer_initializes_width_from_font_upm() {
 
     let layer_id = create_glyph_layer(&mut workspace, glyph_id, source_id);
 
-    assert_eq!(workspace.font().layer(&layer_id).unwrap().width(), 1024.0);
+    assert_eq!(workspace.font().layer(layer_id).unwrap().width(), 1024.0);
 }
 
 #[test]
@@ -1193,29 +1172,27 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
     workspace
         .apply(
             &FontIntentSet::from(CreateSource {
-                source_id: source_id.clone(),
+                source_id,
                 name: "Alt".to_string(),
                 location: weight_location(axis_id, 700.0),
             }),
             Some("Create Source".to_string()),
         )
         .unwrap();
-    let layer_id = create_glyph_layer(&mut workspace, glyph_a, source_id.clone());
+    let layer_id = create_glyph_layer(&mut workspace, glyph_a, source_id);
     workspace
-        .apply(&set_x_advance_intents(layer_id.clone(), 640.0), None)
+        .apply(&set_x_advance_intents(layer_id, 640.0), None)
         .unwrap();
     assert_eq!(
         workspace
             .font()
-            .layer_id_for_glyph_source(glyph_b.clone(), source_id.clone()),
+            .layer_id_for_glyph_source(glyph_b, source_id),
         None
     );
 
     workspace
         .apply(
-            &FontIntentSet::from(DeleteSource {
-                source_id: source_id.clone(),
-            }),
+            &FontIntentSet::from(DeleteSource { source_id }),
             Some("Delete Source".to_string()),
         )
         .unwrap();
@@ -1227,7 +1204,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
             .iter()
             .all(|source| source.id() != source_id)
     );
-    assert!(workspace.font().layer(&layer_id).is_none());
+    assert!(workspace.font().layer(layer_id).is_none());
 
     let undone = workspace.undo().unwrap().expect("deleteSource should undo");
     assert!(
@@ -1247,11 +1224,11 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
             .iter()
             .any(|source| source.id() == source_id)
     );
-    assert_eq!(workspace.font().layer(&layer_id).unwrap().width(), 640.0);
+    assert_eq!(workspace.font().layer(layer_id).unwrap().width(), 640.0);
     assert_eq!(
         workspace
             .font()
-            .layer_id_for_glyph_source(glyph_b, source_id.clone()),
+            .layer_id_for_glyph_source(glyph_b, source_id),
         None
     );
     assert_persisted_font_matches_workspace(&mut workspace);
@@ -1278,7 +1255,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
             .all(|source| source.id() != source_id)
     );
     assert_persisted_font_matches_workspace(&mut workspace);
-    assert!(workspace.font().layer(&layer_id).is_none());
+    assert!(workspace.font().layer(layer_id).is_none());
 }
 
 #[test]
@@ -1322,20 +1299,16 @@ fn axis_source_delete_batches_replay_in_both_orders() {
         workspace
             .apply(
                 &FontIntentSet::from(CreateSource {
-                    source_id: source_id.clone(),
+                    source_id,
                     name: "Bold".to_string(),
-                    location: weight_location(axis_id.clone(), 700.0),
+                    location: weight_location(axis_id, 700.0),
                 }),
                 None,
             )
             .unwrap();
 
-        let delete_axis = FontIntent::from(DeleteAxis {
-            axis_id: axis_id.clone(),
-        });
-        let delete_source = FontIntent::from(DeleteSource {
-            source_id: source_id.clone(),
-        });
+        let delete_axis = FontIntent::from(DeleteAxis { axis_id });
+        let delete_source = FontIntent::from(DeleteSource { source_id });
         workspace
             .apply(
                 &FontIntentSet {
@@ -1391,19 +1364,19 @@ fn batched_source_deletes_restore_order_and_default_on_every_replay() {
             &FontIntentSet {
                 intents: vec![
                     CreateSource {
-                        source_id: source_b.clone(),
+                        source_id: source_b,
                         name: "B".to_string(),
-                        location: weight_location(axis_id.clone(), 700.0),
+                        location: weight_location(axis_id, 700.0),
                     }
                     .into(),
                     CreateSource {
-                        source_id: source_c.clone(),
+                        source_id: source_c,
                         name: "C".to_string(),
-                        location: weight_location(axis_id.clone(), 800.0),
+                        location: weight_location(axis_id, 800.0),
                     }
                     .into(),
                     CreateSource {
-                        source_id: source_d.clone(),
+                        source_id: source_d,
                         name: "D".to_string(),
                         location: weight_location(axis_id, 900.0),
                     }
@@ -1439,7 +1412,7 @@ fn batched_source_deletes_restore_order_and_default_on_every_replay() {
             .iter()
             .map(Source::id)
             .collect::<Vec<_>>(),
-        [source_a.clone(), source_d]
+        [source_a, source_d]
     );
     assert_eq!(workspace.font().default_source_id(), Some(source_a));
     assert_persisted_font_matches_workspace(&mut workspace);
@@ -1468,9 +1441,9 @@ fn batched_axis_deletes_restore_order_on_every_replay() {
         .apply(
             &FontIntentSet {
                 intents: [
-                    (axis_a.clone(), "AAAA", "A"),
-                    (axis_b.clone(), "BBBB", "B"),
-                    (axis_c.clone(), "CCCC", "C"),
+                    (axis_a, "AAAA", "A"),
+                    (axis_b, "BBBB", "B"),
+                    (axis_c, "CCCC", "C"),
                 ]
                 .into_iter()
                 .map(|(axis_id, tag, name)| {
@@ -1536,7 +1509,7 @@ fn mixed_font_level_batch_undoes_axis_source_and_glyph_together() {
     let base_sources = workspace.font().sources().len();
 
     let axis_id = AxisId::from_raw("axis_weight");
-    let location = DesignLocation::from([(axis_id.clone(), 700.0)]);
+    let location = DesignLocation::from([(axis_id, 700.0)]);
     workspace
         .apply(
             &FontIntentSet {
@@ -1595,7 +1568,7 @@ fn apply_set_x_advance_rejects_missing_layer() {
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let layer_id = LayerId::new();
 
-    let Err(error) = workspace.apply(&set_x_advance_intents(layer_id.clone(), 640.0), None) else {
+    let Err(error) = workspace.apply(&set_x_advance_intents(layer_id, 640.0), None) else {
         panic!("apply should reject a missing layer id");
     };
 
@@ -1620,7 +1593,7 @@ fn workspace_with_layer() -> (tempfile::TempDir, FontWorkspace, LayerId) {
 
 fn add_square_contour(
     workspace: &mut FontWorkspace,
-    layer_id: &LayerId,
+    layer_id: LayerId,
     origin: (f64, f64),
     size: f64,
 ) -> (ContourId, Vec<PointId>) {
@@ -1645,13 +1618,13 @@ fn add_square_contour(
             &FontIntentSet {
                 intents: vec![
                     AddContour {
-                        layer_id: layer_id.clone(),
+                        layer_id,
                         contour_id: contour_id.clone(),
                         closed: true,
                     }
                     .into(),
                     AddPoints {
-                        layer_id: layer_id.clone(),
+                        layer_id,
                         contour_id: Some(contour_id.clone()),
                         before: None,
                         points,
@@ -1666,12 +1639,12 @@ fn add_square_contour(
     (contour_id, point_ids)
 }
 
-fn add_anchor(workspace: &mut FontWorkspace, layer_id: &LayerId) -> AnchorId {
+fn add_anchor(workspace: &mut FontWorkspace, layer_id: LayerId) -> AnchorId {
     let anchor_id = AnchorId::new();
     workspace
         .apply(
             &FontIntentSet::from(AddAnchors {
-                layer_id: layer_id.clone(),
+                layer_id,
                 anchors: vec![AnchorSeed {
                     id: anchor_id.clone(),
                     name: Some("top".to_string()),
@@ -1690,7 +1663,7 @@ fn add_anchor(workspace: &mut FontWorkspace, layer_id: &LayerId) -> AnchorId {
 /// pre-apply layer and redo restores the exact post-apply layer.
 fn assert_layer_undo_redo(
     workspace: &mut FontWorkspace,
-    layer_id: &LayerId,
+    layer_id: LayerId,
     intents: Vec<FontIntent>,
 ) {
     let pre = workspace.font().layer(layer_id).unwrap().clone();
@@ -1711,10 +1684,10 @@ fn add_contour_undo_redo_restores_layer() {
 
     assert_layer_undo_redo(
         &mut workspace,
-        &layer_id,
+        layer_id,
         vec![
             AddContour {
-                layer_id: layer_id.clone(),
+                layer_id,
                 contour_id: ContourId::new(),
                 closed: true,
             }
@@ -1730,7 +1703,7 @@ fn add_points_undo_redo_restores_layer() {
     workspace
         .apply(
             &FontIntentSet::from(AddContour {
-                layer_id: layer_id.clone(),
+                layer_id,
                 contour_id: contour_id.clone(),
                 closed: false,
             }),
@@ -1740,10 +1713,10 @@ fn add_points_undo_redo_restores_layer() {
 
     assert_layer_undo_redo(
         &mut workspace,
-        &layer_id,
+        layer_id,
         vec![
             AddPoints {
-                layer_id: layer_id.clone(),
+                layer_id,
                 contour_id: Some(contour_id),
                 before: None,
                 points: vec![PointSeed {
@@ -1762,14 +1735,14 @@ fn add_points_undo_redo_restores_layer() {
 #[test]
 fn set_contour_closed_undo_redo_restores_layer() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
-    let (contour_id, _) = add_square_contour(&mut workspace, &layer_id, (0.0, 0.0), 100.0);
+    let (contour_id, _) = add_square_contour(&mut workspace, layer_id, (0.0, 0.0), 100.0);
 
     assert_layer_undo_redo(
         &mut workspace,
-        &layer_id,
+        layer_id,
         vec![
             SetContourClosed {
-                layer_id: layer_id.clone(),
+                layer_id,
                 contour_id,
                 closed: false,
             }
@@ -1781,20 +1754,20 @@ fn set_contour_closed_undo_redo_restores_layer() {
 #[test]
 fn move_points_undo_redo_restores_exact_coordinates_without_structure() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
-    let (_, point_ids) = add_square_contour(&mut workspace, &layer_id, (0.0, 0.0), 100.0);
-    let pre = workspace.font().layer(&layer_id).unwrap().clone();
+    let (_, point_ids) = add_square_contour(&mut workspace, layer_id, (0.0, 0.0), 100.0);
+    let pre = workspace.font().layer(layer_id).unwrap().clone();
 
     let applied = workspace
         .apply(
             &FontIntentSet::from(MovePoints {
-                layer_id: layer_id.clone(),
+                layer_id,
                 point_ids: vec![point_ids[0].clone(), point_ids[1].clone()],
                 coords: vec![5.0, 6.0, 105.0, 6.0],
             }),
             None,
         )
         .unwrap();
-    let post = workspace.font().layer(&layer_id).unwrap().clone();
+    let post = workspace.font().layer(layer_id).unwrap().clone();
     assert!(!applied.layers[0].structural);
 
     let undone = workspace
@@ -1802,27 +1775,27 @@ fn move_points_undo_redo_restores_exact_coordinates_without_structure() {
         .unwrap()
         .expect("position edit should undo");
     assert!(!undone.layers[0].structural);
-    assert_eq!(workspace.font().layer(&layer_id).unwrap(), &pre);
+    assert_eq!(workspace.font().layer(layer_id).unwrap(), &pre);
 
     let redone = workspace
         .redo()
         .unwrap()
         .expect("position edit should redo");
     assert!(!redone.layers[0].structural);
-    assert_eq!(workspace.font().layer(&layer_id).unwrap(), &post);
+    assert_eq!(workspace.font().layer(layer_id).unwrap(), &post);
 }
 
 #[test]
 fn set_point_smooth_undo_redo_restores_layer() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
-    let (_, point_ids) = add_square_contour(&mut workspace, &layer_id, (0.0, 0.0), 100.0);
+    let (_, point_ids) = add_square_contour(&mut workspace, layer_id, (0.0, 0.0), 100.0);
 
     assert_layer_undo_redo(
         &mut workspace,
-        &layer_id,
+        layer_id,
         vec![
             SetPointSmooth {
-                layer_id: layer_id.clone(),
+                layer_id,
                 point_id: point_ids[0].clone(),
                 smooth: true,
             }
@@ -1834,14 +1807,14 @@ fn set_point_smooth_undo_redo_restores_layer() {
 #[test]
 fn remove_points_undo_redo_restores_layer() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
-    let (_, point_ids) = add_square_contour(&mut workspace, &layer_id, (0.0, 0.0), 100.0);
+    let (_, point_ids) = add_square_contour(&mut workspace, layer_id, (0.0, 0.0), 100.0);
 
     assert_layer_undo_redo(
         &mut workspace,
-        &layer_id,
+        layer_id,
         vec![
             RemovePoints {
-                layer_id: layer_id.clone(),
+                layer_id,
                 point_ids: vec![point_ids[0].clone()],
             }
             .into(),
@@ -1855,10 +1828,10 @@ fn add_anchors_undo_redo_restores_layer() {
 
     assert_layer_undo_redo(
         &mut workspace,
-        &layer_id,
+        layer_id,
         vec![
             AddAnchors {
-                layer_id: layer_id.clone(),
+                layer_id,
                 anchors: vec![AnchorSeed {
                     id: AnchorId::new(),
                     name: Some("top".to_string()),
@@ -1874,14 +1847,14 @@ fn add_anchors_undo_redo_restores_layer() {
 #[test]
 fn move_anchors_undo_redo_restores_layer() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
-    let anchor_id = add_anchor(&mut workspace, &layer_id);
+    let anchor_id = add_anchor(&mut workspace, layer_id);
 
     assert_layer_undo_redo(
         &mut workspace,
-        &layer_id,
+        layer_id,
         vec![
             MoveAnchors {
-                layer_id: layer_id.clone(),
+                layer_id,
                 anchor_ids: vec![anchor_id],
                 coords: vec![150.0, 720.0],
             }
@@ -1893,14 +1866,14 @@ fn move_anchors_undo_redo_restores_layer() {
 #[test]
 fn remove_anchors_undo_redo_restores_layer() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
-    let anchor_id = add_anchor(&mut workspace, &layer_id);
+    let anchor_id = add_anchor(&mut workspace, layer_id);
 
     assert_layer_undo_redo(
         &mut workspace,
-        &layer_id,
+        layer_id,
         vec![
             RemoveAnchors {
-                layer_id: layer_id.clone(),
+                layer_id,
                 anchor_ids: vec![anchor_id],
             }
             .into(),
@@ -1911,14 +1884,14 @@ fn remove_anchors_undo_redo_restores_layer() {
 #[test]
 fn rename_anchors_undo_redo_restores_layer() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
-    let anchor_id = add_anchor(&mut workspace, &layer_id);
+    let anchor_id = add_anchor(&mut workspace, layer_id);
 
     assert_layer_undo_redo(
         &mut workspace,
-        &layer_id,
+        layer_id,
         vec![
             RenameAnchors {
-                layer_id: layer_id.clone(),
+                layer_id,
                 anchor_ids: vec![anchor_id.clone()],
                 names: vec!["bottom".to_string()],
             }
@@ -1928,7 +1901,7 @@ fn rename_anchors_undo_redo_restores_layer() {
     assert_eq!(
         workspace
             .font()
-            .layer(&layer_id)
+            .layer(layer_id)
             .unwrap()
             .anchor(&anchor_id)
             .unwrap()
@@ -1940,14 +1913,14 @@ fn rename_anchors_undo_redo_restores_layer() {
 #[test]
 fn reverse_contour_undo_redo_restores_layer() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
-    let (contour_id, _) = add_square_contour(&mut workspace, &layer_id, (0.0, 0.0), 100.0);
+    let (contour_id, _) = add_square_contour(&mut workspace, layer_id, (0.0, 0.0), 100.0);
 
     assert_layer_undo_redo(
         &mut workspace,
-        &layer_id,
+        layer_id,
         vec![
             ReverseContour {
-                layer_id: layer_id.clone(),
+                layer_id,
                 contour_id,
             }
             .into(),
@@ -1958,14 +1931,14 @@ fn reverse_contour_undo_redo_restores_layer() {
 #[test]
 fn set_contour_start_undo_redo_restores_layer() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
-    let (contour_id, point_ids) = add_square_contour(&mut workspace, &layer_id, (0.0, 0.0), 100.0);
+    let (contour_id, point_ids) = add_square_contour(&mut workspace, layer_id, (0.0, 0.0), 100.0);
 
     assert_layer_undo_redo(
         &mut workspace,
-        &layer_id,
+        layer_id,
         vec![
             SetContourStart {
-                layer_id: layer_id.clone(),
+                layer_id,
                 contour_id: contour_id.clone(),
                 point_id: point_ids[2].clone(),
             }
@@ -1974,7 +1947,7 @@ fn set_contour_start_undo_redo_restores_layer() {
     );
     let contour = workspace
         .font()
-        .layer(&layer_id)
+        .layer(layer_id)
         .unwrap()
         .contour(&contour_id)
         .unwrap();
@@ -1984,14 +1957,14 @@ fn set_contour_start_undo_redo_restores_layer() {
 #[test]
 fn translate_points_undo_redo_restores_layer() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
-    let (_, point_ids) = add_square_contour(&mut workspace, &layer_id, (0.0, 0.0), 100.0);
+    let (_, point_ids) = add_square_contour(&mut workspace, layer_id, (0.0, 0.0), 100.0);
 
     assert_layer_undo_redo(
         &mut workspace,
-        &layer_id,
+        layer_id,
         vec![
             TranslatePoints {
-                layer_id: layer_id.clone(),
+                layer_id,
                 point_ids,
                 dx: 10.0,
                 dy: -5.0,
@@ -2007,10 +1980,10 @@ fn set_x_advance_undo_redo_restores_layer() {
 
     assert_layer_undo_redo(
         &mut workspace,
-        &layer_id,
+        layer_id,
         vec![
             SetXAdvance {
-                layer_id: layer_id.clone(),
+                layer_id,
                 width: 640.0,
             }
             .into(),
@@ -2021,15 +1994,15 @@ fn set_x_advance_undo_redo_restores_layer() {
 #[test]
 fn apply_boolean_op_undo_redo_restores_layer() {
     let (_temp, mut workspace, layer_id) = workspace_with_layer();
-    let (contour_a, _) = add_square_contour(&mut workspace, &layer_id, (0.0, 0.0), 100.0);
-    let (contour_b, _) = add_square_contour(&mut workspace, &layer_id, (50.0, 50.0), 100.0);
+    let (contour_a, _) = add_square_contour(&mut workspace, layer_id, (0.0, 0.0), 100.0);
+    let (contour_b, _) = add_square_contour(&mut workspace, layer_id, (50.0, 50.0), 100.0);
 
     assert_layer_undo_redo(
         &mut workspace,
-        &layer_id,
+        layer_id,
         vec![
             ApplyBooleanOp {
-                layer_id: layer_id.clone(),
+                layer_id,
                 contour_id_a: contour_a,
                 contour_id_b: contour_b,
                 operation: BooleanOp::Union,
@@ -2049,7 +2022,7 @@ fn update_glyph_undo_redo_restores_old_identity() {
     workspace
         .apply(
             &FontIntentSet::from(UpdateGlyph {
-                glyph_id: glyph_id.clone(),
+                glyph_id,
                 new_name: GlyphName::new("A.alt").unwrap(),
                 new_unicodes: vec![97],
             }),
@@ -2057,7 +2030,7 @@ fn update_glyph_undo_redo_restores_old_identity() {
         )
         .unwrap();
 
-    let glyph = workspace.font().glyph(&glyph_id).unwrap();
+    let glyph = workspace.font().glyph(glyph_id).unwrap();
     assert_eq!(glyph.glyph_name().to_string(), "A.alt");
     assert_eq!(glyph.unicodes(), &[97]);
 
@@ -2066,20 +2039,17 @@ fn update_glyph_undo_redo_restores_old_identity() {
         change,
         FontEntityChange::Glyph(EntityChange::Updated { after, .. }) if after.id() == glyph_id
     )));
-    let glyph = workspace.font().glyph(&glyph_id).unwrap();
+    let glyph = workspace.font().glyph(glyph_id).unwrap();
     assert_eq!(glyph.glyph_name().to_string(), "A");
     assert_eq!(glyph.unicodes(), &[65]);
-    assert_eq!(
-        workspace.font().glyph_id_by_name("A"),
-        Some(glyph_id.clone())
-    );
+    assert_eq!(workspace.font().glyph_id_by_name("A"), Some(glyph_id));
 
     let redone = workspace.redo().unwrap().expect("updateGlyph should redo");
     assert!(redone.changes.entity_changes().iter().any(|change| matches!(
         change,
         FontEntityChange::Glyph(EntityChange::Updated { after, .. }) if after.id() == glyph_id
     )));
-    let glyph = workspace.font().glyph(&glyph_id).unwrap();
+    let glyph = workspace.font().glyph(glyph_id).unwrap();
     assert_eq!(glyph.glyph_name().to_string(), "A.alt");
     assert_eq!(glyph.unicodes(), &[97]);
     assert_eq!(workspace.font().glyph_id_by_name("A.alt"), Some(glyph_id));
@@ -2101,7 +2071,7 @@ fn create_weight_axis(workspace: &mut FontWorkspace) -> AxisId {
     workspace
         .apply(
             &FontIntentSet::from(CreateAxis {
-                axis: weight_axis(axis_id.clone()),
+                axis: weight_axis(axis_id),
             }),
             Some("Create Axis".to_string()),
         )
@@ -2327,9 +2297,9 @@ fn named_instance_crud_is_undoable_and_keeps_external_location() {
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let axis_id = AxisId::from_raw("axis_weight");
     let instance_id = NamedInstanceId::from_raw("instance_bold");
-    let location = ExternalLocation::from([(axis_id.clone(), 700.0)]);
+    let location = ExternalLocation::from([(axis_id, 700.0)]);
     let bold = NamedInstance::with_id(
-        instance_id.clone(),
+        instance_id,
         "Bold".to_string(),
         location,
         Some("TestFont-Bold".to_string()),
@@ -2340,7 +2310,7 @@ fn named_instance_crud_is_undoable_and_keeps_external_location() {
             &FontIntentSet {
                 intents: vec![
                     CreateAxis {
-                        axis: weight_axis(axis_id.clone()),
+                        axis: weight_axis(axis_id),
                     }
                     .into(),
                     CreateNamedInstance {
@@ -2357,9 +2327,9 @@ fn named_instance_crud_is_undoable_and_keeps_external_location() {
         std::slice::from_ref(&bold)
     );
 
-    let updated_location = ExternalLocation::from([(axis_id.clone(), 750.0)]);
+    let updated_location = ExternalLocation::from([(axis_id, 750.0)]);
     let updated = NamedInstance::with_id(
-        instance_id.clone(),
+        instance_id,
         "Display Bold".to_string(),
         updated_location,
         Some("TestFont-DisplayBold".to_string()),
@@ -2417,9 +2387,7 @@ fn named_instance_crud_is_undoable_and_keeps_external_location() {
 
     workspace
         .apply(
-            &FontIntentSet::from(DeleteAxis {
-                axis_id: axis_id.clone(),
-            }),
+            &FontIntentSet::from(DeleteAxis { axis_id }),
             Some("Delete Weight Axis".to_string()),
         )
         .unwrap();
@@ -2447,18 +2415,18 @@ fn delete_axis_undo_redo_restores_full_axis_definition() {
     let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
     let axis_id = AxisId::from_raw("axis_weight");
     let source_id = SourceId::from_raw("bold");
-    let location = DesignLocation::from([(axis_id.clone(), 700.0)]);
+    let location = DesignLocation::from([(axis_id, 700.0)]);
 
     workspace
         .apply(
             &FontIntentSet {
                 intents: vec![
                     CreateAxis {
-                        axis: weight_axis(axis_id.clone()),
+                        axis: weight_axis(axis_id),
                     }
                     .into(),
                     CreateSource {
-                        source_id: source_id.clone(),
+                        source_id,
                         name: "Bold".to_string(),
                         location,
                     }
@@ -2472,9 +2440,7 @@ fn delete_axis_undo_redo_restores_full_axis_definition() {
 
     workspace
         .apply(
-            &FontIntentSet::from(DeleteAxis {
-                axis_id: axis_id.clone(),
-            }),
+            &FontIntentSet::from(DeleteAxis { axis_id }),
             Some("Delete Axis".to_string()),
         )
         .unwrap();
@@ -2543,7 +2509,7 @@ fn create_source_undo_redo_removes_and_restores_source() {
     workspace
         .apply(
             &FontIntentSet::from(CreateSource {
-                source_id: source_id.clone(),
+                source_id,
                 name: "Bold".to_string(),
                 location: weight_location(axis_id, 700.0),
             }),
@@ -2621,7 +2587,7 @@ fn failed_redo_replay_hands_the_entry_back_for_retry() {
     workspace
         .apply(
             &FontIntentSet::from(CreateSource {
-                source_id: source_id.clone(),
+                source_id,
                 name: "Bold".to_string(),
                 location: weight_location(axis_id, 700.0),
             }),
@@ -2629,12 +2595,7 @@ fn failed_redo_replay_hands_the_entry_back_for_retry() {
         )
         .unwrap();
     workspace
-        .apply(
-            &FontIntentSet::from(DeleteSource {
-                source_id: source_id.clone(),
-            }),
-            None,
-        )
+        .apply(&FontIntentSet::from(DeleteSource { source_id }), None)
         .unwrap();
     workspace.undo().unwrap().expect("deleteSource should undo");
 
@@ -2693,4 +2654,41 @@ fn ledger_trims_oldest_entries_beyond_max() {
     assert_eq!(undone, 100, "oldest entry should fall off the ledger");
     assert_eq!(workspace.font().glyph_count(), 1);
     assert!(workspace.font().glyph_id_by_name("g0").is_some());
+}
+
+#[test]
+fn a_move_sent_compacted_persists_against_an_unloaded_layer() {
+    let temp = tempfile::tempdir().unwrap();
+    let store_path = temp.path().join("working.sqlite");
+    let mut workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
+    let source_id = workspace.font().default_source_id().unwrap();
+    let glyph_id = create_glyph(&mut workspace, "A", vec![65]);
+    let layer_id = create_glyph_layer(&mut workspace, glyph_id, source_id);
+    add_square_contour(&mut workspace, layer_id, (10.0, 20.0), 100.0);
+    drop(workspace);
+
+    // The window's engine moves every point and sends the change compacted.
+    let mut window = ShiftStore::open(&store_path)
+        .unwrap()
+        .load_font_state()
+        .unwrap();
+    let moved: Vec<f64> = [(15.0, 20.0), (115.0, 20.0), (115.0, 120.0), (15.0, 120.0)]
+        .into_iter()
+        .flat_map(<[f64; 2]>::from)
+        .collect();
+    let applied = window
+        .apply_intents(&FontIntentSet::from(shift_font::SetPositions {
+            layer_id,
+            positions: moved,
+        }))
+        .unwrap();
+
+    let mut workspace = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(workspace.loaded_layer_count(), 0);
+    workspace
+        .persist_compact_change_set(applied.changes.compact(), shift_store::SaveState::Unsaved)
+        .unwrap();
+
+    assert_eq!(workspace.font().layer(layer_id), window.layer(layer_id));
+    assert_persisted_font_matches_workspace(&mut workspace);
 }

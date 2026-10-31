@@ -1,6 +1,6 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createBridge } from "@shift/bridge";
 import {
@@ -14,6 +14,7 @@ import {
   type Unicode,
 } from "@shift/types";
 import type { WorkspaceEditEvent } from "@shift/editor/types";
+import { kerningValueEdit, type Font } from "@shift/editor/model";
 import { createWorkspaceStack, type WorkspaceStack } from "@/testing/workspaceStack";
 
 const createGlyph = (
@@ -113,8 +114,8 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     await stack.editCoordinator.settled();
 
     const compiled = createBridge();
-    compiled.openWorkspace(outputPath, join(outputRoot, "compiled.sqlite3"));
-    const unicodes = compiled.getGlyphs().flatMap((glyph) => glyph.unicodes);
+    compiled.workspace.openWorkspace(outputPath, join(outputRoot, "compiled.sqlite3"));
+    const unicodes = compiled.workspace.getGlyphs().flatMap((glyph) => glyph.unicodes);
     expect(unicodes).toEqual([65]);
   });
 
@@ -174,16 +175,52 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     ]);
   });
 
-  it("publishes a failure after restoring workspace truth", async () => {
+  it("restores workspace truth and reopens the engine when the workspace fails an edit", async () => {
+    await stack.editCoordinator.apply([createGlyph("A", 65)]);
+    const events: WorkspaceEditEvent[] = [];
+    stack.editCoordinator.onEdit((event) => events.push(event));
+
+    stack.failNextPersist();
+    await expect(stack.editCoordinator.apply([createGlyph("B", 66)])).rejects.toThrow(
+      "refused the write",
+    );
+
+    expect(events.map((event) => event.kind)).toEqual(["accepted", "failed"]);
+    expect(stack.store.workspaceCell.peek()?.glyphs).toHaveLength(1);
+    // The engine dropped the failed glyph with everything else, so it can be made again.
+    await stack.editCoordinator.apply([createGlyph("B", 66)]);
+    expect(stack.store.workspaceCell.peek()?.glyphs).toHaveLength(2);
+  });
+
+  it("never accepts or sends an edit the engine rejects", async () => {
     await stack.editCoordinator.apply([createGlyph("A", 65)]);
     const events: WorkspaceEditEvent[] = [];
     stack.editCoordinator.onEdit((event) => events.push(event));
 
     const applying = stack.editCoordinator.apply([createGlyph("A", 66)]);
     await expect(applying).rejects.toThrow();
+    await stack.editCoordinator.settled();
 
-    expect(events.map((event) => event.kind)).toEqual(["accepted", "failed"]);
+    expect(events).toEqual([]);
     expect(stack.store.workspaceCell.peek()?.glyphs).toHaveLength(1);
+  });
+
+  it("shows a font-level edit at once and takes it back when its transaction throws", async () => {
+    const languages = () => stack.store.workspaceCell.peek()?.languageIds ?? null;
+    const before = languages();
+    const french: FontIntent = { kind: "setLanguages", setLanguages: { languageIds: ["fr"] } };
+
+    expect(() =>
+      stack.editCoordinator.transaction("Set languages", () => {
+        stack.editCoordinator.push(french);
+        expect(languages()).toEqual(["fr"]);
+        throw new Error("abandoned");
+      }),
+    ).toThrow("abandoned");
+
+    expect(languages()).toEqual(before);
+    await stack.editCoordinator.settled();
+    expect(languages()).toEqual(before);
   });
 
   it("keeps separate pushes as separate undo entries", async () => {
@@ -281,10 +318,7 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
           tag: "wght",
           name: "Weight",
           role: "external",
-          axisType: "continuous",
-          minimum: 100,
-          default: 400,
-          maximum: 900,
+          kind: { kind: "continuous", minimum: 100, default: 400, maximum: 900 },
           labels: [],
           hidden: false,
         },
@@ -296,5 +330,44 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
 
     expect(font.getAxes().map((axis) => axis.id)).toEqual([axisId]);
     expect(glyph.layerForSource(sourceId)).not.toBeNull();
+  });
+});
+
+const MUTATOR_SANS = resolve(
+  process.cwd(),
+  "../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace",
+);
+
+// T then A kerns through T (a glyph) and A's second-position group at every
+// master: LightCondensed -75, BoldCondensed -65, LightWide -215, BoldWide -150.
+async function openMutatorSans() {
+  const stack = createWorkspaceStack();
+  await stack.openWorkspace(MUTATOR_SANS);
+  const font = stack.font;
+  const id = (name: string) => font.recordForName(name as GlyphName)!.id;
+  const source = (name: string) => font.sourceNamed(name)!.id;
+  return { stack, font, t: id("T"), a: id("A"), lightCondensed: source("LightCondensed") };
+}
+
+function kernAt(font: Font, sourceName: string, first: string, second: string): number {
+  const sourceId = font.sourceNamed(sourceName)!.id;
+  const id = (name: string) => font.recordForName(name as GlyphName)!.id;
+  return font.kerningBetween(id(first), id(second), font.defaultLocation(), sourceId);
+}
+
+// The editor's undo waits for pending edits first (EditorHistory.undo), so no
+// user path reaches this; it is the coordinator's own guarantee.
+describe("undo before persistence", () => {
+  it("shows an undo right after an edit at once, before either is persisted", async () => {
+    const { stack, font, t, a, lightCondensed } = await openMutatorSans();
+    const pair = font.kerning.editablePair(lightCondensed, t, a);
+
+    font.setKerningValues([kerningValueEdit(lightCondensed, pair, -90)], "Change kerning");
+    expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-90);
+    const undone = stack.editCoordinator.undo();
+    expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-75);
+
+    await undone;
+    expect(kernAt(font, "LightCondensed", "T", "A")).toBe(-75);
   });
 });

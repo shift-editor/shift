@@ -5,6 +5,7 @@ export type {
 } from "./types/componentTransform";
 export type { Coordinates } from "./types/coordinates";
 export type { PendingEditId } from "./types/editing";
+export type { FontEngine, KerningPlace, OpenEdit } from "./types/font";
 export type {
   MemoryFontSession,
   MemoryFontSessionOptions,
@@ -44,6 +45,8 @@ export type { ToolShortcutEntry } from "./types/tools";
 export type { AnchorPosition } from "./types/transform";
 export type { DebugOverlays } from "./types/uiState";
 export type {
+  AxisLabelBound,
+  AxisLabelKind,
   DesignAxisLocation,
   ExternalAxisLocation,
   InstanceCreationIssue,

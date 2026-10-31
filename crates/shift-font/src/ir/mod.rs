@@ -16,6 +16,7 @@ pub mod kerning;
 pub mod lib_data;
 pub mod metrics;
 pub mod named_instance;
+pub(crate) mod persistent;
 pub mod point;
 pub mod segment;
 pub mod source;
@@ -50,6 +51,6 @@ pub use metrics::{
 };
 pub use named_instance::NamedInstance;
 pub use point::{Point, PointType};
-pub use segment::{CurveSegment, CurveSegmentIter};
+pub use segment::{CurveSegment, CurveSegmentIter, PointKinds, SegmentIndexIter, SegmentIndices};
 pub use source::{Source, SourceList, SourceRole};
 pub use variation::{AxisMappingBasis, DesignNormalization};

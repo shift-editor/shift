@@ -142,12 +142,16 @@ export type DesignAxisLocation = AxisLocation<"design">;
 // @public
 export class Designspace {
     constructor(cells: {
-        axesCell: Signal<Axis[]>;
-        mappingBasesCell: Signal<AxisMappingBasis[]>;
-        sourcesCell: Signal<Source[]>;
+        axesCell: Signal<readonly Axis$1[]>;
+        mappingBasesCell: Signal<readonly AxisMappingBasis[]>;
+        sourcesCell: Signal<readonly Source[]>;
     });
     // (undocumented)
     get axes(): readonly Axis[];
+    get axesCell(): ComputedSignal<readonly Axis[]>;
+    // (undocumented)
+    axis(axisId: AxisId): Axis | null;
+    axisTagged(tag: string): Axis | null;
     coordinates(location: ExternalAxisLocation | DesignAxisLocation): {
         axisId: AxisId;
         value: number;
@@ -162,6 +166,7 @@ export class Designspace {
     source(sourceId: SourceId): Source | null;
     sourceAt(location: ExternalAxisLocation): Source | null;
     sourceAtDesign(location: DesignAxisLocation): Source | null;
+    sourceNamed(name: string): Source | null;
     // (undocumented)
     get sources(): readonly Source[];
     toDesign(location: ExternalAxisLocation): DesignAxisLocation;
@@ -187,6 +192,7 @@ export class Editor {
     // (undocumented)
     get camera(): Camera;
     canDecomposeSelection(): boolean;
+    chooseToolMenuItem(tool: ToolName, itemId: string): void;
     collapseEditingSources(): boolean;
     componentTransformSelection(ids: readonly SelectableId[]): ComponentTransformSelection | null;
     contentFrom(ids: readonly ShiftId[]): ShiftContent | null;
@@ -226,6 +232,7 @@ export class Editor {
     // (undocumented)
     readonly editing: Editing;
     get editingLayerMatchesCell(): Signal<ReadonlyMap<LayerId, LayerMatch>>;
+    editingLayersMatched(): Promise<void>;
     // (undocumented)
     get editingSourceIds(): ReadonlySet<SourceId>;
     // (undocumented)
@@ -266,6 +273,7 @@ export class Editor {
     readonly history: EditorHistory;
     // (undocumented)
     get hitRadius(): number;
+    hitRadiusIn(node: ShiftNode): number;
     // (undocumented)
     readonly hover: Hover;
     // (undocumented)
@@ -289,6 +297,7 @@ export class Editor {
     object(id: ShiftId): ShiftObject | null;
     objects(ids: readonly ShiftId[]): readonly ShiftObject[];
     on: EventEmitter["on"];
+    openGlyphInText(glyphId: GlyphId): GlyphNode | null;
     // (undocumented)
     get pan(): Point2D;
     paste(): Promise<boolean>;
@@ -362,9 +371,9 @@ export class Editor {
     toLocalVector(node: ShiftNode, vector: SceneVector): LocalVector;
     get tool(): ActiveTool | null;
     get toolCell(): Signal<ActiveTool | null>;
-    toolCellIf<Id extends ToolName>(id: Id): Signal<ActiveTool<Id> | null>;
+    toolCellIf<Id extends ToolName>(id: Id): Signal<ToolFor<Id> | null>;
     get toolIdCell(): Signal<ToolName | null>;
-    toolIf<Id extends ToolName>(id: Id): ActiveTool<Id> | null;
+    toolIf<Id extends ToolName>(id: Id): ToolFor<Id> | null;
     // (undocumented)
     get toolManager(): ToolManager;
     // (undocumented)
@@ -464,8 +473,10 @@ export function externalAxisLocationFromRecord(values: Readonly<Record<string, n
 export class Font {
     constructor(input: FontOptions);
     assignKerningGroup(position: KerningPairPosition, glyphIds: readonly GlyphId[], groupId: KerningGroupId | null): Promise<void>;
-    get axesCell(): Signal<Axis[]>;
-    get axisMappingsCell(): Signal<AxisMapping[]>;
+    get axesCell(): Signal<readonly Axis[]>;
+    axis(axisId: AxisId): Axis | null;
+    get axisMappingsCell(): Signal<readonly AxisMapping[]>;
+    axisTagged(tag: string): Axis | null;
     beginKerningEdit(): KerningEdit;
     cloneGlyphLayer(glyphId: GlyphId, sourceId: SourceId, fromLayerId: LayerId): LayerId;
     get committedRevisionCell(): Signal<number>;
@@ -501,24 +512,30 @@ export class Font {
     entryForUnicode(unicode: Unicode): GlyphEntry | null;
     get externalAxesCell(): Signal<readonly Axis[]>;
     externalLocationForSource(sourceId: SourceId): ExternalAxisLocation | null;
-    getAxes(): Axis[];
-    getAxisMappingBases(): AxisMappingBasis[];
-    getAxisMappings(): AxisMapping[];
+    getAxes(): readonly Axis[];
+    getAxisMappingBases(): readonly AxisMappingBasis[];
+    getAxisMappings(): readonly AxisMapping[];
+    get glyphCount(): number;
     glyphEntries(): readonly GlyphEntry[];
     get glyphEntriesCell(): Signal<readonly GlyphEntry[]>;
     glyphHandleForName(name: GlyphName): GlyphHandle;
     glyphHandleForUnicode(unicode: Unicode): GlyphHandle;
     glyphIdForLayer(layerId: LayerId): GlyphId | null;
+    glyphName(glyphId: GlyphId): GlyphName | null;
     glyphPreviews(glyphIds: readonly GlyphId[], location: DesignAxisLocation): Promise<readonly GlyphPreview[]>;
     // (undocumented)
     glyphRecords(): readonly GlyphRecord[];
     get glyphRecordsCell(): Signal<readonly GlyphRecord[]>;
+    glyphsAfter(after: GlyphId | null, limit: number): GlyphDirectoryPage | null;
     hasGlyph(glyphId: GlyphId): boolean;
     get invalidGlyphsCell(): Signal<GlyphInvalidation>;
     isNonspacingMark(name: GlyphName): boolean;
     isVariable(): boolean;
+    get kerning(): Kerning;
     kerningBetween(first: GlyphId, second: GlyphId, location: ExternalAxisLocation, sourceId: SourceId | null): number;
     get kerningCell(): Signal<Kerning>;
+    kerningRun(pairs: readonly GlyphId[], location: ExternalAxisLocation, sourceId: SourceId | null): readonly number[];
+    kerningSideName(side: KerningSideId): string | null;
     get languageIdsCell(): Signal<readonly string[] | null>;
     layerIdFor(glyphId: GlyphId, sourceId: SourceId): LayerId | null;
     layerIdForAnchor(anchorId: AnchorId): LayerId | null;
@@ -537,18 +554,23 @@ export class Font {
     // (undocumented)
     get metadata(): FontMetadata;
     get metadataCell(): Signal<FontMetadata>;
-    get metricDefinitions(): MetricDefinition[];
-    get metricDefinitionsCell(): Signal<MetricDefinition[]>;
+    get metricDefinitions(): readonly MetricDefinition[];
+    get metricDefinitionsCell(): Signal<readonly MetricDefinition[]>;
     // (undocumented)
     get metrics(): FontMetrics;
     metricsAtLocation(location: ExternalAxisLocation): SourceMetrics;
     get metricsCell(): Signal<FontMetrics>;
+    metricsForLayerSource(sourceId: SourceId): SourceMetrics;
     metricsForSource(sourceId: SourceId): SourceMetrics;
-    get namedInstances(): NamedInstance[];
-    get namedInstancesCell(): Signal<NamedInstance[]>;
+    missingPairOrigin(sourceId: SourceId): MissingKerningOrigin;
+    namedInstance(instanceId: NamedInstanceId): NamedInstance | null;
+    namedInstanceNamed(name: string): NamedInstance | null;
+    get namedInstances(): readonly NamedInstance[];
+    get namedInstancesCell(): Signal<readonly NamedInstance[]>;
     nameForUnicode(unicode: Unicode): GlyphName;
     // (undocumented)
     nearestSource(location: ExternalAxisLocation): Source | null;
+    newAnchorName(layerIds: readonly LayerId[]): string;
     nextAvailableGlyphName(name: GlyphName): GlyphName;
     pointIdsForSegment(segmentId: SegmentId): readonly PointId[] | null;
     primaryUnicodeForName(name: GlyphName): Unicode | null;
@@ -560,23 +582,25 @@ export class Font {
     renameKerningGroup(groupId: KerningGroupId, name: string): Promise<void>;
     resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]>;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
+    setIndependentAxisMapping(axis: Axis$1, mapping: AxisMapping): Promise<void>;
+    setKerningException(sourceId: SourceId, first: GlyphId, second: GlyphId, position: KerningPairPosition, exception: boolean): boolean;
     setKerningValues(edits: readonly KerningValueEdit[], label: string): void;
     setLanguageIds(languageIds: readonly string[]): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
-    shapeParagraphs(paragraphs: readonly ParagraphRequest[]): Promise<ShapedRun[][]>;
     shaperFont(knownRevision: number | null): Promise<ShaperFont | null>;
     source(sourceId: SourceId): Source | null;
     sourceAt(location: ExternalAxisLocation): Source | null;
     sourceAtCell(location: Signal<ExternalAxisLocation>): ComputedSignal<Source | null>;
     sourceAtOrDefault(location: ExternalAxisLocation): Source;
-    get sourceMetricsInterpolationCell(): Signal<SourceMetricsInterpolation | null>;
-    get sources(): Source[];
-    get sourcesCell(): Signal<Source[]>;
+    get sourceMetricsRevisionCell(): Signal<number>;
+    sourceNamed(name: string): Source | null;
+    get sources(): readonly Source[];
+    get sourcesCell(): Signal<readonly Source[]>;
     // (undocumented)
     get unicodes(): readonly Unicode[];
     get unicodesCell(): Signal<Unicode[]>;
     unicodesForName(name: GlyphName): readonly Unicode[];
-    updateAxis(axis: Axis): Promise<void>;
+    updateAxis(axis: Axis$1): Promise<void>;
     updateGlyphIdentity(glyphId: GlyphId, newName: GlyphName, newUnicodes: Unicode[]): void;
     updateMetadata(metadata: FontMetadata): Promise<void>;
     updateNamedInstance(instance: NamedInstance): Promise<void>;
@@ -586,7 +610,8 @@ export class Font {
 // @public
 export interface FontOverview {
     // (undocumented)
-    axes: Axis[];
+    axes: Axis$1[];
+    axisMappings: AxisMapping[];
     // (undocumented)
     glyphCount: number;
     // (undocumented)
@@ -605,31 +630,31 @@ export interface FontOverview {
 // @public
 export type FontRevision = string;
 
-// @public (undocumented)
+// @public
 export interface FontSnapshot {
     // (undocumented)
-    axes: Array<Axis>;
+    readonly axes: readonly Axis$1[];
     // (undocumented)
-    axisMappingBases: Array<AxisMappingBasis>;
+    readonly axisMappingBases: readonly AxisMappingBasis[];
     // (undocumented)
-    axisMappings: Array<AxisMapping>;
+    readonly axisMappings: readonly AxisMapping[];
     // (undocumented)
-    glyphs: Array<GlyphEntry>;
+    readonly glyphs: readonly GlyphEntry[];
     // (undocumented)
-    kerning: KerningSnapshot;
-    languageIds?: Array<string>;
+    readonly kerning: KerningSnapshot;
+    readonly languageIds?: readonly string[] | null;
     // (undocumented)
-    metadata: FontMetadata;
+    readonly metadata: FontMetadata;
     // (undocumented)
-    metricDefinitions: Array<MetricDefinition>;
+    readonly metricDefinitions: readonly MetricDefinition[];
     // (undocumented)
-    metrics: FontMetrics;
+    readonly metrics: FontMetrics;
     // (undocumented)
-    namedInstances: Array<NamedInstance>;
+    readonly namedInstances: readonly NamedInstance[];
     // (undocumented)
-    sourceMetricsInterpolation?: SourceMetricsInterpolationSnapshot;
+    readonly sourceMetricsInterpolation?: SourceMetricsInterpolationSnapshot | null;
     // (undocumented)
-    sources: Array<Source>;
+    readonly sources: readonly Source[];
 }
 
 // @beta
@@ -713,11 +738,11 @@ export interface GlyphLayerReference {
 // @public (undocumented)
 export interface GlyphLayerSnapshot {
     // (undocumented)
-    glyphId: GlyphId;
+    readonly glyphId: GlyphId;
     // (undocumented)
-    sourceId: SourceId;
+    readonly sourceId: SourceId;
     // (undocumented)
-    state: GlyphState;
+    readonly state: GlyphState;
 }
 
 // @public (undocumented)
@@ -726,8 +751,7 @@ export interface GlyphListInput extends ShiftTarget {
     cursor?: string;
     // (undocumented)
     limit?: number;
-    // (undocumented)
-    sourceId?: SourceId;
+    source?: SourceSelector;
 }
 
 // @public
@@ -759,18 +783,18 @@ export interface GlyphReader {
 // @public (undocumented)
 export interface GlyphRecord {
     // (undocumented)
-    componentBaseGlyphIds: Array<GlyphId>;
+    readonly componentBaseGlyphIds: readonly GlyphId[];
     // (undocumented)
-    id: GlyphId;
+    readonly id: GlyphId;
     // (undocumented)
-    layers: Array<GlyphLayerRecord>;
-    ligature?: "explicit" | "subcategory";
-    mark?: boolean;
+    readonly layers: readonly GlyphLayerRecord[];
+    readonly ligature?: Ligature | null;
+    readonly mark: boolean;
     // (undocumented)
-    name: GlyphName;
-    nonspacingMark?: boolean;
+    readonly name: GlyphName;
+    readonly nonspacingMark: boolean;
     // (undocumented)
-    unicodes: Array<Unicode>;
+    readonly unicodes: readonly number[];
 }
 
 // @public (undocumented)
@@ -793,11 +817,11 @@ export type GlyphSelector = {
 // @public (undocumented)
 export interface GlyphSnapshot {
     // (undocumented)
-    glyphId: GlyphId;
+    readonly glyphId: GlyphId;
     // (undocumented)
-    layers: Array<GlyphLayerSnapshot>;
+    readonly layers: readonly GlyphLayerSnapshot[];
     // (undocumented)
-    projection?: GlyphProjection;
+    readonly projection?: GlyphProjection | null;
 }
 
 // @public
@@ -814,6 +838,16 @@ export interface GlyphSummary {
     name: string;
     // (undocumented)
     unicodes: number[];
+}
+
+// @public
+export interface KerningAtInput extends ShiftTarget {
+    // (undocumented)
+    first: GlyphSelector;
+    // (undocumented)
+    second: GlyphSelector;
+    // (undocumented)
+    source?: SourceSelector;
 }
 
 // @public
@@ -869,9 +903,9 @@ export interface KerningPairPage {
 // @public
 export interface KerningPairQuery {
     // (undocumented)
-    first: string;
+    first: GlyphSelector;
     // (undocumented)
-    second: string;
+    second: GlyphSelector;
 }
 
 // @public
@@ -889,11 +923,10 @@ export type KerningPairSide = {
 export interface KerningPairsInput extends ShiftTarget {
     // (undocumented)
     cursor?: string;
-    glyph?: string;
+    glyph?: GlyphSelector;
     // (undocumented)
     limit?: number;
-    // (undocumented)
-    sourceId: SourceId;
+    source?: SourceSelector;
 }
 
 // @public
@@ -913,7 +946,7 @@ export interface KerningResolveInput extends ShiftTarget {
     // (undocumented)
     pairs: KerningPairQuery[];
     // (undocumented)
-    sourceId?: SourceId;
+    source?: SourceSelector;
 }
 
 // @public
@@ -942,10 +975,7 @@ export interface LayerAppearance {
 }
 
 // @public
-export interface LayerGetInput extends ShiftTarget {
-    // (undocumented)
-    layerId: LayerId;
-}
+export type LayerGetInput = ShiftTarget & LayerSelector;
 
 // @public
 export interface LayerGuides {
@@ -983,21 +1013,30 @@ export interface LayerOverlays {
 // @public
 export interface LayerRead {
     // (undocumented)
-    authored: GlyphLayerSnapshot;
+    authored: GlyphLayerSnapshot$1;
     // (undocumented)
     resolved: ResolvedLayerGeometry;
 }
 
 // @public (undocumented)
-export interface LayerRenderInput extends LayerGetInput {
-    // (undocumented)
-    appearance?: LayerAppearance;
-    // (undocumented)
+export type LayerRenderInput = LayerGetInput & {
     overlays?: LayerOverlays;
-}
+    appearance?: LayerAppearance;
+};
 
 // @public (undocumented)
 export type LayerResolveInput = LayerGetInput;
+
+// @public
+export type LayerSelector = {
+    layerId: LayerId;
+    glyph?: never;
+    source?: never;
+} | {
+    glyph: GlyphSelector;
+    source?: SourceSelector;
+    layerId?: never;
+};
 
 // @public
 export interface LayerSvg {
@@ -1206,10 +1245,15 @@ export interface ShiftCapabilities {
         resolve(input: GlyphResolveInput): Promise<ShiftObservation<ResolvedGlyphs>>;
     };
     // (undocumented)
+    instances: {
+        get(input: InstanceGetInput): Promise<ShiftObservation<NamedInstance>>;
+    };
+    // (undocumented)
     kerning: {
         groups(input: KerningGroupsInput): Promise<ShiftObservation<KerningGroupSummary[]>>;
         pairs(input: KerningPairsInput): Promise<ShiftObservation<KerningPairPage>>;
         resolve(input: KerningResolveInput): Promise<ShiftObservation<ResolvedKerningPairs>>;
+        at(input: KerningAtInput): Promise<ShiftObservation<KerningMasterValue>>;
     };
     // (undocumented)
     layers: {
@@ -1224,6 +1268,10 @@ export interface ShiftCapabilities {
     // (undocumented)
     sessions: {
         list(): Promise<ShiftSession[]>;
+    };
+    // (undocumented)
+    sources: {
+        get(input: SourceGetInput): Promise<ShiftObservation<Source>>;
     };
 }
 
@@ -1284,10 +1332,15 @@ export interface ShiftRead {
         resolve(input: ShiftReadInput<GlyphResolveInput>): Promise<ResolvedGlyphs>;
     };
     // (undocumented)
+    instances: {
+        get(input: ShiftReadInput<InstanceGetInput>): Promise<NamedInstance>;
+    };
+    // (undocumented)
     kerning: {
         groups(input?: ShiftReadInput<KerningGroupsInput>): Promise<KerningGroupSummary[]>;
         pairs(input: ShiftReadInput<KerningPairsInput>): Promise<KerningPairPage>;
         resolve(input: ShiftReadInput<KerningResolveInput>): Promise<ResolvedKerningPairs>;
+        at(input: ShiftReadInput<KerningAtInput>): Promise<KerningMasterValue>;
     };
     // (undocumented)
     layers: {
@@ -1298,6 +1351,10 @@ export interface ShiftRead {
     // (undocumented)
     locations: {
         resolve(input: ShiftReadInput<LocationResolveInput>): Promise<ResolvedLocation>;
+    };
+    // (undocumented)
+    sources: {
+        get(input: ShiftReadInput<SourceGetInput>): Promise<Source>;
     };
     // (undocumented)
     readonly state: ShiftReadState;
@@ -1352,6 +1409,15 @@ export interface Signal<T> {
 // @public
 export type SourceId = string & {
     readonly [SourceIdBrand]: typeof SourceIdBrand;
+};
+
+// @public
+export type SourceSelector = {
+    sourceId: SourceId;
+    name?: never;
+} | {
+    name: string;
+    sourceId?: never;
 };
 
 // @public

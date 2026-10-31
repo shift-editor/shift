@@ -13,6 +13,7 @@ use shift_font::{
     Axis, AxisId, AxisMappingBasis, AxisMappingId, AxisRole, AxisSupport, DesignNormalization,
     ExternalLocation, InterpolationBasis, InterpolationRegion, Location, SourceId, VariationBasis,
     VariationDelta, ir::variation::map_location_with_bases,
+    ir::variation::unmap_location_with_bases,
 };
 use tsify::{Ts, Tsify};
 use wasm_bindgen::prelude::*;
@@ -25,14 +26,7 @@ pub struct VariationAxis {
     tag: String,
     name: String,
     role: VariationAxisRole,
-    axis_type: VariationAxisType,
-    #[tsify(optional)]
-    minimum: Option<f64>,
-    default: f64,
-    #[tsify(optional)]
-    maximum: Option<f64>,
-    #[tsify(optional)]
-    values: Option<Vec<f64>>,
+    kind: VariationAxisKind,
 }
 
 #[derive(Deserialize, Tsify)]
@@ -42,22 +36,33 @@ pub enum VariationAxisRole {
     Internal,
 }
 
+/// An axis's range, as shift-font's `AxisKind` crosses into the editor.
 #[derive(Deserialize, Tsify)]
-#[serde(rename_all = "lowercase")]
-pub enum VariationAxisType {
-    Continuous,
-    Discrete,
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum VariationAxisKind {
+    Continuous {
+        minimum: f64,
+        default: f64,
+        maximum: f64,
+    },
+    Discrete {
+        #[tsify(type = "readonly number[]")]
+        values: Vec<f64>,
+        default: f64,
+    },
 }
 
 /// Axes in order.
 #[derive(Deserialize, Tsify)]
 #[serde(transparent)]
-pub struct VariationAxes(pub(crate) Vec<VariationAxis>);
+pub struct VariationAxes(#[tsify(type = "readonly VariationAxis[]")] pub(crate) Vec<VariationAxis>);
 
 /// A font's compiled axis mappings, in order.
 #[derive(Deserialize, Tsify)]
 #[serde(transparent)]
-pub struct AxisMappingBases(Vec<AxisMappingBasisData>);
+pub struct AxisMappingBases(
+    #[tsify(type = "readonly AxisMappingBasisData[]")] Vec<AxisMappingBasisData>,
+);
 
 /// One axis's support within a region, normalized.
 #[derive(Deserialize, Tsify)]
@@ -72,6 +77,7 @@ pub struct VariationSupport {
 /// One contribution: a region and the values it adds there.
 #[derive(Deserialize, Tsify)]
 pub struct VariationBasisDelta {
+    #[tsify(type = "readonly VariationSupport[]")]
     region: Vec<VariationSupport>,
     #[tsify(type = "Float64Array | number[]")]
     values: Vec<f64>,
@@ -80,6 +86,7 @@ pub struct VariationBasisDelta {
 /// A variation basis Rust compiled.
 #[derive(Deserialize, Tsify)]
 pub struct VariationBasisData {
+    #[tsify(type = "readonly VariationBasisDelta[]")]
     deltas: Vec<VariationBasisDelta>,
 }
 
@@ -97,8 +104,10 @@ pub struct VariationDesignNormalization {
 #[derive(Deserialize, Tsify)]
 #[serde(rename_all = "camelCase")]
 pub struct InterpolationBasisData {
+    #[tsify(type = "readonly string[]")]
     source_ids: Vec<String>,
     basis: VariationBasisData,
+    #[tsify(type = "readonly VariationDesignNormalization[]")]
     design_normalization: Vec<VariationDesignNormalization>,
 }
 
@@ -107,26 +116,28 @@ pub struct InterpolationBasisData {
 #[serde(rename_all = "camelCase")]
 pub struct AxisMappingBasisData {
     mapping_id: String,
+    #[tsify(type = "readonly string[]")]
     input_axis_ids: Vec<String>,
+    #[tsify(type = "readonly string[]")]
     output_axis_ids: Vec<String>,
     basis: VariationBasisData,
 }
 
 /// Registered values by handle; a released handle is reused.
-struct Registry<T> {
+pub(crate) struct Registry<T> {
     entries: Vec<Option<T>>,
     free: Vec<u32>,
 }
 
 impl<T> Registry<T> {
-    const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self {
             entries: Vec::new(),
             free: Vec::new(),
         }
     }
 
-    fn insert(&mut self, value: T) -> u32 {
+    pub(crate) fn insert(&mut self, value: T) -> u32 {
         if let Some(handle) = self.free.pop() {
             self.entries[handle as usize] = Some(value);
             return handle;
@@ -140,11 +151,11 @@ impl<T> Registry<T> {
         handle
     }
 
-    fn get(&self, handle: u32) -> Option<&T> {
+    pub(crate) fn get(&self, handle: u32) -> Option<&T> {
         self.entries.get(handle as usize)?.as_ref()
     }
 
-    fn remove(&mut self, handle: u32) {
+    pub(crate) fn remove(&mut self, handle: u32) {
         if let Some(entry) = self.entries.get_mut(handle as usize)
             && entry.take().is_some()
         {
@@ -276,6 +287,23 @@ pub fn interpolation_weights(basis: u32, axes: u32, location: &[f64]) -> Vec<f64
     })
 }
 
+/// The weighted sum of source values: `interpolation::blend_values`.
+///
+/// `values` holds each source's values one after another, `lengths[i]`
+/// of them for source `i`; a source the editor lacks has length 0. None when
+/// there is no source, one has no values, or two differ in length.
+#[wasm_bindgen(js_name = blendSourceValues)]
+pub fn blend_source_values(weights: &[f64], values: &[f64], lengths: &[u32]) -> Option<Vec<f64>> {
+    let mut rest = values;
+    let mut sources = Vec::with_capacity(lengths.len());
+    for &length in lengths {
+        let (source, after) = rest.split_at_checked(usize::try_from(length).ok()?)?;
+        sources.push(source);
+        rest = after;
+    }
+    shift_font::interpolation::blend_values(weights, &sources)
+}
+
 /// A variation basis's values at a location, normalized by each axis's range.
 #[wasm_bindgen(js_name = evaluateVariationBasis)]
 pub fn evaluate_variation_basis(basis: u32, axes: u32, location: &[f64]) -> Vec<f64> {
@@ -318,34 +346,17 @@ pub fn map_axis_location(mappings: u32, axes: u32, external: &[f64]) -> Vec<f64>
     })
 }
 
-/// Maps a location through one registered mapping; its output axes' values in its output order.
-#[wasm_bindgen(js_name = evaluateAxisMapping)]
-pub fn evaluate_axis_mapping(mappings: u32, index: u32, axes: u32, location: &[f64]) -> Vec<f64> {
+/// The external location a design location's mapping came from, in `axes`
+/// order, NaN on internal axes: `unmap_location_with_bases`.
+#[wasm_bindgen(js_name = unmapAxisLocation)]
+pub fn unmap_axis_location(mappings: u32, axes: u32, design: &[f64]) -> Vec<f64> {
     with_axes(axes, |axes| {
         MAPPINGS.with_borrow(|registry| {
-            let Some(basis) = registry
-                .get(mappings)
-                .and_then(|bases| bases.get(index as usize))
-            else {
-                return Vec::new();
-            };
-            let location = to_location(axes, location);
-            let mapped = basis.evaluate(&location, axes).unwrap_or_default();
-            basis
-                .output_axis_ids()
-                .iter()
-                .map(|axis_id| mapped.get(axis_id).unwrap_or(f64::NAN))
-                .collect()
+            let design = shift_font::DesignLocation::from_untyped(to_location(axes, design));
+            let bases = registry.get(mappings).map_or(&[][..], Vec::as_slice);
+            let external = unmap_location_with_bases(&design, axes, bases);
+            from_location(axes, external.as_untyped())
         })
-    })
-}
-
-/// Converts a normalized coordinate on one registered axis back to its design value.
-#[wasm_bindgen(js_name = denormalizeAxis)]
-pub fn denormalize_axis(axes: u32, index: u32, value: f64) -> f64 {
-    with_axes(axes, |axes| {
-        axes.get(index as usize)
-            .map_or(value, |axis| axis.denormalize(value))
     })
 }
 
@@ -355,22 +366,15 @@ fn with_axes<R>(handle: u32, call: impl FnOnce(&[Axis]) -> R) -> R {
 
 pub(crate) fn axis(data: VariationAxis) -> Axis {
     let id = AxisId::from_raw(data.id);
-    let mut axis = match data.axis_type {
-        VariationAxisType::Discrete => Axis::discrete_with_id(
-            id,
-            data.tag,
-            data.name,
-            data.values.unwrap_or_else(|| vec![data.default]),
-            data.default,
-        ),
-        VariationAxisType::Continuous => Axis::continuous_with_id(
-            id,
-            data.tag,
-            data.name,
-            data.minimum.unwrap_or(data.default),
-            data.default,
-            data.maximum.unwrap_or(data.default),
-        ),
+    let mut axis = match data.kind {
+        VariationAxisKind::Discrete { values, default } => {
+            Axis::discrete_with_id(id, data.tag, data.name, values, default)
+        }
+        VariationAxisKind::Continuous {
+            minimum,
+            default,
+            maximum,
+        } => Axis::continuous_with_id(id, data.tag, data.name, minimum, default, maximum),
     };
     axis.set_role(match data.role {
         VariationAxisRole::External => AxisRole::External,
@@ -406,7 +410,7 @@ fn variation_basis(data: VariationBasisData) -> VariationBasis {
     )
 }
 
-fn to_location(axes: &[Axis], values: &[f64]) -> Location {
+pub(crate) fn to_location(axes: &[Axis], values: &[f64]) -> Location {
     let mut location = Location::new();
     for (axis, value) in axes.iter().zip(values) {
         if !value.is_nan() {
@@ -418,6 +422,6 @@ fn to_location(axes: &[Axis], values: &[f64]) -> Location {
 
 fn from_location(axes: &[Axis], location: &Location) -> Vec<f64> {
     axes.iter()
-        .map(|axis| location.get(&axis.id()).unwrap_or(f64::NAN))
+        .map(|axis| location.get(axis.id()).unwrap_or(f64::NAN))
         .collect()
 }

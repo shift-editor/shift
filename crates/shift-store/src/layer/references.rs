@@ -1,6 +1,6 @@
 #[cfg(test)]
 use std::cell::Cell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use rusqlite::Connection;
 use shift_font as font;
@@ -57,9 +57,9 @@ impl ShiftStore {
     /// Returns [`StoreError::Sqlite`] when the read fails.
     pub fn referenced_glyph_ids_for_glyph(
         &self,
-        glyph_id: &font::GlyphId,
+        glyph_id: font::GlyphId,
     ) -> Result<Vec<font::GlyphId>, StoreError> {
-        self.referenced_glyph_ids_for_glyphs(std::slice::from_ref(glyph_id))
+        self.referenced_glyph_ids_for_glyphs(std::slice::from_ref(&glyph_id))
     }
 
     /// Returns the deduplicated direct component bases for a bounded root set.
@@ -74,38 +74,7 @@ impl ShiftStore {
         &self,
         glyph_ids: &[font::GlyphId],
     ) -> Result<Vec<font::GlyphId>, StoreError> {
-        let mut result = HashSet::new();
-        for count_batch in glyph_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
-            #[cfg(test)]
-            COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(count.get() + 1));
-
-            let placeholders = (0..count_batch.len())
-                .map(|_| "?")
-                .collect::<Vec<_>>()
-                .join(",");
-            // Keys go through IN subqueries, not joins: a recovered document reads
-            // through merged UNION ALL views, and SQLite pushes WHERE terms into
-            // them but not join terms, so a join scans every component row.
-            let sql = format!(
-                "SELECT DISTINCT c.base_glyph_id
-                 FROM glyph_components AS c
-                 WHERE c.layer_id IN (
-                     SELECT l.id FROM glyph_layers AS l WHERE l.glyph_id IN ({placeholders})
-                 )"
-            );
-            let mut stmt = self.conn.prepare(&sql)?;
-            let rows = stmt.query_map(
-                rusqlite::params_from_iter(count_batch.iter().map(ToString::to_string)),
-                |row| row.get::<_, font::GlyphId>(0),
-            )?;
-            for row in rows {
-                result.insert(row?);
-            }
-        }
-
-        let mut result = result.into_iter().collect::<Vec<_>>();
-        result.sort_by(|left, right| left.as_str().cmp(right.as_str()));
-        Ok(result)
+        referenced_glyph_ids_for_glyphs_from_conn(&self.conn, glyph_ids)
     }
 
     /// Computes the transitive component closure without scanning payloads.
@@ -121,22 +90,31 @@ impl ShiftStore {
         &self,
         roots: impl IntoIterator<Item = font::GlyphId>,
     ) -> Result<Vec<font::GlyphId>, StoreError> {
-        let mut pending = roots.into_iter().collect::<Vec<_>>();
-        let mut seen = HashSet::new();
-        let mut result = Vec::new();
-        while !pending.is_empty() {
-            let glyph_ids = pending
-                .drain(..)
-                .filter(|glyph_id| seen.insert(glyph_id.clone()))
-                .inspect(|glyph_id| result.push(glyph_id.clone()))
-                .collect::<Vec<_>>();
-            if glyph_ids.is_empty() {
-                continue;
-            }
+        referenced_glyph_closure_from_conn(&self.conn, roots)
+    }
 
-            pending.extend(self.referenced_glyph_ids_for_glyphs(&glyph_ids)?);
-        }
-        Ok(result)
+    /// Every glyph the components of `glyph_ids` use, transitively, other
+    /// than `glyph_ids` themselves: [`Self::referenced_glyph_closure`]
+    /// without its roots.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when a read fails.
+    pub fn bases_of(&self, glyph_ids: &[font::GlyphId]) -> Result<Vec<font::GlyphId>, StoreError> {
+        bases_of_from_conn(&self.conn, glyph_ids)
+    }
+
+    /// Glyphs with a component whose base is one of `glyph_ids`, directly;
+    /// not the composites of those composites.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the read fails.
+    pub fn composites_of(
+        &self,
+        glyph_ids: &[font::GlyphId],
+    ) -> Result<Vec<font::GlyphId>, StoreError> {
+        composites_of_from_conn(&self.conn, glyph_ids)
     }
 
     /// Reverse-reference lookup used for dependent invalidation.
@@ -148,40 +126,7 @@ impl ShiftStore {
         &self,
         layer_ids: &[font::LayerId],
     ) -> Result<Vec<font::GlyphId>, StoreError> {
-        if layer_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let mut result = HashSet::new();
-        for count_batch in layer_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
-            let placeholders = (0..count_batch.len())
-                .map(|_| "?")
-                .collect::<Vec<_>>()
-                .join(",");
-            // IN subqueries rather than joins, for the merged views; see
-            // `referenced_glyph_ids_for_glyphs`.
-            let sql = format!(
-                "SELECT DISTINCT owner.glyph_id
-                 FROM glyph_layers AS owner
-                 WHERE owner.id IN (
-                     SELECT c.layer_id FROM glyph_components AS c
-                     WHERE c.base_glyph_id IN (
-                         SELECT target.glyph_id FROM glyph_layers AS target
-                         WHERE target.id IN ({placeholders})
-                     )
-                 )"
-            );
-            let mut stmt = self.conn.prepare(&sql)?;
-            let rows = stmt.query_map(
-                rusqlite::params_from_iter(count_batch.iter().map(ToString::to_string)),
-                |row| row.get::<_, font::GlyphId>(0),
-            )?;
-            for row in rows {
-                result.insert(row?);
-            }
-        }
-        let mut result: Vec<_> = result.into_iter().collect();
-        result.sort_by(|left, right| left.as_str().cmp(right.as_str()));
-        Ok(result)
+        dependent_glyph_ids_for_layers_from_conn(&self.conn, layer_ids)
     }
 }
 
@@ -230,4 +175,135 @@ pub(super) fn validate_component_rows(
         });
     }
     Ok(())
+}
+
+pub(crate) fn referenced_glyph_ids_for_glyphs_from_conn(
+    conn: &Connection,
+    glyph_ids: &[font::GlyphId],
+) -> Result<Vec<font::GlyphId>, StoreError> {
+    // The id list is one JSON parameter, not a placeholder per id, so the
+    // statement text is the same for every batch and stays prepared. Through
+    // the recovery views, preparing it costs far more than running it.
+    //
+    // Keys go through IN subqueries, not joins: a recovered document reads
+    // through merged UNION ALL views, and SQLite pushes WHERE terms into
+    // them but not join terms, so a join scans every component row.
+    let mut stmt = conn.prepare_cached(
+        "SELECT DISTINCT c.base_glyph_id
+         FROM glyph_components AS c
+         WHERE c.layer_id IN (
+             SELECT l.id FROM glyph_layers AS l
+             WHERE l.glyph_id IN (SELECT value FROM json_each(?1))
+         )",
+    )?;
+    let mut result = BTreeSet::new();
+    for count_batch in glyph_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
+        #[cfg(test)]
+        COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(count.get() + 1));
+
+        let rows = stmt.query_map([serde_json::to_string(count_batch)?], |row| {
+            row.get::<_, font::GlyphId>(0)
+        })?;
+        for row in rows {
+            result.insert(row?);
+        }
+    }
+    Ok(result.into_iter().collect())
+}
+
+pub(crate) fn referenced_glyph_closure_from_conn(
+    conn: &Connection,
+    roots: impl IntoIterator<Item = font::GlyphId>,
+) -> Result<Vec<font::GlyphId>, StoreError> {
+    let mut pending = roots.into_iter().collect::<Vec<_>>();
+    let mut seen = HashSet::new();
+    let mut result = Vec::new();
+    while !pending.is_empty() {
+        let glyph_ids = pending
+            .drain(..)
+            .filter(|glyph_id| seen.insert(*glyph_id))
+            .inspect(|glyph_id| result.push(*glyph_id))
+            .collect::<Vec<_>>();
+        if glyph_ids.is_empty() {
+            continue;
+        }
+
+        pending.extend(referenced_glyph_ids_for_glyphs_from_conn(conn, &glyph_ids)?);
+    }
+    Ok(result)
+}
+
+pub(crate) fn bases_of_from_conn(
+    conn: &Connection,
+    glyph_ids: &[font::GlyphId],
+) -> Result<Vec<font::GlyphId>, StoreError> {
+    let roots: HashSet<font::GlyphId> = glyph_ids.iter().copied().collect();
+    let mut closure = referenced_glyph_closure_from_conn(conn, glyph_ids.iter().copied())?;
+    closure.retain(|glyph_id| !roots.contains(glyph_id));
+    Ok(closure)
+}
+
+pub(crate) fn composites_of_from_conn(
+    conn: &Connection,
+    glyph_ids: &[font::GlyphId],
+) -> Result<Vec<font::GlyphId>, StoreError> {
+    if glyph_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    // As in `dependent_glyph_ids_for_layers_from_conn`, with the bases given
+    // directly rather than found from their layers.
+    let mut stmt = conn.prepare_cached(
+        "WITH users AS MATERIALIZED (
+             SELECT c.layer_id FROM glyph_components AS c
+             WHERE c.base_glyph_id IN (SELECT value FROM json_each(?1))
+         )
+         SELECT DISTINCT owner.glyph_id
+         FROM glyph_layers AS owner
+         WHERE owner.id IN users",
+    )?;
+    let mut result = BTreeSet::new();
+    for count_batch in glyph_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
+        let rows = stmt.query_map([serde_json::to_string(count_batch)?], |row| {
+            row.get::<_, font::GlyphId>(0)
+        })?;
+        for row in rows {
+            result.insert(row?);
+        }
+    }
+    Ok(result.into_iter().collect())
+}
+
+pub(crate) fn dependent_glyph_ids_for_layers_from_conn(
+    conn: &Connection,
+    layer_ids: &[font::LayerId],
+) -> Result<Vec<font::GlyphId>, StoreError> {
+    if layer_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    // One JSON parameter and IN subqueries, as in
+    // `referenced_glyph_ids_for_glyphs_from_conn`. `users` is materialised:
+    // otherwise SQLite pushes `IN users` into both arms of the merged
+    // `glyph_layers` view and finds the component rows once per arm.
+    let mut stmt = conn.prepare_cached(
+        "WITH users AS MATERIALIZED (
+             SELECT c.layer_id FROM glyph_components AS c
+             WHERE c.base_glyph_id IN (
+                 SELECT target.glyph_id FROM glyph_layers AS target
+                 WHERE target.id IN (SELECT value FROM json_each(?1))
+             )
+         )
+         SELECT DISTINCT owner.glyph_id
+         FROM glyph_layers AS owner
+         WHERE owner.id IN users",
+    )?;
+    let mut result = BTreeSet::new();
+    for count_batch in layer_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
+        let rows = stmt.query_map([serde_json::to_string(count_batch)?], |row| {
+            row.get::<_, font::GlyphId>(0)
+        })?;
+        for row in rows {
+            result.insert(row?);
+        }
+    }
+    Ok(result.into_iter().collect())
 }

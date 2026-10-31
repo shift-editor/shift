@@ -1,29 +1,25 @@
 import type { InterpolationBasis, SourceId } from "@shift/types";
+import { blendSourceValues } from "@shift/wasm";
 
-export { interpolationWeights } from "../wasm/variation";
-
-/** Combines source value vectors using a location's evaluated source weights. */
+/**
+ * Combines source value vectors using a location's evaluated source weights,
+ * as shift-font blends them (`interpolation::blend_values`).
+ *
+ * @returns null when a source's values are missing or the sources differ in length.
+ */
 export function interpolateSourceValues(
   basis: InterpolationBasis,
   weights: Float64Array,
   valuesForSource: (sourceId: SourceId) => Float64Array | null,
 ): Float64Array | null {
-  const sourceValues = basis.sourceIds.map(valuesForSource);
-  const first = sourceValues.find((values) => values !== null);
-  if (!first) return null;
-  if (sourceValues.some((values) => !values || values.length !== first.length)) return null;
-
-  const result = new Float64Array(first.length);
-  for (let sourceIndex = 0; sourceIndex < sourceValues.length; sourceIndex++) {
-    const values = sourceValues[sourceIndex];
-    if (!values) return null;
-
-    const weight = weights[sourceIndex] ?? 0;
-    if (weight === 0) continue;
-    for (let valueIndex = 0; valueIndex < values.length; valueIndex++) {
-      result[valueIndex] += weight * values[valueIndex];
-    }
+  const sources = basis.sourceIds.map(valuesForSource);
+  const lengths = Uint32Array.from(sources, (values) => values?.length ?? 0);
+  const packed = new Float64Array(lengths.reduce((total, length) => total + length, 0));
+  let offset = 0;
+  for (const values of sources) {
+    if (!values) continue;
+    packed.set(values, offset);
+    offset += values.length;
   }
-
-  return result;
+  return blendSourceValues(weights, packed, lengths) ?? null;
 }

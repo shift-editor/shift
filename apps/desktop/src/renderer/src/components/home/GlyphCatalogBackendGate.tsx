@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { SlugGlyphCatalogSurface } from "./SlugGlyphCatalogSurface";
 import { SvgGlyphCatalogGrid } from "./SvgGlyphCatalogGrid";
-import type { GlyphId, GlyphName } from "@shift/types";
+import { EntityMap, type GlyphId, type GlyphName } from "@shift/types";
 import { effect, track } from "@shift/editor/signals";
 import type { GlyphCatalogBackendGateProps, PendingGlyphNames } from "@/types/glyphCatalog";
 import type { GlyphCatalogRendererKind } from "@/types/glyphCatalogRenderer";
@@ -51,16 +51,29 @@ export function GlyphCatalogBackendGate({
   useEffect(() => {
     if (pendingGlyphNames.size === 0) return;
 
+    const visibleById = new EntityMap(
+      "visible glyph",
+      glyphs.map((glyph) => [glyph.id, glyph] as const),
+    );
+    /**
+     * Whether a pending rename can stop overriding the shown name: the font
+     * committed it and the catalog shows it (or does not list the glyph), or
+     * edits settled without committing it.
+     */
+    const renameSettled = (glyphId: GlyphId, pendingName: GlyphName): boolean => {
+      const visibleGlyph = visibleById.get(glyphId);
+      const committedName = session.font.recordForId(glyphId)?.name;
+      const visibleNameConfirmed =
+        committedName === pendingName && (!visibleGlyph || visibleGlyph.name === pendingName);
+      const renameRejected = editsSettled && committedName !== pendingName;
+      return visibleNameConfirmed || renameRejected;
+    };
+
     setPendingGlyphNames((current) => {
       const next = new Map(current);
 
       for (const [glyphId, pendingName] of current) {
-        const visibleGlyph = glyphs.find(({ id }) => id === glyphId);
-        const committedName = session.font.recordForId(glyphId)?.name;
-        const visibleNameConfirmed =
-          committedName === pendingName && (!visibleGlyph || visibleGlyph.name === pendingName);
-        const renameRejected = editsSettled && committedName !== pendingName;
-        if (visibleNameConfirmed || renameRejected) next.delete(glyphId);
+        if (renameSettled(glyphId, pendingName)) next.delete(glyphId);
       }
 
       return next.size === current.size ? current : next;

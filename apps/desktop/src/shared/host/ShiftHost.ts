@@ -1,8 +1,9 @@
 import type { CommandId, RendererCommandId } from "../commands";
 import type { UpdateProgress } from "../update/types";
 import type { RendererErrorReport } from "../ipc/contract";
-import type { FontSessionMode } from "../workspace/protocol";
+import type { FontSessionMode, FontStoreLocation } from "../workspace/lanes";
 import type { RecentDocument } from "../recents";
+import type { AgentConnection } from "../agent/protocol";
 import type { AgentConnectionsState } from "../agent/connections";
 import type { AppConfigState, ThemeSetting } from "../config/config";
 import type { DebugOverlays } from "../debug";
@@ -21,7 +22,7 @@ export interface ShiftHost {
   platform: NodeJS.Platform;
   /** Connects this renderer to main-owned live agent requests. */
   agent: {
-    connect: () => Promise<void>;
+    connect: () => Promise<AgentConnection>;
   };
   /** Runs app commands owned by the main process. */
   commands: {
@@ -229,4 +230,40 @@ export interface ShiftHost {
     writeText: (text: string) => Promise<void>;
     readText: () => Promise<string>;
   };
+  /**
+   * Synchronous, read-only access to the open workspace's stored layers, so
+   * the window's editing engine can load what an edit reads within the edit.
+   *
+   * @remarks
+   * Every call blocks on SQLite and returns committed state, including unsaved
+   * edits in a document's recovery overlay. Writes stay in the utility process.
+   */
+  layers: LayerReaderHost;
+}
+
+/** Handle-based read-only layer access; handles are opaque numbers. */
+export interface LayerReaderHost {
+  /**
+   * Opens a reader for the store at `location`.
+   *
+   * @throws {Error} when the store cannot be opened read-only.
+   */
+  open: (location: FontStoreLocation) => number;
+  /**
+   * Answers one request of shift-engine's `StoreReader` protocol, as the
+   * engine encoded it, from the reader's store; the window passes it on
+   * unchanged. A store failure comes back in the reply, as the method's error.
+   *
+   * @param blobs - The request's blobs, the last of them the names it uses.
+   * @returns The reply's numbers and blobs, the last of them the names it uses.
+   * @throws {Error} for an unknown reader.
+   */
+  request: (
+    reader: number,
+    method: number,
+    numbers: Float64Array,
+    blobs: readonly Uint8Array[],
+  ) => { numbers: Float64Array; blobs: Uint8Array[] };
+  /** Releases a reader; unknown handles are ignored. */
+  close: (reader: number) => void;
 }

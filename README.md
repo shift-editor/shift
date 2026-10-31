@@ -73,6 +73,7 @@ pnpm dev
 - `packages/editor`: tools, rendering, and editor state
 - `crates/shift-bridge`: native bridge between TypeScript and Rust
 - `crates/shift-workspace`: open documents and editing sessions
+- `crates/shift-engine`: the editing session over a partly loaded font, shared by native and the renderer
 - `crates/shift-font`: the font model and editing behavior
 - `crates/shift-store`: `.shift` files and recovery
 - `crates/shift-backends`, `crates/fontsrc`: importing and exporting UFO, Designspace, Glyphs, and TrueType

@@ -74,7 +74,7 @@ pub struct ComponentGlyph {
 impl ComponentGlyph {
     /// Returns the glyph layer that owns the component transform.
     pub fn parent_glyph_id(&self) -> GlyphId {
-        self.parent_glyph_id.clone()
+        self.parent_glyph_id
     }
 
     /// Returns the stable component identity within its parent layer.
@@ -89,7 +89,7 @@ impl ComponentGlyph {
 
     /// Returns the glyph instantiated by this component occurrence.
     pub fn base_glyph_id(&self) -> GlyphId {
-        self.base_glyph_id.clone()
+        self.base_glyph_id
     }
 
     /// Returns the parent component occurrence, or an empty path for the root.
@@ -128,12 +128,12 @@ impl GlyphComponents {
     /// transitive component closure at one location before invoking this
     /// function.
     pub fn from_layers(
-        root_glyph_id: &GlyphId,
+        root_glyph_id: GlyphId,
         layers: &HashMap<GlyphId, &GlyphLayer>,
     ) -> CoreResult<Self> {
         let root_layer = layer_for_glyph(layers, root_glyph_id)?;
         let mut components = Vec::new();
-        let mut visiting = HashSet::from([root_glyph_id.clone()]);
+        let mut visiting = HashSet::from([root_glyph_id]);
         append_components(
             layers,
             root_layer,
@@ -143,19 +143,92 @@ impl GlyphComponents {
             &mut components,
         )?;
         Ok(Self {
-            root_glyph_id: root_glyph_id.clone(),
+            root_glyph_id,
             components,
         })
     }
 
     /// Returns the glyph whose component relationships are represented.
     pub fn root_glyph_id(&self) -> GlyphId {
-        self.root_glyph_id.clone()
+        self.root_glyph_id
     }
 
     /// Returns component occurrences in parent-before-child evaluation order.
     pub fn components(&self) -> &[ComponentGlyph] {
         &self.components
+    }
+
+    /// Each occurrence in parent-before-child order, with its base layer
+    /// and its transform into root-glyph coordinates.
+    fn occurrences<'a>(
+        &'a self,
+        layers: &HashMap<GlyphId, &'a GlyphLayer>,
+    ) -> CoreResult<Vec<ResolvedOccurrence<'a>>> {
+        let mut resolved_transforms = HashMap::<ComponentPath, Transform>::new();
+        let mut occurrences = Vec::with_capacity(self.components.len());
+
+        for component in &self.components {
+            let local_transform = explicit_transform_for_component(layers, component)?;
+            let parent_transform = if component.parent_path().is_root() {
+                Transform::identity()
+            } else {
+                *resolved_transforms
+                    .get(component.parent_path())
+                    .ok_or_else(|| invalid_component(component))?
+            };
+            let transform = parent_transform.compose(local_transform);
+            resolved_transforms.insert(component.component_path().clone(), transform);
+
+            let layer =
+                layer_for_component(layers, &component.component_id(), component.base_glyph_id())?;
+            occurrences.push(ResolvedOccurrence {
+                component,
+                transform,
+                layer,
+            });
+        }
+
+        Ok(occurrences)
+    }
+
+    /// The contours of every occurrence in root-glyph coordinates; with
+    /// `selected`, only those under the selected direct components.
+    fn contours(
+        &self,
+        layers: &HashMap<GlyphId, &GlyphLayer>,
+        selected: Option<&HashSet<ComponentId>>,
+    ) -> CoreResult<Vec<ResolvedContour>> {
+        let mut contours = Vec::new();
+        for occurrence in self.occurrences(layers)? {
+            if selected.is_none_or(|selected| occurrence.is_under(selected)) {
+                contours.extend(
+                    occurrence
+                        .layer
+                        .contours_iter()
+                        .map(|contour| transform_contour_points(contour, occurrence.transform)),
+                );
+            }
+        }
+        Ok(contours)
+    }
+}
+
+/// One component occurrence resolved against its base layer.
+struct ResolvedOccurrence<'a> {
+    component: &'a ComponentGlyph,
+    /// Into root-glyph coordinates.
+    transform: Transform,
+    layer: &'a GlyphLayer,
+}
+
+impl ResolvedOccurrence<'_> {
+    /// Whether the occurrence sits under one of the `selected` direct components.
+    fn is_under(&self, selected: &HashSet<ComponentId>) -> bool {
+        self.component
+            .component_path()
+            .as_slice()
+            .first()
+            .is_some_and(|component_id| selected.contains(component_id))
     }
 }
 
@@ -163,28 +236,28 @@ impl GlyphComponents {
 fn layer_view(layers: &HashMap<GlyphId, GlyphLayer>) -> HashMap<GlyphId, &GlyphLayer> {
     layers
         .iter()
-        .map(|(glyph_id, layer)| (glyph_id.clone(), layer))
+        .map(|(glyph_id, layer)| (*glyph_id, layer))
         .collect()
 }
 
 fn layer_for_glyph<'a>(
     layers: &HashMap<GlyphId, &'a GlyphLayer>,
-    glyph_id: &GlyphId,
+    glyph_id: GlyphId,
 ) -> CoreResult<&'a GlyphLayer> {
-    layers.get(glyph_id).copied().require(&glyph_id)
+    layers.get(&glyph_id).copied().require(&glyph_id)
 }
 
 fn layer_for_component<'a>(
     layers: &HashMap<GlyphId, &'a GlyphLayer>,
     component_id: &ComponentId,
-    base_glyph_id: &GlyphId,
+    base_glyph_id: GlyphId,
 ) -> CoreResult<&'a GlyphLayer> {
     layers
-        .get(base_glyph_id)
+        .get(&base_glyph_id)
         .copied()
         .ok_or_else(|| CoreError::UnresolvableComponentGlyph {
             component_id: component_id.clone(),
-            base_glyph_id: base_glyph_id.clone(),
+            base_glyph_id,
         })
 }
 
@@ -226,7 +299,7 @@ fn transform_contour_points(contour: &Contour, transform: Transform) -> Resolved
 fn append_components(
     layers: &HashMap<GlyphId, &GlyphLayer>,
     parent_layer: &GlyphLayer,
-    parent_glyph_id: &GlyphId,
+    parent_glyph_id: GlyphId,
     parent_path: &ComponentPath,
     visiting: &mut HashSet<GlyphId>,
     out: &mut Vec<ComponentGlyph>,
@@ -237,23 +310,23 @@ fn append_components(
             continue;
         }
 
-        let component_layer = layer_for_component(layers, &component.id(), &base_glyph_id)?;
+        let component_layer = layer_for_component(layers, &component.id(), base_glyph_id)?;
 
         let component_path = parent_path.child(component.id());
         out.push(ComponentGlyph {
-            parent_glyph_id: parent_glyph_id.clone(),
+            parent_glyph_id,
             component_id: component.id(),
             component_index,
-            base_glyph_id: base_glyph_id.clone(),
+            base_glyph_id,
             parent_path: parent_path.clone(),
             component_path: component_path.clone(),
         });
 
-        visiting.insert(base_glyph_id.clone());
+        visiting.insert(base_glyph_id);
         append_components(
             layers,
             component_layer,
-            &base_glyph_id,
+            base_glyph_id,
             &component_path,
             visiting,
             out,
@@ -268,7 +341,7 @@ fn explicit_transform_for_component(
     layers: &HashMap<GlyphId, &GlyphLayer>,
     component_glyph: &ComponentGlyph,
 ) -> CoreResult<Transform> {
-    let parent_layer = layer_for_glyph(layers, &component_glyph.parent_glyph_id())?;
+    let parent_layer = layer_for_glyph(layers, component_glyph.parent_glyph_id())?;
     let component = parent_layer
         .components_iter()
         .find(|component| component.id() == component_glyph.component_id())
@@ -278,65 +351,6 @@ fn explicit_transform_for_component(
     }
 
     Ok(component.matrix())
-}
-
-/// Walks resolved component occurrences in parent-before-child order with
-/// each occurrence's base layer and transform into root-glyph coordinates.
-fn resolved_occurrences<'a>(
-    layers: &HashMap<GlyphId, &'a GlyphLayer>,
-    components: &'a GlyphComponents,
-) -> CoreResult<Vec<(&'a ComponentGlyph, Transform, &'a GlyphLayer)>> {
-    let mut resolved_transforms = HashMap::<ComponentPath, Transform>::new();
-    let mut occurrences = Vec::with_capacity(components.components().len());
-
-    for component_glyph in components.components() {
-        let local_transform = explicit_transform_for_component(layers, component_glyph)?;
-        let parent_transform = if component_glyph.parent_path().is_root() {
-            Transform::identity()
-        } else {
-            *resolved_transforms
-                .get(component_glyph.parent_path())
-                .ok_or_else(|| invalid_component(component_glyph))?
-        };
-        let resolved_transform = parent_transform.compose(local_transform);
-        resolved_transforms.insert(component_glyph.component_path().clone(), resolved_transform);
-
-        let layer = layer_for_component(
-            layers,
-            &component_glyph.component_id(),
-            &component_glyph.base_glyph_id(),
-        )?;
-        occurrences.push((component_glyph, resolved_transform, layer));
-    }
-
-    Ok(occurrences)
-}
-
-fn resolve_component_contours(
-    layers: &HashMap<GlyphId, &GlyphLayer>,
-    components: &GlyphComponents,
-    selected_root_components: Option<&HashSet<ComponentId>>,
-) -> CoreResult<Vec<ResolvedContour>> {
-    let mut contours = Vec::new();
-
-    for (component_glyph, transform, layer) in resolved_occurrences(layers, components)? {
-        let selected = selected_root_components.is_none_or(|selected| {
-            component_glyph
-                .component_path()
-                .as_slice()
-                .first()
-                .is_some_and(|component_id| selected.contains(component_id))
-        });
-        if selected {
-            contours.extend(
-                layer
-                    .contours_iter()
-                    .map(|contour| transform_contour_points(contour, transform)),
-            );
-        }
-    }
-
-    Ok(contours)
 }
 
 /// Composited geometry of one exact authored layer.
@@ -379,7 +393,7 @@ impl ResolvedComponentGeometry {
 
     /// Returns the glyph this component instantiates.
     pub fn base_glyph_id(&self) -> GlyphId {
-        self.base_glyph_id.clone()
+        self.base_glyph_id
     }
 
     /// Returns the authored placement of the base glyph in the root layer.
@@ -401,7 +415,7 @@ impl ResolvedComponentGeometry {
 /// Returns an error when `layers` does not contain the root or its complete
 /// component closure, or when component identities are inconsistent.
 pub(crate) fn resolved_layer_geometry_from_layers(
-    root_glyph_id: &GlyphId,
+    root_glyph_id: GlyphId,
     layers: &HashMap<GlyphId, GlyphLayer>,
 ) -> CoreResult<ResolvedLayerGeometry> {
     let view = layer_view(layers);
@@ -414,20 +428,21 @@ pub(crate) fn resolved_layer_geometry_from_layers(
     let mut components = Vec::<ResolvedComponentGeometry>::new();
 
     // Occurrences are depth-first, so each descendant follows its direct root.
-    for (occurrence, transform, layer) in resolved_occurrences(&view, &relationships)? {
-        if occurrence.parent_path().is_root() {
+    for occurrence in relationships.occurrences(&view)? {
+        let component = occurrence.component;
+        if component.parent_path().is_root() {
             components.push(ResolvedComponentGeometry {
-                component_id: occurrence.component_id(),
-                base_glyph_id: occurrence.base_glyph_id(),
-                transformation: transform,
+                component_id: component.component_id(),
+                base_glyph_id: component.base_glyph_id(),
+                transformation: occurrence.transform,
                 outline: Vec::new(),
             });
         }
         let direct = components
             .last_mut()
-            .ok_or_else(|| invalid_component(occurrence))?;
-        for contour in layer.contours_iter() {
-            let contour = transform_contour_points(contour, transform);
+            .ok_or_else(|| invalid_component(component))?;
+        for contour in occurrence.layer.contours_iter() {
+            let contour = transform_contour_points(contour, occurrence.transform);
             direct.outline.push(contour.clone());
             outline.push(contour);
         }
@@ -453,12 +468,12 @@ pub(crate) fn resolved_layer_geometry_from_layers(
 /// Returns an error when `layers` does not contain the complete component
 /// closure or when its component and anchor identities are inconsistent.
 pub fn flatten_component_contours_from_layers(
-    root_glyph_id: &GlyphId,
+    root_glyph_id: GlyphId,
     layers: &HashMap<GlyphId, GlyphLayer>,
 ) -> CoreResult<Vec<ResolvedContour>> {
     let view = layer_view(layers);
     let components = GlyphComponents::from_layers(root_glyph_id, &view)?;
-    resolve_component_contours(&view, &components, None)
+    components.contours(&view, None)
 }
 
 /// Flattens selected direct component occurrences into local contours.
@@ -471,13 +486,13 @@ pub fn flatten_component_contours_from_layers(
 /// Returns an error when `layers` does not contain the complete component
 /// closure or when its component and anchor identities are inconsistent.
 pub(crate) fn flatten_selected_component_contours_from_layers(
-    root_glyph_id: &GlyphId,
+    root_glyph_id: GlyphId,
     layers: &HashMap<GlyphId, GlyphLayer>,
     component_ids: &HashSet<ComponentId>,
 ) -> CoreResult<Vec<ResolvedContour>> {
     let view = layer_view(layers);
     let components = GlyphComponents::from_layers(root_glyph_id, &view)?;
-    resolve_component_contours(&view, &components, Some(component_ids))
+    components.contours(&view, Some(component_ids))
 }
 
 /// Resolves root and component contours for one derived glyph layer.
@@ -491,7 +506,7 @@ pub(crate) fn flatten_selected_component_contours_from_layers(
 /// Returns an error when `layers` does not contain the root or its complete
 /// component closure, or when component and anchor identities are inconsistent.
 pub fn resolved_contours_from_layers(
-    root_glyph_id: &GlyphId,
+    root_glyph_id: GlyphId,
     layers: &HashMap<GlyphId, GlyphLayer>,
 ) -> CoreResult<Vec<ResolvedContour>> {
     let view = layer_view(layers);
@@ -501,7 +516,7 @@ pub fn resolved_contours_from_layers(
         .map(|contour| transform_contour_points(contour, Transform::identity()))
         .collect::<Vec<_>>();
     let components = GlyphComponents::from_layers(root_glyph_id, &view)?;
-    contours.extend(resolve_component_contours(&view, &components, None)?);
+    contours.extend(components.contours(&view, None)?);
     Ok(contours)
 }
 
@@ -694,7 +709,7 @@ mod tests {
         font.glyphs()
             .filter_map(|glyph| {
                 glyph
-                    .layer_for_source(&source_id)
+                    .layer_for_source(source_id)
                     .map(|layer| (glyph.id(), layer.clone()))
             })
             .collect()
@@ -707,7 +722,7 @@ mod tests {
 
         let mut base = Glyph::new("base".to_string());
         let base_id = base.id();
-        let mut base_layer = test_layer(source_id.clone(), 500.0);
+        let mut base_layer = test_layer(source_id, 500.0);
         base_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 10.0));
         base.set_layer(base_layer);
         font.insert_glyph(base).unwrap();
@@ -720,7 +735,7 @@ mod tests {
         font.insert_glyph(composite).unwrap();
 
         let resolved =
-            flatten_component_contours_from_layers(&composite_id, &default_layers(&font)).unwrap();
+            flatten_component_contours_from_layers(composite_id, &default_layers(&font)).unwrap();
 
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].points.len(), 2);
@@ -733,12 +748,12 @@ mod tests {
 
         let mut base = Glyph::new("base".to_string());
         let base_id = base.id();
-        base.set_layer(test_layer(source_id.clone(), 500.0));
+        base.set_layer(test_layer(source_id, 500.0));
         font.insert_glyph(base).unwrap();
 
         let mut middle = Glyph::new("middle".to_string());
         let middle_id = middle.id();
-        let mut middle_layer = test_layer(source_id.clone(), 500.0);
+        let mut middle_layer = test_layer(source_id, 500.0);
         let nested_id = middle_layer.add_component(Component::new(base_id, "base".to_string()));
         middle.set_layer(middle_layer);
         font.insert_glyph(middle).unwrap();
@@ -746,14 +761,13 @@ mod tests {
         let mut root = Glyph::new("root".to_string());
         let root_id = root.id();
         let mut root_layer = test_layer(source_id, 500.0);
-        let first_id =
-            root_layer.add_component(Component::new(middle_id.clone(), "middle".to_string()));
+        let first_id = root_layer.add_component(Component::new(middle_id, "middle".to_string()));
         let second_id = root_layer.add_component(Component::new(middle_id, "middle".to_string()));
         root.set_layer(root_layer);
         font.insert_glyph(root).unwrap();
 
         let layers = default_layers(&font);
-        let components = GlyphComponents::from_layers(&root_id, &layer_view(&layers)).unwrap();
+        let components = GlyphComponents::from_layers(root_id, &layer_view(&layers)).unwrap();
         let paths = components
             .components()
             .iter()
@@ -788,16 +802,16 @@ mod tests {
         let a_id = a.id();
         let b_id = GlyphId::new();
         let c_id = GlyphId::new();
-        let mut a_layer = test_layer(source_id.clone(), 500.0);
-        a_layer.add_component(Component::new(b_id.clone(), "B".to_string()));
-        a_layer.add_component(Component::new(c_id.clone(), "C".to_string()));
+        let mut a_layer = test_layer(source_id, 500.0);
+        a_layer.add_component(Component::new(b_id, "B".to_string()));
+        a_layer.add_component(Component::new(c_id, "C".to_string()));
         a.set_layer(a_layer);
         font.insert_glyph(a).unwrap();
 
         let mut b = Glyph::with_id(b_id, "B".to_string());
-        let mut b_layer = test_layer(source_id.clone(), 500.0);
+        let mut b_layer = test_layer(source_id, 500.0);
         b_layer.add_contour(two_point_contour(0.0, 0.0, 20.0, 20.0));
-        b_layer.add_component(Component::new(a_id.clone(), "A".to_string()));
+        b_layer.add_component(Component::new(a_id, "A".to_string()));
         b.set_layer(b_layer);
         font.insert_glyph(b).unwrap();
 
@@ -808,7 +822,7 @@ mod tests {
         font.insert_glyph(c).unwrap();
 
         let resolved =
-            flatten_component_contours_from_layers(&a_id, &default_layers(&font)).unwrap();
+            flatten_component_contours_from_layers(a_id, &default_layers(&font)).unwrap();
 
         assert_eq!(resolved.len(), 2);
     }
@@ -816,9 +830,9 @@ mod tests {
     #[test]
     fn anchor_aligned_offset_matches_latest_sibling_anchor() {
         let source_id = SourceId::new();
-        let mut first = test_layer(source_id.clone(), 500.0);
+        let mut first = test_layer(source_id, 500.0);
         first.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
-        let mut second = test_layer(source_id.clone(), 500.0);
+        let mut second = test_layer(source_id, 500.0);
         second.add_anchor(Anchor::new(Some("top".to_string()), 50.0, 300.0));
         let mut mark = test_layer(source_id, 500.0);
         mark.add_anchor(Anchor::new(Some("_top".to_string()), 5.0, 10.0));
@@ -846,7 +860,7 @@ mod tests {
 
         let mut base = Glyph::new("base".to_string());
         let base_id = base.id();
-        let mut base_layer = test_layer(source_id.clone(), 500.0);
+        let mut base_layer = test_layer(source_id, 500.0);
         base_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
         base_layer.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
         base.set_layer(base_layer);
@@ -854,7 +868,7 @@ mod tests {
 
         let mut mark = Glyph::new("mark".to_string());
         let mark_id = mark.id();
-        let mut mark_layer = test_layer(source_id.clone(), 500.0);
+        let mut mark_layer = test_layer(source_id, 500.0);
         mark_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
         mark_layer.add_anchor(Anchor::new(Some("_top".to_string()), 5.0, 0.0));
         mark.set_layer(mark_layer);
@@ -873,7 +887,7 @@ mod tests {
         font.insert_glyph(comp).unwrap();
 
         let resolved =
-            flatten_component_contours_from_layers(&comp_id, &default_layers(&font)).unwrap();
+            flatten_component_contours_from_layers(comp_id, &default_layers(&font)).unwrap();
 
         let mark_contour = &resolved[1];
         assert_eq!(mark_contour.points[0].x(), 95.0);
@@ -889,7 +903,7 @@ mod tests {
 
         let mut mark = Glyph::new("mark".to_string());
         let mark_id = mark.id();
-        let mut mark_layer = test_layer(source_id.clone(), 500.0);
+        let mut mark_layer = test_layer(source_id, 500.0);
         mark_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
         mark_layer.add_anchor(Anchor::new(Some("top".to_string()), 5.0, 0.0));
         mark.set_layer(mark_layer);
@@ -904,7 +918,7 @@ mod tests {
         font.insert_glyph(comp).unwrap();
 
         let resolved =
-            flatten_component_contours_from_layers(&comp_id, &default_layers(&font)).unwrap();
+            flatten_component_contours_from_layers(comp_id, &default_layers(&font)).unwrap();
 
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].points[0].x(), 30.0);
@@ -920,7 +934,7 @@ mod tests {
 
         let mut base = Glyph::new("base".to_string());
         let base_id = base.id();
-        let mut base_layer = test_layer(source_id.clone(), 500.0);
+        let mut base_layer = test_layer(source_id, 500.0);
         base_layer.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
         base_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
         base.set_layer(base_layer);
@@ -928,7 +942,7 @@ mod tests {
 
         let mut mark = Glyph::new("mark".to_string());
         let mark_id = mark.id();
-        let mut mark_layer = test_layer(source_id.clone(), 500.0);
+        let mut mark_layer = test_layer(source_id, 500.0);
         mark_layer.add_anchor(Anchor::new(Some("top_extra".to_string()), 5.0, 0.0));
         mark_layer.add_contour(two_point_contour(0.0, 0.0, 10.0, 0.0));
         mark.set_layer(mark_layer);
@@ -944,7 +958,7 @@ mod tests {
         font.insert_glyph(comp).unwrap();
 
         let resolved =
-            flatten_component_contours_from_layers(&comp_id, &default_layers(&font)).unwrap();
+            flatten_component_contours_from_layers(comp_id, &default_layers(&font)).unwrap();
 
         assert_eq!(resolved.len(), 2);
         let mark_contour = &resolved[1];
@@ -957,7 +971,7 @@ mod tests {
     #[test]
     fn stacked_marks_align_to_the_previous_mark() {
         let source_id = SourceId::new();
-        let mut base = test_layer(source_id.clone(), 500.0);
+        let mut base = test_layer(source_id, 500.0);
         base.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 200.0));
         let mut mark = test_layer(source_id, 500.0);
         mark.add_anchor(Anchor::new(Some("_top".to_string()), 5.0, 0.0));

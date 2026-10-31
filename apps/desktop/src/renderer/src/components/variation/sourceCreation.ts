@@ -91,19 +91,16 @@ export function suggestedSourceName(
   const labels = axes.flatMap((axis) => {
     const value = axisValue(location, axis);
     const exact = axis.labels.find(
-      ({ minimum, maximum, value: nominal }) =>
-        minimum === undefined &&
-        maximum === undefined &&
-        Math.abs(nominal - value) <= LOCATION_TOLERANCE,
+      ({ range, value: nominal }) =>
+        range == null && Math.abs(nominal - value) <= LOCATION_TOLERANCE,
     );
     if (exact) return [exact.name];
 
     const range = axis.labels.find(
-      (label) =>
-        label.minimum !== undefined &&
-        label.maximum !== undefined &&
-        value >= label.minimum - LOCATION_TOLERANCE &&
-        value <= label.maximum + LOCATION_TOLERANCE,
+      ({ range }) =>
+        range != null &&
+        value >= range.minimum - LOCATION_TOLERANCE &&
+        value <= range.maximum + LOCATION_TOLERANCE,
     );
     return range ? [range.name] : [];
   });

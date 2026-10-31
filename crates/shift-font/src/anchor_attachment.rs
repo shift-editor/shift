@@ -36,40 +36,52 @@ pub(crate) fn realign_attached_components<'a>(
     let touched: BTreeSet<&LayerId> = touched.into_iter().collect();
     let mut anchor_glyphs = HashSet::new();
     for &layer_id in &touched {
-        let (Some(old), Some(new)) = (before.layer(layer_id), after.layer(layer_id)) else {
+        let (Some(old), Some(new)) = (before.layer(*layer_id), after.layer(*layer_id)) else {
             continue;
         };
         if old.anchors() != new.anchors() {
-            anchor_glyphs.extend(after.glyph_id_by_layer(layer_id));
+            anchor_glyphs.extend(after.glyph_id_by_layer(*layer_id));
         }
     }
     // Most edits move points: nothing to follow unless anchors or stacked components changed.
     if anchor_glyphs.is_empty()
         && !touched.iter().any(|layer_id| {
             after
-                .layer(layer_id)
+                .layer(**layer_id)
                 .is_some_and(|layer| layer.components_iter().nth(1).is_some())
         })
     {
         return Vec::new();
     }
 
-    let candidates: Vec<LayerId> = after
-        .glyphs()
-        .flat_map(|glyph| glyph.layers().values())
-        .filter(|layer| layer.components_iter().nth(1).is_some())
-        .filter(|layer| {
-            touched.contains(&layer.id())
-                || layer
-                    .components_iter()
-                    .any(|component| anchor_glyphs.contains(&component.base_glyph_id()))
+    // Touched layers plus composites that stack components on a glyph whose
+    // anchors moved, found through the component index, once each and in
+    // glyph then layer order so every engine emits the same changeset.
+    // Derived anchored placement retires this query.
+    let candidates: BTreeSet<(Option<usize>, LayerId)> = touched
+        .iter()
+        .copied()
+        .chain(
+            anchor_glyphs
+                .iter()
+                .flat_map(|glyph_id| after.layers_using_component_base(glyph_id)),
+        )
+        .filter(|layer_id| {
+            after
+                .layer(**layer_id)
+                .is_some_and(|layer| layer.components_iter().nth(1).is_some())
         })
-        .map(|layer| layer.id())
+        .map(|layer_id| {
+            let glyph_order = after
+                .glyph_id_by_layer(*layer_id)
+                .and_then(|glyph_id| after.glyph_order(glyph_id));
+            (glyph_order, *layer_id)
+        })
         .collect();
 
     let mut changed_layers = Vec::new();
-    for layer_id in candidates {
-        let (Some(old), Some(new)) = (before.layer(&layer_id), after.layer(&layer_id)) else {
+    for (_, layer_id) in candidates {
+        let (Some(old), Some(new)) = (before.layer(layer_id), after.layer(layer_id)) else {
             continue;
         };
         let inputs: Vec<_> = new
@@ -87,7 +99,7 @@ pub(crate) fn realign_attached_components<'a>(
             .collect();
         let following = follow_anchors(&inputs);
 
-        let Some(layer) = after.layer_mut(&layer_id) else {
+        let Some(layer) = after.layer_mut(layer_id) else {
             continue;
         };
         let mut changed = false;
@@ -115,8 +127,8 @@ fn base_anchors<'font>(
     component: &Component,
     layer: &GlyphLayer,
 ) -> &'font [Anchor] {
-    font.glyph(&component.base_glyph_id())
-        .and_then(|glyph| glyph.layer_for_source(&layer.source_id()))
+    font.glyph(component.base_glyph_id())
+        .and_then(|glyph| glyph.layer_for_source(layer.source_id()))
         .map_or(&[], GlyphLayer::anchors)
 }
 
@@ -181,6 +193,7 @@ pub struct FollowingComponent<'a, A> {
 
 /// Where a component goes after an edit, and whether it is anchored.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Following {
     pub transform: DecomposedTransform,
     pub alignment: ComponentAlignment,

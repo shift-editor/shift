@@ -6,11 +6,9 @@ import type {
   VariationBasis,
 } from "@shift/types";
 import {
-  denormalizeAxis as wasmDenormalizeAxis,
-  evaluateAxisMapping as wasmEvaluateAxisMapping,
   evaluateVariationBasis as wasmEvaluateVariationBasis,
   interpolationWeights as wasmInterpolationWeights,
-  mapAxisLocation,
+  mapAxisLocation as wasmMapAxisLocation,
   registerAxes,
   registerAxisMappings,
   registerInterpolationBasis,
@@ -19,9 +17,10 @@ import {
   releaseAxisMappings,
   releaseInterpolationBasis,
   releaseVariationBasis,
+  unmapAxisLocation as wasmUnmapAxisLocation,
 } from "@shift/wasm";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
-import { asDesignAxisLocation } from "../variation/location";
+import { asDesignAxisLocation, asExternalAxisLocation } from "../variation/location";
 
 /**
  * Registers Rust-compiled values with the module once per object, and frees
@@ -49,22 +48,19 @@ class Handles<T extends object> {
   }
 }
 
-const axesHandles = new Handles<readonly Axis[]>(
-  (axes) => registerAxes(axes as Axis[]),
-  releaseAxes,
-);
+const axesHandles = new Handles<readonly Axis[]>(registerAxes, releaseAxes);
 const basisHandles = new Handles<VariationBasis>(registerVariationBasis, releaseVariationBasis);
 const interpolationHandles = new Handles<InterpolationBasis>(
   registerInterpolationBasis,
   releaseInterpolationBasis,
 );
 const mappingHandles = new Handles<readonly AxisMappingBasis[]>(
-  (bases) => registerAxisMappings(bases as AxisMappingBasis[]),
+  registerAxisMappings,
   releaseAxisMappings,
 );
 
 /** A location as numbers in `axes` order; NaN where it has no coordinate, read as the default. */
-function locationValues(
+export function locationValues(
   axes: readonly Axis[],
   location: ReadonlyMap<AxisId, number>,
 ): Float64Array {
@@ -147,13 +143,16 @@ export function evaluateVariationBasis(
   );
 }
 
-/** Maps an external location to its design location through a font's compiled axis mappings. */
-export function mapAxisMappings(
+/**
+ * Maps an external location to its design location, exactly once, through a
+ * font's compiled axis mappings: shift-font's `map_location_with_bases`.
+ */
+export function mapAxisLocation(
   location: ExternalAxisLocation,
   axes: readonly Axis[],
   bases: readonly AxisMappingBasis[],
 ): DesignAxisLocation {
-  const design = mapAxisLocation(
+  const design = wasmMapAxisLocation(
     mappingHandles.of(bases),
     axesHandles.of(axes),
     locationValues(axes, location),
@@ -161,31 +160,19 @@ export function mapAxisMappings(
   return asDesignAxisLocation(locationFromValues(axes, design));
 }
 
-/** Maps a location through one of a font's compiled axis mappings; its output axes only. */
-export function evaluateAxisMapping(
-  bases: readonly AxisMappingBasis[],
-  index: number,
-  location: ReadonlyMap<AxisId, number>,
+/**
+ * The external location a design location's mapping came from, on the
+ * external axes alone: shift-font's `unmap_location_with_bases`.
+ */
+export function externalAxisLocationForDesignLocation(
+  location: DesignAxisLocation,
   axes: readonly Axis[],
-): DesignAxisLocation {
-  const outputs = wasmEvaluateAxisMapping(
+  bases: readonly AxisMappingBasis[],
+): ExternalAxisLocation {
+  const external = wasmUnmapAxisLocation(
     mappingHandles.of(bases),
-    index,
     axesHandles.of(axes),
     locationValues(axes, location),
   );
-  const outputIds = bases[index]?.outputAxisIds ?? [];
-  return asDesignAxisLocation(
-    new Map(
-      outputIds.flatMap((axisId, outputIndex) => {
-        const value = outputs[outputIndex];
-        return value === undefined || Number.isNaN(value) ? [] : [[axisId, value] as const];
-      }),
-    ),
-  );
-}
-
-/** Converts a normalized coordinate on an axis back to its design value. */
-export function denormalizeAxis(axes: readonly Axis[], axis: Axis, value: number): number {
-  return wasmDenormalizeAxis(axesHandles.of(axes), axes.indexOf(axis), value);
+  return asExternalAxisLocation(locationFromValues(axes, external));
 }

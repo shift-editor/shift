@@ -29,6 +29,12 @@ const capabilities: ShiftCapabilities = {
     get: (input) => host.call("shift.glyphs.get", input),
     resolve: (input) => host.call("shift.glyphs.resolve", input),
   },
+  sources: {
+    get: (input) => host.call("shift.sources.get", input),
+  },
+  instances: {
+    get: (input) => host.call("shift.instances.get", input),
+  },
   layers: {
     get: (input) => host.call("shift.layers.get", input),
     resolve: (input) => host.call("shift.layers.resolve", input),
@@ -38,6 +44,7 @@ const capabilities: ShiftCapabilities = {
     groups: (input) => host.call("shift.kerning.groups", input),
     pairs: (input) => host.call("shift.kerning.pairs", input),
     resolve: (input) => host.call("shift.kerning.resolve", input),
+    at: (input) => host.call("shift.kerning.at", input),
   },
 };
 const runtime = serveChannel<SandboxCallMap, SandboxEventMap>(transport, {

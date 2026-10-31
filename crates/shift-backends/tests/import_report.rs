@@ -39,11 +39,11 @@ fn glyphs_import_keeps_non_default_master_kerning() {
         .find(|source| source.id() != default_source_id && source.is_master())
         .expect("the second master should import");
     assert_eq!(
-        kerning_between(&font, &kerned_source.id(), "space", "space"),
+        kerning_between(&font, kerned_source.id(), "space", "space"),
         Some(-10.0)
     );
     assert_eq!(
-        kerning_between(&font, &default_source_id, "space", "space"),
+        kerning_between(&font, default_source_id, "space", "space"),
         None
     );
 }
