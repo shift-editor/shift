@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { ElectronApplication, Locator, Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
 import {
   designspacePreviewTest,
@@ -6,7 +6,12 @@ import {
   glyphsPreviewTest,
   variablePreviewTest,
 } from "./fixtures/perfApp";
-import { firstAxisSlider, openVariationControls, waitForEditorReady } from "./fixtures/appLocators";
+import {
+  firstAxisSlider,
+  openSessionGlyphNamed,
+  openVariationControls,
+} from "./fixtures/appLocators";
+import { sessionMode } from "./fixtures/documentLifecycle";
 import type { EditorDriver } from "./fixtures/EditorDriver";
 
 interface VariationSample {
@@ -15,21 +20,10 @@ interface VariationSample {
   readonly geometry: readonly number[];
 }
 
-async function openVariableGlyph(page: Page): Promise<GlyphId> {
-  await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
+async function openVariableGlyph(page: Page, electronApp: ElectronApplication): Promise<GlyphId> {
+  await expect.poll(() => sessionMode(page, electronApp)).toBe("preview");
 
-  const glyphId = await page.evaluate(async () => {
-    const session = window.shiftSession;
-    if (!session) throw new Error("Expected preview font session");
-
-    const entry = session.font.entryForName("A");
-    if (!entry) throw new Error("Variable fixture should contain A");
-
-    await session.font.loadGlyph(entry.id);
-    window.location.hash = `#/editor/${encodeURIComponent(entry.id)}`;
-    return entry.id;
-  });
-  await waitForEditorReady(page, glyphId);
+  const glyphId = await openSessionGlyphNamed(page, "A");
   await openVariationControls(page);
   await expect(await firstAxisSlider(page)).toBeVisible();
 
@@ -37,6 +31,7 @@ async function openVariableGlyph(page: Page): Promise<GlyphId> {
 }
 
 async function variationSample(page: Page, glyphId: GlyphId): Promise<VariationSample> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- waits on the open-glyph refactor: reads the interpolated outline
   return page.evaluate((id) => {
     const session = window.shiftSession;
     const glyph = session?.editor.glyphForId(id);
@@ -51,7 +46,7 @@ async function variationSample(page: Page, glyphId: GlyphId): Promise<VariationS
 }
 
 async function moveSliderToMiddle(page: Page): Promise<void> {
-  const slider = await firstAxisSlider(page);
+  const slider: Locator = await firstAxisSlider(page);
   const track = await slider.evaluate((input) => {
     const bounds = input.parentElement?.parentElement?.getBoundingClientRect();
     if (!bounds) throw new Error("Expected slider track");
@@ -67,9 +62,12 @@ async function renderedSceneFrame(editor: EditorDriver): Promise<Buffer> {
   return editor.page.locator("#scene-canvas").screenshot();
 }
 
-async function expectContinuousVariablePreview(editor: EditorDriver): Promise<void> {
+async function expectContinuousVariablePreview(
+  editor: EditorDriver,
+  electronApp: ElectronApplication,
+): Promise<void> {
   const page = editor.page;
-  const glyphId = await openVariableGlyph(page);
+  const glyphId = await openVariableGlyph(page, electronApp);
   const slider = await firstAxisSlider(page);
 
   await slider.press("Home");
@@ -95,14 +93,20 @@ async function expectContinuousVariablePreview(editor: EditorDriver): Promise<vo
   expect(maximumFrame.equals(middleFrame)).toBe(false);
 }
 
-variablePreviewTest("OpenType variables interpolate continuously", async ({ editor }) => {
-  await expectContinuousVariablePreview(editor);
-});
+variablePreviewTest(
+  "OpenType variables interpolate continuously",
+  async ({ editor, electronApp }) => {
+    await expectContinuousVariablePreview(editor, electronApp);
+  },
+);
 
-designspacePreviewTest("Designspace sources interpolate continuously", async ({ editor }) => {
-  await expectContinuousVariablePreview(editor);
-});
+designspacePreviewTest(
+  "Designspace sources interpolate continuously",
+  async ({ editor, electronApp }) => {
+    await expectContinuousVariablePreview(editor, electronApp);
+  },
+);
 
-glyphsPreviewTest("Glyphs sources interpolate continuously", async ({ editor }) => {
-  await expectContinuousVariablePreview(editor);
+glyphsPreviewTest("Glyphs sources interpolate continuously", async ({ editor, electronApp }) => {
+  await expectContinuousVariablePreview(editor, electronApp);
 });

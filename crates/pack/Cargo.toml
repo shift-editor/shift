@@ -1,0 +1,13 @@
+[package]
+name = "pack"
+version = "0.0.0"
+edition = "2024"
+description = "Values packed into flat numbers to cross into TypeScript, with a derive that writes the TypeScript side"
+license.workspace = true
+publish = false
+
+[dependencies]
+pack-derive = { path = "../pack-derive" }
+
+[lints]
+workspace = true

@@ -16,10 +16,10 @@ export function createAuthoredDocument(sourcePath: string, workspaceDirectory: s
   const recoveryPath = path.join(workspaceDirectory, "conversion-recovery.sqlite");
 
   try {
-    bridge.openWorkspace(sourcePath, storePath);
-    bridge.saveWorkspaceAsDocument(documentPath, recoveryPath);
+    bridge.workspace.openWorkspace(sourcePath, storePath);
+    bridge.workspace.saveWorkspaceAsDocument(documentPath, recoveryPath);
   } finally {
-    bridge.closeWorkspace();
+    bridge.workspace.closeWorkspace();
   }
 
   return documentPath;

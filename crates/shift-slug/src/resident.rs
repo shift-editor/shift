@@ -161,7 +161,7 @@ pub fn build_authored_atlas_page_profiled(
     let mut glyphs = Vec::with_capacity(glyph_ids.len());
     let started = Instant::now();
     for glyph_id in glyph_ids {
-        let authored = match projection_set.projection(&glyph_id) {
+        let authored = match projection_set.projection(glyph_id) {
             Some(projection) => builder.add_glyph_from_projection_set_profiled(
                 font,
                 &projection_set,
@@ -192,11 +192,11 @@ fn unique_glyph_ids(font: &Font, glyph_ids: &[GlyphId]) -> Result<Vec<GlyphId>, 
     let mut unique = Vec::with_capacity(glyph_ids.len());
 
     for glyph_id in glyph_ids {
-        if font.glyph(glyph_id).is_none() {
-            return Err(CoreError::GlyphNotFound(glyph_id.clone()).into());
+        if font.glyph(*glyph_id).is_none() {
+            return Err(CoreError::GlyphNotFound(*glyph_id).into());
         }
-        if seen.insert(glyph_id.clone()) {
-            unique.push(glyph_id.clone());
+        if seen.insert(*glyph_id) {
+            unique.push(*glyph_id);
         }
     }
 
@@ -211,7 +211,7 @@ fn collect_weight_sets(
     let mut seen = HashSet::new();
 
     for glyph_id in glyph_ids {
-        let Some(root) = projection_set.projection(glyph_id) else {
+        let Some(root) = projection_set.projection(*glyph_id) else {
             continue;
         };
         collect_projection(projection_set, root, &mut seen, &mut projections)?;
@@ -258,7 +258,7 @@ fn collect_projection<'a>(
 
     projections.push(root);
     for glyph_id in root.component_glyph_ids() {
-        let projection = projection_set.projection(glyph_id).require(&glyph_id)?;
+        let projection = projection_set.projection(*glyph_id).require(&glyph_id)?;
         collect_projection(projection_set, projection, seen, projections)?;
     }
 

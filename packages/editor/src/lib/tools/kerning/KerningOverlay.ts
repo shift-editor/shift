@@ -86,7 +86,7 @@ function fillPairGlyphs(
   pair: KerningPair,
   theme: KerningTheme,
 ): void {
-  const layout = editor.text.layoutCell(pair.gap.node.runId).peek();
+  const layout = editor.text.layout(pair.gap.node.runId);
   if (!layout) return;
   for (const side of [pair.gap.left, pair.gap.right]) {
     const placed = layout.placedGlyphForItem(side.itemId);

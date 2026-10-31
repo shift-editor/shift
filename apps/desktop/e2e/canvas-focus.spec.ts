@@ -1,5 +1,6 @@
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import { glyphProperties } from "./fixtures/appLocators";
+import { clearSelection } from "./fixtures/editorInteractions";
 
 // Canvas shortcuts fire only while the canvas owns keyboard focus. Each test leaves that
 // ownership with a sidebar the way a real session can, puts the pointer back on the canvas,
@@ -38,7 +39,7 @@ test.describe("Canvas keyboard focus", () => {
 
     // Stands in for an undo, agent edit, or any other change that clears the selection while
     // the field is focused. The field unmounts without ever receiving blur.
-    await page.evaluate(() => window.shift!.editor.selection.clear());
+    await clearSelection(page);
     await expect(width).toHaveCount(0);
 
     await page.mouse.move(center.x + 10, center.y + 10, { steps: 5 });

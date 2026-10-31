@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   WorkspaceDocumentState,
   WorkspaceDocumentIdentity,
-} from "../../shared/workspace/protocol";
+} from "../../shared/workspace/lanes";
 import { DocumentSessionIndex, type IndexedDocumentSession } from "./DocumentSessionIndex";
 import type { FontSessionId } from "./FontSessionHost";
 

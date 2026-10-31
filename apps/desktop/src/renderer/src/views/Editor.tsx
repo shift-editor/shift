@@ -49,8 +49,8 @@ export const Editor = () => {
   useEffect(() => {
     if (!glyph) return undefined;
 
-    // Route hydration is navigation, never a history entry.
-    const opened = editor.history.withoutRecording(() => windowTabs(editor).openGlyph(glyph.id));
+    // Route hydration is navigation, never a history entry; opening a glyph records none.
+    const opened = windowTabs(editor).openGlyph(glyph.id);
     // Tools activate against the glyph node they find, so reset after it is placed.
     editor.toolManager.reset();
     if (opened.node && opened.placed) editor.fitGlyphFrame(opened.node);

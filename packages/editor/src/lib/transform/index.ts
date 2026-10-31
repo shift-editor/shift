@@ -1,17 +1,13 @@
 /**
  * Transform System
  *
- * Provides geometry transformation operations for selected points:
- * - Rotate
- * - Scale
- * - Reflect (mirror/flip)
- * - Arbitrary matrix transforms
+ * Matrices about an origin, applied to points for rotate and scale previews.
+ * Committed transforms run in shift-font (`TransformPoints`).
  *
  * @example
  * ```ts
  * import { Transform } from '.';
  *
- * // Pure function usage (for preview/calculations)
  * const rotated = Transform.rotatePoints(points, Math.PI/2, center);
  * ```
  */
@@ -27,9 +23,6 @@ export type {
 
 // Pure transform functions
 export { Transform } from "./Transform";
-
-// Alignment utilities
-export { Alignment } from "./Alignment";
 
 // Anchor utilities
 export { anchorToPoint } from "./anchor";

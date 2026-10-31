@@ -1,6 +1,6 @@
 import type { ElectronApplication, Page } from "@playwright/test";
-import type { GlyphName } from "@shift/types";
 import { waitForEditorReady } from "./fixtures/appLocators";
+import { EditorDriver } from "./fixtures/EditorDriver";
 import { expect, workspaceTest as test, waitForWorkspaceReady } from "./fixtures/electronApp";
 
 test.setTimeout(90_000);
@@ -10,15 +10,12 @@ test(
   "reopens a crashed document renderer with completed edits",
   { tag: "@os" },
   async ({ electronApp, page }) => {
-    const glyphName = "rendererCrashRecovery" as GlyphName;
-    await page.evaluate((name) => {
-      window.shift?.editor.createGlyph(name);
-    }, glyphName);
-    await waitForGlyph(page, glyphName);
+    await page.getByRole("button", { name: "Create glyph", exact: true }).click();
+    await expectDirtyWithGlyph(page, electronApp, "newGlyph");
 
     const reopenedPage = await crashRendererAndWaitForWindow(electronApp, page);
     await waitForWorkspaceReady(reopenedPage);
-    await waitForGlyph(reopenedPage, glyphName);
+    await expectDirtyWithGlyph(reopenedPage, electronApp, "newGlyph");
 
     await expect.poll(() => electronApp.windows().length).toBe(1);
   },
@@ -38,15 +35,10 @@ test("reopens a crashed document renderer on the glyph it was editing", async ({
 });
 
 test("reopens after a document render failure", async ({ electronApp, page }) => {
-  const glyphName = "reactDocumentRecovery" as GlyphName;
-  await page.evaluate((name) => {
-    window.shift?.editor.createGlyph(name);
-  }, glyphName);
-  await waitForGlyph(page, glyphName);
+  await page.getByRole("button", { name: "Create glyph", exact: true }).click();
+  await expectDirtyWithGlyph(page, electronApp, "newGlyph");
 
-  await page.evaluate(() => {
-    window.location.hash = "/e2e-document-render-failure";
-  });
+  await page.goto(`${page.url().split("#")[0]}#/e2e-document-render-failure`);
   await expect(
     page.getByRole("heading", {
       name: "This document needs to be reopened",
@@ -62,13 +54,11 @@ test("reopens after a document render failure", async ({ electronApp, page }) =>
   await page.getByRole("button", { name: "Reopen document" }).click();
   const reopenedPage = await nextWindow;
   await waitForWorkspaceReady(reopenedPage);
-  await waitForGlyph(reopenedPage, glyphName);
+  await expectDirtyWithGlyph(reopenedPage, electronApp, "newGlyph");
 });
 
 test("contains root route render failures", async ({ page }) => {
-  await page.evaluate(() => {
-    window.location.hash = "/e2e-root-render-failure";
-  });
+  await page.goto(`${page.url().split("#")[0]}#/e2e-root-render-failure`);
 
   await expect(
     page.getByRole("heading", { name: "Shift needs to reload this window" }),
@@ -95,17 +85,20 @@ async function crashRendererAndWaitForWindow(
   return reopenedPage;
 }
 
-async function waitForGlyph(page: Page, glyphName: GlyphName): Promise<void> {
-  await page.waitForFunction(
-    (name) => {
-      const workspace = window.shift;
-      return (
-        workspace?.applyStatusCell.peek() === "idle" &&
-        workspace.documentStateCell.peek()?.dirty === true &&
-        workspace.font.recordForName(name as GlyphName) !== null
-      );
-    },
-    glyphName,
-    { timeout: 20_000 },
-  );
+/** Waits until the document is dirty and its font has the glyph named `glyphName`. */
+async function expectDirtyWithGlyph(
+  page: Page,
+  electronApp: ElectronApplication,
+  glyphName: string,
+): Promise<void> {
+  const editor = new EditorDriver(page, electronApp);
+  await expect
+    .poll(
+      async () => ({
+        document: await editor.documentState(),
+        hasGlyph: (await editor.glyphNames()).includes(glyphName),
+      }),
+      { timeout: 20_000 },
+    )
+    .toMatchObject({ document: { dirty: true }, hasGlyph: true });
 }

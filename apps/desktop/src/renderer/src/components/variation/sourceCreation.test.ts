@@ -11,10 +11,7 @@ function weightAxis(): Axis {
     tag: "wght",
     name: "Weight",
     role: "external",
-    axisType: "continuous",
-    minimum: 100,
-    default: 400,
-    maximum: 900,
+    kind: { kind: "continuous", minimum: 100, default: 400, maximum: 900 },
     labels: [
       {
         id: mintAxisLabelId(),
@@ -32,7 +29,8 @@ function source(name: string, values: Record<AxisId, number>): Source {
     id: mintSourceId(),
     name,
     location: { values },
-    metricValues: [],
+    metricValues: {},
+    role: "master",
   };
 }
 

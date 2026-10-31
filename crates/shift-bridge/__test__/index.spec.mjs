@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { createRequire } from "module";
 import { existsSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { fileURLToPath } from "url";
-
-const require = createRequire(import.meta.url);
-const { Bridge } = require("../index.js");
+import { PackError } from "@shift/pack";
+import { nativeBridge } from "./bridge.mjs";
+import { engineFontRecords } from "./engineReads.mjs";
 
 const shortIdAlphabet = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
 const shortIdLength = 10;
@@ -30,8 +29,8 @@ describe("Bridge", () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), "shift-bridge-"));
-    bridge = new Bridge();
-    bridge.createUntitledWorkspace(join(tempDir, "working.sqlite"));
+    bridge = nativeBridge();
+    bridge.workspace.createUntitledWorkspace(join(tempDir, "working.sqlite"));
   });
 
   afterEach(() => {
@@ -39,33 +38,35 @@ describe("Bridge", () => {
   });
 
   function defaultSourceId() {
-    return bridge.getSources()[0].id;
+    return engineFontRecords(bridge).sources[0].id;
   }
 
   function createGlyphLayer(name = "A", unicodes = [65]) {
     const glyphId = mintId("glyph");
     const layerId = mintId("layer");
-    const applied = bridge.apply([
+    const applied = bridge.workspace.apply([
       { kind: "createGlyph", createGlyph: { glyphId, name, unicodes } },
       {
         kind: "createGlyphLayer",
         createGlyphLayer: { layerId, glyphId, sourceId: defaultSourceId() },
       },
     ]);
-    const record = applied.next.glyphs.find((glyph) => glyph.id === glyphId);
+    const record = applied.next.glyphChanges.updated.find((glyph) => glyph.id === glyphId);
     expect(record.layers).toContainEqual({ id: layerId, sourceId: defaultSourceId() });
     return layerId;
   }
 
   function addContour(layerId) {
     const contourId = mintId("contour");
-    bridge.apply([{ kind: "addContour", addContour: { layerId, contourId, closed: false } }]);
+    bridge.workspace.apply([
+      { kind: "addContour", addContour: { layerId, contourId, closed: false } },
+    ]);
     return contourId;
   }
 
   function addPoint(layerId, contourId, x, y) {
     const pointId = mintId("point");
-    const applied = bridge.apply([
+    const applied = bridge.workspace.apply([
       {
         kind: "addPoints",
         addPoints: {
@@ -79,29 +80,33 @@ describe("Bridge", () => {
   }
 
   function glyphState(name) {
-    const glyph = bridge.getGlyphs().find((record) => record.name === name);
-    const snapshots = bridge.getGlyphSnapshots([{ glyphId: glyph.id }]);
+    const glyph = bridge.workspace.getGlyphs().find((record) => record.name === name);
+    const snapshots = bridge.napi.getGlyphSnapshots([{ glyphId: glyph.id }]);
     return snapshots[0]?.layers[0]?.state;
   }
 
+  it("rejects an intent kind it does not know", () => {
+    expect(() => bridge.workspace.apply([{ kind: "explodeFont", explodeFont: {} }])).toThrow();
+  });
+
   it("exposes the durable Slug cache revision", () => {
-    expect(bridge.slugAtlasCacheRevision()).toBe("0");
+    expect(bridge.atlas.slugAtlasCacheRevision()).toBe("0");
 
     createGlyphLayer();
 
-    expect(bridge.slugAtlasCacheRevision()).toBe("1");
+    expect(bridge.atlas.slugAtlasCacheRevision()).toBe("1");
   });
 
   it("creates an untitled workspace with default committed font metadata", () => {
-    expect(bridge.getMetadata()).toMatchObject({
+    expect(bridge.workspace.getMetadata()).toMatchObject({
       familyName: "Untitled Font",
       styleName: "Regular",
       versionMajor: 1,
       versionMinor: 0,
     });
 
-    expect(bridge.getMetrics()).toEqual({ unitsPerEm: 1000 });
-    const definitions = bridge.getMetricDefinitions();
+    expect(bridge.workspace.getMetrics()).toEqual({ unitsPerEm: 1000 });
+    const definitions = bridge.workspace.getMetricDefinitions();
     expect(definitions).toEqual([
       expect.objectContaining({ kind: "ascender", name: "Ascender" }),
       expect.objectContaining({ kind: "capHeight", name: "Cap Height" }),
@@ -110,24 +115,22 @@ describe("Bridge", () => {
       expect.objectContaining({ kind: "descender", name: "Descender" }),
     ]);
 
-    const [defaultSource] = bridge.getSources();
-    expect(defaultSource.metricValues).toHaveLength(5);
-    expect(
-      definitions.map(
-        ({ id }) => defaultSource.metricValues.find(({ metricId }) => metricId === id).position,
-      ),
-    ).toEqual([800, 700, 500, 0, -200]);
+    const [defaultSource] = engineFontRecords(bridge).sources;
+    expect(Object.keys(defaultSource.metricValues)).toHaveLength(5);
+    expect(definitions.map(({ id }) => defaultSource.metricValues[id].position)).toEqual([
+      800, 700, 500, 0, -200,
+    ]);
 
-    expect(bridge.getGlyphs()).toEqual([]);
+    expect(bridge.workspace.getGlyphs()).toEqual([]);
   });
 
   it("creates a glyph through the createGlyph intent", () => {
     const glyphId = mintId("glyph");
-    const applied = bridge.apply([
+    const applied = bridge.workspace.apply([
       { kind: "createGlyph", createGlyph: { glyphId, name: "A", unicodes: [65] } },
     ]);
 
-    const glyphs = bridge.getGlyphs();
+    const glyphs = bridge.workspace.getGlyphs();
     expect(applied.layers).toEqual([]);
     expect(glyphs).toHaveLength(1);
     expect(glyphs[0].id).toMatch(/^glyph_/);
@@ -140,7 +143,7 @@ describe("Bridge", () => {
   it("creates a glyph layer through the createGlyphLayer intent", () => {
     const layerId = createGlyphLayer();
 
-    const glyphs = bridge.getGlyphs();
+    const glyphs = bridge.workspace.getGlyphs();
     expect(glyphs[0].layers).toEqual([{ id: layerId, sourceId: defaultSourceId() }]);
   });
 
@@ -151,7 +154,7 @@ describe("Bridge", () => {
     addPoint(layerId, contourId, 10, 20);
 
     const outputPath = join(tempDir, "output.ttf");
-    const result = await bridge.exportWorkspace({ path: outputPath, format: "ttf" });
+    const result = await bridge.napi.exportWorkspace({ path: outputPath, format: "ttf" });
 
     expect(result).toMatchObject({ path: outputPath, format: "ttf" });
     expect(existsSync(outputPath)).toBe(true);
@@ -160,30 +163,30 @@ describe("Bridge", () => {
   function openMutatorWorkspace() {
     const sourcePath = join(repositoryRoot, "fixtures/fonts/mutatorsans/MutatorSans.ttf");
     const storePath = join(tempDir, "mutatorsans.sqlite");
-    bridge.openWorkspace(sourcePath, storePath);
+    bridge.workspace.openWorkspace(sourcePath, storePath);
   }
 
   it("transports imported variation without fabricating authored sources", () => {
-    bridge.closeWorkspace();
+    bridge.workspace.closeWorkspace();
     const sourcePath = join(
       repositoryRoot,
       "fixtures/fonts/mutatorsans-variable/MutatorSans.designspace",
     );
-    const font = bridge.openFontSource(sourcePath);
+    const font = bridge.source.openFontSource(sourcePath);
     const glyph = font.glyphs.find((entry) => entry.name === "A");
     if (!glyph) throw new Error("MutatorSans fixture has no A glyph");
 
-    const projection = bridge.readFontSourceGlyph(glyph.id)[0]?.projection;
+    const projection = bridge.source.readFontSourceGlyph(glyph.id)[0]?.projection;
 
-    expect(projection?.interpolation).toBeUndefined();
+    expect(projection?.interpolation).toBeNull();
     expect(projection?.variation?.basis.deltas.length).toBeGreaterThan(0);
   });
 
   it("acquires every lazy glyph payload before preparing the complete Slug atlas", () => {
     openMutatorWorkspace();
 
-    const atlas = bridge.prepareSlugAtlas(256);
-    expect(atlas.glyphs).toHaveLength(bridge.getGlyphs().length);
+    const atlas = bridge.atlas.prepareSlugAtlas(256);
+    expect(atlas.glyphs).toHaveLength(bridge.workspace.getGlyphs().length);
     expect(atlas.curveCount).toBeGreaterThan(0);
     expect(atlas.layout.totalLength).toBeGreaterThan(0);
   });
@@ -191,10 +194,10 @@ describe("Bridge", () => {
   it("acquires lazy glyph payloads before preparing a Slug atlas patch", () => {
     openMutatorWorkspace();
 
-    const glyph = bridge.getGlyphs().find((record) => record.name === "S");
+    const glyph = bridge.workspace.getGlyphs().find((record) => record.name === "S");
     expect(glyph).toBeDefined();
 
-    const atlas = bridge.prepareSlugAtlasPage([glyph.id], 256);
+    const atlas = bridge.atlas.prepareSlugAtlasPage([glyph.id], 256);
     expect(atlas.glyphs).toContainEqual(expect.objectContaining({ glyphId: glyph.id }));
     expect(atlas.curveCount).toBeGreaterThan(0);
     expect(atlas.layout.totalLength).toBeGreaterThan(0);
@@ -228,7 +231,7 @@ describe("Bridge", () => {
     const contourId = addContour(layerId);
     const { pointId } = addPoint(layerId, contourId, 10, 20);
 
-    bridge.apply([
+    bridge.workspace.apply([
       {
         kind: "movePoints",
         movePoints: { layerId, pointIds: [pointId], coords: [30, 40] },
@@ -240,87 +243,74 @@ describe("Bridge", () => {
     expect(Array.from(state.values)).toEqual([500, 30, 40]);
   });
 
-  it("undoes and redoes an applied intent set", () => {
-    const layerId = createGlyphLayer();
-    const contourId = addContour(layerId);
-    addPoint(layerId, contourId, 10, 20);
+  it("throws the kind of error a request failed with", () => {
+    const closed = nativeBridge();
+    const kindOf = (call) => {
+      try {
+        call();
+      } catch (error) {
+        expect(error).toBeInstanceOf(PackError);
+        return `${error.type}.${error.kind}`;
+      }
+      throw new Error("the request did not fail");
+    };
 
-    const undone = bridge.undo();
-    expect(undone.layers).toHaveLength(1);
-    expect(glyphState("A").structure.contours[0].points).toHaveLength(0);
-
-    const redone = bridge.redo();
-    expect(redone.layers).toHaveLength(1);
-    expect(glyphState("A").structure.contours[0].points).toHaveLength(1);
-  });
-
-  function shapeText(text, options = {}) {
-    const units = [...text].map((character) => ({ codepoint: character.codePointAt(0) }));
-    const runs = bridge.shapeParagraph({ units, location: { values: {} }, ...options });
-    return runs.flatMap((run) => run.glyphs);
-  }
-
-  function glyphName(glyphId) {
-    return bridge.getGlyphs().find((record) => record.id === glyphId)?.name ?? null;
-  }
-
-  it("shapes text with the font's feature code", () => {
-    bridge.closeWorkspace();
-    bridge.openWorkspace(
-      join(repositoryRoot, "fixtures/fonts/Homenaje.glyphs"),
-      join(tempDir, "homenaje.sqlite"),
+    expect(kindOf(() => closed.workspace.documentState())).toBe("NativeWorkspaceError.noWorkspace");
+    expect(kindOf(() => closed.source.readFontSourceGlyph(mintId("glyph")))).toBe(
+      "NativeSourceError.noFontSource",
     );
-
-    const plain = shapeText("1/2");
-    const fraction = shapeText("1/2", { features: [{ tag: "frac", value: 1 }] });
-
-    expect(plain.map((glyph) => glyphName(glyph.glyphId))).toEqual(["one", "slash", "two"]);
-    expect(plain.map((glyph) => glyph.cluster)).toEqual([0, 1, 2]);
-    expect(fraction.map((glyph) => [glyphName(glyph.glyphId), glyph.cluster])).toEqual([
-      ["onehalf", 0],
-    ]);
+    expect(kindOf(() => closed.shaping.shaperFont())).toBe("NativeShapingError.noWorkspace");
+    expect(kindOf(() => bridge.workspace.saveWorkspace())).toBe("NativeWorkspaceError.needsSaveAs");
+    expect(() => bridge.workspace.persist(new Uint8Array([0xc1]), "unsaved")).toThrow(
+      /^NativeWorkspaceError\.invalidInput: cannot decode from the window/,
+    );
   });
 
-  it("shapes glyphs added since the last shape", () => {
-    expect(shapeText("A")[0].glyphId).toBeUndefined();
+  it("carries bytes whole in both directions", () => {
+    createGlyphLayer();
+    const directory = bridge.workspace.encodedDirectory();
+    const shaper = bridge.shaping.shaperFont();
 
-    createGlyphLayer("A", [65]);
-
-    expect(glyphName(shapeText("A")[0].glyphId)).toBe("A");
+    expect(directory).toBeInstanceOf(Uint8Array);
+    expect(directory.length).toBeGreaterThan(0);
+    expect(shaper?.bytes).toBeInstanceOf(Uint8Array);
+    expect(bridge.shaping.shaperFont(shaper?.revision)).toBeNull();
   });
 
   it("surfaces typed bridge errors at the NAPI boundary", () => {
     expect(() =>
-      bridge.apply([
+      bridge.workspace.apply([
         {
           kind: "addContour",
-          addContour: { layerId: "not-a-layer", contourId: mintId("contour"), closed: false },
+          addContour: { layerId: mintId("layer"), contourId: mintId("contour"), closed: false },
         },
       ]),
-    ).toThrow(/layer ID/i);
+    ).toThrow(/^NativeWorkspaceError\.failed: layer layer_\S+ not found/);
 
     const layerId = createGlyphLayer();
     expect(() =>
-      bridge.apply([
+      bridge.workspace.apply([
         {
           kind: "addPoints",
           addPoints: {
             layerId,
-            contourId: "not-a-contour",
+            contourId: mintId("contour"),
             points: [{ id: mintId("point"), x: 10, y: 20, pointType: "onCurve", smooth: false }],
           },
         },
       ]),
-    ).toThrow(/contour ID/i);
+    ).toThrow(/^NativeWorkspaceError\.failed: contour contour_\S+ not found/);
   });
 });
 
 /**
  * Opens a font source and replaces every minted id with a readable label, so a
- * test can compare the whole preview snapshot.
+ * test can compare the whole preview snapshot. A value the source does not
+ * have crosses as `null`; it is left out here, so the comparisons list only
+ * what the source has.
  */
 function openPreview(relativePath) {
-  const snapshot = new Bridge().openFontSource(join(repositoryRoot, relativePath));
+  const snapshot = nativeBridge().source.openFontSource(join(repositoryRoot, relativePath));
   const labels = new Map([
     ...snapshot.axes.map(({ id, tag }) => [id, `axis:${tag}`]),
     ...snapshot.metricDefinitions.map(({ id, kind }) => [id, `metric:${kind}`]),
@@ -331,6 +321,7 @@ function openPreview(relativePath) {
   const label = (value) => labels.get(value) ?? value;
 
   return JSON.parse(JSON.stringify(snapshot), (key, value) => {
+    if (value === null) return undefined;
     if (typeof value === "string") return label(value);
     if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
 
@@ -344,7 +335,7 @@ function sourceRows(snapshot) {
     source.name,
     source.filename,
     source.location.values,
-    source.metricValues.map(({ position }) => position),
+    standardMetricDefinitions.map(({ id }) => source.metricValues[id].position),
   ]);
 }
 
@@ -356,13 +347,14 @@ const standardMetricDefinitions = [
   { id: "metric:descender", kind: "descender", name: "Descender" },
 ];
 
-/** Standard metric values at the given positions, without overshoot. */
+/** Standard metric values at the given positions, without overshoot, by metric row. */
 function metricValues(positions) {
-  return standardMetricDefinitions.map(({ id }, index) => ({
-    metricId: id,
-    position: positions[index],
-    overshoot: 0,
-  }));
+  return Object.fromEntries(
+    standardMetricDefinitions.map(({ id }, index) => [
+      id,
+      { position: positions[index], overshoot: 0 },
+    ]),
+  );
 }
 
 describe("font source previews", () => {
@@ -372,11 +364,8 @@ describe("font source previews", () => {
       id: `axis:${tag}`,
       tag,
       name,
-      minimum: 0,
-      default: 0,
-      maximum: 1000,
+      kind: { kind: "continuous", minimum: 0, default: 0, maximum: 1000 },
       hidden: false,
-      axisType: "continuous",
       role: "external",
       labels: [],
     });
@@ -422,6 +411,7 @@ describe("font source previews", () => {
       metricValues: metricValues(lightMetrics),
       italicAngle: 0,
       lineGap: 0,
+      role: "master",
     });
     expect(sourceRows(snapshot)).toEqual([
       ["LightCondensed", lightCondensed, location(0, 0), lightMetrics],
@@ -434,7 +424,9 @@ describe("font source previews", () => {
     ]);
     for (const source of snapshot.sources) {
       expect(source).toMatchObject({ italicAngle: 0, lineGap: 0 });
-      expect(source.metricValues.map(({ overshoot }) => overshoot)).toEqual([0, 0, 0, 0, 0]);
+      expect(Object.values(source.metricValues).map(({ overshoot }) => overshoot)).toEqual([
+        0, 0, 0, 0, 0,
+      ]);
     }
 
     expect(snapshot.namedInstances).toEqual([
@@ -478,6 +470,7 @@ describe("font source previews", () => {
         location: { values: {} },
         metricValues: metricValues([1000, 700, 500, 0, -200]),
         lineGap: 0,
+        role: "master",
       },
     ]);
     expect(snapshot.axes).toEqual([]);

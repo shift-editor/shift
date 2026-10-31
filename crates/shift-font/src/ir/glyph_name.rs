@@ -4,9 +4,12 @@ use std::borrow::Borrow;
 use std::fmt;
 use std::ops::Deref;
 
+// Crosses into the editor as its text, typed by the `GlyphName` alias in
+// @shift/types.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[cfg_attr(feature = "pack", derive(pack::PackId), pack(brand = "@shift/types"))]
 #[serde(transparent)]
-pub struct GlyphName(String);
+pub struct GlyphName(std::sync::Arc<str>);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GlyphNameError {
@@ -24,7 +27,7 @@ impl GlyphName {
         if value.is_empty() {
             return Err(GlyphNameError::Empty);
         }
-        Ok(Self(value))
+        Ok(Self(value.into()))
     }
 
     pub fn as_str(&self) -> &str {
@@ -32,7 +35,15 @@ impl GlyphName {
     }
 
     pub fn into_string(self) -> String {
-        self.0
+        self.0.to_string()
+    }
+
+    /// A name read from a transport, as the editor sent it. Unlike
+    /// [`Self::new`] it does not refuse an empty name, which an id-less read
+    /// past the end of a message yields; such a name names no glyph.
+    #[cfg(feature = "pack")]
+    pub fn from_raw(raw: impl fmt::Display) -> Self {
+        Self(raw.to_string().into())
     }
 }
 
@@ -60,7 +71,7 @@ impl From<&str> for GlyphName {
 
 impl From<GlyphName> for String {
     fn from(value: GlyphName) -> Self {
-        value.0
+        value.0.to_string()
     }
 }
 

@@ -7,7 +7,7 @@ import { useSignalState } from "@shift/editor/signals";
  * Each source's `location` is already resolved against the font's axes
  * (filled with axis defaults), so callers can index it directly by tag.
  */
-export const useSources = (): Source[] => {
+export const useSources = (): readonly Source[] => {
   const font = useFont();
   return useSignalState(font.sourcesCell);
 };

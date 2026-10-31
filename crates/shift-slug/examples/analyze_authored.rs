@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     for glyph in font.glyphs() {
         report.glyphs += 1;
-        let Some(projection) = font.glyph_projection(&glyph.id())? else {
+        let Some(projection) = font.glyph_projection(glyph.id())? else {
             report.missing_projection += 1;
             continue;
         };
@@ -121,7 +121,7 @@ fn collect_weight_sets(
     let mut sets = Vec::new();
     let mut next_weight_index = 1_u32;
     for glyph in font.glyphs() {
-        let Some(projection) = font.glyph_projection(&glyph.id())? else {
+        let Some(projection) = font.glyph_projection(glyph.id())? else {
             continue;
         };
         let Some(interpolation) = projection.interpolation() else {
@@ -197,7 +197,7 @@ fn validate_locations(
             let actual = atlas.resolve_glyph_with_weights(atlas_index, &weights)?;
             let mut font_projection = font.projection(location);
             let resolved = font_projection
-                .glyph(&glyph.glyph_id)?
+                .glyph(glyph.glyph_id)?
                 .ok_or("missing resolved glyph")?;
             let expected = curves_from_resolved_contours(resolved.contours())?;
             let expected_advance = resolved.x_advance() as f32;

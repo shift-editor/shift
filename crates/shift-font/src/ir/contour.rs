@@ -6,6 +6,7 @@ use kurbo::{BezPath, PathEl};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Contour {
     id: ContourId,
     points: Vec<Point>,

@@ -4,6 +4,7 @@ import {
   asLayerId,
   asNodeId,
   asPointId,
+  asNamedInstanceId,
   asSourceId,
 } from "@shift/types";
 import {
@@ -17,6 +18,8 @@ import {
 } from "@shift/runtime";
 import { describe, expect, it } from "vitest";
 import { executeShiftCode } from "./execute";
+
+const T_THEN_A: KerningPairQuery = { first: { name: "T" }, second: { name: "A" } };
 
 const FONT_REVISION = "revision-a";
 
@@ -84,6 +87,7 @@ const capabilities: ShiftCapabilities = {
         metricDefinitions: [],
         glyphCount: 1,
         axes: [],
+        axisMappings: [],
         sources: [],
         instances: [],
       });
@@ -97,11 +101,36 @@ const capabilities: ShiftCapabilities = {
         sourceId: null,
         metrics: {
           unitsPerEm: 1000,
-          metricValues: [],
+          metricValues: {},
           ascender: 800,
           descender: -200,
           baseline: 0,
         },
+      });
+    },
+  },
+  sources: {
+    async get(input) {
+      if ("name" in input && input.name !== "Light")
+        throw new Error(`Source ${input.name} is not in this font`);
+      return observation({
+        id: asSourceId("source-a"),
+        name: "Light",
+        location: { values: {} },
+        metricValues: {},
+        role: "master",
+      });
+    },
+  },
+  instances: {
+    async get(input) {
+      if ("name" in input && input.name !== "Black") {
+        throw new Error(`Instance ${input.name} is not in this font`);
+      }
+      return observation({
+        id: asNamedInstanceId("instance-a"),
+        name: "Black",
+        location: { values: {} },
       });
     },
   },
@@ -165,11 +194,18 @@ const capabilities: ShiftCapabilities = {
     async groups() {
       return observation([kerningGroup()]);
     },
-    async pairs({ sourceId }) {
-      return observation({ sourceId, items: [authoredKerningPair()], nextCursor: null });
+    async pairs() {
+      return observation({
+        sourceId: asSourceId("source-a"),
+        items: [authoredKerningPair()],
+        nextCursor: null,
+      });
     },
     async resolve({ pairs }) {
       return observation({ items: pairs.map(kerningResolution) });
+    },
+    async at() {
+      return observation(kerningResolution(T_THEN_A).masters[0]!);
     },
   },
 };
@@ -191,7 +227,9 @@ function authoredKerningPair() {
   };
 }
 
-function kerningResolution({ first, second }: KerningPairQuery) {
+function kerningResolution(query: KerningPairQuery) {
+  const first = query.first.name ?? query.first.glyphId;
+  const second = query.second.name ?? query.second.glyphId;
   return {
     first: { glyphId: asGlyphId(`glyph-${first}`), name: first },
     second: { glyphId: asGlyphId(`glyph-${second}`), name: second },
@@ -269,11 +307,86 @@ describe("Shift sandbox executes bounded code over live capabilities", () => {
     });
   });
 
-  it("rejects layer reads addressed by glyph and source", async () => {
+  it("passes a layer addressed by glyph and source name through to the host", async () => {
+    const seen: unknown[] = [];
+    const host: ShiftCapabilities = {
+      ...capabilities,
+      layers: {
+        ...capabilities.layers,
+        async get(input) {
+          seen.push(input);
+          return observation(authoredLayer(asLayerId("layer-a")));
+        },
+      },
+    };
+
+    await executeShiftCode(
+      host,
+      "async () => { await shift.layers.get({ windowId: 7, glyph: { name: 'A' }, source: { name: 'Bold' } }); await shift.layers.get({ windowId: 7, glyph: { glyphId: 'glyph-a' } }); return null; }",
+    );
+
+    expect(seen).toEqual([
+      { windowId: 7, glyph: { name: "A" }, source: { name: "Bold" } },
+      { windowId: 7, glyph: { glyphId: "glyph-a" } },
+    ]);
+  });
+
+  it("rejects layer reads that mix a layer id with a glyph, or name a glyph at the top level", async () => {
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.layers.get({ windowId: 7, layerId: 'layer-a', glyph: { name: 'A' } })",
+      ),
+    ).rejects.toThrow();
     await expect(
       executeShiftCode(
         capabilities,
         "async () => shift.layers.get({ windowId: 7, glyphId: 'glyph-a', sourceId: 'source-a' })",
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("reads one kerning pair at a source and rejects an ambiguous source", async () => {
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.kerning.at({ windowId: 7, first: { name: 'T' }, second: { name: 'A' }, source: { name: 'Light' } })",
+      ),
+    ).resolves.toMatchObject({ value: { amount: -75, rule: "exception" } });
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.kerning.at({ windowId: 7, first: { name: 'T' }, second: { name: 'A' }, source: { name: 'Light', sourceId: 'source-a' } })",
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("gets a source by exact name and rejects ambiguous selectors", async () => {
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.sources.get({ windowId: 7, name: 'Light' })",
+      ),
+    ).resolves.toMatchObject({ value: { id: "source-a", name: "Light" } });
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.sources.get({ windowId: 7, name: 'Light', sourceId: 'source-a' })",
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("gets a named instance by exact name and rejects ambiguous selectors", async () => {
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.instances.get({ windowId: 7, name: 'Black' })",
+      ),
+    ).resolves.toMatchObject({ value: { id: "instance-a", name: "Black" } });
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.instances.get({ windowId: 7, name: 'Black', instanceId: 'instance-a' })",
       ),
     ).rejects.toThrow();
   });
@@ -297,15 +410,15 @@ describe("Shift sandbox executes bounded code over live capabilities", () => {
     await expect(
       executeShiftCode(
         capabilities,
-        "async () => shift.kerning.pairs({ windowId: 7, sourceId: 'source-a', limit: 0 })",
+        "async () => shift.kerning.pairs({ windowId: 7, source: { sourceId: 'source-a' }, limit: 0 })",
       ),
     ).rejects.toThrow();
     await expect(
       executeShiftCode(
         capabilities,
-        "async () => shift.kerning.resolve({ windowId: 7, pairs: [{ first: 'T', second: 'A' }], sourceId: 'source-a', location: [] })",
+        "async () => shift.kerning.resolve({ windowId: 7, pairs: [{ first: { name: 'T' }, second: { name: 'A' } }], source: { name: 'Light' }, location: [] })",
       ),
-    ).rejects.toThrow("sourceId or location, not both");
+    ).rejects.toThrow("source or location, not both");
     await expect(
       executeShiftCode(
         capabilities,
@@ -377,6 +490,7 @@ function revisionedCapabilities({ advanceAfter }: { advanceAfter?: string } = {}
         metricDefinitions: [],
         glyphCount: 1,
         axes: [],
+        axisMappings: [],
         sources: [],
         instances: [],
       })),
@@ -393,12 +507,13 @@ function revisionedCapabilities({ advanceAfter }: { advanceAfter?: string } = {}
     },
     kerning: {
       groups: guarded("kerning.groups", () => [kerningGroup()]),
-      pairs: guarded("kerning.pairs", ({ sourceId }) => ({
-        sourceId,
+      pairs: guarded("kerning.pairs", () => ({
+        sourceId: asSourceId("source-a"),
         items: [authoredKerningPair()],
         nextCursor: null,
       })),
       resolve: guarded("kerning.resolve", ({ pairs }) => ({ items: pairs.map(kerningResolution) })),
+      at: guarded("kerning.at", () => kerningResolution(T_THEN_A).masters[0]!),
     },
   };
 
@@ -438,14 +553,15 @@ describe("shift.read binds one font revision for its callback", () => {
 
     const result = await executeShiftCode(
       host.capabilities,
-      "async () => shift.read({ windowId: 7 }, async (read) => { const groups = await read.kerning.groups(); const page = await read.kerning.pairs({ sourceId: 'source-a' }); const resolved = await read.kerning.resolve({ pairs: [{ first: 'T', second: 'A' }] }); return { group: groups[0].name, pair: page.items[0].amount, amount: resolved.items[0].amount }; })",
+      "async () => shift.read({ windowId: 7 }, async (read) => { const groups = await read.kerning.groups(); const page = await read.kerning.pairs({ source: { name: 'Light' } }); const resolved = await read.kerning.resolve({ pairs: [{ first: { name: 'T' }, second: { name: 'A' } }] }); const at = await read.kerning.at({ first: { name: 'T' }, second: { name: 'A' } }); return { group: groups[0].name, pair: page.items[0].amount, amount: resolved.items[0].amount, at: at.amount }; })",
     );
 
-    expect(result).toEqual({ group: "A", pair: -75, amount: -75 });
+    expect(result).toEqual({ group: "A", pair: -75, amount: -75, at: -75 });
     expect(host.calls.slice(1)).toEqual([
       { method: "kerning.groups", ifFontRevision: "revision-1" },
       { method: "kerning.pairs", ifFontRevision: "revision-1" },
       { method: "kerning.resolve", ifFontRevision: "revision-1" },
+      { method: "kerning.at", ifFontRevision: "revision-1" },
     ]);
   });
 

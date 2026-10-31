@@ -36,11 +36,11 @@ fn group_members(font: &Font, position: KerningPosition, name: &str) -> Vec<Stri
     let kerning = font.kerning();
     let group_id = kerning.group_id(position, name).unwrap();
     kerning
-        .group(group_id)
+        .group(*group_id)
         .unwrap()
         .members
         .iter()
-        .map(|glyph_id| font.glyph(glyph_id).unwrap().name().to_string())
+        .map(|glyph_id| font.glyph(*glyph_id).unwrap().name().to_string())
         .collect()
 }
 
@@ -180,14 +180,14 @@ fn set_then_remove_edits_one_pair_at_one_master() {
     assert_eq!(set["changes"][0]["value"], -35.0);
     assert_eq!(set["changes"][0]["previous"], Value::Null);
     assert_eq!(
-        kerning_between(&after_set, &regular(), "acute", "A"),
+        kerning_between(&after_set, regular(), "acute", "A"),
         Some(-35.0)
     );
-    assert_eq!(kerning_between(&after_set, &bold(), "acute", "A"), None);
+    assert_eq!(kerning_between(&after_set, bold(), "acute", "A"), None);
     assert_eq!(removed["changes"][0]["kind"], "kerningValueRemoved");
     assert_eq!(removed["changes"][0]["previous"], -35.0);
     assert_eq!(
-        kerning_between(&after_remove, &regular(), "acute", "A"),
+        kerning_between(&after_remove, regular(), "acute", "A"),
         None
     );
 }
@@ -278,10 +278,10 @@ fn a_batch_creates_groups_that_its_pairs_reference_in_one_save() {
         ["acute"]
     );
     assert_eq!(
-        kerning_between(&after, &regular(), "acute", "A"),
+        kerning_between(&after, regular(), "acute", "A"),
         Some(-30.0)
     );
-    assert_eq!(kerning_between(&after, &bold(), "A", "A"), Some(-120.0));
+    assert_eq!(kerning_between(&after, bold(), "A", "A"), Some(-120.0));
 }
 
 #[test]

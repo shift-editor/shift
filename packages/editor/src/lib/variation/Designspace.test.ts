@@ -11,6 +11,18 @@ import {
 import { computed, signal } from "../signals";
 import { Designspace } from "./Designspace";
 import { axisValue, externalAxisLocationFromRecord } from "./location";
+import type {
+  CoordinateSpacesRemainDistinct,
+  MappingAcceptsExternalLocation,
+  MappingReturnsDesignLocation,
+} from "./location.test-d";
+
+const coordinateSpaceContract: readonly [
+  MappingAcceptsExternalLocation,
+  MappingReturnsDesignLocation,
+  CoordinateSpacesRemainDistinct,
+] = [true, true, true];
+void coordinateSpaceContract;
 
 function weightAxis(): Axis {
   return {
@@ -18,10 +30,7 @@ function weightAxis(): Axis {
     tag: "wght",
     name: "Weight",
     role: "external",
-    axisType: "continuous",
-    minimum: 100,
-    default: 400,
-    maximum: 900,
+    kind: { kind: "continuous", minimum: 100, default: 400, maximum: 900 },
     labels: [],
     hidden: false,
   };
@@ -32,7 +41,8 @@ function source(name: string, axis: Axis, value: number): Source {
     id: mintSourceId(),
     name,
     location: { values: { [axis.id]: value } as Record<AxisId, number> },
-    metricValues: [],
+    metricValues: {},
+    role: "master",
   };
 }
 
@@ -94,6 +104,16 @@ describe("Designspace", () => {
     expect(designspace.nearestSource(at(500))).toBe(bold);
     expect(designspace.source(light.id)).toBe(light);
     expect(axisValue(designspace.defaultLocation(), axis)).toBe(400);
+  });
+
+  it("finds a source by exact name, and refuses a name two sources share", () => {
+    const { axis, designspace, sourcesCell } = weightDesignspace([]);
+    const light = source("Light", axis, 100);
+    sourcesCell.set([light, source("Bold", axis, 700), source("Bold", axis, 800)]);
+
+    expect(designspace.sourceNamed("Light")).toBe(light);
+    expect(designspace.sourceNamed("light")).toBeNull();
+    expect(() => designspace.sourceNamed("Bold")).toThrow("Source name Bold is ambiguous");
   });
 
   it("keeps reactive readers current when sources or mappings change", () => {

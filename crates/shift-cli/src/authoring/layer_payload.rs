@@ -6,11 +6,11 @@ use std::path::Path;
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use serde::de::DeserializeOwned;
+use shift_font::svg_path;
 use shift_font::{
-    Anchor, Component, Contour, DecomposedTransform, FontIntent, GlyphId, LayerId, PointType,
-    Transform,
+    Anchor, Component, Contour, DecomposedTransform, FontIntent, GlyphId, LayerId, Transform,
 };
-use svgtypes::{PathParser, PathSegment, SimplePathSegment, SimplifyingPathParser};
+use svgtypes::{PathParser, PathSegment};
 
 use super::input::{LayerInput, TransformInput};
 use super::require_finite;
@@ -120,7 +120,7 @@ impl LayerInput {
 }
 
 fn contours_from_svg_path(svg_path: &str) -> Result<Vec<Contour>> {
-    // Reject arcs before the simplifying parser can approximate them with cubics.
+    // Reject arcs before the shared parser approximates them with cubics.
     for segment in PathParser::from(svg_path) {
         if matches!(
             segment.into_diagnostic()?,
@@ -130,50 +130,7 @@ fn contours_from_svg_path(svg_path: &str) -> Result<Vec<Contour>> {
         }
     }
 
-    let mut contours = Vec::<Contour>::new();
-    for segment in SimplifyingPathParser::from(svg_path) {
-        let segment = segment.into_diagnostic().wrap_err("invalid svgPath")?;
-        if let SimplePathSegment::MoveTo { x, y } = segment {
-            require_finite(x, "svgPath x")?;
-            require_finite(y, "svgPath y")?;
-            let mut contour = Contour::new();
-            contour.add_point(x, y, PointType::OnCurve, false);
-            contours.push(contour);
-            continue;
-        }
-        let contour = contours
-            .last_mut()
-            .ok_or_else(|| miette::miette!("svgPath must begin with M or m"))?;
-        match segment {
-            SimplePathSegment::LineTo { x, y } => {
-                contour.add_point(x, y, PointType::OnCurve, false);
-            }
-            SimplePathSegment::CurveTo {
-                x1,
-                y1,
-                x2,
-                y2,
-                x,
-                y,
-            } => {
-                contour.add_point(x1, y1, PointType::OffCurve, false);
-                contour.add_point(x2, y2, PointType::OffCurve, false);
-                contour.add_point(x, y, PointType::OnCurve, false);
-            }
-            SimplePathSegment::Quadratic { x1, y1, x, y } => {
-                contour.add_point(x1, y1, PointType::OffCurve, false);
-                contour.add_point(x, y, PointType::QCurve, false);
-            }
-            SimplePathSegment::ClosePath => contour.close(),
-            SimplePathSegment::MoveTo { .. } => unreachable!("move starts a new contour"),
-        }
-    }
-    for contour in &contours {
-        for point in contour.points() {
-            require_finite(point.x(), "svgPath x")?;
-            require_finite(point.y(), "svgPath y")?;
-        }
-    }
-
-    Ok(contours)
+    svg_path::contours_from_svg_path(svg_path)
+        .into_diagnostic()
+        .wrap_err("invalid svgPath")
 }

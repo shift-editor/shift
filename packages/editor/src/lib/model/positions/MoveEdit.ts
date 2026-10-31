@@ -208,14 +208,28 @@ export class MoveEdit implements PositionEdit {
     if (this.#phase === "committed" || this.#phase === "discarded") return;
 
     this.#phase = "committed";
-    this.#layers.finish(label);
+    try {
+      this.#layers.finish(label);
+    } finally {
+      this.#releaseRules();
+    }
   }
 
   discard(): void {
     if (this.#phase === "committed" || this.#phase === "discarded") return;
 
     this.#phase = "discarded";
-    this.#layers.cancel();
+    try {
+      this.#layers.cancel();
+    } finally {
+      this.#releaseRules();
+    }
+  }
+
+  /** Releases the drag rules prepared for every layer; the edit previews no more. */
+  #releaseRules(): void {
+    this.#pointRules?.dispose();
+    for (const rules of this.#additionalPointRules) rules?.dispose();
   }
 
   #snapCandidatesAt(

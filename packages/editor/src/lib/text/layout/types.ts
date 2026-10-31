@@ -1,13 +1,13 @@
-import type { Bounds, Point2D } from "@shift/geo";
+import type { Point2D } from "@shift/geo";
 import {
   type GlyphName,
   mintTextItemId,
   type GlyphId,
-  type ShapedGlyph,
   type SourceMetrics,
   type TextItemId,
   type Unicode,
 } from "@shift/types";
+import type { ShapedGlyph } from "@shift/wasm/protocol";
 import type { Font } from "../../model/Font";
 
 export type { TextItemId };
@@ -94,7 +94,6 @@ export interface PositionedGlyph {
   xOffset: number;
   yOffset: number;
   cluster: number;
-  bounds: Bounds | null;
 }
 
 export type Direction = "ltr" | "rtl";
@@ -104,7 +103,7 @@ export interface SegmentedRun {
   /** Glyphs in visual order, clusters indexing `items`: the shaper's, or one per item for literal layout. */
   shaped: readonly ShapedGlyph[];
   direction: Direction;
-  script?: string;
+  script?: string | null;
   language?: string;
   features?: Record<string, boolean | "auto">;
   clusterStart: number;
@@ -113,7 +112,7 @@ export interface SegmentedRun {
 export interface PositionedRun {
   glyphs: PositionedGlyph[];
   direction: Direction;
-  script?: string;
+  script?: string | null;
   language?: string;
   features?: Record<string, boolean | "auto">;
   advance: number;

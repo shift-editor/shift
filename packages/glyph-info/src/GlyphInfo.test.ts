@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { alphabetical, ascending } from "@shift/types";
 import { GlyphInfo } from "./GlyphInfo.js";
 import { DEFAULT_LANGUAGE_IDS, type GlyphCategory } from "./types.js";
 import { defaultResources } from "./resources.js";
@@ -131,14 +132,18 @@ describe("getAllGlyph", () => {
   });
 
   it("every entry has required fields", () => {
-    const all = db.getAllGlyph();
-    for (const g of all) {
-      expect(g.codepoint).toBeTypeOf("number");
-      expect(g.name).toBeTypeOf("string");
-      expect(g.name.length).toBeGreaterThan(0);
-      expect(g.category).toBeTypeOf("string");
-      expect(g.category.length).toBeGreaterThan(0);
-    }
+    const incomplete = db
+      .getAllGlyph()
+      .filter(
+        (g) =>
+          typeof g.codepoint !== "number" ||
+          typeof g.name !== "string" ||
+          g.name.length === 0 ||
+          typeof g.category !== "string" ||
+          g.category.length === 0,
+      );
+
+    expect(incomplete).toEqual([]);
   });
 
   it("contains no duplicate codepoints", () => {
@@ -149,11 +154,11 @@ describe("getAllGlyph", () => {
   });
 
   it("codepoints are all non-negative integers", () => {
-    const all = db.getAllGlyph();
-    for (const g of all) {
-      expect(g.codepoint).toBeGreaterThanOrEqual(0);
-      expect(Number.isInteger(g.codepoint)).toBe(true);
-    }
+    const invalid = db
+      .getAllGlyph()
+      .filter((g) => !Number.isInteger(g.codepoint) || g.codepoint < 0);
+
+    expect(invalid).toEqual([]);
   });
 });
 
@@ -413,7 +418,7 @@ describe("language coverage catalogs", () => {
 
     expect(required).toHaveLength(56);
     expect(required).toContain(0x61);
-    expect(required).toEqual(required.toSorted((left, right) => left - right));
+    expect(required).toEqual(required.toSorted(ascending));
     expect(catalog.required("unknown-language")).toEqual([]);
   });
 
@@ -442,10 +447,8 @@ describe("language coverage catalogs", () => {
     const latin = catalog.scripts.find((script) => script.script === "Latin");
     const languageNames = latin?.languages.map(({ language }) => language.name) ?? [];
 
-    expect(scripts).toEqual(scripts.toSorted((left, right) => left.localeCompare(right)));
-    expect(languageNames).toEqual(
-      languageNames.toSorted((left, right) => left.localeCompare(right)),
-    );
+    expect(scripts).toEqual(scripts.toSorted(alphabetical));
+    expect(languageNames).toEqual(languageNames.toSorted(alphabetical));
   });
 });
 

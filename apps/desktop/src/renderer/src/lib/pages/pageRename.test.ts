@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { asNodeId } from "@shift/types";
-import { TestEditor } from "@/testing/TestEditor";
+import { useTestEditor } from "@/testing/fontFixture";
 import { pageRenameRequests, renameOnDoubleClick, type ClickTarget } from "./pageRename";
 
 const pageId = asNodeId("page-1");
@@ -22,33 +22,31 @@ function press(x: number, y: number): Event {
 }
 
 describe("renaming a page opened by a double-click", () => {
-  let editor: TestEditor;
+  const editor = useTestEditor();
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.useFakeTimers();
-    editor = new TestEditor();
-    await editor.startSession();
   });
 
   afterEach(() => vi.useRealTimers());
 
   it("asks for the rename when the second press lands by the first, and swallows it", () => {
-    renameOnDoubleClick(editor, pageId, { x: 100, y: 40 }, target);
+    renameOnDoubleClick(editor.asEditor(), pageId, { x: 100, y: 40 }, target);
 
     const second = press(102, 41);
 
-    expect(pageRenameRequests(editor).peek()).toBe(pageId);
+    expect(pageRenameRequests(editor.asEditor()).peek()).toBe(pageId);
     expect(second.defaultPrevented).toBe(true);
   });
 
   it("leaves a press elsewhere or after the double-click time alone", () => {
-    renameOnDoubleClick(editor, pageId, { x: 100, y: 40 }, target);
+    renameOnDoubleClick(editor.asEditor(), pageId, { x: 100, y: 40 }, target);
     const far = press(200, 40);
-    renameOnDoubleClick(editor, pageId, { x: 100, y: 40 }, target);
+    renameOnDoubleClick(editor.asEditor(), pageId, { x: 100, y: 40 }, target);
     vi.advanceTimersByTime(600);
     const late = press(100, 40);
 
-    expect(pageRenameRequests(editor).peek()).toBeNull();
+    expect(pageRenameRequests(editor.asEditor()).peek()).toBeNull();
     expect([far.defaultPrevented, late.defaultPrevented]).toEqual([false, false]);
   });
 });

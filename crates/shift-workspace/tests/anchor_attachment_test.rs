@@ -15,7 +15,7 @@ fn apply(workspace: &mut FontWorkspace, intents: Vec<FontIntent>) {
 /// Creates a glyph with one layer at `source_id` holding `anchors`.
 fn glyph(
     workspace: &mut FontWorkspace,
-    source_id: &SourceId,
+    source_id: SourceId,
     name: &str,
     anchors: &[(&str, f64, f64)],
 ) -> (GlyphId, LayerId, Vec<AnchorId>) {
@@ -37,13 +37,13 @@ fn glyph(
         workspace,
         vec![
             CreateGlyphLayer {
-                layer_id: layer_id.clone(),
-                glyph_id: glyph_id.clone(),
-                source_id: source_id.clone(),
+                layer_id,
+                glyph_id,
+                source_id,
             }
             .into(),
             AddAnchors {
-                layer_id: layer_id.clone(),
+                layer_id,
                 anchors: anchors
                     .iter()
                     .zip(&anchor_ids)
@@ -62,15 +62,15 @@ fn glyph(
 }
 
 /// Adds a component, placed on its anchors as adding one places it.
-fn add_component(workspace: &mut FontWorkspace, layer_id: &LayerId, base: &GlyphId) -> ComponentId {
+fn add_component(workspace: &mut FontWorkspace, layer_id: LayerId, base: GlyphId) -> ComponentId {
     let component_id = ComponentId::new();
     apply(
         workspace,
         vec![
             AddComponent {
-                layer_id: layer_id.clone(),
+                layer_id,
                 component_id: component_id.clone(),
-                base_glyph_id: base.clone(),
+                base_glyph_id: base,
             }
             .into(),
         ],
@@ -80,7 +80,7 @@ fn add_component(workspace: &mut FontWorkspace, layer_id: &LayerId, base: &Glyph
 
 fn translation(
     workspace: &FontWorkspace,
-    layer_id: &LayerId,
+    layer_id: LayerId,
     component: &ComponentId,
 ) -> (f64, f64) {
     let transform = *workspace
@@ -113,33 +113,33 @@ fn fixture() -> Fixture {
         FontWorkspace::create_untitled(temp.path().join("working.sqlite"), NewWorkspace::new())
             .unwrap();
     let source_id = workspace.font().default_source_id().unwrap();
-    let (a, a_layer, a_anchors) = glyph(&mut workspace, &source_id, "a", &[("top", 250.0, 500.0)]);
+    let (a, a_layer, a_anchors) = glyph(&mut workspace, source_id, "a", &[("top", 250.0, 500.0)]);
     let (acutecomb, _, _) = glyph(
         &mut workspace,
-        &source_id,
+        source_id,
         "acutecomb",
         &[("_top", 100.0, 500.0), ("top", 100.0, 700.0)],
     );
     let (tildecomb, _, _) = glyph(
         &mut workspace,
-        &source_id,
+        source_id,
         "tildecomb",
         &[("_top", 120.0, 500.0), ("top", 120.0, 650.0)],
     );
 
-    let (aacute_id, aacute, _) = glyph(&mut workspace, &source_id, "aacutetilde", &[]);
-    add_component(&mut workspace, &aacute, &a);
-    let acute = add_component(&mut workspace, &aacute, &acutecomb);
-    let tilde = add_component(&mut workspace, &aacute, &tildecomb);
+    let (aacute_id, aacute, _) = glyph(&mut workspace, source_id, "aacutetilde", &[]);
+    add_component(&mut workspace, aacute, a);
+    let acute = add_component(&mut workspace, aacute, acutecomb);
+    let tilde = add_component(&mut workspace, aacute, tildecomb);
 
-    let (off_id, off_anchor, _) = glyph(&mut workspace, &source_id, "aacute.off", &[]);
-    add_component(&mut workspace, &off_anchor, &a);
-    let off_acute = add_component(&mut workspace, &off_anchor, &acutecomb);
+    let (off_id, off_anchor, _) = glyph(&mut workspace, source_id, "aacute.off", &[]);
+    add_component(&mut workspace, off_anchor, a);
+    let off_acute = add_component(&mut workspace, off_anchor, acutecomb);
     apply(
         &mut workspace,
         vec![
             SetComponentTransforms {
-                layer_id: off_anchor.clone(),
+                layer_id: off_anchor,
                 component_ids: vec![off_acute.clone()],
                 transforms: vec![160.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0],
             }
@@ -171,7 +171,7 @@ fn components_on_a_moved_anchor_follow_it_and_marks_stacked_on_them_too() {
         &mut f.workspace,
         vec![
             MoveAnchors {
-                layer_id: f.a_layer.clone(),
+                layer_id: f.a_layer,
                 anchor_ids: vec![f.a_top.clone()],
                 coords: vec![300.0, 520.0],
             }
@@ -179,17 +179,14 @@ fn components_on_a_moved_anchor_follow_it_and_marks_stacked_on_them_too() {
         ],
     );
 
+    assert_eq!(translation(&f.workspace, f.aacute, &f.acute), (200.0, 20.0));
     assert_eq!(
-        translation(&f.workspace, &f.aacute, &f.acute),
-        (200.0, 20.0)
-    );
-    assert_eq!(
-        translation(&f.workspace, &f.aacute, &f.tilde),
+        translation(&f.workspace, f.aacute, &f.tilde),
         (180.0, 220.0)
     );
     // Placed by hand off its anchor: stays where it was put.
     assert_eq!(
-        translation(&f.workspace, &f.off_anchor, &f.off_acute),
+        translation(&f.workspace, f.off_anchor, &f.off_acute),
         (160.0, 0.0)
     );
 }
@@ -201,7 +198,7 @@ fn undo_puts_followers_back_with_the_anchor() {
         &mut f.workspace,
         vec![
             MoveAnchors {
-                layer_id: f.a_layer.clone(),
+                layer_id: f.a_layer,
                 anchor_ids: vec![f.a_top.clone()],
                 coords: vec![300.0, 520.0],
             }
@@ -211,9 +208,9 @@ fn undo_puts_followers_back_with_the_anchor() {
 
     f.workspace.undo().unwrap();
 
-    assert_eq!(translation(&f.workspace, &f.aacute, &f.acute), (150.0, 0.0));
+    assert_eq!(translation(&f.workspace, f.aacute, &f.acute), (150.0, 0.0));
     assert_eq!(
-        translation(&f.workspace, &f.aacute, &f.tilde),
+        translation(&f.workspace, f.aacute, &f.tilde),
         (130.0, 200.0)
     );
 }
@@ -225,16 +222,16 @@ fn moving_an_attached_component_by_hand_detaches_it_and_carries_marks_stacked_on
         &mut f.workspace,
         vec![
             SetComponentTransforms {
-                layer_id: f.aacute.clone(),
+                layer_id: f.aacute,
                 component_ids: vec![f.acute.clone()],
                 transforms: vec![170.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0],
             }
             .into(),
         ],
     );
-    assert_eq!(translation(&f.workspace, &f.aacute, &f.acute), (170.0, 0.0));
+    assert_eq!(translation(&f.workspace, f.aacute, &f.acute), (170.0, 0.0));
     assert_eq!(
-        translation(&f.workspace, &f.aacute, &f.tilde),
+        translation(&f.workspace, f.aacute, &f.tilde),
         (150.0, 200.0)
     );
 
@@ -242,19 +239,19 @@ fn moving_an_attached_component_by_hand_detaches_it_and_carries_marks_stacked_on
         &mut f.workspace,
         vec![
             MoveAnchors {
-                layer_id: f.a_layer.clone(),
+                layer_id: f.a_layer,
                 anchor_ids: vec![f.a_top.clone()],
                 coords: vec![300.0, 520.0],
             }
             .into(),
         ],
     );
-    assert_eq!(translation(&f.workspace, &f.aacute, &f.acute), (170.0, 0.0));
+    assert_eq!(translation(&f.workspace, f.aacute, &f.acute), (170.0, 0.0));
 }
 
 fn alignment(
     workspace: &FontWorkspace,
-    layer_id: &LayerId,
+    layer_id: LayerId,
     component: &ComponentId,
 ) -> ComponentAlignment {
     workspace
@@ -271,7 +268,7 @@ fn move_a_top(f: &mut Fixture, x: f64, y: f64) {
         &mut f.workspace,
         vec![
             MoveAnchors {
-                layer_id: f.a_layer.clone(),
+                layer_id: f.a_layer,
                 anchor_ids: vec![f.a_top.clone()],
                 coords: vec![x, y],
             }
@@ -285,11 +282,11 @@ fn adding_on_anchors_records_anchored_and_moving_by_hand_records_free() {
     let mut f = fixture();
     move_a_top(&mut f, 250.0, 500.0);
     assert_eq!(
-        alignment(&f.workspace, &f.aacute, &f.acute),
+        alignment(&f.workspace, f.aacute, &f.acute),
         ComponentAlignment::Anchored
     );
     assert_eq!(
-        alignment(&f.workspace, &f.off_anchor, &f.off_acute),
+        alignment(&f.workspace, f.off_anchor, &f.off_acute),
         ComponentAlignment::Free
     );
 }
@@ -301,7 +298,7 @@ fn anchoring_a_free_component_puts_it_back_on_its_anchors_and_it_follows_again()
         &mut f.workspace,
         vec![
             SetComponentAlignment {
-                layer_id: f.off_anchor.clone(),
+                layer_id: f.off_anchor,
                 component_ids: vec![f.off_acute.clone()],
                 alignment: ComponentAlignment::Anchored,
             }
@@ -309,13 +306,13 @@ fn anchoring_a_free_component_puts_it_back_on_its_anchors_and_it_follows_again()
         ],
     );
     assert_eq!(
-        translation(&f.workspace, &f.off_anchor, &f.off_acute),
+        translation(&f.workspace, f.off_anchor, &f.off_acute),
         (150.0, 0.0)
     );
 
     move_a_top(&mut f, 300.0, 520.0);
     assert_eq!(
-        translation(&f.workspace, &f.off_anchor, &f.off_acute),
+        translation(&f.workspace, f.off_anchor, &f.off_acute),
         (200.0, 20.0)
     );
 }
@@ -327,7 +324,7 @@ fn an_unrecorded_component_follows_while_it_sits_on_its_anchors_and_is_then_reco
         &mut f.workspace,
         vec![
             SetComponentAlignment {
-                layer_id: f.aacute.clone(),
+                layer_id: f.aacute,
                 component_ids: vec![f.acute.clone(), f.tilde.clone()],
                 alignment: ComponentAlignment::Unset,
             }
@@ -337,16 +334,13 @@ fn an_unrecorded_component_follows_while_it_sits_on_its_anchors_and_is_then_reco
 
     move_a_top(&mut f, 300.0, 520.0);
 
+    assert_eq!(translation(&f.workspace, f.aacute, &f.acute), (200.0, 20.0));
     assert_eq!(
-        translation(&f.workspace, &f.aacute, &f.acute),
-        (200.0, 20.0)
-    );
-    assert_eq!(
-        translation(&f.workspace, &f.aacute, &f.tilde),
+        translation(&f.workspace, f.aacute, &f.tilde),
         (180.0, 220.0)
     );
     assert_eq!(
-        alignment(&f.workspace, &f.aacute, &f.acute),
+        alignment(&f.workspace, f.aacute, &f.acute),
         ComponentAlignment::Anchored
     );
 }

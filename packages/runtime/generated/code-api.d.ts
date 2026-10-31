@@ -83,6 +83,7 @@ declare const ContourIdBrand: unique symbol;
 declare const AnchorIdBrand: unique symbol;
 declare const AxisIdBrand: unique symbol;
 declare const AxisLabelIdBrand: unique symbol;
+declare const AxisMappingIdBrand: unique symbol;
 declare const ComponentIdBrand: unique symbol;
 declare const GlyphIdBrand: unique symbol;
 declare const KerningGroupIdBrand: unique symbol;
@@ -124,6 +125,10 @@ type AxisId = string & {
 /** A stable identifier for one user-space axis label. */
 type AxisLabelId = string & {
   readonly [AxisLabelIdBrand]: typeof AxisLabelIdBrand;
+};
+/** A stable identifier for one font-owned axis mapping. */
+type AxisMappingId = string & {
+  readonly [AxisMappingIdBrand]: typeof AxisMappingIdBrand;
 };
 /**
  * A component identifier from Rust.
@@ -190,92 +195,148 @@ type SourceId = string & {
 type ShiftId = NodeId | PointId | AnchorId | ContourId | SegmentId | ComponentId | TextItemId;
 /** Identifies objects that can be selected by the editor. */
 type SelectableId = ShiftId;
-//#endregion
-//#region ../types/src/bridge/generated.d.ts
+/** A glyph's authored name, such as `A` or `uni0041`. */
 type GlyphName = string;
-interface Axis {
-  id: AxisId;
-  tag: string;
-  name: string;
-  role: AxisRole;
-  axisType: AxisType;
-  minimum?: number;
-  default: number;
-  maximum?: number;
-  values?: Array<number>;
-  labels: Array<AxisLabel>;
-  hidden: boolean;
-}
-interface AxisLabel {
-  id: AxisLabelId;
-  name: string;
-  value: number;
-  minimum?: number;
-  maximum?: number;
-  linkedValue?: number;
-  elidable: boolean;
-}
-type AxisRole = "external" | "internal";
-type AxisType = "continuous" | "discrete";
+//#endregion
+//#region ../types/src/bridge/protocol.d.ts
 interface FontMetadata {
-  familyName?: string;
-  styleName?: string;
-  versionMajor?: number;
-  versionMinor?: number;
-  copyright?: string;
-  trademark?: string;
-  designer?: string;
-  designerUrl?: string;
-  manufacturer?: string;
-  manufacturerUrl?: string;
-  license?: string;
-  licenseUrl?: string;
-  description?: string;
-  note?: string;
+  readonly familyName?: string | null;
+  readonly styleName?: string | null;
+  readonly versionMajor?: number | null;
+  readonly versionMinor?: number | null;
+  readonly copyright?: string | null;
+  readonly trademark?: string | null;
+  readonly designer?: string | null;
+  readonly designerUrl?: string | null;
+  readonly manufacturer?: string | null;
+  readonly manufacturerUrl?: string | null;
+  readonly license?: string | null;
+  readonly licenseUrl?: string | null;
+  readonly description?: string | null;
+  readonly note?: string | null;
 }
 interface FontMetrics {
-  unitsPerEm: number;
-}
-type KerningPosition = "first" | "second";
-interface Location {
-  values: Record<AxisId, number>;
-}
-interface MetricDefinition {
-  id: MetricId;
-  kind: MetricKind;
-  name: string;
+  readonly unitsPerEm: number;
 }
 type MetricKind = "ascender" | "capHeight" | "xHeight" | "baseline" | "descender" | "custom";
-/** NAPI projection of one explicit named product preset. */
-interface NamedInstance {
-  id: NamedInstanceId;
-  name: string;
-  location: Location;
-  postscriptName?: string;
+interface MetricDefinition {
+  readonly id: MetricId;
+  readonly kind: MetricKind;
+  readonly name: string;
 }
-type PointType = "onCurve" | "offCurve" | "qCurve";
+interface Location {
+  readonly values: Readonly<Record<AxisId, number>>;
+}
+/**
+ * One source's authored position and alignment-zone overshoot for a metric.
+ *
+ * Both values are expressed in font units. Overshoots are positive above a
+ * metric line and negative below it.
+ */
+interface MetricValue {
+  readonly position: number;
+  readonly overshoot: number;
+}
+/**
+ * How a source participates in the font. A `Master` is a genuine
+ * designspace source: it has a design-space location and earns a
+ * `<source>` entry when the font is written as a designspace. A `Layer`
+ * only carries a format layer that rides along with its file's masters
+ * (e.g. a plain UFO background layer) and must never gain a designspace
+ * `<source>` entry on save.
+ */
+type SourceRole = "master" | "layer";
 interface Source {
-  id: SourceId;
-  name: string;
-  location: Location;
-  filename?: string;
-  metricValues: Array<SourceMetricValue>;
-  italicAngle?: number;
-  lineGap?: number;
-  underlinePosition?: number;
-  underlineThickness?: number;
+  readonly id: SourceId;
+  readonly name: string;
+  readonly location: Location;
+  readonly metricValues: Readonly<Record<MetricId, MetricValue>>;
+  readonly italicAngle?: number | null;
+  readonly lineGap?: number | null;
+  readonly underlinePosition?: number | null;
+  readonly underlineThickness?: number | null;
+  readonly filename?: string | null;
+  readonly color?: string | null;
+  readonly role: SourceRole;
+  readonly layerName?: string | null;
 }
-interface SourceMetricValue {
-  metricId: MetricId;
-  position: number;
-  overshoot: number;
+type AxisRole = "external" | "internal";
+type AxisKind =
+  | {
+      readonly kind: "continuous";
+      readonly minimum: number;
+      readonly default: number;
+      readonly maximum: number;
+    }
+  | {
+      readonly kind: "discrete";
+      readonly values: readonly number[];
+      readonly default: number;
+    };
+interface AxisLabelRange {
+  readonly minimum: number;
+  readonly maximum: number;
 }
+/**
+ * One authored external-axis name and its stable identity.
+ *
+ * Labels describe values for authoring UI and STAT output. They do not create
+ * products or reference sources.
+ */
+interface AxisLabel {
+  readonly id: AxisLabelId;
+  readonly name: string;
+  readonly value: number;
+  readonly range?: AxisLabelRange | null;
+  readonly linkedValue?: number | null;
+  readonly elidable: boolean;
+}
+interface Axis {
+  readonly id: AxisId;
+  readonly tag: string;
+  readonly name: string;
+  readonly role: AxisRole;
+  readonly kind: AxisKind;
+  readonly labels: readonly AxisLabel[];
+  readonly hidden: boolean;
+}
+interface AxisMappingPoint {
+  readonly description?: string | null;
+  readonly input: Location;
+  readonly output: Location;
+}
+interface AxisMapping {
+  readonly id: AxisMappingId;
+  readonly name: string;
+  readonly description?: string | null;
+  readonly inputs: readonly AxisId[];
+  readonly outputs: readonly AxisId[];
+  readonly points: readonly AxisMappingPoint[];
+}
+/**
+ * Wire projection of an explicit named product preset.
+ *
+ * `location` is complete external authoring state, not a normalized or
+ * compiler-owned coordinate record.
+ */
+interface NamedInstance {
+  readonly id: NamedInstanceId;
+  readonly name: string;
+  readonly location: Location;
+  readonly postscriptName?: string | null;
+}
+/**
+ * Pair position a kerning group applies to: `First` kerns a glyph's right
+ * edge, `Second` its left edge.
+ */
+type KerningPosition = "first" | "second";
+type PointType = "onCurve" | "offCurve" | "qCurve";
 //#endregion
 //#region ../types/src/domain.d.ts
 /** Standard and technical metrics resolved for one authored source. */
 type SourceMetrics = Readonly<
   FontMetrics & {
-    metricValues: readonly SourceMetricValue[];
+    metricValues: Readonly<Record<MetricId, MetricValue>>;
     ascender: number;
     descender: number;
     baseline: number;
@@ -362,6 +423,20 @@ export interface EditorView {
   editing: boolean;
   applyStatus: "idle" | "queued" | "applying" | null;
 }
+/** Where an open document came from: a `.shift` package, a font file opened for editing, or a new font. */
+export type DocumentSourceKind = "document" | "imported" | "untitled";
+/** One window's document and whether it has edits Save has not written. */
+export interface DocumentState {
+  sourceKind: DocumentSourceKind;
+  /** The file Save writes; null until the document has one. */
+  saveTarget: string | null;
+  /** The file the document was opened from or last saved to; null for a new font. */
+  path: string | null;
+  /** Whether the document has edits Save has not written. */
+  dirty: boolean;
+  /** Whether Save must first ask where to write, as for a new or imported font. */
+  needsSaveAs: boolean;
+}
 /** Editor facts paired with the explicit window and font-session target. */
 export interface EditorInspection extends EditorView {
   windowId: number;
@@ -376,6 +451,8 @@ export interface FontOverview {
   metricDefinitions: MetricDefinition[];
   glyphCount: number;
   axes: Axis[];
+  /** How user coordinates on the axes map to source coordinates (`avar`), in font order. */
+  axisMappings: AxisMapping[];
   /** Global designspace sources; glyph-specific layers are advertised on glyphs. */
   sources: Source[];
   instances: NamedInstance[];
@@ -403,6 +480,51 @@ export type GlyphSelector =
   | {
       name: GlyphName;
       glyphId?: never;
+    };
+/** Select one source by stable ID or exact name, never by both. */
+export type SourceSelector =
+  | {
+      sourceId: SourceId;
+      name?: never;
+    }
+  | {
+      name: string;
+      sourceId?: never;
+    };
+/** Select one named instance by stable ID or exact name, never by both. */
+export type InstanceSelector =
+  | {
+      instanceId: NamedInstanceId;
+      name?: never;
+    }
+  | {
+      name: string;
+      instanceId?: never;
+    };
+/** Select one axis by stable ID or tag, never by both. */
+export type AxisSelector =
+  | {
+      axisId: AxisId;
+      tag?: never;
+    }
+  | {
+      tag: string;
+      axisId?: never;
+    };
+/**
+ * Select one authored layer by stable ID, or as a glyph's layer at a source,
+ * never both. Without `source`, the glyph's layer at the default source.
+ */
+export type LayerSelector =
+  | {
+      layerId: LayerId;
+      glyph?: never;
+      source?: never;
+    }
+  | {
+      glyph: GlyphSelector;
+      source?: SourceSelector;
+      layerId?: never;
     };
 /** One bounded page of glyphs in font directory order. */
 export interface GlyphPage {
@@ -551,22 +673,25 @@ export interface ResolvedGlyphs {
 export interface GlyphListInput extends ShiftTarget {
   limit?: number;
   cursor?: string;
-  sourceId?: SourceId;
+  /** Nests each glyph's authored layer at this source. */
+  source?: SourceSelector;
 }
 export type GlyphGetInput = ShiftTarget & GlyphSelector;
+/** One source by stable id or exact name, never by both. */
+export type SourceGetInput = ShiftTarget & SourceSelector;
+/** One named instance by stable id or exact name, never by both. */
+export type InstanceGetInput = ShiftTarget & InstanceSelector;
 export interface GlyphResolveInput extends ShiftTarget {
   glyphIds: GlyphId[];
   location: AxisCoordinate[];
 }
-/** Addresses one authored layer by its stable identity. */
-export interface LayerGetInput extends ShiftTarget {
-  layerId: LayerId;
-}
+/** Addresses one authored layer by its stable identity, or by glyph and source. */
+export type LayerGetInput = ShiftTarget & LayerSelector;
 export type LayerResolveInput = LayerGetInput;
-export interface LayerRenderInput extends LayerGetInput {
+export type LayerRenderInput = LayerGetInput & {
   overlays?: LayerOverlays;
   appearance?: LayerAppearance;
-}
+};
 export interface LocationResolveInput extends ShiftTarget {
   location: AxisCoordinate[];
 }
@@ -646,22 +771,29 @@ export interface KerningGroupsInput extends ShiftTarget {
   position?: KerningPosition;
 }
 export interface KerningPairsInput extends ShiftTarget {
-  sourceId: SourceId;
-  /** Only pairs that apply to this glyph (exact name or id), directly or through its groups. */
-  glyph?: string;
+  /** The master whose pairs to list; the default source when omitted. */
+  source?: SourceSelector;
+  /** Only pairs that apply to this glyph, directly or through its groups. */
+  glyph?: GlyphSelector;
   limit?: number;
   cursor?: string;
 }
-/** Two glyphs, first then second, each by exact name or stable glyph id. */
+/** Two glyphs, first then second, each selected by exact name or stable glyph id. */
 export interface KerningPairQuery {
-  first: string;
-  second: string;
+  first: GlyphSelector;
+  second: GlyphSelector;
 }
-/** Resolves at one master (`sourceId`), an external `location`, or else the default location. */
+/** Resolves at one master (`source`), an external `location`, or else the default location. */
 export interface KerningResolveInput extends ShiftTarget {
   pairs: KerningPairQuery[];
-  sourceId?: SourceId;
+  source?: SourceSelector;
   location?: AxisCoordinate[];
+}
+/** One pair, first glyph then second, at one master; the default source when `source` is omitted. */
+export interface KerningAtInput extends ShiftTarget {
+  first: GlyphSelector;
+  second: GlyphSelector;
+  source?: SourceSelector;
 }
 /** Live application capabilities shared by protocol and plugin hosts. */
 export interface ShiftCapabilities {
@@ -683,6 +815,12 @@ export interface ShiftCapabilities {
     get(input: GlyphGetInput): Promise<ShiftObservation<GlyphSummary>>;
     resolve(input: GlyphResolveInput): Promise<ShiftObservation<ResolvedGlyphs>>;
   };
+  sources: {
+    get(input: SourceGetInput): Promise<ShiftObservation<Source>>;
+  };
+  instances: {
+    get(input: InstanceGetInput): Promise<ShiftObservation<NamedInstance>>;
+  };
   layers: {
     get(input: LayerGetInput): Promise<ShiftObservation<AuthoredLayer>>;
     resolve(input: LayerResolveInput): Promise<ShiftObservation<ResolvedLayer>>;
@@ -692,6 +830,7 @@ export interface ShiftCapabilities {
     groups(input: KerningGroupsInput): Promise<ShiftObservation<KerningGroupSummary[]>>;
     pairs(input: KerningPairsInput): Promise<ShiftObservation<KerningPairPage>>;
     resolve(input: KerningResolveInput): Promise<ShiftObservation<ResolvedKerningPairs>>;
+    at(input: KerningAtInput): Promise<ShiftObservation<KerningMasterValue>>;
   };
 }
 /** A capability input without the window and revision a read scope binds. */
@@ -724,6 +863,12 @@ export interface ShiftRead {
     get(input: ShiftReadInput<GlyphGetInput>): Promise<GlyphSummary>;
     resolve(input: ShiftReadInput<GlyphResolveInput>): Promise<ResolvedGlyphs>;
   };
+  sources: {
+    get(input: ShiftReadInput<SourceGetInput>): Promise<Source>;
+  };
+  instances: {
+    get(input: ShiftReadInput<InstanceGetInput>): Promise<NamedInstance>;
+  };
   layers: {
     get(input: ShiftReadInput<LayerGetInput>): Promise<AuthoredLayer>;
     resolve(input: ShiftReadInput<LayerResolveInput>): Promise<ResolvedLayer>;
@@ -733,6 +878,7 @@ export interface ShiftRead {
     groups(input?: ShiftReadInput<KerningGroupsInput>): Promise<KerningGroupSummary[]>;
     pairs(input: ShiftReadInput<KerningPairsInput>): Promise<KerningPairPage>;
     resolve(input: ShiftReadInput<KerningResolveInput>): Promise<ResolvedKerningPairs>;
+    at(input: ShiftReadInput<KerningAtInput>): Promise<KerningMasterValue>;
   };
 }
 /** The `shift` global in scripts: raw capabilities plus revision-bound reads. */
@@ -748,6 +894,143 @@ export interface ShiftScript extends ShiftCapabilities {
     },
     callback: (read: ShiftRead) => Result | Promise<Result>,
   ): Promise<Result>;
+}
+/** One item of a canvas text run: a typed character, a glyph picked by name, or a line break. */
+export interface TextRunItem {
+  id: string;
+  /** The character, `"\n"` for a line break, or `/name` for a glyph picked by name. */
+  text: string;
+}
+/** One glyph a canvas text run shows, in the order its line shows them. */
+export interface TextRunGlyph {
+  /** The glyph shown; null for a character the font has no glyph for. */
+  glyphId: GlyphId | null;
+  name: string;
+  /** The items it shows: one for most glyphs, several for a ligature. */
+  itemIds: string[];
+  line: number;
+  /** Left edge of its advance box, in the run's units. */
+  left: number;
+  baseline: number;
+  /** Where its outline is drawn: `left` and `baseline` plus a mark's attachment offset. */
+  origin: {
+    x: number;
+    y: number;
+  };
+  advance: number;
+  /** Kerning with the next glyph, added after `advance`. */
+  kern: number;
+}
+/** The Text mode caret, as positions between items: 0 is before the first item. */
+export interface TextRunCaret {
+  position: number;
+  /** The selected positions, `start` to `end`; equal when nothing is selected. */
+  selection: {
+    start: number;
+    end: number;
+  };
+  /** Where the caret is drawn, in the run's units. */
+  x: number;
+  y: number;
+}
+/** The canvas text run as it shows now. */
+export interface TextRunView {
+  items: TextRunItem[];
+  glyphs: TextRunGlyph[];
+  /** The run's total advance, in its units. */
+  advance: number;
+  /** Each line's baseline, top line first. */
+  baselines: number[];
+  /** The item whose glyph is open on the canvas, showing its outline; null when none is. */
+  openItemId: string | null;
+  /**
+   * The name of the glyph open on the canvas: the item's glyph, or one part
+   * of it, such as a dot, when the font draws the item with several.
+   */
+  openGlyph: string | null;
+  /** The item whose glyph is being edited in place, its points editable; null when none is. */
+  editedItemId: string | null;
+  /** The item under the pointer, highlighted as text; null when none is. */
+  hoveredItemId: string | null;
+  /** The caret while Text mode shows one; null otherwise. */
+  caret: TextRunCaret | null;
+}
+/** One glyph's side of a spacing gap. */
+export interface SpacingGapSide {
+  itemId: string;
+  glyph: string;
+  sidebearing: number;
+  /** X of its outline's edge facing the gap. */
+  edge: number;
+}
+/** The space between two neighbouring glyphs, or before or after a line. */
+export interface SpacingGapView {
+  left: SpacingGapSide | null;
+  right: SpacingGapSide | null;
+  /** End of the left glyph's advance box. */
+  leftBoundary: number;
+  /** Start of the right glyph's advance box; differs from `leftBoundary` by the kern. */
+  rightBoundary: number;
+  baseline: number;
+  top: number;
+  bottom: number;
+}
+/** One sidebearing the Spacing tool shows: a gap's left or right half. */
+export interface SpacingHalfView {
+  side: "left" | "right";
+  /** `gap` when reached through its gap; `glyph` when drawn alone beside its glyph. */
+  scope: "gap" | "glyph";
+  gap: SpacingGapView;
+}
+/** What the Spacing tool shows. */
+export interface SpacingToolView {
+  hovered: SpacingHalfView | null;
+  /** The half arrow keys nudge. */
+  selected: SpacingHalfView | null;
+  /** The half whose value field is open. */
+  editing: SpacingHalfView | null;
+  /** Every other place the hovered half's glyph shows the same sidebearing. */
+  sameAsHovered: SpacingHalfView[];
+  /** Whether the pointer is on the hovered half's value. */
+  overValue: boolean;
+  /** Whether a nudge hid the overlay until the pointer moves. */
+  quiet: boolean;
+}
+/** One side of the kerning pair that applies between two glyphs. */
+export interface KerningPairSideView {
+  /** The glyph's name, or the group's name when the pair kerns a group. */
+  name: string;
+  group: boolean;
+  /** Whether this side is locked to its glyph, an exception to its group. */
+  locked: boolean;
+  /** Whether the lock can be toggled: false for a glyph with no group on that side. */
+  toggleable: boolean;
+}
+/** One kern the Kerning tool shows between two neighbouring glyphs. */
+export interface KerningGapView {
+  firstItemId: string;
+  secondItemId: string;
+  amount: number;
+  /** X of the middle of the kern, in the run's units. */
+  center: number;
+  baseline: number;
+  bottom: number;
+  /** The pair an edit here changes; null where the location is interpolated. */
+  pair: {
+    first: KerningPairSideView;
+    second: KerningPairSideView;
+    amount: number;
+  } | null;
+}
+/** What the Kerning tool shows. */
+export interface KerningToolView {
+  hovered: KerningGapView | null;
+  /** The kern arrow keys nudge, which the sidebar shows. */
+  selected: KerningGapView | null;
+  /** The kern whose value field is open. */
+  editing: KerningGapView | null;
+  /** Every other place in the text the hovered kern applies to. */
+  sameAsHovered: KerningGapView[];
 }
 //#endregion
 

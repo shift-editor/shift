@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { WorkspaceDocumentState } from "../../shared/workspace/protocol";
+import type { WorkspaceDocumentState } from "../../shared/workspace/lanes";
 import { AsyncOnce } from "../AsyncOnce";
 import type { NativeDialogs } from "../dialogs/NativeDialogs";
 import type { Window } from "../windows/Window";

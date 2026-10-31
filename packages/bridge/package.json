@@ -4,13 +4,12 @@
   "license": "MIT OR Apache-2.0",
   "private": true,
   "type": "module",
-  "main": "./index.cjs",
+  "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
     ".": {
       "types": "./src/index.ts",
-      "import": "./src/index.ts",
-      "require": "./index.cjs"
+      "default": "./src/index.ts"
     }
   },
   "scripts": {
@@ -19,6 +18,7 @@
     "lint:check": "oxlint --deny-warnings src/"
   },
   "dependencies": {
+    "@shift/pack": "workspace:*",
     "@shift/types": "workspace:*",
     "shift-bridge": "workspace:*"
   },

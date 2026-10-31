@@ -65,7 +65,7 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
                 .default_source_id()
                 .ok_or_else(|| miette!("{}: the font has no default source", context()))?,
         };
-        if !seen.insert((name.clone(), source_id.clone())) {
+        if !seen.insert((name.clone(), source_id)) {
             bail!("{}: glyph/source pair appears more than once", context());
         }
 
@@ -95,7 +95,7 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
                     let values = requested_unicodes.clone().unwrap_or_default();
                     intents.push(
                         CreateGlyph {
-                            glyph_id: Some(glyph_id.clone()),
+                            glyph_id: Some(glyph_id),
                             name: name.clone(),
                             unicodes: values.clone(),
                         }
@@ -112,7 +112,7 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
         {
             intents.push(
                 UpdateGlyph {
-                    glyph_id: glyph_id.clone(),
+                    glyph_id: *glyph_id,
                     new_name: glyph_name,
                     new_unicodes: values.clone(),
                 }
@@ -122,23 +122,23 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
         }
 
         if let Some(input) = entry.layer {
-            layers.push((glyph_id.clone(), source_id, input, context()));
+            layers.push((*glyph_id, source_id, input, context()));
         }
     }
 
     // Layers come after every glyph is planned, so a component may name a glyph
     // that appears later in the batch.
     let base_glyph = |name: &str| match glyphs.get(name) {
-        Some((glyph_id, _)) => Ok(glyph_id.clone()),
+        Some((glyph_id, _)) => Ok(*glyph_id),
         None => font.glyph_id_for(name),
     };
     for (glyph_id, source_id, input, context) in layers {
-        let existing = font.layer_id_for_glyph_source(glyph_id.clone(), source_id.clone());
-        let layer_id = existing.clone().unwrap_or_else(LayerId::new);
+        let existing = font.layer_id_for_glyph_source(glyph_id, source_id);
+        let layer_id = existing.unwrap_or_else(LayerId::new);
         if existing.is_none() {
             intents.push(
                 CreateGlyphLayer {
-                    layer_id: layer_id.clone(),
+                    layer_id,
                     glyph_id,
                     source_id,
                 }

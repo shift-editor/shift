@@ -56,6 +56,8 @@ export class FontSessionHost {
         this.document = new DocumentSession({
           document: this.documentClient,
           closeDocument: async (discard) => {
+            // Windows will not delete the store's files while the window reads them.
+            await options.documentClient.releaseStore();
             await this.workspaceProcess.closeWorkspace(discard);
           },
           dialogWindow: () => this.activeWindow(),

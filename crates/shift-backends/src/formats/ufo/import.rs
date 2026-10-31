@@ -45,13 +45,13 @@ pub(crate) fn stream_retained(
     let default_source_id = header.default_source_id().ok_or_else(|| {
         FormatBackendError::Ufo("UFO header is missing its default source".into())
     })?;
-    let layers = load_layer_directories(retained, &mut header, &default_source_id)?;
+    let layers = load_layer_directories(retained, &mut header, default_source_id)?;
     let (glyph_ids, glyphs) = build_glyph_directory(&SourceGlyphIds::for_path(ufo_path), &layers);
 
     let mut report = ImportReport::default();
     let mut import = KerningImport::new(&glyph_ids);
     kerning.add_groups(&mut import);
-    kerning.add_pairs(&mut import, &default_source_id);
+    kerning.add_pairs(&mut import, default_source_id);
     *header.kerning_mut() = import.finish(&mut report);
 
     Ok((header, GlifGlyphStream::new(glyph_ids, glyphs), report))
@@ -84,17 +84,17 @@ pub(crate) fn read_ufo_layer_directories(
 fn load_layer_directories(
     retained: &[UfoLayerDirectory],
     header: &mut Font,
-    default_source_id: &SourceId,
+    default_source_id: SourceId,
 ) -> FormatBackendResult<Vec<LayerDirectory>> {
     let mut layers = Vec::with_capacity(retained.len());
     for (index, retained) in retained.iter().enumerate() {
         let (color, lib) = read_layer_info(&retained.path)?;
         let source_id = if index == 0 {
-            default_source_id.clone()
+            default_source_id
         } else {
             header.add_source(Source::layer(retained.name.clone()))
         };
-        let source = header.source_mut(&source_id).ok_or_else(|| {
+        let source = header.source_mut(source_id).ok_or_else(|| {
             FormatBackendError::Ufo("newly registered UFO source is missing".into())
         })?;
         source.set_color(color);
@@ -224,14 +224,14 @@ fn build_glyph_directory(
                 .iter()
                 .filter_map(|layer| {
                     layer.glyphs.get(&name).map(|path| GlifLayer {
-                        source_id: layer.source_id.clone(),
+                        source_id: layer.source_id,
                         layer_id: LayerId::new(),
                         path: path.clone(),
                     })
                 })
                 .collect();
             GlifGlyph {
-                id: glyph_ids[&name].clone(),
+                id: glyph_ids[&name],
                 name,
                 layers: layer_records,
             }

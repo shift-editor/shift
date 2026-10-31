@@ -5,6 +5,7 @@ import type { KerningGroupId } from "@shift/types";
 import { Button, Check } from "@shift/ui";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { SidePanel } from "./SidePanel";
+import { NameQuery } from "@/lib/utils/NameQuery";
 
 const GROUP_LIST_TITLE: Readonly<Record<KerningPairPosition, string>> = {
   first: "Right groups",
@@ -24,10 +25,7 @@ export function GroupsSidePanel({ position, shown, onPick, onClose }: GroupsSide
   const editor = useEditor();
   const kerning = useSignalState(editor.font.kerningCell);
   const [query, setQuery] = useState("");
-  const typed = query.trim().toLowerCase();
-  const groups = kerning.groups
-    .atPosition(position)
-    .filter((group) => !typed || group.name.toLowerCase().includes(typed));
+  const groups = NameQuery.from(query).filter(kerning.groups.atPosition(position));
 
   return (
     <SidePanel

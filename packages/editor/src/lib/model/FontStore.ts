@@ -1,7 +1,7 @@
-import { EntityMap } from "@shift/types";
+import { ascending, EntityMap } from "@shift/types";
 import type {
-  KerningValueEdit,
   AppliedChange,
+  FontReplacement,
   AnchorId,
   ContourData,
   ContourId,
@@ -11,11 +11,14 @@ import type {
   GlyphName,
   GlyphProjection,
   GlyphRecord,
+  GlyphRecordChanges,
+  ReadonlyEntityMap,
   GlyphSnapshot,
   GlyphStructure,
   GlyphState,
   InterpolationBasis,
   LayerId,
+  LayerReplaced,
   PointData,
   PointId,
   SegmentId,
@@ -34,13 +37,17 @@ import {
   type Signal,
   type WritableSignal,
 } from "../signals/signal";
-import type { PendingEditId } from "../../types/editing";
-import type { FontRecordIndex, FontStoreOptions, GlyphSourceKey } from "../../types/font";
+import type {
+  FontEngine,
+  FontRecordIndex,
+  FontStoreOptions,
+  GlyphSourceKey,
+} from "../../types/font";
 import type { GlyphObjectIndex, GlyphObjectSegment } from "../../types/glyph";
-import { GlyphLayerState } from "./GlyphLayerState";
-import { Kerning } from "./Kerning";
-import { PendingState } from "./PendingState";
+import { GlyphLayerState, type LayerUpdate } from "./GlyphLayerState";
+import { Kerning, KerningRecords } from "./Kerning";
 import type { Glyph } from "./Glyph";
+import type { EngineEdit } from "../wasm/engine";
 
 /**
  * Renderer-local owner for font records, concrete glyph layer state, glyphs, and views.
@@ -61,7 +68,8 @@ export interface GlyphInvalidation {
 export class FontStore {
   readonly #font: WritableSignal<FontSnapshot | null>;
   readonly #workspace: WritableSignal<WorkspaceSnapshot | null>;
-  readonly #kerning: PendingState<Kerning, KerningValueEdit>;
+  readonly #engine: FontEngine | null;
+  readonly #kerning: Signal<Kerning>;
   readonly #committedRevision: WritableSignal<number>;
   readonly #invalidGlyphs: WritableSignal<GlyphInvalidation>;
 
@@ -96,7 +104,13 @@ export class FontStore {
   // non-reactive: interning table that dedupes projection bases; only read while interning
   readonly #interpolationBases = new Map<string, InterpolationBasis>();
 
-  constructor({ font = null, records = [], workspace = null }: FontStoreOptions = {}) {
+  constructor({
+    font = null,
+    records = [],
+    workspace = null,
+    engine = null,
+  }: FontStoreOptions = {}) {
+    this.#engine = engine;
     this.#font = signal(font ?? (workspace ? fontSnapshotFromWorkspace(workspace) : null), {
       name: "fontStore.font",
     });
@@ -113,24 +127,34 @@ export class FontStore {
     }
 
     // Echoes rebuild the font snapshot but keep its kerning reference unless
-    // kerning changed, so the lookup is indexed again only then.
+    // kerning changed, so the groups are indexed again only then.
     const kerningSnapshot = computed(() => this.#font.value?.kerning ?? null, {
       name: "fontStore.kerningSnapshot",
     });
-    const confirmedKerning = computed(() => Kerning.from(kerningSnapshot.value), {
-      name: "fontStore.confirmedKerning",
+    const kerningRecords = computed(() => KerningRecords.from(kerningSnapshot.value), {
+      name: "fontStore.kerningRecords",
     });
-    this.#kerning = new PendingState(confirmedKerning, (kerning, edits) =>
-      kerning.withEdits(edits),
+    this.#kerning = computed(
+      () => {
+        if (engine) track(engine.kerningRevisionCell);
+        return new Kerning(kerningRecords.value, engine);
+      },
+      { name: "fontStore.kerning" },
     );
   }
 
   /**
-   * The font's kerning as the renderer shows it: the workspace's, with value
-   * edits not yet confirmed and an open kerning edit's preview over it.
+   * The font's kerning: its records as the window's engine left them, and
+   * pair reads answered by the engine, an open edit included. A new value
+   * whenever either may have changed.
    */
-  get kerning(): PendingState<Kerning, KerningValueEdit> {
+  get kerningCell(): Signal<Kerning> {
     return this.#kerning;
+  }
+
+  /** The window's editing engine, which answers kerning and metric reads; null without one. */
+  get engine(): FontEngine | null {
+    return this.#engine;
   }
 
   get fontCell(): Signal<FontSnapshot | null> {
@@ -191,7 +215,6 @@ export class FontStore {
 
   replaceWorkspace(snapshot: WorkspaceSnapshot | null): void {
     batch(() => {
-      this.#kerning.reset();
       this.#indexCell.set(workspaceRecordIndex(snapshot));
       this.#font.set(snapshot ? fontSnapshotFromWorkspace(snapshot) : null);
       this.#workspace.set(snapshot);
@@ -206,7 +229,6 @@ export class FontStore {
 
   replaceFont(snapshot: FontSnapshot): void {
     batch(() => {
-      this.#kerning.reset();
       this.#indexCell.set(fontRecordIndex(snapshot));
       this.#font.set(snapshot);
       this.#workspace.set(null);
@@ -273,136 +295,179 @@ export class FontStore {
     });
   }
 
-  /** Restores every loaded layer touched by a throwing renderer transaction. */
-  rollbackEdit(editId: PendingEditId): void {
-    this.#kerning.rollback(editId);
-    for (const cell of this.#layerStateCells.values()) {
-      cell.peek()?.rollbackEdit(editId);
-    }
-  }
-
-  /** Confirms a renderer-tracked edit and folds its replace-grade workspace echo. */
-  confirmEdit(editId: PendingEditId, applied: AppliedChange): readonly GlyphId[] {
-    return this.#foldWorkspaceChange(applied, editId);
-  }
-
-  /** Folds an untracked undo, redo, snapshot, or direct workspace echo. */
-  applyWorkspaceChange(applied: AppliedChange): readonly GlyphId[] {
-    return this.#foldWorkspaceChange(applied, null);
+  /**
+   * Shows what the window's engine did for an edit: the font-level records it
+   * changed, the records of the glyphs it changed, and the layers it touched.
+   *
+   * @returns The resident layers' states before, to restore if the edit is undone locally.
+   */
+  applyEngineEdit(edit: EngineEdit): GlyphState[] {
+    return batch(() => {
+      const next = edit.next;
+      if (next) this.#applyRecords(next);
+      return this.publishLayers(edit.layers);
+    });
   }
 
   /**
-   * Folds a replace-grade workspace echo and reports structural projection work.
-   *
-   * Numeric layer edits flow through live layer signals and return no projection
-   * work. Axis/source topology, glyph-layer membership, and structural layer
-   * replacements return only resident glyph identities that need native rebuilding.
+   * The glyphs whose layer records `edit` changes, added or removed among
+   * them, read before it is shown: their projections are rebuilt once the
+   * workspace has persisted it.
    */
-  #foldWorkspaceChange(applied: AppliedChange, editId: PendingEditId | null): readonly GlyphId[] {
-    const current = this.#workspace.peek();
-    if (!current) return [];
-    const changedGlyphLayers = applied.next?.glyphs
-      ? glyphIdsWithChangedLayers(current.glyphs, applied.next.glyphs)
-      : [];
-    const structurallyChangedGlyphIds = new Set(changedGlyphLayers);
-    const invalidGlyphIds = new Set<GlyphId>([...changedGlyphLayers, ...applied.dependents]);
-    for (const layer of applied.layers) {
-      const glyphId = this.#indexCell.peek().glyphByLayer.get(layer.layerId);
-      if (!glyphId) continue;
+  glyphsRelayeredBy(edit: EngineEdit): GlyphId[] {
+    const glyphChanges = edit.next?.glyphChanges;
+    if (!glyphChanges) return [];
+    return glyphIdsWithChangedLayers(this.#indexCell.peek().recordsById, glyphChanges);
+  }
 
-      invalidGlyphIds.add(glyphId);
-      if (layer.structure) structurallyChangedGlyphIds.add(glyphId);
-    }
+  /** The font-level records as they stand, for {@link restoreRecords}; copies nothing. */
+  recordsCheckpoint(): WorkspaceSnapshot | null {
+    return this.#workspace.peek();
+  }
 
+  /** Shows the font-level records of `checkpoint` again: a local edit was taken back. */
+  restoreRecords(checkpoint: WorkspaceSnapshot | null): void {
+    if (!checkpoint || checkpoint === this.#workspace.peek()) return;
     batch(() => {
-      const next = applied.next;
-      const nextWorkspace = next
-        ? {
-            ...current,
-            metadata: next.metadata ?? current.metadata,
-            glyphs: next.glyphs ?? current.glyphs,
-            axes: next.axes ?? current.axes,
-            axisMappings: next.axisMappings ?? current.axisMappings,
-            axisMappingBases: next.axisMappingBases ?? current.axisMappingBases,
-            metricDefinitions: next.metricDefinitions ?? current.metricDefinitions,
-            sourceMetricsInterpolation: next.sourceMetricsInterpolation
-              ? (next.sourceMetricsInterpolation.snapshot ?? null)
-              : current.sourceMetricsInterpolation,
-            namedInstances: next.namedInstances ?? current.namedInstances,
-            languageIds: next.languages
-              ? (next.languages.languageIds ?? null)
-              : current.languageIds,
-            sources: next.sources ?? current.sources,
-            kerning: next.kerning ?? current.kerning,
-          }
-        : current;
+      this.#indexCell.set(workspaceRecordIndex(checkpoint));
+      this.#font.set(fontSnapshotFromWorkspace(checkpoint));
+      this.#workspace.set(checkpoint);
+      this.#interpolationBases.clear();
+    });
+  }
 
-      if (nextWorkspace !== current) {
-        this.#indexCell.set(workspaceRecordIndex(nextWorkspace));
-        this.#font.set(fontSnapshotFromWorkspace(nextWorkspace));
-        this.#workspace.set(nextWorkspace);
-      }
-      // The echo now carries this edit's kerning values, if it had any.
-      if (editId !== null) this.#kerning.confirm(editId);
-
-      const index = this.#indexCell.peek();
-      if (nextWorkspace !== current) {
-        for (const [glyphId, cell] of this.#glyphCells) {
-          if (index.glyphById.has(glyphId)) continue;
-
-          cell.set(null);
-          this.#glyphCells.delete(glyphId);
-        }
-        if (next?.axes || next?.sources || next?.axisMappingBases) this.#interpolationBases.clear();
-
-        for (const [layerId, cell] of this.#layerStateCells) {
-          if (index.glyphByLayer.has(layerId)) continue;
-
-          cell.set(null);
-          this.#layerStateCells.delete(layerId);
-        }
-
-        for (const [glyphId, cell] of this.#projectionCells) {
-          if (index.glyphById.has(glyphId)) continue;
-
-          cell.set(null);
-          this.#projectionCells.delete(glyphId);
-        }
-      }
-
-      for (const layer of applied.layers) {
-        if (!index.glyphByLayer.has(layer.layerId)) continue;
-
-        const state = this.#peekLayerState(layer.layerId);
-        if (state) {
-          state.foldWorkspaceState(editId, layer);
-          continue;
-        }
-        if (!layer.structure) continue;
-
-        this.#replaceLayerState({
-          layerId: layer.layerId,
-          structure: layer.structure,
-          values: layer.values,
-        });
+  /**
+   * Shows each resident layer as `states` leave it; a state with no structure
+   * changed only values.
+   *
+   * @returns Each shown layer's state before, for taking the edit back.
+   */
+  publishLayers(states: readonly LayerUpdate[]): GlyphState[] {
+    const before: GlyphState[] = [];
+    batch(() => {
+      for (const state of states) {
+        const layer = this.#peekLayerState(state.layerId);
+        if (!layer) continue;
+        before.push(layer.state);
+        layer.replace(state);
       }
     });
+    return before;
+  }
 
-    if (applied.next?.axes || applied.next?.sources || applied.next?.axisMappingBases) {
-      this.#invalidGlyphs.set({ glyphIds: null });
-    } else if (invalidGlyphIds.size > 0) {
-      this.#invalidGlyphs.set({ glyphIds: [...invalidGlyphIds] });
+  /**
+   * Confirms an edit the window's engine made and showed, from the workspace's
+   * receipt. The engine already showed the layers it touched and every record
+   * it changed, so only layers that had no state to show come from the
+   * receipt.
+   *
+   * @param relayered - The glyphs whose layer records the engine changed for
+   * the edit ({@link glyphsRelayeredBy}).
+   * @returns The resident glyphs whose projections need rebuilding natively.
+   */
+  confirmEdit(applied: AppliedChange, relayered: readonly GlyphId[] = []): readonly GlyphId[] {
+    const current = this.#workspace.peek();
+    if (!current) return [];
+    const next = applied.next;
+    const restructured = new Set(relayered);
+    const invalid = new Set<GlyphId>([...relayered, ...applied.dependents]);
+    const { glyphByLayer } = this.#indexCell.peek();
+    for (const layer of applied.layers) {
+      const glyphId = glyphByLayer.get(layer.layerId);
+      if (!glyphId) continue;
+      invalid.add(glyphId);
+      if (layer.structure) restructured.add(glyphId);
     }
+
+    batch(() => this.#showUnshownLayers(applied.layers));
+
+    const topologyChanged = Boolean(next?.axes || next?.sources || next?.axisMappingBases);
+    if (topologyChanged) this.#invalidGlyphs.set({ glyphIds: null });
+    else if (invalid.size > 0) this.#invalidGlyphs.set({ glyphIds: [...invalid] });
     this.#committedRevision.update((revision) => revision + 1);
 
-    if (applied.next?.axes || applied.next?.sources || applied.next?.axisMappingBases) {
-      return this.#residentProjectionGlyphIds();
-    }
-
+    if (topologyChanged) return this.#residentProjectionGlyphIds();
     const { glyphById } = this.#indexCell.peek();
-    return [...structurallyChangedGlyphIds].filter(
+    return [...restructured].filter(
       (glyphId) => glyphById.has(glyphId) && Boolean(this.#projectionCells.get(glyphId)?.peek()),
     );
+  }
+
+  /** Shows each of `layers` that has a structure but no state yet, so the engine never showed it. */
+  #showUnshownLayers(layers: readonly LayerReplaced[]): void {
+    const { glyphByLayer } = this.#indexCell.peek();
+    for (const { layerId, structure, values } of layers) {
+      if (!structure || !glyphByLayer.has(layerId) || this.#peekLayerState(layerId)) continue;
+      this.#replaceLayerState({ layerId, structure, values });
+    }
+  }
+
+  /**
+   * Folds `next`'s font-level records, and the glyph records it changed,
+   * into the workspace, and drops what they removed.
+   */
+  #applyRecords(next: FontReplacement): void {
+    const current = this.#workspace.peek();
+    if (!current) return;
+    const interpolation = next.sourceMetricsInterpolation;
+    const languages = next.languages;
+    const glyphChanges = next.glyphChanges;
+    const nextWorkspace: WorkspaceSnapshot = {
+      ...current,
+      metadata: next.metadata ?? current.metadata,
+      glyphs: glyphChanges ? this.#recordsAfter(current.glyphs, glyphChanges) : current.glyphs,
+      axes: next.axes ?? current.axes,
+      axisMappings: next.axisMappings ?? current.axisMappings,
+      axisMappingBases: next.axisMappingBases ?? current.axisMappingBases,
+      metricDefinitions: next.metricDefinitions ?? current.metricDefinitions,
+      sourceMetricsInterpolation: interpolation
+        ? (interpolation.snapshot ?? null)
+        : current.sourceMetricsInterpolation,
+      namedInstances: next.namedInstances ?? current.namedInstances,
+      languageIds: languages ? (languages.languageIds ?? null) : current.languageIds,
+      sources: next.sources ?? current.sources,
+      kerning: next.kerning ?? current.kerning,
+    };
+    this.#indexCell.set(workspaceRecordIndex(nextWorkspace));
+    this.#font.set(fontSnapshotFromWorkspace(nextWorkspace));
+    this.#workspace.set(nextWorkspace);
+
+    const index = this.#indexCell.peek();
+    for (const [glyphId, cell] of this.#glyphCells) {
+      if (index.glyphById.has(glyphId)) continue;
+
+      cell.set(null);
+      this.#glyphCells.delete(glyphId);
+    }
+    if (next.axes || next.sources || next.axisMappingBases) this.#interpolationBases.clear();
+
+    for (const [layerId, cell] of this.#layerStateCells) {
+      if (index.glyphByLayer.has(layerId)) continue;
+
+      cell.set(null);
+      this.#layerStateCells.delete(layerId);
+    }
+
+    for (const [glyphId, cell] of this.#projectionCells) {
+      if (index.glyphById.has(glyphId)) continue;
+
+      cell.set(null);
+      this.#projectionCells.delete(glyphId);
+    }
+  }
+
+  /**
+   * The glyph records after `changes`, in the order Rust gives: the new
+   * order when the edit moved a glyph in it, else `records`' own, each
+   * changed record in its glyph's place.
+   */
+  #recordsAfter(records: readonly GlyphRecord[], changes: GlyphRecordChanges): GlyphRecord[] {
+    const updated = new Map(changes.updated.map((record) => [record.id, record]));
+    if (changes.order) {
+      const { recordsById } = this.#indexCell.peek();
+      return changes.order.map((glyphId) => updated.get(glyphId) ?? recordsById.require(glyphId));
+    }
+    return records.map((record) => updated.get(record.id) ?? record);
   }
 
   layerState(layerId: LayerId): GlyphLayerState | null {
@@ -710,10 +775,7 @@ function recordIndex(
   return {
     entries: [...entries],
     records: knownRecords,
-    unicodes: nameByUnicode
-      .keys()
-      .toArray()
-      .sort((a, b) => a - b),
+    unicodes: nameByUnicode.keys().toArray().sort(ascending),
     glyphById,
     recordsById,
     entryByName,
@@ -729,21 +791,18 @@ function glyphSourceKey(glyphId: GlyphId, sourceId: SourceId): GlyphSourceKey {
   return `${glyphId}:${sourceId}` as GlyphSourceKey;
 }
 
+/** The glyphs `changes` gave new or different layers, or removed. */
 function glyphIdsWithChangedLayers(
-  before: readonly GlyphRecord[],
-  after: readonly GlyphRecord[],
+  before: ReadonlyEntityMap<GlyphId, GlyphRecord>,
+  changes: GlyphRecordChanges,
 ): GlyphId[] {
-  const beforeById = new Map(before.map((glyph) => [glyph.id, glyph]));
-  const changed: GlyphId[] = [];
-
-  for (const glyph of after) {
-    const previous = beforeById.get(glyph.id);
-    if (!previous || !sameGlyphLayers(previous, glyph)) changed.push(glyph.id);
-    beforeById.delete(glyph.id);
-  }
-
-  changed.push(...beforeById.keys());
-  return changed;
+  const changed = changes.updated
+    .filter((glyph) => {
+      const previous = before.get(glyph.id);
+      return !previous || !sameGlyphLayers(previous, glyph);
+    })
+    .map((glyph) => glyph.id);
+  return [...changed, ...changes.removed];
 }
 
 function sameGlyphLayers(left: GlyphRecord, right: GlyphRecord): boolean {
@@ -844,6 +903,7 @@ function fontSnapshotFromWorkspace(workspace: WorkspaceSnapshot): FontSnapshot {
     metadata: workspace.metadata,
     metrics: workspace.metrics,
     metricDefinitions: workspace.metricDefinitions,
+    // oxlint-disable-next-line shift/no-conditional-spread -- FontSnapshot is a stored snapshot; a font without interpolated source metrics has no key
     ...(workspace.sourceMetricsInterpolation
       ? { sourceMetricsInterpolation: workspace.sourceMetricsInterpolation }
       : {}),
@@ -853,6 +913,7 @@ function fontSnapshotFromWorkspace(workspace: WorkspaceSnapshot): FontSnapshot {
     axisMappings: workspace.axisMappings,
     axisMappingBases: workspace.axisMappingBases,
     namedInstances: workspace.namedInstances,
+    // oxlint-disable-next-line shift/no-conditional-spread -- FontSnapshot is a stored snapshot; a font without language ids has no key
     ...(workspace.languageIds ? { languageIds: workspace.languageIds } : {}),
     kerning: workspace.kerning,
   };

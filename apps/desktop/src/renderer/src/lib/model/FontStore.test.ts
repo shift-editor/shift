@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   asAnchorId,
@@ -22,9 +23,10 @@ import {
   type Unicode,
 } from "@shift/types";
 import { segmentIdFor } from "@shift/glyph-state";
-import type { WorkspaceSnapshot } from "@shared/workspace/protocol";
+import type { WorkspaceSnapshot } from "@shared/workspace/lanes";
 import { effect, track } from "@shift/editor/signals";
 import { Font, FontStore } from "@shift/editor/model";
+import { createWorkspaceStack } from "@/testing/workspaceStack";
 
 const GLYPH_ID = "glyph_shared" as GlyphId;
 const SOURCE_ID = "source_regular" as SourceId;
@@ -64,10 +66,9 @@ describe("FontStore glyph snapshot application", () => {
     });
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
 
-    store.applyWorkspaceChange({
-      next: { glyphs: snapshot("document-a", LAYER_B_ID).glyphs },
+    store.applyEngineEdit({
+      next: { glyphChanges: { updated: snapshot("document-a", LAYER_B_ID).glyphs, removed: [] } },
       layers: [],
-      dependents: [],
     });
 
     expect(store.layerState(LAYER_A_ID)).toBeNull();
@@ -76,7 +77,40 @@ describe("FontStore glyph snapshot application", () => {
 });
 
 describe("FontStore record index", () => {
-  it("indexes every glyph relation once and follows workspace changes", () => {
+  it("places changed glyph records by name and drops removed ones", () => {
+    const base = snapshot("document-a", LAYER_A_ID);
+    const record = (id: string, name: string) => ({
+      id: id as GlyphId,
+      name: name as GlyphName,
+      unicodes: [],
+      componentBaseGlyphIds: [],
+      layers: [],
+      mark: false,
+      nonspacingMark: false,
+    });
+    const store = new FontStore({
+      workspace: {
+        ...base,
+        glyphs: [...base.glyphs, record("glyph_m", "M"), record("glyph_t", "T")],
+      },
+    });
+    const font = new Font({ store });
+
+    store.applyEngineEdit({
+      next: {
+        glyphChanges: {
+          updated: [record("glyph_m", "Z"), record("glyph_b", "B")],
+          removed: ["glyph_t" as GlyphId],
+          order: [GLYPH_ID, "glyph_b" as GlyphId, "glyph_m" as GlyphId],
+        },
+      },
+      layers: [],
+    });
+
+    expect(font.glyphEntries().map(({ name }) => name)).toEqual(["A", "B", "Z"]);
+  });
+
+  it("indexes every glyph relation once and follows glyph record changes", () => {
     const base = snapshot("document-a", LAYER_A_ID);
     const acute = {
       id: "glyph_acute" as GlyphId,
@@ -84,6 +118,8 @@ describe("FontStore record index", () => {
       unicodes: [180 as Unicode, 65 as Unicode],
       componentBaseGlyphIds: [],
       layers: [],
+      mark: false,
+      nonspacingMark: false,
     };
     const aacute = {
       id: "glyph_aacute" as GlyphId,
@@ -91,6 +127,8 @@ describe("FontStore record index", () => {
       unicodes: [193 as Unicode],
       componentBaseGlyphIds: [GLYPH_ID, acute.id],
       layers: [{ id: LAYER_B_ID, sourceId: SOURCE_ID }],
+      mark: false,
+      nonspacingMark: false,
     };
     const store = new FontStore({
       workspace: { ...base, glyphs: [...base.glyphs, acute, aacute] },
@@ -107,10 +145,9 @@ describe("FontStore record index", () => {
     expect(font.dependentNamesForName("acute" as GlyphName)).toEqual(["Aacute"]);
     expect(font.nameForUnicode(193 as Unicode)).toBe("Aacute");
 
-    store.applyWorkspaceChange({
-      next: { glyphs: [base.glyphs[0]!, acute] },
+    store.applyEngineEdit({
+      next: { glyphChanges: { updated: [], removed: [aacute.id], order: [GLYPH_ID, acute.id] } },
       layers: [],
-      dependents: [],
     });
 
     expect(font.hasGlyph(aacute.id)).toBe(false);
@@ -154,22 +191,15 @@ describe("FontStore glyph object ownership", () => {
       pointIds: [NEXT_POINT_ID, POINT_2_ID, POINT_3_ID, POINT_4_ID],
       anchorId: NEXT_ANCHOR_ID,
     });
-    store.applyWorkspaceChange({
+    store.applyEngineEdit({
       layers: [
         {
           layerId: LAYER_A_ID,
           structure: nextStructure,
           values: valuesFor(nextStructure),
-          changed: {
-            pointIds: [NEXT_POINT_ID],
-            contourIds: [NEXT_CONTOUR_ID],
-            anchorIds: [NEXT_ANCHOR_ID],
-            guidelineIds: [],
-            componentIds: [],
-          },
+          structural: true,
         },
       ],
-      dependents: [],
     });
 
     expect(store.layerIdForPoint(POINT_1_ID)).toBeNull();
@@ -193,8 +223,11 @@ describe("FontStore glyph object ownership", () => {
       anchorId: NEXT_ANCHOR_ID,
     });
 
-    store.applyWorkspaceChange({
-      next: { glyphs: snapshot("document-a", LAYER_B_ID).glyphs },
+    store.applyEngineEdit({
+      next: { glyphChanges: { updated: snapshot("document-a", LAYER_B_ID).glyphs, removed: [] } },
+      layers: [],
+    });
+    store.confirmEdit({
       layers: [
         {
           layerId: LAYER_B_ID,
@@ -231,7 +264,7 @@ describe("FontStore glyph object ownership", () => {
       runs += 1;
     });
 
-    store.applyWorkspaceChange(valuesOnlyChange());
+    store.confirmEdit(valuesOnlyChange());
 
     expect(runs).toBe(2);
     subscription.dispose();
@@ -250,7 +283,7 @@ describe("FontStore glyph object ownership", () => {
       invalidGlyphIds = font.invalidGlyphsCell.value.glyphIds;
     });
 
-    store.applyWorkspaceChange({
+    store.confirmEdit({
       ...valuesOnlyChange(),
       dependents: [dependentGlyphId],
     });
@@ -314,6 +347,8 @@ function snapshot(workspaceId: string, layerId: LayerId): WorkspaceSnapshot {
         unicodes: [65 as Unicode],
         componentBaseGlyphIds: [],
         layers: [{ id: layerId, sourceId: SOURCE_ID }],
+        mark: false,
+        nonspacingMark: false,
       },
     ],
     sources: [
@@ -321,7 +356,8 @@ function snapshot(workspaceId: string, layerId: LayerId): WorkspaceSnapshot {
         id: SOURCE_ID,
         name: "Regular",
         location: { values: {} },
-        metricValues: [],
+        metricValues: {},
+        role: "master",
       },
     ],
     axes: [],
@@ -400,3 +436,47 @@ function valuesFor(glyphStructure: GlyphStructure): Float64Array {
   values[GLYPH_ADVANCE_VALUE_OFFSET] = 600;
   return values;
 }
+
+describe("FontStore interpolation projections follow axis mappings", () => {
+  const fixture = resolve(process.cwd(), "../../fixtures/fonts/MappedWeight.glyphs");
+
+  it("replaces cached glyph and metric normalization after mapping edits and undo", async () => {
+    const stack = createWorkspaceStack();
+    await stack.openWorkspace(fixture);
+    const glyph = await stack.font.loadGlyph(stack.font.recordForName("A" as GlyphName)!.id);
+    const axisId = stack.font.getAxes()[0]!.id;
+    const mapping = stack.font.getAxisMappings()[0]!;
+    await stack.font.setAxisMappings([
+      {
+        ...mapping,
+        points: mapping.points.map((point) => ({
+          ...point,
+          output: {
+            values: {
+              [axisId]: Math.max(
+                point.output.values[axisId]!,
+                86 + (point.output.values[axisId]! - 86) * 2,
+              ),
+            },
+          },
+        })),
+      },
+    ]);
+
+    expect(
+      stack.store.projection(glyph.id)!.interpolation!.basis.designNormalization[0]!.maximum,
+    ).toBeCloseTo(234);
+    expect(
+      stack.store.workspaceCell.peek()!.sourceMetricsInterpolation!.basis.designNormalization[0]!
+        .maximum,
+    ).toBeCloseTo(234);
+    await stack.editCoordinator.undo();
+    expect(
+      stack.store.projection(glyph.id)!.interpolation!.basis.designNormalization[0]!.maximum,
+    ).toBe(160);
+    expect(
+      stack.store.workspaceCell.peek()!.sourceMetricsInterpolation!.basis.designNormalization[0]!
+        .maximum,
+    ).toBe(160);
+  });
+});

@@ -1,13 +1,6 @@
+import { Mat, type MatModel } from "@shift/geo";
 import {
-  Bounds,
-  Curve,
-  Mat,
-  type Bounds as BoundsType,
-  type MatModel,
-  type Point2D,
-} from "@shift/geo";
-import {
-  parseContourSegments,
+  segmentContour,
   type NewPoint,
   type SegmentedContour,
   type SegmentPoints,
@@ -19,14 +12,14 @@ import { formatDecimal } from "../utils/number";
  * Represents one transformed contour as reusable vector-path output.
  *
  * @remarks
- * Commands are derived eagerly because every output shares them. Tight bounds,
- * SVG text, and Canvas `Path2D` are each derived on first access, so consumers
- * pay only for the representations they observe.
+ * Commands are derived eagerly because every output shares them. SVG text and
+ * Canvas `Path2D` are each derived on first access, so consumers pay only for
+ * the representations they observe. Bounds come from the contour, which
+ * shift-font segments, not from these commands.
  */
 export class ContourPath {
   readonly commands: readonly PathCommand[];
 
-  #bounds: BoundsType | null | undefined;
   #path: Path2D | null = null;
   #svgPath: string | null = null;
 
@@ -108,54 +101,11 @@ export class ContourPath {
    * @returns An independent path snapshot shared by Canvas, SVG, and bounds consumers.
    */
   static fromPoints(points: readonly NewPoint[], closed: boolean): ContourPath {
-    return new ContourPath(parseContourSegments({ points, closed }), closed, Mat.Identity());
-  }
-
-  /** Returns tight curve bounds, or `null` when the contour has no segments. */
-  get bounds(): BoundsType | null {
-    if (this.#bounds !== undefined) return this.#bounds;
-
-    let current: Point2D | null = null;
-    const bounds: BoundsType[] = [];
-    for (const command of this.commands) {
-      switch (command.type) {
-        case "moveTo":
-          current = command;
-          break;
-        case "lineTo":
-          if (current) bounds.push(Curve.bounds(Curve.line(current, command)));
-          current = command;
-          break;
-        case "quadTo":
-          if (current) {
-            bounds.push(
-              Curve.bounds(Curve.quadratic(current, { x: command.cp1x, y: command.cp1y }, command)),
-            );
-          }
-          current = command;
-          break;
-        case "cubicTo":
-          if (current) {
-            bounds.push(
-              Curve.bounds(
-                Curve.cubic(
-                  current,
-                  { x: command.cp1x, y: command.cp1y },
-                  { x: command.cp2x, y: command.cp2y },
-                  command,
-                ),
-              ),
-            );
-          }
-          current = command;
-          break;
-        case "close":
-          break;
-      }
-    }
-
-    this.#bounds = Bounds.unionAll(bounds);
-    return this.#bounds;
+    return new ContourPath(
+      segmentContour({ points, closed }).segments.map((segment) => segment.points),
+      closed,
+      Mat.Identity(),
+    );
   }
 
   /** Returns a cached Canvas path for this contour. */

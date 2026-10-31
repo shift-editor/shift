@@ -1,5 +1,5 @@
 import type { Editor } from "@shift/editor";
-import type { AlignmentType } from "@shift/editor/transform";
+import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import { Bounds, Mat } from "@shift/geo";
 import type { ContourId } from "@shift/types";
 import { PositionTargets } from "@shift/editor/model";
@@ -46,6 +46,61 @@ export function flipSelection(editor: Editor, axis: "horizontal" | "vertical"): 
     axis === "horizontal" ? "vertical" : "horizontal",
     Bounds.center(bounds),
   );
+  return true;
+}
+
+/**
+ * Spaces the selected points evenly between the outermost two, as the
+ * sidebar's distribute buttons do.
+ *
+ * @returns false while a gesture is editing, or when fewer than three points are selected.
+ */
+export function distributeSelection(editor: Editor, type: DistributeType): boolean {
+  if (editor.isEditing) return false;
+
+  const selection = editor.positionSelection(editor.selection.ids);
+  const pointIds = (selection?.targets ?? PositionTargets.NONE).points;
+  if (!selection || pointIds.length < 3) return false;
+
+  selection.layer.distribute(pointIds, type);
+  return true;
+}
+
+/**
+ * Rotates the selection about the center of its bounds, as the sidebar's
+ * rotation field and rotate button do. Selected components rotate about
+ * their own centers in every source being edited.
+ *
+ * @param degrees - Counter-clockwise angle in degrees, in the glyph's y-up units.
+ * @returns false when nothing rotatable is selected.
+ */
+export function rotateSelection(editor: Editor, degrees: number): boolean {
+  const radians = (degrees * Math.PI) / 180;
+  const ids = editor.selection.ids;
+  const componentSelection = editor.componentTransformSelection(ids);
+  if (componentSelection && !editor.isEditing) {
+    componentSelection.layer.transformComponents(
+      componentSelection,
+      "Rotate components",
+      ({ bounds }) => {
+        const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+        return Mat.Compose(
+          Mat.Translate(center.x, center.y),
+          Mat.Compose(Mat.Rotate(radians), Mat.Translate(-center.x, -center.y)),
+        );
+      },
+    );
+    return true;
+  }
+
+  if (editor.isEditing) return false;
+
+  const selection = editor.positionSelection(ids);
+  const pointIds = (selection?.targets ?? PositionTargets.NONE).points;
+  const bounds = editor.selectionBounds();
+  if (!selection || !bounds || pointIds.length === 0) return false;
+
+  selection.layer.rotate(pointIds, radians, Bounds.center(bounds));
   return true;
 }
 

@@ -46,9 +46,6 @@
     "packages/glyph-info": {
       "project": ["src/**/*.ts", "scripts/**/*.ts"]
     },
-    "packages/rules": {
-      "project": ["src/**/*.ts"]
-    },
     "packages/types": {
       "project": ["src/**/*.ts"]
     },

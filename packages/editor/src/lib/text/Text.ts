@@ -97,7 +97,7 @@ export class Text {
   glyphIdForItem(id: TextItemId): GlyphId | null {
     const run = this.runForItem(id);
     if (!run) return null;
-    return this.layoutCell(run.id).peek()?.placedGlyphForItem(id)?.glyph.glyphId ?? null;
+    return this.layout(run.id)?.placedGlyphForItem(id)?.glyph.glyphId ?? null;
   }
 
   /** Stores an independent proof text source. */
@@ -171,6 +171,15 @@ export class Text {
   /** Returns a stable computed whose layout invalidates on content, location, source, or glyph acquisition. */
   layoutCell(id: RunId): ComputedSignal<TextLayout | null> {
     return this.#runs.get(id).layoutCell;
+  }
+
+  /**
+   * The run's layout now, without subscribing; reactive readers use {@link layoutCell}.
+   *
+   * @returns null when the run cannot lay out.
+   */
+  layout(id: RunId): TextLayout | null {
+    return this.layoutCell(id).peek();
   }
 
   /** The parser for typed and pasted text; replace it to change the input syntax for every run. */

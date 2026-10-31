@@ -48,6 +48,7 @@ pub struct PlacedMaster<'a> {
 
 /// One point of a blended occurrence.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct BlendedPoint {
     /// The point's index in the first master's authored contour, which gives
     /// the blended point its identity and type.

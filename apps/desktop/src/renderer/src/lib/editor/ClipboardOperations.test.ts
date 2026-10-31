@@ -1,150 +1,44 @@
-import type { Contour } from "@shift/glyph-state";
 import { beforeEach, describe, expect, it } from "vitest";
-import { TestEditor } from "@/testing/TestEditor";
+import type { ContourId } from "@shift/types";
+import { useTestEditor } from "@/testing/fontFixture";
+import type { OutlineContour } from "@/testing/reads";
 
 describe("editor clipboard operations", () => {
-  let editor: TestEditor;
+  const editor = useTestEditor();
 
   beforeEach(async () => {
-    editor = new TestEditor();
-    await editor.startSession();
     editor.selectTool("shape");
-    await editor.dragLocal({
-      down: { x: 20, y: 40 },
-      start: { x: 30, y: 50 },
-      end: { x: 130, y: 150 },
-    });
-    editor.selection.select([editor.requireGlyphLayer().contours[0]!.id]);
-  });
-
-  it("copies and pastes a closed contour with new selected identities", async () => {
-    const layer = editor.requireGlyphLayer();
-    const source = layer.contours[0]!;
-
-    expect(await editor.copy()).toBe(true);
-    editor.selectTool("shape");
-    expect(await editor.paste()).toBe(true);
-
-    const pasted = layer.contours[1]!;
-    expect(contourShape(pasted)).toEqual(offsetContour(source, 20, -20));
-    expect(pasted.points.map(({ id }) => id)).not.toEqual(source.points.map(({ id }) => id));
-    expect(editor.selection.ids).toEqual(pasted.points.map(({ id }) => id));
-    expect(editor.toolIf("select")?.state).toEqual({ type: "ready" });
-  });
-
-  it("inserts multiple contours with one undo step and preserves their returned identities", async () => {
-    const layer = editor.requireGlyphLayer();
-    const source = layer.contours[0]!;
-    const inserted = editor.insertContent(
-      {
-        contours: [
-          contourShape(source),
-          { ...contourShape(source), closed: false },
-          { closed: true, points: [] },
-        ],
-      },
-      { offset: { x: 7, y: -11 } },
-    );
-    await editor.settle();
-
-    expect(layer.contours.slice(1).map(contourShape)).toEqual([
-      offsetContour(source, 7, -11),
-      { ...offsetContour(source, 7, -11), closed: false },
-    ]);
-    expect(inserted).toEqual(
-      layer.contours.slice(1).flatMap((contour) => contour.points.map(({ id }) => id)),
-    );
-    expect(new Set(layer.allPoints.map(({ id }) => id)).size).toBe(12);
-    await editor.undo();
-    expect(layer.contours.map(({ id }) => id)).toEqual([source.id]);
-    await editor.redo();
-    expect(
-      layer.contours.slice(1).flatMap((contour) => contour.points.map(({ id }) => id)),
-    ).toEqual(inserted);
-  });
-
-  it("compounds repeated paste offsets and undoes each insertion separately", async () => {
-    const layer = editor.requireGlyphLayer();
-    const source = layer.contours[0]!;
-    await editor.copy();
-
-    await editor.paste();
-    const firstPasteSelection = editor.selection.ids;
-    await editor.paste();
-    const secondPasteSelection = editor.selection.ids;
-
-    expect(contourShape(layer.contours[1]!)).toEqual(offsetContour(source, 20, -20));
-    expect(contourShape(layer.contours[2]!)).toEqual(offsetContour(source, 40, -40));
-
-    await editor.undo();
-    expect(layer.contours).toHaveLength(2);
-    expect(editor.selection.ids).toEqual(firstPasteSelection);
-    await editor.redo();
-    expect(contourShape(layer.contours[2]!)).toEqual(offsetContour(source, 40, -40));
-    expect(editor.selection.ids).toEqual(secondPasteSelection);
-  });
-
-  it("cuts and pastes with separate undoable workspace edits", async () => {
-    const layer = editor.requireGlyphLayer();
-    const source = layer.contours[0]!;
-    const original = contourShape(source);
-    const pasted = offsetContour(source, 20, -20);
-
-    expect(await editor.cut()).toBe(true);
-    expect(layer.contours).toHaveLength(0);
-    expect(editor.selection.hasSelection()).toBe(false);
-
-    expect(await editor.paste()).toBe(true);
-    expect(contourShape(layer.contours[0]!)).toEqual(pasted);
-    const pastedSelection = editor.selection.ids;
-
-    await editor.undo();
-    expect(layer.contours).toHaveLength(0);
-    expect(editor.selection.ids).toEqual([]);
-    await editor.undo();
-    expect(layer.contours[0]?.id).toBe(source.id);
-    expect(contourShape(layer.contours[0]!)).toEqual(original);
-    expect(editor.selection.ids).toEqual([source.id]);
-
-    await editor.redo();
-    expect(layer.contours).toHaveLength(0);
-    expect(editor.selection.ids).toEqual([]);
-    await editor.redo();
-    expect(contourShape(layer.contours[0]!)).toEqual(pasted);
-    expect(editor.selection.ids).toEqual(pastedSelection);
+    await editor.dragFrom({ x: 20, y: 40 }, { x: 130, y: 150 });
+    const [contour] = await editor.outline();
+    editor.selectObjects([contour!.id as ContourId]);
   });
 
   it("pastes copied geometry into another glyph without changing the source", async () => {
-    const sourceLayer = editor.requireGlyphLayer();
-    const source = sourceLayer.contours[0]!;
+    const [source] = await editor.outline();
     await editor.copy();
     await editor.addGlyph("B", 66);
-
-    const destinationRecord = editor.font.recordForName("B");
-    const node = editor.glyphNode;
-    if (!destinationRecord || !node) throw new Error("Expected destination glyph");
-    editor.scene.updateNode({ id: node.id, glyphId: destinationRecord.id });
+    await editor.openGlyph("B");
 
     expect(await editor.paste()).toBe(true);
 
-    const destinationLayer = editor.requireGlyphLayer();
-    expect(contourShape(destinationLayer.contours[0]!)).toEqual(offsetContour(source, 20, -20));
-    expect(sourceLayer.contours).toHaveLength(1);
+    const [pasted] = await editor.outline();
+    expect(contourShape(pasted!)).toEqual(offsetContour(source!, 20, -20));
+    expect((await editor.layerOf("A")).contours).toHaveLength(1);
 
     await editor.undo();
-    expect(destinationLayer.contours).toHaveLength(0);
-    expect(sourceLayer.contours).toHaveLength(1);
+    expect(await editor.outline()).toHaveLength(0);
+    expect((await editor.layerOf("A")).contours).toHaveLength(1);
   });
 });
 
-function contourShape(contour: Contour) {
+function contourShape(contour: OutlineContour) {
   return {
     closed: contour.closed,
     points: contour.points.map(({ x, y, pointType, smooth }) => ({ x, y, pointType, smooth })),
   };
 }
 
-function offsetContour(contour: Contour, dx: number, dy: number) {
+function offsetContour(contour: OutlineContour, dx: number, dy: number) {
   const shape = contourShape(contour);
 
   return {

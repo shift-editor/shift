@@ -3,14 +3,18 @@ import path from "node:path";
 import { Channel, utilityProcessTransport } from "../../shared/workspace/channel";
 import type {
   FontSourceSession,
-  ShellCallMap,
-  ShellEventMap,
   WorkspaceDocumentIdentity,
   Specimen,
   WorkspaceDocumentState,
   WorkspaceRecovery,
-} from "../../shared/workspace/protocol";
+  WorkspaceShell,
+} from "../../shared/workspace/lanes";
+import type { ShellEventMap, ShellPortCallMap } from "../../shared/workspace/protocol";
+import { client } from "../../shared/workspace/remote";
 import { createShiftLogger, type ShiftLogger } from "../logging";
+
+/** The shell lane's channel: events and the port-carrying `connect`. */
+type ShellChannel = Channel<ShellPortCallMap, ShellEventMap>;
 
 /**
  * Main-process controller for the workspace utility process.
@@ -23,7 +27,8 @@ import { createShiftLogger, type ShiftLogger } from "../logging";
 export class WorkspaceProcess {
   readonly #log: ShiftLogger;
   #process: UtilityProcess | null = null;
-  #channel: Channel<ShellCallMap, ShellEventMap> | null = null;
+  #channel: ShellChannel | null = null;
+  #shell: WorkspaceShell | null = null;
   #ready: Promise<void> | null = null;
   #unlistenDocumentChanged: (() => void) | null = null;
   #documentListeners = new Set<(state: WorkspaceDocumentState | null) => void>();
@@ -48,10 +53,11 @@ export class WorkspaceProcess {
       serviceName: "Shift Workspace",
       stdio: "pipe",
     });
-    const channel = new Channel<ShellCallMap, ShellEventMap>(utilityProcessTransport(proc));
+    const channel: ShellChannel = new Channel(utilityProcessTransport(proc));
 
     this.#process = proc;
     this.#channel = channel;
+    this.#shell = client<WorkspaceShell, ShellPortCallMap, ShellEventMap>(channel);
     this.#ready = this.#trackReady(proc, channel);
     this.#unlistenDocumentChanged = channel.listen("document.changed", (state) => {
       for (const listener of this.#documentListeners) listener(state);
@@ -71,6 +77,7 @@ export class WorkspaceProcess {
     if (this.#channel) this.#channel.dispose();
     this.#process = null;
     this.#channel = null;
+    this.#shell = null;
     this.#ready = null;
     this.#unlistenDocumentChanged = null;
     this.#documentListeners.clear();
@@ -93,7 +100,7 @@ export class WorkspaceProcess {
       return Promise.reject(new Error("workspace process is not running"));
     }
 
-    return this.#channel.call("workspace.connect", undefined, [port]);
+    return this.#channel.call("connect", undefined, [port]);
   }
 
   /**
@@ -103,7 +110,7 @@ export class WorkspaceProcess {
    * @throws {Error} when the utility process is not running or rejects the call.
    */
   createWorkspace(): Promise<WorkspaceDocumentState> {
-    return this.#requireChannel().call("workspace.create", undefined);
+    return this.#requireShell().create();
   }
 
   /** Fully imports a foreign source and atomically publishes its first Shift document. */
@@ -111,15 +118,12 @@ export class WorkspaceProcess {
     sourcePath: string,
     documentPath: string,
   ): Promise<WorkspaceDocumentState> {
-    return this.#requireChannel().call("workspace.createFromSource", {
-      sourcePath,
-      documentPath,
-    });
+    return this.#requireShell().createFromSource(sourcePath, documentPath);
   }
 
   /** Reads canonical document identity before Open for live-session reuse. */
   inspectDocument(path: string): Promise<WorkspaceDocumentIdentity> {
-    return this.#requireChannel().call("workspace.inspectDocument", { path });
+    return this.#requireShell().inspectDocument(path);
   }
 
   /**
@@ -130,29 +134,29 @@ export class WorkspaceProcess {
    * @throws {Error} when the utility process is not running or rejects the call.
    */
   openWorkspace(path: string): Promise<WorkspaceDocumentState> {
-    return this.#requireChannel().call("workspace.open", { path });
+    return this.#requireShell().open(path);
   }
 
   /** Lists recoverable app-owned workspaces selected by the active distribution root. */
   listRecoveries(): Promise<WorkspaceRecovery[]> {
-    return this.#requireChannel().call("workspace.listRecoveries", undefined);
+    return this.#requireShell().listRecoveries();
   }
 
   /** Resumes one trusted app-owned working store selected by workspace id. */
   resumeWorkspace(workspaceId: string): Promise<WorkspaceDocumentState> {
-    return this.#requireChannel().call("workspace.resume", { workspaceId });
+    return this.#requireShell().resume(workspaceId);
   }
 
   /** Opens a retained read-only source without allocating a workspace document. */
   openFontSource(path: string): Promise<FontSourceSession> {
-    return this.#requireChannel().call("source.open", { path });
+    return this.#requireShell().openSource(path);
   }
 
   /** Closes the retained source, treating an unavailable process as already closed. */
   closeFontSource(): Promise<null> {
-    if (!this.#channel) return Promise.resolve(null);
+    if (!this.#shell) return Promise.resolve(null);
 
-    return this.#channel.call("source.close", undefined);
+    return this.#shell.closeSource();
   }
 
   /**
@@ -168,12 +172,12 @@ export class WorkspaceProcess {
    * @throws {Error} when a running utility process rejects the close transition.
    */
   closeWorkspace(discard: boolean): Promise<null> {
-    if (!this.#channel) {
+    if (!this.#shell) {
       this.#log.info("close skipped: process is not running", { discard });
       return Promise.resolve(null);
     }
 
-    return this.#channel.call("workspace.close", { discard });
+    return this.#shell.close(discard);
   }
 
   /**
@@ -215,7 +219,7 @@ export class WorkspaceProcess {
    * @throws {Error} when the utility process is not running or rejects the call.
    */
   documentState(): Promise<WorkspaceDocumentState | null> {
-    return this.#requireChannel().call("document.state", undefined);
+    return this.#requireShell().documentState();
   }
 
   /**
@@ -226,10 +230,10 @@ export class WorkspaceProcess {
    * @throws {Error} when the process is not running, or the font cannot be read or compiled.
    */
   specimen(path: string): Promise<Specimen | null> {
-    return this.#requireChannel().call("workspace.specimen", { path });
+    return this.#requireShell().specimen(path);
   }
 
-  #trackReady(proc: UtilityProcess, channel: Channel<ShellCallMap, ShellEventMap>): Promise<void> {
+  #trackReady(proc: UtilityProcess, channel: ShellChannel): Promise<void> {
     const ready = new Promise<void>((resolve, reject) => {
       const unlisten = channel.listen("ready", () => {
         unlisten();
@@ -250,7 +254,7 @@ export class WorkspaceProcess {
     return ready;
   }
 
-  #wire(proc: UtilityProcess, channel: Channel<ShellCallMap, ShellEventMap>): void {
+  #wire(proc: UtilityProcess, channel: ShellChannel): void {
     proc.on("spawn", () => this.#log.info("spawned", proc.pid));
 
     proc.on("exit", (code) => {
@@ -260,6 +264,7 @@ export class WorkspaceProcess {
       if (this.#process === proc) {
         this.#process = null;
         this.#channel = null;
+        this.#shell = null;
         this.#ready = null;
         this.#unlistenDocumentChanged = null;
 
@@ -282,11 +287,11 @@ export class WorkspaceProcess {
     });
   }
 
-  #requireChannel(): Channel<ShellCallMap, ShellEventMap> {
-    if (!this.#channel) {
+  #requireShell(): WorkspaceShell {
+    if (!this.#shell) {
       throw new Error("workspace process is not running");
     }
 
-    return this.#channel;
+    return this.#shell;
   }
 }

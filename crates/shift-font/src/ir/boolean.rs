@@ -4,6 +4,7 @@ use linesweeper::binary_op;
 
 crate::string_enum! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[cfg_attr(feature = "pack", derive(pack::Pack))]
     pub enum BooleanOp {
         Union => "union",
         Subtract => "subtract",

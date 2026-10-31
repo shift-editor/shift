@@ -58,6 +58,12 @@ export async function executeShiftCode(
   installAsyncJsonFunction(vm, "__shiftGetGlyph", deadline, (input) =>
     validated.glyphs.get(input as never),
   );
+  installAsyncJsonFunction(vm, "__shiftGetSource", deadline, (input) =>
+    validated.sources.get(input as never),
+  );
+  installAsyncJsonFunction(vm, "__shiftGetInstance", deadline, (input) =>
+    validated.instances.get(input as never),
+  );
   installAsyncJsonFunction(vm, "__shiftResolveGlyphs", deadline, (input) =>
     validated.glyphs.resolve(input as never),
   );
@@ -78,6 +84,9 @@ export async function executeShiftCode(
   );
   installAsyncJsonFunction(vm, "__shiftResolveKerning", deadline, (input) =>
     validated.kerning.resolve(input as never),
+  );
+  installAsyncJsonFunction(vm, "__shiftKerningAt", deadline, (input) =>
+    validated.kerning.at(input as never),
   );
   installAsyncJsonFunction(vm, "__shiftReadOpen", deadline, async (target) => {
     const scope = await ShiftReadScope.open(validated, shiftInputSchemas.read.parse(target));
@@ -115,6 +124,12 @@ export async function executeShiftCode(
         get: async (input) => JSON.parse(await __shiftGetGlyph(input)),
         resolve: async (input) => JSON.parse(await __shiftResolveGlyphs(input)),
       }),
+      sources: Object.freeze({
+        get: async (input) => JSON.parse(await __shiftGetSource(input)),
+      }),
+      instances: Object.freeze({
+        get: async (input) => JSON.parse(await __shiftGetInstance(input)),
+      }),
       layers: Object.freeze({
         get: async (input) => JSON.parse(await __shiftGetLayer(input)),
         resolve: async (input) => JSON.parse(await __shiftResolveLayer(input)),
@@ -124,6 +139,7 @@ export async function executeShiftCode(
         groups: async (input) => JSON.parse(await __shiftKerningGroups(input)),
         pairs: async (input) => JSON.parse(await __shiftKerningPairs(input)),
         resolve: async (input) => JSON.parse(await __shiftResolveKerning(input)),
+        at: async (input) => JSON.parse(await __shiftKerningAt(input)),
       }),
       read: async (target, callback) => {
         if (typeof callback !== "function") throw new TypeError("shift.read requires a callback");
@@ -142,6 +158,12 @@ export async function executeShiftCode(
             get: call("glyphs.get"),
             resolve: call("glyphs.resolve"),
           }),
+          sources: Object.freeze({
+            get: call("sources.get"),
+          }),
+          instances: Object.freeze({
+            get: call("instances.get"),
+          }),
           layers: Object.freeze({
             get: call("layers.get"),
             resolve: call("layers.resolve"),
@@ -151,6 +173,7 @@ export async function executeShiftCode(
             groups: call("kerning.groups"),
             pairs: call("kerning.pairs"),
             resolve: call("kerning.resolve"),
+            at: call("kerning.at"),
           }),
         });
         try {
@@ -219,6 +242,12 @@ function validatedCapabilities(capabilities: ShiftCapabilities): ShiftCapabiliti
       resolve: (input) =>
         capabilities.glyphs.resolve(shiftInputSchemas["glyphs.resolve"].parse(input)),
     },
+    sources: {
+      get: (input) => capabilities.sources.get(shiftInputSchemas["sources.get"].parse(input)),
+    },
+    instances: {
+      get: (input) => capabilities.instances.get(shiftInputSchemas["instances.get"].parse(input)),
+    },
     layers: {
       get: (input) => capabilities.layers.get(shiftInputSchemas["layers.get"].parse(input)),
       resolve: (input) =>
@@ -232,6 +261,7 @@ function validatedCapabilities(capabilities: ShiftCapabilities): ShiftCapabiliti
       pairs: (input) => capabilities.kerning.pairs(shiftInputSchemas["kerning.pairs"].parse(input)),
       resolve: (input) =>
         capabilities.kerning.resolve(shiftInputSchemas["kerning.resolve"].parse(input)),
+      at: (input) => capabilities.kerning.at(shiftInputSchemas["kerning.at"].parse(input)),
     },
   };
 }
@@ -258,6 +288,10 @@ function callReadScope(scope: ShiftReadScope, method: unknown, input: unknown): 
       return scope.glyphs.get(args);
     case "glyphs.resolve":
       return scope.glyphs.resolve(args);
+    case "sources.get":
+      return scope.sources.get(args);
+    case "instances.get":
+      return scope.instances.get(args);
     case "layers.get":
       return scope.layers.get(args);
     case "layers.resolve":
@@ -270,6 +304,8 @@ function callReadScope(scope: ShiftReadScope, method: unknown, input: unknown): 
       return scope.kerning.pairs(args);
     case "kerning.resolve":
       return scope.kerning.resolve(args);
+    case "kerning.at":
+      return scope.kerning.at(args);
     default:
       throw new Error(`Unknown shift.read method: ${String(method)}`);
   }

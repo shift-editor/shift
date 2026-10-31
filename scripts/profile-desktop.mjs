@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { createRequire } from "node:module";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { chromium } from "@playwright/test";
 // Shared with the render-budget E2E spec; `pnpm profile:desktop` runs this under tsx.
 import { renderCounterInitScript } from "../apps/desktop/e2e/fixtures/renderCounter.mts";
@@ -30,6 +30,8 @@ const { values: options } = parseArgs({
     seconds: { type: "string", default: "8" },
     app: { type: "string" },
     cpu: { type: "string" },
+    // point-drag only: paste this many points into the glyph first, as circles.
+    points: { type: "string" },
     "keep-open": { type: "boolean", default: false },
   },
 });
@@ -40,6 +42,7 @@ const SCENARIOS = {
   marquee: { run: marquee, editor: true },
   undo: { run: undoRedo, editor: true },
   "toolbar-drag": { run: toolbarDrag, editor: true },
+  "point-drag": { run: pointDrag, editor: true },
   open: { run: openFont, editor: false },
 };
 if (!options.font) usage("--font is required");
@@ -95,12 +98,28 @@ try {
     console.log(`\nCPU profile: ${profilePath} (open in Chrome DevTools > Performance)`);
     printCpuProfile(report.cpuProfile);
   }
+  printRendererMemory();
   if (options["keep-open"]) await new Promise(() => {});
 } finally {
   if (!options["keep-open"]) {
     await browser.close();
     app.kill();
   }
+}
+
+/** Prints the resident memory of the app's renderer processes, largest first. */
+function printRendererMemory() {
+  const renderers = execFileSync("ps", ["-A", "-o", "ppid=,rss=,command="], { encoding: "utf8" })
+    .split("\n")
+    .map((line) => line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/))
+    .filter(
+      (match) => match && Number(match[1]) === app.pid && match[3].includes("--type=renderer"),
+    )
+    .map((match) => Number(match[2]) / 1024)
+    .sort((a, b) => b - a);
+  console.log(
+    `\nRenderer RSS (MB): ${renderers.map((mb) => mb.toFixed(0)).join(", ") || "none found"}`,
+  );
 }
 
 async function connect(port) {
@@ -298,6 +317,96 @@ async function openFont(page) {
   return { milestones, cpuProfile: profile };
 }
 
+/**
+ * Selects every point of the glyph and drags them in circles with real
+ * pointer events for `seconds`, then times the release until the edit settles.
+ */
+async function pointDrag(page) {
+  const canvas = await page.locator('[data-shift-capture-target="editor"]').boundingBox();
+  if (!canvas) throw new Error("the editor canvas is not visible");
+  if (options.points) {
+    await page.evaluate(
+      async (contours) => {
+        const editor = window.shift.editor;
+        if (!editor.insertContent({ contours })) throw new Error("pasting the points failed");
+        await editor.font.editCoordinator.settled();
+      },
+      circles(Number(options.points)),
+    );
+    await page.waitForTimeout(500);
+  }
+  const grab = await page.evaluate(() => {
+    const editor = window.shift.editor;
+    editor.selectAll();
+    const node = editor.scene.nodesOfKind("glyph")[0];
+    const pointIds = new Set(editor.selection.ids.filter((id) => id.startsWith("point")));
+    const layer = editor.layerForGeometry({ points: [...pointIds] });
+    const point = layer?.geometry.allPoints.find(
+      (candidate) => pointIds.has(candidate.id) && candidate.pointType === "onCurve",
+    );
+    if (!node || !point) throw new Error("the glyph has no on-curve point to drag");
+    return {
+      at: editor.sceneToScreen(editor.toScene(node, { x: point.x, y: point.y })),
+      points: pointIds.size,
+    };
+  });
+  const start = { x: canvas.x + grab.at.x, y: canvas.y + grab.at.y };
+
+  return measure(page, async () => {
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    const end = Date.now() + seconds * 1000;
+    let step = 0;
+    while (Date.now() < end) {
+      step++;
+      const angle = step / 15;
+      await page.mouse.move(start.x + 40 * Math.sin(angle), start.y + 40 * (1 - Math.cos(angle)));
+      await page.waitForTimeout(16);
+    }
+    const released = Date.now();
+    await page.mouse.up();
+    await page.evaluate(() => window.shift.editor.font.editCoordinator.settled());
+    return { timings: { [`release to settled (${grab.points} points)`]: [Date.now() - released] } };
+  });
+}
+
+/**
+ * `count` points as closed circles of four cubics each (twelve points), in a
+ * grid inside the em, so a drag moves outlines of a known size.
+ */
+function circles(count) {
+  const perCircle = 12;
+  const total = Math.ceil(count / perCircle);
+  const columns = Math.ceil(Math.sqrt(total));
+  const radius = 400 / columns;
+  const handle = radius * 0.5523;
+  return Array.from({ length: total }, (_, index) => {
+    const cx = 100 + (index % columns) * radius * 2.2;
+    const cy = 100 + Math.floor(index / columns) * radius * 2.2;
+    const on = (x, y) => ({ x: cx + x, y: cy + y, pointType: "onCurve", smooth: true });
+    const off = (x, y) => ({ x: cx + x, y: cy + y, pointType: "offCurve", smooth: false });
+    const r = radius;
+    const k = handle;
+    return {
+      closed: true,
+      points: [
+        on(r, 0),
+        off(r, k),
+        off(k, r),
+        on(0, r),
+        off(-k, r),
+        off(-r, k),
+        on(-r, 0),
+        off(-r, -k),
+        off(-k, -r),
+        on(0, -r),
+        off(k, -r),
+        off(r, -k),
+      ],
+    };
+  });
+}
+
 /** Edits every point of the glyph, then times repeated undo and redo round trips. */
 async function undoRedo(page) {
   const samples = Number(options.seconds);
@@ -479,7 +588,7 @@ function readdirSafe(directory) {
 function usage(problem) {
   console.error(`${problem}
 
-Usage: pnpm profile:desktop --font <path> [--glyph A] [--scenario scrub|marquee|undo|open|toolbar-drag] [--axis Weight]
+Usage: pnpm profile:desktop --font <path> [--glyph A] [--scenario scrub|marquee|undo|open|toolbar-drag|point-drag] [--points N] [--axis Weight]
                             [--seconds 8] [--cpu out.cpuprofile] [--app <executable>] [--keep-open]`);
   process.exit(1);
 }

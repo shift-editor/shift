@@ -5,7 +5,7 @@ import { renderLayerSvg } from "./renderLayerSvg";
 
 const metrics = {
   unitsPerEm: 1000,
-  metricValues: [],
+  metricValues: {},
   ascender: 800,
   capHeight: 700,
   xHeight: 500,

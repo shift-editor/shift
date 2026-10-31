@@ -10,7 +10,8 @@ import { Sources } from "./Sources";
 import { OutlineVisibilityButton } from "./OutlineVisibilityButton";
 import { useActiveSourceId } from "@/hooks/useActiveSourceId";
 import { useSources } from "@/hooks/useSources";
-import type { GlyphOutlineControls, GlyphOutlineTarget } from "@shift/editor/types";
+import { OutlineTargets } from "@shift/editor/model";
+import type { GlyphOutlineControls } from "@shift/editor/types";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import PlusIcon from "@/assets/general/plus.svg";
 
@@ -31,12 +32,9 @@ export const SourcesSection = ({
   const canAuthor = useFontSession().mode === "workspace";
   const activeSourceId = useActiveSourceId();
   const sources = useSources();
-  const sourceTargets: GlyphOutlineTarget[] = sources
-    .filter((source) => source.id !== activeSourceId)
-    .map((source) => ({
-      kind: "source",
-      sourceId: source.id,
-    }));
+  const sourceTargets = OutlineTargets.sources(
+    sources.filter((source) => source.id !== activeSourceId).map((source) => source.id),
+  );
   const toggleAll = () => outlineControls?.onToggleGroup(sourceTargets);
 
   return (
@@ -47,7 +45,7 @@ export const SourcesSection = ({
       isActive={sourceMenuOpen}
       actions={
         <>
-          {outlineControls && sourceTargets.length > 0 && (
+          {outlineControls && sourceTargets.size > 0 && (
             <OutlineVisibilityButton
               visible={outlineControls.groupActive}
               alwaysOpen

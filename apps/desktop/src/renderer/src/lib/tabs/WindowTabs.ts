@@ -2,7 +2,6 @@ import type { Editor } from "@shift/editor";
 import { effect, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
 import type { GlyphNode, PageNode } from "@shift/editor/types";
 import type { GlyphId, NodeId } from "@shift/types";
-import { openGlyphInRun } from "@/lib/editor/openGlyph";
 import { CANVAS_PATH, glyphIdFromPath } from "@/lib/editorRoute";
 
 /** The pinned font overview tab's id. */
@@ -123,10 +122,14 @@ export class WindowTabs {
    * Shows a glyph opened from the overview in a tab of its own and edits it.
    *
    * @remarks
-   * A glyph already open in a tab is shown there as it was left. Writes scene
-   * and text records, so call it inside `history.withoutRecording`.
+   * A glyph already open in a tab is shown there as it was left. Navigation,
+   * never a history entry.
    */
   openGlyph(glyphId: GlyphId): OpenedGlyph {
+    return this.#editor.history.withoutRecording(() => this.#openGlyph(glyphId));
+  }
+
+  #openGlyph(glyphId: GlyphId): OpenedGlyph {
     const pages = this.#editor.pages;
     const open = this.#tabs.peek().find((tab) => tab.kind === "glyph" && tab.glyphId === glyphId);
     if (open?.kind === "glyph") {
@@ -140,7 +143,7 @@ export class WindowTabs {
     }
 
     const page = pages.createGlyphPage();
-    const node = openGlyphInRun(this.#editor, glyphId, page);
+    const node = this.#editor.openGlyphInText(glyphId, page);
     const tab: WindowTab = { kind: "glyph", id: this.#mintId(), pageId: page.id, glyphId };
     this.#tabs.update((current) => [...current, tab]);
     return { node, placed: true };
@@ -162,11 +165,12 @@ export class WindowTabs {
    * Selects a loaded glyph in the font overview and shows it on the overview's page.
    *
    * @remarks
-   * Writes scene and text records, so call it inside `history.withoutRecording`.
+   * Navigation, never a history entry.
    */
   selectGlyph(glyphId: GlyphId): void {
     this.#selectedGlyph.set(glyphId);
-    openGlyphInRun(this.#editor, glyphId, this.#selectionPage());
+    const page = this.#editor.history.withoutRecording(() => this.#selectionPage());
+    this.#editor.openGlyphInText(glyphId, page);
   }
 
   /**

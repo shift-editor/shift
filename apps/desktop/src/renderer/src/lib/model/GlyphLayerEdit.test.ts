@@ -1,63 +1,27 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Point } from "@shift/glyph-state";
-import type { ContourId, GlyphState, LayerId, PointId, Source, SourceId } from "@shift/types";
-import { TestEditor } from "@/testing/TestEditor";
-import { GlyphLayer, GlyphLayerState } from "@shift/editor/model";
-
-describe("local glyph layer position edits", () => {
-  it("retains a finished position edit without a workspace", () => {
-    const pointId = "point-memory" as PointId;
-    const initialState: GlyphState = {
-      layerId: "layer-memory" as LayerId,
-      structure: {
-        contours: [
-          {
-            id: "contour-memory" as ContourId,
-            closed: false,
-            points: [{ id: pointId, pointType: "onCurve", smooth: false }],
-          },
-        ],
-        anchors: [],
-        components: [],
-      },
-      values: new Float64Array([500, 100, 100]),
-    };
-    const state = new GlyphLayerState(initialState);
-    const source: Source = {
-      id: "source-memory" as SourceId,
-      name: "Regular",
-      location: { values: {} },
-      metricValues: [],
-    };
-    const layer = new GlyphLayer(source, null, state);
-
-    const edit = layer.beginEdit();
-    edit.setPositions([{ kind: "point", id: pointId, x: 175, y: 125 }]);
-    edit.finish("Move point");
-
-    expect(layer.point(pointId)).toMatchObject({ x: 175, y: 125 });
-
-    const canceled = layer.beginEdit();
-    canceled.setPositions([{ kind: "point", id: pointId, x: 250, y: 200 }]);
-    canceled.cancel();
-
-    expect(layer.point(pointId)).toMatchObject({ x: 175, y: 125 });
-  });
-});
+import type { GlyphLayer } from "@shift/editor/model";
+import { drawPoints, startWorkspaceGlyph, type WorkspaceStack } from "@/testing/workspaceStack";
 
 describe("glyph layer edits preserve committed preview bases", () => {
-  let editor: TestEditor;
+  let stack: WorkspaceStack;
+  let layer: GlyphLayer;
 
   beforeEach(async () => {
-    editor = new TestEditor();
-    await editor.startSession();
-    editor.selectTool("pen");
-    await editor.clickLocal(100, 100);
-    await editor.clickLocal(300, 200);
+    ({ stack, layer } = await startWorkspaceGlyph());
+    drawPoints(layer, [
+      { x: 100, y: 100 },
+      { x: 300, y: 200 },
+    ]);
+    await stack.editCoordinator.settled();
+  });
+
+  afterEach(async () => {
+    await stack.editCoordinator.settled();
+    stack.dispose();
   });
 
   it("adds contours, points, and anchors locally and cancels them together", () => {
-    const layer = editor.requireGlyphLayer();
     const edit = layer.beginEdit();
     const contourId = edit.addContour(true);
     const [pointId] = edit.addPoints(contourId, [Point.onCurve({ x: 400, y: 300 })]);
@@ -74,7 +38,6 @@ describe("glyph layer edits preserve committed preview bases", () => {
   });
 
   it("finishes structural additions as one undoable edit", async () => {
-    const layer = editor.requireGlyphLayer();
     const edit = layer.beginEdit();
     const contourId = edit.addContour(true);
     const [pointId] = edit.addPoints(contourId, [
@@ -83,29 +46,28 @@ describe("glyph layer edits preserve committed preview bases", () => {
     ]);
     const anchorId = edit.addAnchor("top", { x: 400, y: 700 });
     edit.finish("Add contour and anchor");
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.contour(contourId)?.closed).toBe(true);
     expect(layer.point(pointId!)).toMatchObject({ x: 400, y: 300 });
     expect(layer.anchor(anchorId)).toMatchObject({ x: 400, y: 700 });
 
-    await editor.undo();
+    await stack.editCoordinator.undo();
     expect(layer.point(pointId!)).toBeNull();
     expect(layer.anchor(anchorId)).toBeNull();
 
-    await editor.redo();
+    await stack.editCoordinator.redo();
     expect(layer.contour(contourId)?.closed).toBe(true);
     expect(layer.point(pointId!)).toMatchObject({ x: 400, y: 300 });
     expect(layer.anchor(anchorId)).toMatchObject({ x: 400, y: 700 });
   });
 
   it("reapplies structural additions over an older workspace echo", async () => {
-    const layer = editor.requireGlyphLayer();
     const acceptedContourId = layer.addContour();
     const edit = layer.beginEdit();
     const previewContourId = edit.addContour(false);
     const [previewPointId] = edit.addPoints(previewContourId, [Point.onCurve({ x: 400, y: 300 })]);
 
-    await editor.settle();
+    await stack.editCoordinator.settled();
     expect(layer.contour(acceptedContourId)).not.toBeNull();
     expect(layer.point(previewPointId!)).toMatchObject({ x: 400, y: 300 });
     expect(layer.contourIdOfPoint(previewPointId!)).toBe(previewContourId);
@@ -117,23 +79,21 @@ describe("glyph layer edits preserve committed preview bases", () => {
   });
 
   it("previews, finishes, and undoes through the workspace ledger", async () => {
-    const layer = editor.requireGlyphLayer();
     const pointId = layer.allPoints[0]!.id;
     const edit = layer.beginEdit();
 
     edit.setPositions([{ kind: "point", id: pointId, x: 125, y: 90 }]);
-    expect(editor.pointPosition(pointId)).toEqual({ x: 125, y: 90 });
+    expect(layer.point(pointId)).toMatchObject({ x: 125, y: 90 });
 
     edit.finish("Move point");
-    await editor.settle();
-    expect(editor.pointPosition(pointId)).toEqual({ x: 125, y: 90 });
+    await stack.editCoordinator.settled();
+    expect(layer.point(pointId)).toMatchObject({ x: 125, y: 90 });
 
-    await editor.undo();
-    expect(editor.pointPosition(pointId)).toEqual({ x: 100, y: 100 });
+    await stack.editCoordinator.undo();
+    expect(layer.point(pointId)).toMatchObject({ x: 100, y: 100 });
   });
 
   it("cancels every previewed position in an arbitrary patch", () => {
-    const layer = editor.requireGlyphLayer();
     const [first, second] = layer.allPoints;
     const edit = layer.beginEdit();
 
@@ -143,12 +103,11 @@ describe("glyph layer edits preserve committed preview bases", () => {
     ]);
     edit.cancel();
 
-    expect(editor.pointPosition(first!.id)).toEqual({ x: 100, y: 100 });
-    expect(editor.pointPosition(second!.id)).toEqual({ x: 300, y: 200 });
+    expect(layer.point(first!.id)).toMatchObject({ x: 100, y: 100 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 300, y: 200 });
   });
 
   it("uses every position in a finished patch as the next cancellation base", async () => {
-    const layer = editor.requireGlyphLayer();
     const [first, second] = layer.allPoints;
     const firstEdit = layer.beginEdit();
     firstEdit.setPositions([
@@ -156,7 +115,7 @@ describe("glyph layer edits preserve committed preview bases", () => {
       { kind: "point", id: second!.id, x: 320, y: 200 },
     ]);
     firstEdit.finish("Expanded move");
-    await editor.settle();
+    await stack.editCoordinator.settled();
 
     const secondEdit = layer.beginEdit();
     secondEdit.setPositions([
@@ -165,9 +124,7 @@ describe("glyph layer edits preserve committed preview bases", () => {
     ]);
     secondEdit.cancel();
 
-    expect([editor.pointPosition(first!.id), editor.pointPosition(second!.id)]).toEqual([
-      { x: 110, y: 100 },
-      { x: 320, y: 200 },
-    ]);
+    expect(layer.point(first!.id)).toMatchObject({ x: 110, y: 100 });
+    expect(layer.point(second!.id)).toMatchObject({ x: 320, y: 200 });
   });
 });

@@ -10,21 +10,39 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [features]
-# Test-only exports of shift-font rules the editor keeps in TypeScript, built
-# into @shift/wasm/reference so tests compare the two. Never shipped.
-reference = []
 # Text shaping (shift-shape and HarfRust, about 0.6 MB), built into
 # @shift/wasm/shaping, a separate module the editor loads when text first
 # needs shaping.
 shaping = ["dep:shift-shape"]
+# The editing engine (shift-engine over shift-font), built into
+# @shift/wasm/engine, a separate module the editor loads when a font opens
+# for editing.
+engine = [
+    "dep:rmp-serde",
+    "dep:serde-wasm-bindgen",
+    "dep:thiserror",
+    "engine-protocol",
+]
+# The engine's interfaces and the records they carry, without the session
+# that answers them: what the editor's generated side is written from. Kept
+# out of the default build, which would otherwise link shift-wire, and with
+# it napi's symbols wherever another crate turns napi on.
+engine-protocol = ["dep:shift-engine", "dep:shift-wire"]
 
 [dependencies]
 fontir = "1.0.0"
 serde = { version = "1.0", features = ["derive"] }
-shift-font = { workspace = true }
+pack = { workspace = true }
+shift-font = { workspace = true, features = ["pack"] }
 shift-shape = { workspace = true, optional = true }
-# Generates the TypeScript types of exported values and converts them.
-tsify = { version = "0.5", default-features = false, features = ["js"] }
+# Typed arrays and the blob lists a request carries (`blobs`).
+js-sys = "0.3"
+rmp-serde = { version = "1.3", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
+shift-engine = { workspace = true, optional = true }
+# The records an engine edit changes, in the native workspace's packed shape.
+shift-wire = { workspace = true, features = ["pack"], optional = true }
+thiserror = { version = "2", optional = true }
 # Must match the wasm-bindgen CLI in the Nix dev shell exactly; scripts check it.
 wasm-bindgen = "=0.2.121"
 

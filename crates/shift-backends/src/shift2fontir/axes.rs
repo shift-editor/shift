@@ -93,7 +93,7 @@ pub(super) fn to_ir_named_instances(
                 .iter()
                 .map(|(axis_id, value)| {
                     let axis = axes
-                        .axis(axis_id)
+                        .axis(*axis_id)
                         .expect("named instances were validated against these axes");
                     Ok((axis_tag(axis)?, UserCoord::new(*value)))
                 })
@@ -176,11 +176,11 @@ fn mapped_converter(
         .map(|point| {
             let input = point
                 .input
-                .get(&axis.id())
+                .get(axis.id())
                 .ok_or_else(|| missing(MappingSide::Input))?;
             let output = point
                 .output
-                .get(&axis.id())
+                .get(axis.id())
                 .ok_or_else(|| missing(MappingSide::Output))?;
             Ok((input, output))
         })
@@ -250,7 +250,7 @@ pub(super) fn normalized_source_location(
     if let Some((unknown, _)) = source
         .location()
         .iter()
-        .find(|(axis_id, _)| !shift_axes.contains_axis(axis_id))
+        .find(|(axis_id, _)| !shift_axes.contains_axis(**axis_id))
     {
         return Err(Error::InvalidEntry(
             "Shift source location",

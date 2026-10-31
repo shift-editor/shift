@@ -1,22 +1,23 @@
 import { describe, expect, it } from "vitest";
+import { ascending } from "@shift/types";
 import { springEasing } from "./springEasing";
 import { TOOL_TURN_DIM, TOOL_TURN_OPACITY, toolDipKeyframes } from "./toolbarPresence";
 
 describe("tools dim early in a turn and are back before it settles", () => {
   const turning = springEasing({ visualDuration: 0.24, bounce: 0.08 });
-  const keyframes = toolDipKeyframes(1, turning.timeAtProgress);
+  const keyframes = toolDipKeyframes(turning.timeAtProgress);
   const dimmed = keyframes.filter((keyframe) => keyframe.opacity === TOOL_TURN_OPACITY);
 
   it("run forward in time so the browser accepts them", () => {
     const offsets = keyframes.map((keyframe) => keyframe.offset);
 
-    expect(offsets).toEqual([...offsets].sort((a, b) => a - b));
+    expect(offsets).toEqual([...offsets].sort(ascending));
     expect(offsets[0]).toBe(0);
     expect(offsets.at(-1)).toBe(1);
   });
 
-  it("begin where the tools were and end fully visible", () => {
-    expect(toolDipKeyframes(0.6, turning.timeAtProgress)[0].opacity).toBe(0.6);
+  it("begin and end fully visible", () => {
+    expect(keyframes[0].opacity).toBe(1);
     expect(keyframes.at(-1)?.opacity).toBe(1);
   });
 

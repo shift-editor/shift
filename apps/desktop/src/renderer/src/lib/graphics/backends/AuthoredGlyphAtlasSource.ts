@@ -1,5 +1,5 @@
 import type { Axis, AxisMappingBasis } from "@shift/types";
-import type { SlugAtlasOrigin } from "@shared/workspace/protocol";
+import type { SlugAtlasOrigin } from "@shared/workspace/lanes";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 import type {
   GlyphAtlasPage,
@@ -51,6 +51,7 @@ export class AuthoredGlyphAtlasSource implements GlyphAtlasSource {
       weightSets: descriptor.weightSets,
       weightAxes: [...this.#axes()],
       weightMappingBases: [...this.#mappingBases()],
+      weightEngine: this.#edits.engine,
       resolvedWeights: null,
     };
   }

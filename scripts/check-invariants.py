@@ -37,11 +37,12 @@ NAPI_ALLOWED_DEPENDENTS = {"shift-bridge", "shift-wire"}
 # makes its pure-function guarantee reviewable at a glance.
 GEO_DIR = "packages/geo"
 
-# glyph-state-deps: @shift/glyph-state depends on exactly @shift/types and
-# @shift/geo. Readers over GlyphStructure + Float64Array must not grow
-# renderer, workspace, or IO dependencies.
+# glyph-state-deps: @shift/glyph-state depends on exactly @shift/types,
+# @shift/geo and @shift/wasm, which runs shift-font's geometry rules.
+# Readers over GlyphStructure + Float64Array must not grow renderer,
+# workspace, or IO dependencies.
 GLYPH_STATE_DIR = "packages/glyph-state"
-GLYPH_STATE_ALLOWED = {"@shift/types", "@shift/geo"}
+GLYPH_STATE_ALLOWED = {"@shift/types", "@shift/geo", "@shift/wasm"}
 
 TEST_ONLY_IMPORTS = {"vitest"}
 

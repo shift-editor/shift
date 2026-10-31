@@ -1,4 +1,5 @@
 import { Mat, type DecomposedTransform, type MatModel } from "@shift/geo";
+import { geometry } from "@shift/wasm";
 import { batch } from "../signals";
 import type {
   ComponentTransformSelection,
@@ -78,7 +79,7 @@ export class ComponentTransformEdit {
     this.#transforms = this.#layers.map((layer, index) => {
       const delta = deltaForLayer(layer);
       return (this.#baseTransforms[index] ?? []).map((transform) =>
-        Mat.toDecomposed(Mat.Compose(delta, Mat.fromDecomposed(transform))),
+        geometry.decomposeMatrix(Mat.Compose(delta, geometry.composeTransform(transform))),
       );
     });
 
@@ -127,9 +128,8 @@ export class ComponentTransformEdit {
     const transforms = this.#transforms[index];
     if (!layer || !state || !transforms) return;
 
-    if (!state.buffers.setComponentTransforms(layer.componentIds, transforms)) {
-      throw new Error("cannot reapply component transforms");
-    }
+    // The same edit the commit sends, shown as the window's engine applies it.
+    layer.layer.preview(() => layer.layer.setComponentTransforms(layer.componentIds, transforms));
   }
 
   #assertOpen(): void {

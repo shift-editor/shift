@@ -1,28 +1,33 @@
 import fs from "node:fs";
-import type { Page } from "@playwright/test";
+import type { ElectronApplication, Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
 import { variablePreviewTest as test, expect } from "./fixtures/perfApp";
 import {
   firstAxisSlider,
   glyphCatalogCanvas,
+  instanceRow,
+  openSessionGlyphNamed,
   openVariationControls,
-  waitForEditorReady,
+  sourceRow,
+  variationControls,
 } from "./fixtures/appLocators";
+import { sessionMode } from "./fixtures/documentLifecycle";
+import { rejectGlyphAcquisition } from "./fixtures/previewSession";
 
 test.describe("variable font preview projection", () => {
-  test("offers source and instance navigation without authoring actions", async ({ page }) => {
-    await openPreviewGlyph(page, "A");
+  test("offers source and instance navigation without authoring actions", async ({
+    page,
+    editor,
+    electronApp,
+  }) => {
+    await openPreviewGlyph(page, electronApp, "A");
     const variationSidebar = await openVariationControls(page);
 
     await expect(variationSidebar.getByLabel("Create source")).toHaveAttribute(
       "aria-disabled",
       "true",
     );
-    const regularSourceId = await page.evaluate(
-      () => window.shiftSession?.font.sources.find(({ name }) => name === "Regular")?.id,
-    );
-    if (!regularSourceId) throw new Error("Expected Regular source");
-    await expect(page.getByTestId(`source-${regularSourceId}`)).toBeEnabled();
+    await expect(sourceRow(variationControls(page), "Regular")).toBeEnabled();
     await expect(variationSidebar.getByText("Light", { exact: true })).toBeVisible();
     // Source and instance rows both expose actions; every one is unavailable in a preview.
     const rowActions = variationSidebar.getByLabel(/^Actions for (Regular|Medium)$/);
@@ -31,24 +36,22 @@ test.describe("variable font preview projection", () => {
       await expect(action).toHaveAttribute("aria-disabled", "true");
     }
 
-    const mediumInstanceId = await page.evaluate(
-      () => window.shiftSession?.font.namedInstances.find(({ name }) => name === "Medium")?.id,
-    );
-    if (!mediumInstanceId) throw new Error("Expected Medium instance");
-    await page.getByTestId(`instance-${mediumInstanceId}`).click();
+    await instanceRow(variationControls(page), "Medium").click();
     await expect
-      .poll(() =>
-        page.evaluate(() => window.shiftSession?.editor.externalLocation.values().next().value),
-      )
-      .toBe(500);
+      .poll(async () => {
+        const [location] = (await editor.editorView()).externalLocation;
+        return location;
+      })
+      .toMatchObject({ value: 500 });
   });
 
   test("scrubs retained glyph geometry without source reads or projection acquisition", async ({
     page,
     editor,
     sourcePath,
+    electronApp,
   }) => {
-    const glyphId = await openPreviewGlyph(page, "A");
+    const glyphId = await openPreviewGlyph(page, electronApp, "A");
     await openVariationControls(page);
     const slider = await firstAxisSlider(page);
     await expect(slider).toBeVisible();
@@ -62,17 +65,7 @@ test.describe("variable font preview projection", () => {
     // A removed source exposes filesystem reads; rejecting acquisition exposes any
     // attempt to rebuild the retained projection while scrubbing.
     fs.rmSync(sourcePath);
-    await page.evaluate(() => {
-      const font = window.shiftSession?.font;
-      if (!font) throw new Error("Expected preview font");
-
-      font.loadGlyph = async () => {
-        throw new Error("variation scrub attempted glyph acquisition");
-      };
-      font.loadGlyphs = async () => {
-        throw new Error("variation scrub attempted glyph acquisition");
-      };
-    });
+    await rejectGlyphAcquisition(page);
 
     await slider.press("End");
     await expect
@@ -85,30 +78,24 @@ test.describe("variable font preview projection", () => {
   });
 });
 
-async function openPreviewGlyph(page: Page, name: string): Promise<GlyphId> {
-  await expect.poll(() => page.evaluate(() => window.shiftSession?.mode)).toBe("preview");
+async function openPreviewGlyph(
+  page: Page,
+  electronApp: ElectronApplication,
+  name: string,
+): Promise<GlyphId> {
+  await expect.poll(() => sessionMode(page, electronApp)).toBe("preview");
   await expect(glyphCatalogCanvas(page)).toHaveAttribute("data-grid-readiness", "Complete", {
     timeout: 30_000,
   });
 
-  const glyphId = await page.evaluate(async (glyphName) => {
-    const session = window.shiftSession;
-    if (!session) throw new Error("Expected preview font session");
-
-    const entry = session.font.entryForName(glyphName);
-    if (!entry) throw new Error(`Variable fixture should contain ${glyphName}`);
-    await session.font.loadGlyph(entry.id);
-    window.location.hash = `#/editor/${encodeURIComponent(entry.id)}`;
-    return entry.id;
-  }, name);
-  await waitForEditorReady(page, glyphId);
-  return glyphId;
+  return openSessionGlyphNamed(page, name);
 }
 
 async function glyphSample(
   page: Page,
   glyphId: GlyphId,
 ): Promise<{ location: number[]; values: number[] }> {
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- waits on the open-glyph refactor: reads the interpolated outline
   return page.evaluate((selectedGlyphId) => {
     const session = window.shiftSession;
     const glyph = session?.editor.glyphForId(selectedGlyphId);

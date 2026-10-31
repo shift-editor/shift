@@ -1,21 +1,17 @@
-import type { ElectronApplication, Page } from "@playwright/test";
-import { documentTest, expect, FONT_PATH } from "./fixtures/electronApp";
+import type { Page } from "@playwright/test";
+import { documentTest, expect, FONTS } from "./fixtures/electronApp";
+import {
+  clickOpenRecentItem,
+  openFontFromLauncher,
+  openRecentLabels,
+  sessionMode,
+} from "./fixtures/documentLifecycle";
 
 const test = documentTest.extend({
-  openFontPath: FONT_PATH,
+  openFontPath: FONTS.mutatorSansTtf,
 });
 
 const FONT_NAME = "MutatorSans.ttf";
-
-async function openFontFromLauncher(page: Page, electronApp: ElectronApplication): Promise<Page> {
-  const workspaceWindow = electronApp.waitForEvent("window");
-  await page.getByRole("button", { name: "Open Font…", exact: true }).click();
-
-  const workspacePage = await workspaceWindow;
-  await workspacePage.waitForURL(/#\/home$/);
-  await expect(workspacePage.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
-  return workspacePage;
-}
 
 function recentFile(launcher: Page) {
   return launcher
@@ -45,7 +41,7 @@ test("a font opened once is listed in Recent files after relaunch and reopens fr
     .click();
   const workspacePage = await workspaceWindow;
   await workspacePage.waitForURL(/#\/home$/);
-  await expect.poll(() => workspacePage.evaluate(() => window.shiftSession?.mode)).toBe("preview");
+  await expect.poll(() => sessionMode(workspacePage, restarted)).toBe("preview");
 });
 
 test("removing a recent file can be undone from the toast", async ({
@@ -74,23 +70,10 @@ test(
   async ({ electronApp, page }) => {
     await openFontFromLauncher(page, electronApp);
 
-    const openRecentLabels = () =>
-      electronApp.evaluate(({ Menu }) => {
-        const file = Menu.getApplicationMenu()?.items.find((item) => item.label === "File");
-        const openRecent = file?.submenu?.items.find((item) => item.label === "Open Recent");
-        return openRecent?.submenu?.items.map((item) => item.label) ?? null;
-      });
+    await expect.poll(() => openRecentLabels(electronApp)).toEqual([FONT_NAME, "", "Clear Menu"]);
 
-    await expect.poll(openRecentLabels).toEqual([FONT_NAME, "", "Clear Menu"]);
+    await clickOpenRecentItem(electronApp, "Clear Menu");
 
-    await electronApp.evaluate(({ Menu }) => {
-      const file = Menu.getApplicationMenu()?.items.find((item) => item.label === "File");
-      const openRecent = file?.submenu?.items.find((item) => item.label === "Open Recent");
-      const clear = openRecent?.submenu?.items.find((item) => item.label === "Clear Menu");
-      if (!clear) throw new Error("Missing Clear Menu item");
-      clear.click();
-    });
-
-    await expect.poll(openRecentLabels).toEqual(["Clear Menu"]);
+    await expect.poll(() => openRecentLabels(electronApp)).toEqual(["Clear Menu"]);
   },
 );

@@ -35,6 +35,7 @@ export class WorkspaceDocumentBridge {
         "document.state": () => this.#edits.state(),
         "document.save": ({ path }) => this.#edits.save(path),
         "document.export": ({ path }) => this.#edits.export(path),
+        "document.releaseStore": () => this.#edits.releaseStore(),
       },
     );
   }

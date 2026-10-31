@@ -25,17 +25,15 @@ export class AnchorEdits {
   }
 
   /**
-   * Adds an anchor at the same position to each layer.
-   *
-   * @remarks
-   * Named `new`, or `new.1`, `new.2`, … when taken in any layer, as Glyphs names it.
+   * Adds an anchor named `name` at the same position to each layer.
    *
    * @returns The new anchor's id in each layer's source.
    */
-  static add(layers: readonly GlyphLayer[], position: Point2D): ReadonlyMap<SourceId, AnchorId> {
-    const taken = new Set(layers.flatMap((layer) => layer.anchors.map((anchor) => anchor.name)));
-    let name = "new";
-    for (let suffix = 1; taken.has(name); suffix++) name = `new.${suffix}`;
+  static add(
+    layers: readonly GlyphLayer[],
+    name: string,
+    position: Point2D,
+  ): ReadonlyMap<SourceId, AnchorId> {
     const at = { x: Math.round(position.x), y: Math.round(position.y) };
     return new Map(layers.map((layer) => [layer.sourceId, layer.addAnchor(name, at)] as const));
   }

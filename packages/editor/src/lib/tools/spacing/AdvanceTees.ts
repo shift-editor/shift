@@ -23,7 +23,7 @@ const MERGE_PX = 2;
 export function drawAdvanceTees(canvas: Canvas, editor: Editor): void {
   const { color, widthPx, tickPx, armPx } = canvas.theme.advanceTee;
   for (const node of editor.scene.nodesOfKind("textRun")) {
-    const layout = editor.text.layoutCell(node.runId).peek();
+    const layout = editor.text.layout(node.runId);
     if (!layout || layout.placedGlyphs.length === 0) continue;
     canvas.withTransform(editor.sceneTransform(node), (local) => {
       local.withScreenSpace((screen, project) => {

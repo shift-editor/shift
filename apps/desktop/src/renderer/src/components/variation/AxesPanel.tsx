@@ -30,7 +30,9 @@ export const AxesPanel = () => {
           <AxisActionsMenu
             axis={axis}
             onEdit={() => settings.open({ category: "axes", axisId: axis.id })}
-            onReset={() => setExternalLocation(withExternalAxisValue(location, axis, axis.default))}
+            onReset={() =>
+              setExternalLocation(withExternalAxisValue(location, axis, axis.kind.default))
+            }
             onDelete={() => session.font.deleteAxis(axis.id)}
           />
         ) : (

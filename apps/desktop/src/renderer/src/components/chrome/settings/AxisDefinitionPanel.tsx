@@ -1,4 +1,5 @@
-import type { Axis, AxisType } from "@shift/types";
+import { Axis } from "@shift/editor/model";
+import type { AxisKindName } from "@shift/types";
 import {
   Checkbox,
   Input,
@@ -26,10 +27,10 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
   const axis = draft.axis;
   const registeredTag = isRegisteredOpenTypeAxisTag(axis.tag);
 
-  const changeType = async (axisType: AxisType | null): Promise<void> => {
-    if (!axisType || axisType === axis.axisType) return;
+  const changeType = async (axisType: AxisKindName | null): Promise<void> => {
+    if (!axisType || axisType === axis.kind.kind) return;
 
-    await draft.updateAndCommit((current) => axisWithType(current, axisType));
+    await draft.updateAndCommit((current) => new Axis(current).withKind(axisType));
   };
 
   return (
@@ -43,7 +44,7 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
             value={axis.name}
             onChange={(event) => {
               const name = event.currentTarget.value;
-              draft.update((current) => ({ ...current, name }));
+              draft.update((current) => new Axis(current).withName(name));
             }}
             onBlur={async () => {
               await draft.commit();
@@ -60,7 +61,7 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
             disabled={registeredTag}
             onChange={(event) => {
               const tag = event.currentTarget.value;
-              draft.update((current) => ({ ...current, tag }));
+              draft.update((current) => new Axis(current).withTag(tag));
             }}
             onBlur={async () => {
               await draft.commit();
@@ -77,28 +78,32 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
         <div className="grid grid-cols-[repeat(3,minmax(0,1fr))_7rem] gap-2">
           <DefinitionNumberField
             label="Minimum"
-            value={axis.minimum ?? axis.default}
-            disabled={axis.axisType === "discrete"}
-            onChange={(minimum) => draft.update((current) => ({ ...current, minimum }))}
+            value={axis.minimum}
+            disabled={axis.isDiscrete}
+            onChange={(minimum) =>
+              draft.update((current) => new Axis(current).withMinimum(minimum))
+            }
             onCommit={draft.commit}
           />
           <DefinitionNumberField
             label="Default"
             value={axis.default}
-            onChange={(value) => draft.update((current) => ({ ...current, default: value }))}
+            onChange={(value) => draft.update((current) => new Axis(current).withDefault(value))}
             onCommit={draft.commit}
           />
           <DefinitionNumberField
             label="Maximum"
-            value={axis.maximum ?? axis.default}
-            disabled={axis.axisType === "discrete"}
-            onChange={(maximum) => draft.update((current) => ({ ...current, maximum }))}
+            value={axis.maximum}
+            disabled={axis.isDiscrete}
+            onChange={(maximum) =>
+              draft.update((current) => new Axis(current).withMaximum(maximum))
+            }
             onCommit={draft.commit}
           />
 
           <label className="flex flex-col gap-1.5 text-sm text-secondary">
             Type
-            <Select value={axis.axisType} onValueChange={changeType}>
+            <Select value={axis.kind.kind} onValueChange={changeType}>
               <SelectTrigger variant="plain" className="h-8">
                 <SelectValue />
                 <SelectIcon />
@@ -128,7 +133,7 @@ export const AxisDefinitionPanel = ({ draft }: AxisDefinitionPanelProps) => {
         <Checkbox
           checked={axis.hidden}
           onCheckedChange={async (hidden) => {
-            await draft.updateAndCommit((current) => ({ ...current, hidden }));
+            await draft.updateAndCommit((current) => new Axis(current).withHidden(hidden));
           }}
           aria-label="Hidden axis"
         />
@@ -166,24 +171,3 @@ const DefinitionNumberField = ({
     />
   </label>
 );
-
-function axisWithType(axis: Axis, axisType: AxisType): Axis {
-  switch (axisType) {
-    case "continuous": {
-      const values = axis.values ?? [axis.default];
-      return {
-        ...axis,
-        axisType,
-        minimum: Math.min(...values),
-        maximum: Math.max(...values),
-        values: undefined,
-      };
-    }
-    case "discrete": {
-      const values = [...new Set([axis.minimum, axis.default, axis.maximum])]
-        .filter((value): value is number => value !== undefined)
-        .sort((left, right) => left - right);
-      return { ...axis, axisType, minimum: undefined, maximum: undefined, values };
-    }
-  }
-}

@@ -23,11 +23,12 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { Page } from "@playwright/test";
-import type { LocalPoint, ScenePoint } from "@shift/editor/spaces";
 import type { Point2D } from "@shift/geo";
-import type { GlyphName, TextItemId } from "@shift/types";
+import type { TextItemId } from "@shift/types";
 import { proofText } from "../src/renderer/src/testing/proofText";
 import type { EditorDriver } from "./fixtures/EditorDriver";
+import { liveUTopAnchor, textRunHoverTargets } from "./fixtures/editorInteractions";
+import { installFrameProbe, measureMove } from "./fixtures/perfProbe";
 import {
   anchorDragTest as test,
   computeStats,
@@ -49,167 +50,13 @@ const CEILINGS: Record<string, number> = {
   "text run drag u.top frame (10K chars)": 250,
 };
 
-interface FrameSample {
-  work: number;
-  frame: number;
-}
-
-declare global {
-  interface Window {
-    __shiftFrameProbe?: {
-      /** Start time and duration of every animation-frame callback since install. */
-      callbacks: { start: number; duration: number }[];
-      /** The latest pointer move: its time, its frames' start and end, and its first idle frame. */
-      move: {
-        at: number;
-        frameStarts: number[];
-        frameEnds: number[];
-        settledAt: number | null;
-      } | null;
-    };
-  }
-}
-
-/**
- * Times every animation-frame callback and stamps each pointer move.
- *
- * @remarks
- * The editor coalesces pointer moves into an animation frame and redraws in
- * the frame after, so animation-frame callbacks hold the hit test, the
- * preview, and every render pass. After a move the probe ticks once per
- * frame, unwrapped, and stops at the first frame in which no other callback
- * ran since its last tick, so samples do not overlap.
- *
- * Each tick is the first callback of its frame, because it is requested
- * before any callback for that frame. It posts a message, which runs as the
- * next task, after the frame's style, layout, paint, and commit, so the gap
- * from tick to message is the frame's main-thread time.
- */
-async function installFrameProbe(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const request = window.requestAnimationFrame.bind(window);
-    const probe: NonNullable<Window["__shiftFrameProbe"]> = { callbacks: [], move: null };
-    window.__shiftFrameProbe = probe;
-    window.requestAnimationFrame = (callback) =>
-      request((time) => {
-        const start = performance.now();
-        try {
-          callback(time);
-        } finally {
-          probe.callbacks.push({ start, duration: performance.now() - start });
-        }
-      });
-    window.addEventListener(
-      "pointermove",
-      () => {
-        const move = {
-          at: performance.now(),
-          frameStarts: [] as number[],
-          frameEnds: [] as number[],
-          settledAt: null as number | null,
-        };
-        probe.move = move;
-        const frameEnd = new MessageChannel();
-        frameEnd.port1.onmessage = ({ data }: MessageEvent<number>) => {
-          move.frameEnds[data] = performance.now();
-        };
-        let last = move.at;
-        let ticks = 0;
-        const tick = () => {
-          const now = performance.now();
-          frameEnd.port2.postMessage(move.frameStarts.length);
-          move.frameStarts.push(now);
-          const busy = probe.callbacks.some(({ start }) => start >= last && start < now);
-          last = now;
-          ticks++;
-          // Two ticks at least: the move is handled in the first frame, drawn in the next.
-          if ((ticks >= 2 && !busy) || ticks >= 10) {
-            move.settledAt = now;
-            return;
-          }
-          request(tick);
-        };
-        request(tick);
-      },
-      { capture: true },
-    );
-  });
-}
-
-/**
- * Moves the real pointer and times the frames that handle it.
- *
- * @returns `work`, the summed animation-frame callbacks from the move until the
- * first idle frame after it; `frame`, the main-thread time of the heaviest
- * frame in that span, including its rendering and commit.
- */
-async function measureMove(page: Page, position: Point2D): Promise<FrameSample> {
-  await page.evaluate(() => {
-    window.__shiftFrameProbe!.move = null;
-  });
-  await page.mouse.move(position.x, position.y);
-  // Poll on a timer: polling on animation frames would keep the probe from seeing an idle frame.
-  await page.waitForFunction(
-    () => {
-      const move = window.__shiftFrameProbe?.move;
-      return move?.settledAt != null && move.frameEnds.length === move.frameStarts.length;
-    },
-    null,
-    { polling: 10 },
-  );
-  return page.evaluate(() => {
-    const probe = window.__shiftFrameProbe!;
-    const { at, settledAt, frameStarts, frameEnds } = probe.move!;
-    const work = probe.callbacks
-      .filter((callback) => callback.start >= at && callback.start < settledAt!)
-      .reduce((total, callback) => total + callback.duration, 0);
-    const frame = Math.max(...frameStarts.map((start, index) => frameEnds[index]! - start));
-    probe.callbacks = [];
-    return { work, frame };
-  });
-}
-
-/** Live position of the `u` glyph's `top` anchor in its default-source layer. */
-async function uTop(page: Page): Promise<Point2D> {
-  return page.evaluate(() => {
-    const editor = window.shift!.editor;
-    const record = editor.font.recordForName("u" as GlyphName);
-    const layer = record
-      ? editor.glyphForId(record.id)?.layerForSource(editor.font.defaultSource.id)
-      : null;
-    const anchor = layer?.anchors.find((candidate) => candidate.name === "top");
-    if (!anchor) throw new Error("Expected u's top anchor");
-
-    return { x: anchor.x, y: anchor.y };
-  });
-}
-
 /** Page positions over run glyphs on the canvas, other than the edited one, with their items. */
 async function hoverTargets(
   page: Page,
   editor: EditorDriver,
 ): Promise<{ itemId: TextItemId; position: Point2D }[]> {
   const bounds = await editor.canvasBounds();
-  const targets = await page.evaluate((size) => {
-    const editor = window.shift!.editor;
-    const run = editor.scene.nodesOfKind("textRun")[0];
-    const layout = run ? editor.text.layoutCell(run.runId).peek() : null;
-    if (!run || !layout) throw new Error("Expected the canvas run");
-
-    const found: { itemId: TextItemId; position: Point2D }[] = [];
-    for (const placed of layout.placedGlyphs.slice(1, 40)) {
-      // Between the bowl's outer and inner rings, inside every letter's fill.
-      const local = { x: placed.left + placed.glyph.xAdvance / 2, y: 35 } as LocalPoint;
-      const scene = editor.toScene(run, local);
-      const target = editor.getPointerTarget(scene as ScenePoint);
-      const screen = editor.sceneToScreen(scene);
-      const onCanvas =
-        screen.x > 0 && screen.y > 0 && screen.x < size.width && screen.y < size.height;
-      if (target.kind === "text" && onCanvas)
-        found.push({ itemId: target.itemId, position: screen });
-    }
-    return found;
-  }, bounds);
+  const targets = await textRunHoverTargets(page, bounds);
 
   return targets.map(({ itemId, position }) => ({
     itemId,
@@ -265,27 +112,12 @@ test.describe("Performance — 10K-character text run", () => {
     await expect(page.getByRole("textbox", { name: "Text input" })).toBeFocused();
     await page.keyboard.insertText(text);
     await expect
-      .poll(
-        () =>
-          page.evaluate(() => {
-            const editor = window.shift!.editor;
-            const run = editor.scene.nodesOfKind("textRun")[0];
-            const items = run ? editor.text.run(run.runId)?.items : null;
-            const layout = run ? editor.text.layoutCell(run.runId).peek() : null;
-            const loaded = layout?.placedGlyphs.every(
-              (placed) => placed.glyph.glyphId && editor.glyphForId(placed.glyph.glyphId),
-            );
-            return items && loaded ? items.length : null;
-          }),
-        { timeout: 60_000 },
-      )
-      .toBe(1 + [...text].length);
+      .poll(() => editor.canvasText(), { timeout: 60_000 })
+      .toMatchObject({ items: { length: 1 + [...text].length } });
 
     await editor.press("Escape");
-    await expect
-      .poll(() => page.evaluate(() => window.shift!.editor.editing.nodeIds.length))
-      .toBe(1);
-    await page.evaluate(() => window.shift!.editor.setZoom(window.shift!.editor.zoom * 0.5));
+    await expect.poll(async () => (await editor.editedNodeIds()).length).toBe(1);
+    await editor.setZoom((await editor.zoomLevel()) * 0.5);
     await editor.waitForCanvasRender();
 
     // Hover: each move lands on another run glyph, so each frame redraws its outline.
@@ -303,7 +135,7 @@ test.describe("Performance — 10K-character text run", () => {
     }
 
     // Drag: press on the anchor, start the drag, then time each move.
-    const before = await uTop(page);
+    const before = await liveUTopAnchor(page);
     const from = await editor.projectGlyphToPage(before);
     await editor.pointerDown(from);
     await editor.pointerMove({ x: from.x + 6, y: from.y - 3 });
@@ -319,13 +151,13 @@ test.describe("Performance — 10K-character text run", () => {
       dragWork.push(sample.work);
       dragFrame.push(sample.frame);
     }
-    const dragged = await uTop(page);
+    const dragged = await liveUTopAnchor(page);
     expect(dragged.x).toBeGreaterThan(before.x);
 
     await editor.pointerUp();
-    expect(await uTop(page)).toEqual(dragged);
+    expect(await liveUTopAnchor(page)).toEqual(dragged);
     await editor.undo();
-    expect(await uTop(page)).toEqual(before);
+    expect(await liveUTopAnchor(page)).toEqual(before);
 
     record("text run hover work (10K chars)", hoverWork);
     record("text run hover frame (10K chars)", hoverFrame);

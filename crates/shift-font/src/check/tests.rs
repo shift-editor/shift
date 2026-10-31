@@ -27,7 +27,7 @@ fn edit_layer(font: &mut Font, source: &str, edit: impl FnOnce(&mut GlyphLayer))
     let source_id = source_named(font, source);
     let glyph_id = font.glyph_id_by_name("A").unwrap();
     let mut glyph = font.pop_glyph(glyph_id).unwrap();
-    edit(glyph.layer_for_source_mut(&source_id).unwrap());
+    edit(glyph.layer_for_source_mut(source_id).unwrap());
     font.insert_glyph(glyph).unwrap();
 }
 
@@ -41,7 +41,7 @@ fn glyph_a_checks(font: &Font) -> Vec<Check> {
 
 fn glyph_a_findings(font: &Font) -> Vec<Check> {
     let glyph_id = font.glyph_id_by_name("A").unwrap();
-    font.check_glyph(&glyph_id)
+    font.check_glyph(glyph_id)
         .unwrap()
         .into_iter()
         .map(|finding| finding.check)
@@ -108,12 +108,12 @@ fn reports_a_master_whose_structure_differs() {
 fn reports_masters_at_the_same_location() {
     let mut font = sample_variable_font();
     let bold = font
-        .source(&source_named(&font, "Bold"))
+        .source(source_named(&font, "Bold"))
         .unwrap()
         .location()
         .clone();
     let medium = source_named(&font, "Medium");
-    font.source_mut(&medium).unwrap().set_location(bold);
+    font.source_mut(medium).unwrap().set_location(bold);
 
     assert!(checks(&font).contains(&Check::DuplicateMasterLocation));
 }
@@ -124,7 +124,7 @@ fn reports_a_master_outside_its_axis() {
     let axis = font.axes()[0].id();
     let location = DesignLocation::from([(axis, 2000.0)]);
     let bold = source_named(&font, "Bold");
-    font.source_mut(&bold).unwrap().set_location(location);
+    font.source_mut(bold).unwrap().set_location(location);
 
     assert!(checks(&font).contains(&Check::MasterOutsideAxis));
 }
@@ -135,7 +135,7 @@ fn reports_a_font_without_a_master_at_the_default() {
     let axis = font.axes()[0].id();
     let location = DesignLocation::from([(axis, 500.0)]);
     let regular = font.default_source_id().unwrap();
-    font.source_mut(&regular).unwrap().set_location(location);
+    font.source_mut(regular).unwrap().set_location(location);
 
     assert!(checks(&font).contains(&Check::NoDefaultMaster));
 }
@@ -145,15 +145,14 @@ fn reports_kerning_through_an_empty_group() {
     let mut font = sample_variable_font();
     let regular = font.default_source_id().unwrap();
     let empty = KerningGroupId::from_raw("empty");
-    let first = font
+    let first = *font
         .kerning()
         .group_id(KerningPosition::First, "A")
-        .unwrap()
-        .clone();
+        .unwrap();
     let kerning = font.kerning_mut();
     kerning
         .set_group(
-            empty.clone(),
+            empty,
             KerningGroup::new(KerningPosition::Second, "Empty", Vec::new()),
         )
         .unwrap();
@@ -261,14 +260,14 @@ fn a_glyph_off_the_monospace_cell_is_reported() {
 fn a_master_drawing_outlines_where_another_uses_a_component_is_a_warning() {
     let mut font = sample_variable_font();
     let a = font.glyph_id_by_name("A").unwrap();
-    let a_glyph = font.glyph(&a).unwrap().clone();
+    let a_glyph = font.glyph(a).unwrap().clone();
     let mut b = crate::Glyph::new("B");
     for source in ["Regular", "Bold"] {
         let source_id = source_named(&font, source);
-        let a_layer = a_glyph.layer_for_source(&source_id).unwrap();
+        let a_layer = a_glyph.layer_for_source(source_id).unwrap();
         let mut layer = GlyphLayer::with_width(crate::LayerId::new(), source_id, a_layer.width());
         if source == "Regular" {
-            layer.add_component(crate::Component::new(a.clone(), "A"));
+            layer.add_component(crate::Component::new(a, "A"));
         } else {
             for contour in a_layer.contours_iter() {
                 let points = contour
@@ -284,7 +283,7 @@ fn a_master_drawing_outlines_where_another_uses_a_component_is_a_warning() {
     let b = font.insert_glyph(b).unwrap();
 
     let found = font
-        .check_glyph(&b)
+        .check_glyph(b)
         .unwrap()
         .into_iter()
         .map(|finding| finding.check)

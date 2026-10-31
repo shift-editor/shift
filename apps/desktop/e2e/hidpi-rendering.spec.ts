@@ -4,6 +4,7 @@
  */
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import { expectCanvasSnapshot } from "./fixtures/snapshots";
+import { devicePixelRatio } from "./fixtures/window";
 
 test.use({ deviceScaleFactor: 2 });
 
@@ -11,7 +12,7 @@ test(
   "renders glyph, handles, and selection at 2× device scale",
   { tag: "@golden" },
   async ({ page, editor }) => {
-    expect(await page.evaluate(() => window.devicePixelRatio)).toBe(2);
+    expect(await devicePixelRatio(page)).toBe(2);
     await editor.openGlyphByUnicode("53");
     await editor.selectAll();
     expect(await editor.selectionIds()).toHaveLength(await editor.pointCount());
