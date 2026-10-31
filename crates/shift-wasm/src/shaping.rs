@@ -80,6 +80,8 @@ pub struct ShapedGlyph {
     pub y_advance: i32,
     pub x_offset: i32,
     pub y_offset: i32,
+    /// Whether `GDEF` classes the glyph as a mark.
+    pub is_mark: bool,
 }
 
 /// A paragraph as shaping left it.
@@ -101,6 +103,8 @@ pub struct ShapedRun {
     /// ISO 15924 script tag such as `Arab`; null when the run holds only
     /// characters common to all scripts.
     pub script: Option<String>,
+    /// The run's resolved bidi level; odd levels read right to left.
+    pub level: u32,
     pub direction: TextDirection,
     /// Glyphs in visual order; clusters index the paragraph's units.
     pub glyphs: Vec<ShapedGlyph>,
@@ -309,11 +313,13 @@ mod exports {
             features: &features,
         })?;
         Ok(runs
+            .runs
             .into_iter()
             .map(|run| ShapedRun {
                 start: run.units.start,
                 end: run.units.end,
                 script: run.script,
+                level: u32::from(run.level),
                 direction: match run.direction {
                     shift_shape::TextDirection::LeftToRight => TextDirection::Ltr,
                     shift_shape::TextDirection::RightToLeft => TextDirection::Rtl,
@@ -328,6 +334,7 @@ mod exports {
                         y_advance: glyph.y_advance,
                         x_offset: glyph.x_offset,
                         y_offset: glyph.y_offset,
+                        is_mark: glyph.is_mark,
                     })
                     .collect(),
             })

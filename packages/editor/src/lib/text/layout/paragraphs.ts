@@ -65,6 +65,7 @@ export function literalRun(paragraph: Paragraph, font: Font): SegmentedRun {
       yAdvance: 0,
       xOffset: 0,
       yOffset: 0,
+      isMark: false,
     })),
   };
 }
