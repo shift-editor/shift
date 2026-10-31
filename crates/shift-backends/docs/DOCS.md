@@ -106,7 +106,6 @@ src/
 - `GlyphsReader` -- eagerly drains the canonical `.glyphs` / `.glyphspackage` stream for compatibility callers; read-only (no writer)
 - `GlyphsGlyphStream` -- owns one upstream-parsed Glyphs model and converts bounded, layer-aware Shift glyph batches in directory order
 - `FontExporter` -- compiles a `FontView` directly to TTF via `ShiftIrSource` and fontc
-- `shaper_font_source` -- the font's `ShaperFontSource` with each glyph's `GDEF` class looked up in glyph data (shift-font's `gdef_classes`, the rule export compiles with too); every layer must be loaded
 
 ## How it works
 
