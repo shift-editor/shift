@@ -14,11 +14,11 @@
 //! itself is large and lives with the store's reader, not here: callers look
 //! a glyph up by name and codepoints ([`NamedGlyph`]) and pass the answer in.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{Glyph, GlyphName, LibData, LibValue};
+use crate::{Glyph, GlyphId, GlyphName, LibData, LibValue};
 
 macro_rules! named_enum {
     (
@@ -161,13 +161,45 @@ impl GlyphDataCategory {
     }
 }
 
-/// A GDEF class a UFO's `public.openTypeCategories` gives a glyph by name.
+/// An OpenType GDEF glyph class: one a UFO's `public.openTypeCategories`
+/// gives a glyph by name, or the one its category gives it ([`Self::of`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum OpenTypeCategory {
     Base,
     Ligature,
     Mark,
     Component,
+}
+
+impl OpenTypeCategory {
+    /// The GDEF class a glyph compiles with: the class `explicit` gives it,
+    /// else fontc's Glyphs rule over its own category, falling back to glyph
+    /// data's (`glyph_data`). Marks are classed by category and subcategory;
+    /// bases and ligatures only when the glyph carries an anchor marks attach
+    /// to (`attaching_anchor`, [`Glyph::has_attaching_anchor`]). Asked
+    /// through [`GlyphClasses::class`], which holds those inputs.
+    fn of(
+        glyph: &Glyph,
+        glyph_data: GlyphDataCategory,
+        explicit: Option<Self>,
+        attaching_anchor: bool,
+    ) -> Option<Self> {
+        if explicit.is_some() {
+            return explicit;
+        }
+
+        let resolved = glyph_data.resolve(glyph);
+        match (resolved.category, resolved.sub_category) {
+            (_, Some(GlyphSubcategory::Ligature)) if attaching_anchor => Some(Self::Ligature),
+            (
+                Some(GlyphCategory::Mark),
+                Some(GlyphSubcategory::Nonspacing | GlyphSubcategory::SpacingCombining),
+            ) => Some(Self::Mark),
+            _ if attaching_anchor => Some(Self::Base),
+            _ => None,
+        }
+    }
 }
 
 /// The classes a font lib's `public.openTypeCategories` gives, by glyph name.
@@ -204,6 +236,81 @@ impl<'a> OpenTypeCategories<'a> {
     /// The class given to the glyph named `name`, if any.
     pub fn class(&self, name: &str) -> Option<OpenTypeCategory> {
         self.0.get(name).copied()
+    }
+}
+
+/// What decides each glyph's GDEF class ([`OpenTypeCategory::of`]): the
+/// classes a font lib's `public.openTypeCategories` gives by name, glyph
+/// data's category for each glyph, and which glyphs carry an anchor marks
+/// attach to.
+///
+/// Glyph data and, for layers a session has not loaded, the anchors are the
+/// store's answers; build it with [`Self::new`] from them, or with
+/// [`Self::of_loaded`] when every layer is loaded and answers for itself.
+#[derive(Clone, Debug)]
+pub struct GlyphClasses<'a> {
+    explicit: OpenTypeCategories<'a>,
+    glyph_data: HashMap<GlyphId, GlyphDataCategory>,
+    attaching: HashSet<GlyphId>,
+}
+
+impl<'a> GlyphClasses<'a> {
+    /// Classes from `lib`'s explicit ones, glyph data's category for each
+    /// glyph (`glyph_data`; a glyph it leaves out has none) and the glyphs
+    /// that carry an attaching anchor (`attaching`).
+    pub fn new(
+        lib: &'a LibData,
+        glyph_data: HashMap<GlyphId, GlyphDataCategory>,
+        attaching: HashSet<GlyphId>,
+    ) -> Self {
+        Self {
+            explicit: OpenTypeCategories::of(lib),
+            glyph_data,
+            attaching,
+        }
+    }
+
+    /// Classes for `glyphs` with every layer loaded, so each glyph's anchors
+    /// answer whether it carries an attaching anchor; `glyph_data` gives each
+    /// glyph's glyph-data category.
+    pub fn of_loaded<'g>(
+        glyphs: impl IntoIterator<Item = &'g Glyph>,
+        lib: &'a LibData,
+        mut glyph_data: impl FnMut(&Glyph) -> GlyphDataCategory,
+    ) -> Self {
+        let mut categories = HashMap::new();
+        let mut attaching = HashSet::new();
+        for glyph in glyphs {
+            categories.insert(glyph.id(), glyph_data(glyph));
+            if glyph.has_attaching_anchor() {
+                attaching.insert(glyph.id());
+            }
+        }
+        Self::new(lib, categories, attaching)
+    }
+
+    /// The GDEF class `glyph` compiles with; `None` when it has none.
+    pub fn class(&self, glyph: &Glyph) -> Option<OpenTypeCategory> {
+        OpenTypeCategory::of(
+            glyph,
+            self.glyph_data
+                .get(&glyph.id())
+                .copied()
+                .unwrap_or_default(),
+            self.explicit.class(glyph.name()),
+            self.attaching.contains(&glyph.id()),
+        )
+    }
+
+    /// The class of each of `glyphs` that has one, by glyph name.
+    pub fn gdef_classes<'g>(
+        &self,
+        glyphs: impl IntoIterator<Item = &'g Glyph>,
+    ) -> BTreeMap<String, OpenTypeCategory> {
+        glyphs
+            .into_iter()
+            .filter_map(|glyph| Some((glyph.name().to_string(), self.class(glyph)?)))
+            .collect()
     }
 }
 
@@ -329,5 +436,38 @@ mod tests {
 
         assert_eq!(categories.class("f_i"), Some(OpenTypeCategory::Ligature));
         assert_eq!(categories.class("x"), None);
+    }
+
+    #[test]
+    fn bases_and_ligatures_take_a_gdef_class_only_with_an_attaching_anchor() {
+        let category = |category, sub_category| GlyphDataCategory {
+            category: Some(category),
+            sub_category,
+        };
+        let letter = category(GlyphCategory::Letter, None);
+        let ligature = category(GlyphCategory::Letter, Some(GlyphSubcategory::Ligature));
+        let spacing_mark = category(
+            GlyphCategory::Mark,
+            Some(GlyphSubcategory::SpacingCombining),
+        );
+        let glyph = Glyph::new("x");
+        let class = |data, attaching| OpenTypeCategory::of(&glyph, data, None, attaching);
+
+        assert_eq!(
+            [false, true].map(|attaching| class(letter, attaching)),
+            [None, Some(OpenTypeCategory::Base)]
+        );
+        assert_eq!(
+            [false, true].map(|attaching| class(ligature, attaching)),
+            [None, Some(OpenTypeCategory::Ligature)]
+        );
+        assert_eq!(
+            [false, true].map(|attaching| class(spacing_mark, attaching)),
+            [Some(OpenTypeCategory::Mark); 2]
+        );
+        assert_eq!(
+            OpenTypeCategory::of(&glyph, letter, Some(OpenTypeCategory::Component), true),
+            Some(OpenTypeCategory::Component)
+        );
     }
 }

@@ -912,6 +912,17 @@ impl Font {
         self.data().glyphs.values().map(Arc::as_ref)
     }
 
+    /// Each codepoint a glyph claims, with the glyph claiming it, in glyph
+    /// order; a codepoint two glyphs claim appears for each.
+    pub fn character_map(&self) -> impl Iterator<Item = (u32, GlyphId)> + '_ {
+        self.glyphs().flat_map(|glyph| {
+            glyph
+                .unicodes()
+                .iter()
+                .map(move |codepoint| (*codepoint, glyph.id()))
+        })
+    }
+
     /// Returns the id of every layer of every glyph.
     pub fn layer_ids(&self) -> impl Iterator<Item = LayerId> + '_ {
         self.glyphs().flat_map(Glyph::layer_ids)

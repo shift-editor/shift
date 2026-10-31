@@ -4,7 +4,6 @@ use crate::reply::{PackedReply, answer};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
-use shift_backends::shaper_font::{LiveShaper, ShaperFontRequest, ShaperFontState};
 use shift_backends::{
   AxisIndex as SourceAxisIndex, DirectoryGlyph, DirectoryInstance, DirectorySource, ExportFormat,
   FontDirectory, FontExportRequest, FontExportResult, FontExporter, FontSource, FontView,
@@ -19,6 +18,7 @@ use shift_font::{
   GlyphLayer, LayerId, Location as FontLocation, MetricId, MetricKind, NamedInstanceId, PointId,
   SourceId,
 };
+use shift_shaper_font::{LiveShaper, ShaperFontRequest, ShaperFontState};
 use shift_slug::{AuthoredAtlasProfile, VariableAtlas};
 use shift_wire::bridges::napi::IntoEach;
 use shift_wire::values;
@@ -1413,7 +1413,9 @@ impl Bridge {
   /// glyph's `GDEF` class depends on its anchors.
   fn new_live_shaper(&mut self) -> BridgeResult<LiveShaper> {
     self.workspace_mut()?.acquire_all_layers()?;
-    let request = ShaperFontRequest::from_font(self.font()?)?;
+    let font = self.font()?;
+    let classes = shift_backends::GlyphCategories::new().classes(font.glyphs(), font.lib());
+    let request = ShaperFontRequest::new(&font.shaper_font_source(&classes))?;
     self.shaper_fonts.update(request)?;
     let shaper_font =
       self
@@ -1424,7 +1426,7 @@ impl Bridge {
           kind: "font",
           value: "it has no shaping tables".to_string(),
         })?;
-    Ok(LiveShaper::new(shaper_font, self.font()?)?)
+    Ok(LiveShaper::new(shaper_font, self.font()?.character_map())?)
   }
 
   fn mark_font_changed(&mut self) {

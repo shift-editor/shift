@@ -20,7 +20,6 @@ pub mod import;
 mod import_report;
 mod kerning_import;
 mod numeric;
-pub mod shaper_font;
 mod shift2fontir;
 mod source_glyph_ids;
 mod traits;
