@@ -58,7 +58,8 @@ export class ShiftFontReader {
       // The agent API hands out its own arrays; the font's are read-only.
       metricDefinitions: [...font.metricDefinitions],
       glyphCount: font.glyphCount,
-      axes: [...font.getAxes()],
+      // Records, not the font's Axis objects: the overview is cloned across a port.
+      axes: font.getAxes().map((axis) => axis.record),
       axisMappings: [...font.getAxisMappings()],
       sources: [...font.sources],
       instances: [...font.namedInstances],
@@ -192,7 +193,9 @@ export class ShiftFontReader {
   /** The axis `selector` names, by id or tag, or null when the font has none. */
   axis(selector: AxisSelector): Axis | null {
     const font = this.#font;
-    return selector.tag !== undefined ? font.axisTagged(selector.tag) : font.axis(selector.axisId);
+    const axis =
+      selector.tag !== undefined ? font.axisTagged(selector.tag) : font.axis(selector.axisId);
+    return axis?.record ?? null;
   }
 
   async resolveGlyphs(glyphIds: GlyphId[], location: AxisCoordinate[]): Promise<ResolvedGlyphs> {

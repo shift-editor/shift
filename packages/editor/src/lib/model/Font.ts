@@ -5,7 +5,7 @@ import type {
   MetricKind,
   MetricValue,
   FontMetadata,
-  Axis,
+  Axis as AxisRecord,
   AxisDefinition,
   AxisMapping,
   AxisMappingBasis,
@@ -46,6 +46,7 @@ import {
   mintNamedInstanceId,
   mintSourceId,
 } from "@shift/types";
+import type { Axis } from "./Axis";
 import {
   batch,
   computed,
@@ -264,7 +265,7 @@ export class Font {
   readonly #metadataCell: Signal<FontMetadata>;
   readonly #sourcesCell: Signal<readonly Source[]>;
 
-  readonly #axesCell: Signal<readonly Axis[]>;
+  readonly #axesCell: ComputedSignal<readonly Axis[]>;
   readonly #externalAxesCell: Signal<readonly Axis[]>;
   readonly #axisMappingsCell: Signal<readonly AxisMapping[]>;
   readonly #axisMappingBasesCell: Signal<readonly AxisMappingBasis[]>;
@@ -313,17 +314,17 @@ export class Font {
 
     this.#metadataCell = computed(() => fontCell.value?.metadata ?? {});
     this.#sourcesCell = computed(() => fontCell.value?.sources ?? []);
-    this.#axesCell = computed(() => fontCell.value?.axes ?? []);
-    this.#externalAxesCell = computed(() =>
-      this.#axesCell.value.filter((axis) => axis.role === "external"),
-    );
     this.#axisMappingsCell = computed(() => fontCell.value?.axisMappings ?? []);
     this.#axisMappingBasesCell = computed(() => fontCell.value?.axisMappingBases ?? []);
     this.#designspace = new Designspace({
-      axesCell: this.#axesCell,
+      axesCell: computed(() => fontCell.value?.axes ?? NO_AXES),
       mappingBasesCell: this.#axisMappingBasesCell,
       sourcesCell: this.#sourcesCell,
     });
+    this.#axesCell = this.#designspace.axesCell;
+    this.#externalAxesCell = computed(() =>
+      this.#axesCell.value.filter((axis) => axis.role === "external"),
+    );
     this.#defaultSourceMetricsCell = computed(() => {
       const designspace = this.#designspace;
       track(this.#metricsCell);
@@ -1536,7 +1537,7 @@ export class Font {
    * @param axis - Complete replacement axis returned from the current font model.
    * @throws {Error} when the definition is invalid or cannot be persisted.
    */
-  async updateAxis(axis: Axis): Promise<void> {
+  async updateAxis(axis: AxisRecord): Promise<void> {
     await this.editCoordinator.apply(
       [
         {
@@ -1572,7 +1573,7 @@ export class Font {
    *
    * @throws {Error} when the resulting collection is invalid or cannot be persisted.
    */
-  async setIndependentAxisMapping(axis: Axis, mapping: AxisMapping): Promise<void> {
+  async setIndependentAxisMapping(axis: AxisRecord, mapping: AxisMapping): Promise<void> {
     await this.setAxisMappings(withIndependentMapping(this.getAxisMappings(), axis, mapping));
   }
 
@@ -2013,6 +2014,7 @@ export class Font {
 
 /** Never changes: the revision of reads a font without an engine answers. */
 const NO_REVISIONS: Signal<number> = computed(() => 0);
+const NO_AXES: readonly AxisRecord[] = [];
 
 /** The intent that moves one glyph into a kerning group, or out of its group with null. */
 function memberIntent(

@@ -1,3 +1,4 @@
+export { Axis } from "./lib/model/Axis";
 export { Font, type GlyphDirectoryPage, type MissingKerningOrigin } from "./lib/model/Font";
 export { sourceMetricValue, withSourceMetricValue } from "./lib/model/sourceMetrics";
 export {

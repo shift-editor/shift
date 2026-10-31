@@ -1,5 +1,6 @@
-import type { Axis, AxisId, AxisMappingBasis, Source, SourceId } from "@shift/types";
-import { track, type Signal } from "../signals";
+import type { AxisId, AxisMappingBasis, Axis as AxisRecord, Source, SourceId } from "@shift/types";
+import { Axis } from "../model/Axis";
+import { computed, track, type ComputedSignal, type Signal } from "../signals";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import {
   axisValue,
@@ -21,18 +22,34 @@ import { externalAxisLocationForDesignLocation, mapAxisLocation } from "../wasm/
  * readers current when the designspace changes.
  */
 export class Designspace {
-  readonly #axesCell: Signal<readonly Axis[]>;
+  readonly #axesCell: ComputedSignal<readonly Axis[]>;
   readonly #mappingBasesCell: Signal<readonly AxisMappingBasis[]>;
   readonly #sourcesCell: Signal<readonly Source[]>;
 
+  /**
+   * @param cells - the font's axis records, axis mapping bases and sources;
+   *   each is read reactively, never written.
+   */
   constructor(cells: {
-    axesCell: Signal<readonly Axis[]>;
+    axesCell: Signal<readonly AxisRecord[]>;
     mappingBasesCell: Signal<readonly AxisMappingBasis[]>;
     sourcesCell: Signal<readonly Source[]>;
   }) {
-    this.#axesCell = cells.axesCell;
+    const recordsCell = cells.axesCell;
+    this.#axesCell = computed(() => recordsCell.value.map((record) => new Axis(record)));
     this.#mappingBasesCell = cells.mappingBasesCell;
     this.#sourcesCell = cells.sourcesCell;
+  }
+
+  /**
+   * The font's axes in authored order, rebuilt only when the axis records change.
+   *
+   * @remarks
+   * The array keeps its identity while the records do, so readers that key on
+   * it (module handles, memoized weights) stay valid across unrelated edits.
+   */
+  get axesCell(): ComputedSignal<readonly Axis[]> {
+    return this.#axesCell;
   }
 
   get axes(): readonly Axis[] {

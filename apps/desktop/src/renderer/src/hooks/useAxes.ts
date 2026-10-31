@@ -1,4 +1,4 @@
-import type { Axis } from "@shift/types";
+import type { Axis } from "@shift/editor/model";
 import { useFont } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@shift/editor/signals";
 
