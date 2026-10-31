@@ -5,7 +5,10 @@ use shift_font as font;
 
 use crate::StoreError;
 use crate::connection::configure_common;
-use crate::layer::{bases_of_from_conn, composites_of_from_conn, load_glyph_layers_from_conn};
+use crate::layer::{
+    bases_of_from_conn, component_bases_from_conn, composites_of_from_conn,
+    load_glyph_layers_from_conn,
+};
 use crate::recovery::attach_merged_views;
 use crate::schema;
 
@@ -75,6 +78,20 @@ impl StoreReader {
     /// Returns [`StoreError::Sqlite`] when a read fails.
     pub fn bases_of(&self, glyph_ids: &[font::GlyphId]) -> Result<Vec<font::GlyphId>, StoreError> {
         self.read(|conn| bases_of_from_conn(conn, glyph_ids))
+    }
+
+    /// The direct component bases of each of `glyph_ids`, in request order,
+    /// each list in id order; empty for a glyph with no components or one the
+    /// store lacks.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when a read fails.
+    pub fn component_bases(
+        &self,
+        glyph_ids: &[font::GlyphId],
+    ) -> Result<Vec<Vec<font::GlyphId>>, StoreError> {
+        self.read(|conn| component_bases_from_conn(conn, glyph_ids))
     }
 
     /// As [`crate::ShiftStore::composites_of`].

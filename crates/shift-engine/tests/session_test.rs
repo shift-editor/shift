@@ -5,12 +5,13 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 
 use proptest::prelude::*;
-use shift_engine::{EditHistory, EngineSession, LayerSource};
+use shift_engine::{EditHistory, EngineSession, LayerSource, RecordSource};
 use shift_font::test_support::sample_font;
 use shift_font::{
-    AddComponent, Anchor, AnchorId, Component, ComponentId, DecomposeComponents,
-    DecomposedTransform, Font, FontIntent, FontIntentSet, Glyph, GlyphId, GlyphLayer, LayerId,
-    MoveAnchors, MovePoints, SourceId, contour,
+    AddComponent, Anchor, AnchorId, Component, ComponentId, CreateGlyph, DecomposeComponents,
+    DecomposedTransform, Font, FontIntent, FontIntentSet, Glyph, GlyphCategory, GlyphDataCategory,
+    GlyphId, GlyphLayer, GlyphName, GlyphSubcategory, LayerId, MoveAnchors, MovePoints, NamedGlyph,
+    SourceId, UpdateGlyph, contour,
 };
 
 const BASES: usize = 4;
@@ -132,6 +133,42 @@ impl LayerSource for Persisted {
                     .any(|layer| bases(layer).any(|base| targets.contains(&base)))
             })
             .map(Glyph::id)
+            .collect())
+    }
+}
+
+impl RecordSource for Persisted {
+    type Error = Infallible;
+
+    fn component_bases(&mut self, glyph_ids: &[GlyphId]) -> Result<Vec<Vec<GlyphId>>, Infallible> {
+        Ok(glyph_ids
+            .iter()
+            .map(|glyph_id| {
+                let bases: BTreeSet<GlyphId> = self
+                    .0
+                    .glyph(*glyph_id)
+                    .into_iter()
+                    .flat_map(Glyph::component_glyph_ids)
+                    .collect();
+                bases.into_iter().collect()
+            })
+            .collect())
+    }
+
+    /// Glyph data that knows only that `mark…` glyphs are nonspacing marks.
+    fn glyph_data_categories(
+        &mut self,
+        glyphs: &[NamedGlyph],
+    ) -> Result<Vec<GlyphDataCategory>, Infallible> {
+        Ok(glyphs
+            .iter()
+            .map(|glyph| match glyph.name.as_str().starts_with("mark") {
+                true => GlyphDataCategory {
+                    category: Some(GlyphCategory::Mark),
+                    sub_category: Some(GlyphSubcategory::Nonspacing),
+                },
+                false => GlyphDataCategory::default(),
+            })
             .collect())
     }
 }
@@ -540,4 +577,143 @@ fn the_history_knows_when_undo_and_redo_reach_the_saved_font() {
     edit(&mut session, &mut history, "branch");
     history.undo(&mut session, &mut persisted).unwrap();
     assert!(!history.matches_saved());
+}
+
+#[test]
+fn a_partly_loaded_session_lists_the_records_a_loaded_font_would() {
+    let font = composite_font();
+    let mut persisted = Persisted(font.clone());
+    let mut session = EngineSession::open_directory(placeholders(&font));
+    session
+        .load_glyphs(&mut persisted, &[GlyphId::from_raw("composite0")])
+        .unwrap();
+    let loaded = EngineSession::open_loaded(font);
+
+    let records = session.glyph_records(&mut persisted).unwrap();
+
+    assert_eq!(records, loaded.glyph_records(&mut persisted).unwrap());
+    let record = |name: &str| {
+        records
+            .iter()
+            .find(|record| record.name.as_str() == name)
+            .unwrap()
+    };
+    assert_eq!(
+        record("composite1").component_base_glyph_ids,
+        [GlyphId::from_raw("base1"), GlyphId::from_raw("mark1")]
+    );
+    assert!(record("mark0").nonspacing_mark);
+    assert!(!record("base0").mark);
+}
+
+#[test]
+fn a_rename_changes_the_glyphs_record_in_the_edit_that_made_it() {
+    let font = composite_font();
+    let mut persisted = Persisted(font.clone());
+    let mut session = EngineSession::open_directory(placeholders(&font));
+    let mark = GlyphId::from_raw("mark0");
+    let rename = FontIntentSet::from(FontIntent::from(UpdateGlyph {
+        glyph_id: mark,
+        new_name: GlyphName::from("dot"),
+        new_unicodes: vec![0x2e],
+    }));
+
+    let applied = session.apply(&mut persisted, &rename).unwrap();
+    let changes = session
+        .glyph_record_changes(&mut persisted, &applied.changes)
+        .unwrap();
+
+    let [record] = &*changes.updated else {
+        panic!("the rename changes one record");
+    };
+    assert_eq!((record.id, record.name.as_str()), (mark, "dot"));
+    assert_eq!(record.unicodes, [0x2e]);
+    assert!(!record.mark, "glyph data no longer calls it a mark");
+    assert!(changes.removed.is_empty());
+}
+
+/// The glyphs' names, in the records' order.
+fn record_names(records: &[shift_font::GlyphRecord]) -> Vec<&str> {
+    records.iter().map(|record| record.name.as_str()).collect()
+}
+
+#[test]
+fn glyph_records_and_the_glyph_order_follow_an_add_a_rename_and_a_remove() {
+    let font = composite_font();
+    let mut persisted = Persisted(font.clone());
+    let mut session = EngineSession::open_directory(placeholders(&font));
+    let mut history = EditHistory::default();
+    let added = GlyphId::from_raw("added");
+    let create = FontIntentSet::from(FontIntent::from(CreateGlyph {
+        glyph_id: Some(added),
+        name: "0first".to_string(),
+        unicodes: Vec::new(),
+    }));
+    let rename = FontIntentSet::from(FontIntent::from(UpdateGlyph {
+        glyph_id: added,
+        new_name: GlyphName::from("zzz"),
+        new_unicodes: Vec::new(),
+    }));
+    let order_of = |session: &EngineSession| -> Vec<GlyphId> {
+        let mut glyphs: Vec<&Glyph> = session.font().glyphs().collect();
+        glyphs.sort_by(|a, b| a.name().cmp(b.name()));
+        glyphs.into_iter().map(Glyph::id).collect()
+    };
+
+    history.begin();
+    let created = session.apply(&mut persisted, &create).unwrap();
+    let created_changes = session
+        .glyph_record_changes(&mut persisted, &created.changes)
+        .unwrap();
+    history.record(created.changes);
+    history.end(session.font()).unwrap();
+    assert_eq!(created_changes.order, Some(order_of(&session)));
+    assert_eq!(created_changes.order.as_ref().unwrap()[0], added);
+    let records = session.glyph_records(&mut persisted).unwrap();
+    assert_eq!(record_names(&records)[0], "0first");
+
+    history.begin();
+    let renamed = session.apply(&mut persisted, &rename).unwrap();
+    let renamed_changes = session
+        .glyph_record_changes(&mut persisted, &renamed.changes)
+        .unwrap();
+    history.record(renamed.changes);
+    history.end(session.font()).unwrap();
+    assert_eq!(renamed_changes.order, Some(order_of(&session)));
+    assert_eq!(renamed_changes.order.as_ref().unwrap().last(), Some(&added));
+    let records = session.glyph_records(&mut persisted).unwrap();
+    assert_eq!(record_names(&records).last(), Some(&"zzz"));
+
+    history.undo(&mut session, &mut persisted).unwrap();
+    let removed = history.undo(&mut session, &mut persisted).unwrap().unwrap();
+    let removed_changes = session
+        .glyph_record_changes(&mut persisted, &removed.changes)
+        .unwrap();
+    assert_eq!(removed_changes.removed, [added]);
+    assert_eq!(removed_changes.order, Some(order_of(&session)));
+    let records = session.glyph_records(&mut persisted).unwrap();
+    assert!(!records.iter().any(|record| record.id == added));
+    let mut sorted = record_names(&records);
+    sorted.sort_unstable();
+    assert_eq!(record_names(&records), sorted);
+}
+
+#[test]
+fn an_edit_that_keeps_the_glyph_order_sends_none() {
+    let font = composite_font();
+    let mut persisted = Persisted(font.clone());
+    let mut session = EngineSession::open_directory(placeholders(&font));
+    let recode = FontIntentSet::from(FontIntent::from(UpdateGlyph {
+        glyph_id: GlyphId::from_raw("mark0"),
+        new_name: GlyphName::from("mark0"),
+        new_unicodes: vec![0x301],
+    }));
+
+    let applied = session.apply(&mut persisted, &recode).unwrap();
+    let changes = session
+        .glyph_record_changes(&mut persisted, &applied.changes)
+        .unwrap();
+
+    assert_eq!(record_names(&changes.updated), ["mark0"]);
+    assert_eq!(changes.order, None);
 }
