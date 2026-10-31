@@ -49,6 +49,11 @@ impl FontIndex {
         self.by_name.get(name)
     }
 
+    /// Every glyph's id, in name order.
+    pub(super) fn ids_by_name(&self) -> impl Iterator<Item = &GlyphId> {
+        self.by_name.values()
+    }
+
     /// The glyphs mapped to `unicode`, in glyph order.
     pub(super) fn ids_with_unicode(&self, unicode: u32) -> impl Iterator<Item = &GlyphId> {
         self.by_unicode.get(&unicode)

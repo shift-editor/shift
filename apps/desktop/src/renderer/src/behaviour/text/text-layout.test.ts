@@ -188,6 +188,17 @@ describe("nonspacing marks in typed text", () => {
     });
   });
 
+  // The window's engine builds the renamed glyph's record in the edit, before the workspace persists it.
+  it("lays out a glyph renamed to a nonspacing mark as one in the frame it is renamed", () => {
+    editor.pasteText("/x.comb");
+
+    editor.setGlyphIdentity("x.comb", "kasra-ar", []);
+
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [expect.anything(), { name: "kasra-ar", advance: NONSPACING_MARK_EDITOR_ADVANCE }],
+    });
+  });
+
   it("kerns a glyph named like a mark against its neighbour, but not a nonspacing mark", async () => {
     editor.setKerning("Regular", "A", "x.comb", -30);
     editor.setKerning("Regular", "A", "fatha-ar", -30);

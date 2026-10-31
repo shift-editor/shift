@@ -1,22 +1,31 @@
-//! What the editor reads from the editing engine's font: its axes, sources
-//! and kerning, as shift-font's own types, and kerning and source metrics at
-//! a place, answered by the same shift-font code the workspace and export run.
-//! Every read answers from the session's font as it stands, unsaved edits
-//! included.
+//! What the editor reads from the editing engine's font: its axes, sources,
+//! kerning and glyph records, as shift-font's own types; kerning and source
+//! metrics at a place; and the per-frame variation reads, interpolation
+//! weights and axis mapping, answered by the same shift-font code the
+//! workspace and export run. Every read answers from the session's font as it
+//! stands, unsaved edits included.
 //!
 //! The [`EngineReads`] interface is answered only with the `engine` feature,
 //! beside the session it reads ([`crate::engine`]). The interface and its
 //! types are declared with `engine-protocol` alone, so the editor's side
 //! generates without building the session.
 //!
-//! The hot reads name glyphs and sources by numbers the session interns, not
-//! by the engine module's name table: the editor interns a
-//! glyph or source id once with `engineGlyphNumbers` or `engineSourceNumbers`
-//! and passes its number from then on. A location crosses as numbers in the
+//! The hot reads name glyphs, sources and source sets by numbers the session
+//! interns, not by the engine module's name table: the editor interns a
+//! glyph or source id once with `engineGlyphNumbers` or `engineSourceNumbers`,
+//! and a glyph's ordered source set once with `engineSourceSetNumber`, and
+//! passes its number from then on. A location crosses as numbers in the
 //! font's axis order, NaN for an axis at its default.
+//!
+//! The session derives each interned source set's interpolation basis, and
+//! the font's compiled axis mappings, from its font when a read first needs
+//! them, and keeps them with the axes, mappings and source locations they
+//! were derived from: a read whose font no longer has those derives them
+//! again ([`FontVariation`]).
 
 use pack::Pack;
-use shift_font::{Axis, MetricValue, Source};
+use shift_engine::StoreReadError;
+use shift_font::{Axis, GlyphRecords, MetricValue, MissingKerningOrigin, ResolvedKerning, Source};
 use shift_wire::KerningSnapshot;
 
 /// What the editor reads from one engine session's font. Glyphs and sources
@@ -51,6 +60,40 @@ pub trait EngineReads {
     /// The font's kerning: its groups, each source's pairs, and the basis
     /// kerning interpolates over.
     fn kerning(&self) -> KerningSnapshot;
+    /// The pairs authored at `source` that name `glyph` on a side, directly
+    /// or through its group at that side, as `Kerning::pairs_naming` finds
+    /// them; empty for a number the session never interned.
+    fn kerning_pairs_naming(&self, source: usize, glyph: usize) -> Vec<ResolvedKerning>;
+    /// Where a pair's value comes from at `source` when it authors no pair
+    /// for it: `Font::missing_kerning_origin`; unkerned for a number the
+    /// session never interned.
+    fn missing_kerning_origin(&self, source: usize) -> MissingKerningOrigin;
+    /// Every glyph's record, sorted by name: its own fields from the
+    /// session's font, the component bases of glyphs it has not loaded and
+    /// glyph data's categories from the store's reader.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreReadError`] when the store's reader cannot answer.
+    fn glyph_records(&self) -> Result<GlyphRecords, StoreReadError>;
+    /// Every interned source set's weights at a design location, as the
+    /// basis the session's font gives each set evaluates them
+    /// (`InterpolationBasis::weights_at`): the weights of the sets a frame
+    /// draws, read once per location.
+    fn source_set_weights(&self, location: Vec<f64>) -> SourceSetWeights;
+    /// The weights of the interned source sets `sets`, as
+    /// [`EngineReads::source_set_weights`] gives each, one set after
+    /// another, at an external location mapped once through the font's axis
+    /// mappings: a Slug atlas's weight sets in one read. Null when a set was
+    /// never interned, or its sources are missing from the font or form no
+    /// model.
+    fn atlas_weights(&self, sets: Vec<usize>, external: Vec<f64>) -> Option<Vec<f64>>;
+    /// An external location's design location, through the font's axis
+    /// mappings, exactly once: `map_location_with_bases`.
+    fn design_location(&self, external: Vec<f64>) -> Vec<f64>;
+    /// The external location a design location's mapping came from, NaN on
+    /// internal axes: `unmap_location_with_bases`.
+    fn external_location(&self, design: Vec<f64>) -> Vec<f64>;
 }
 
 /// The authored pair an edit to the kerning between two glyphs at a source changes.
@@ -77,35 +120,180 @@ pub struct InterpolatedMetrics {
     pub underline_thickness: Option<f64>,
 }
 
+/// The weights of every source set a session interned, at one location.
+#[derive(Clone, Debug, Default, PartialEq, Pack)]
+pub struct SourceSetWeights {
+    /// Each set's weights, one per source in the set's order, one set after
+    /// another in number order. A set whose sources the font lacks, or that
+    /// forms no model, has NaN for each.
+    #[pack(numbers)]
+    pub weights: Vec<f64>,
+    /// Where each set's weights start in `weights`, by set number, then
+    /// where the last set's end: set `n`'s weights are
+    /// `weights[starts[n]..starts[n + 1]]`.
+    pub starts: Vec<usize>,
+}
+
 #[cfg(feature = "engine")]
-pub(crate) use exports::InternedIds;
+pub(crate) use exports::{FontVariation, InternedIds};
 
 #[cfg(feature = "engine")]
 mod exports {
+    use std::cell::RefCell;
     use std::collections::HashMap;
     use std::hash::Hash;
+    use std::rc::Rc;
 
-    use serde::Serialize;
+    use shift_engine::StoreReadError;
     use shift_font::naming::new_anchor_name;
     use shift_font::{
-        DesignLocation, Font, GlyphId, Kerning, KerningSide, LayerId, ResolvedKerning, SourceId,
+        AxisMapping, AxisMappingBasis, DesignLocation, Font, FontCopyId, GlyphId, GlyphRecords,
+        InterpolationBasis, Kerning, KerningSide, LayerId, MissingKerningOrigin, ResolvedKerning,
+        SourceId,
     };
     use shift_wire::values::{self, WireParse};
-    use tsify::{Ts, Tsify};
     use wasm_bindgen::prelude::*;
 
     use super::{
         Axis, EditablePair, EngineReads, InterpolatedMetrics, KerningSnapshot, Source,
-        engine_reads_request,
+        SourceSetWeights, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
-    use crate::variation::to_location;
+    use crate::variation::{design_values, external_values, to_location, weights_at};
 
     /// The ids a session's reads name by number, each interned once.
     #[derive(Default)]
     pub(crate) struct InternedIds {
         glyphs: IdTable<GlyphId>,
         sources: IdTable<SourceId>,
+        source_sets: IdTable<Vec<SourceId>>,
+    }
+
+    /// What the variation reads evaluate, derived from the session's font:
+    /// its compiled axis mappings, and each interned source set's basis,
+    /// derived on the set's first read. Kept with the inputs it was derived
+    /// from, so a font with other inputs derives it again
+    /// ([`FontVariation::of`]): no edit, undo or rewind can leave it stale.
+    pub(crate) struct FontVariation {
+        inputs: VariationInputs,
+        /// The last font copy found to have `inputs`: a read of the same
+        /// copy skips comparing them.
+        checked: RefCell<FontCopyId>,
+        mappings: Vec<AxisMappingBasis>,
+        bases: RefCell<HashMap<usize, Option<Rc<InterpolationBasis>>>>,
+    }
+
+    impl FontVariation {
+        /// The variation `held` keeps for `font`, derived again first when
+        /// `font`'s axes, axis mappings or source locations are not the ones
+        /// it was derived from.
+        pub(crate) fn of(held: &RefCell<Option<Rc<Self>>>, font: &Font) -> Rc<Self> {
+            let mut held = held.borrow_mut();
+            if let Some(variation) = held.as_ref()
+                && variation.derived_from(font)
+            {
+                return Rc::clone(variation);
+            }
+            let variation = Rc::new(Self::derive(font));
+            *held = Some(Rc::clone(&variation));
+            variation
+        }
+
+        /// `font`'s compiled axis mappings, and no source set's basis yet. A
+        /// font whose mappings cannot be compiled maps as an unmapped font
+        /// does.
+        /// Whether `font` has the inputs this was derived from.
+        fn derived_from(&self, font: &Font) -> bool {
+            if font.is_copy(&self.checked.borrow()) {
+                return true;
+            }
+            if !self.inputs.describe(font) {
+                return false;
+            }
+            *self.checked.borrow_mut() = font.copy_id();
+            true
+        }
+
+        fn derive(font: &Font) -> Self {
+            Self {
+                inputs: VariationInputs::of(font),
+                checked: RefCell::new(font.copy_id()),
+                mappings: font.axis_mapping_bases().unwrap_or_default(),
+                bases: RefCell::default(),
+            }
+        }
+
+        /// The basis `font` gives the interned set `set`, derived on first
+        /// use; none for a set never interned, or whose sources `font` lacks
+        /// or form no model.
+        fn basis(
+            &self,
+            set: usize,
+            font: &Font,
+            ids: &InternedIds,
+        ) -> Option<Rc<InterpolationBasis>> {
+            self.bases
+                .borrow_mut()
+                .entry(set)
+                .or_insert_with(|| {
+                    let source_ids = ids.source_sets.get(set)?;
+                    font.interpolation_basis_for(source_ids)
+                        .ok()
+                        .flatten()
+                        .map(Rc::new)
+                })
+                .clone()
+        }
+    }
+
+    /// The parts of a font its variation is derived from: its axes, its axis
+    /// mappings, and where each source sits.
+    #[derive(PartialEq)]
+    struct VariationInputs {
+        axes: Vec<Axis>,
+        mappings: Vec<AxisMapping>,
+        sources: Vec<SourcePlace>,
+    }
+
+    /// One source's id and design location.
+    #[derive(PartialEq)]
+    struct SourcePlace {
+        id: SourceId,
+        location: DesignLocation,
+    }
+
+    impl From<&Source> for SourcePlace {
+        fn from(source: &Source) -> Self {
+            Self {
+                id: source.id(),
+                location: source.location().clone(),
+            }
+        }
+    }
+
+    impl VariationInputs {
+        fn of(font: &Font) -> Self {
+            Self {
+                axes: font.axes().to_vec(),
+                mappings: font.axis_mappings().to_vec(),
+                sources: font.sources().iter().map(SourcePlace::from).collect(),
+            }
+        }
+
+        /// Whether `font` has exactly these inputs; compares in place, so a
+        /// read that finds them unchanged copies nothing.
+        fn describe(&self, font: &Font) -> bool {
+            self.axes == font.axes()
+                && self.mappings == font.axis_mappings()
+                && self.sources.len() == font.sources().len()
+                && self
+                    .sources
+                    .iter()
+                    .zip(font.sources())
+                    .all(|(place, source)| {
+                        place.id == source.id() && &place.location == source.location()
+                    })
+        }
     }
 
     /// Ids by number, and each id's number.
@@ -128,35 +316,28 @@ mod exports {
         fn intern(&mut self, ids: &[String]) -> Result<Vec<u32>, JsError> {
             values::parse_id_list::<T>(ids)?
                 .into_iter()
-                .map(|id| {
-                    if let Some(number) = self.numbers.get(&id) {
-                        return Ok(*number);
-                    }
-                    let number = u32::try_from(self.ids.len())?;
-                    self.ids.push(id.clone());
-                    self.numbers.insert(id, number);
-                    Ok(number)
-                })
+                .map(|id| self.intern_one(id))
                 .collect()
         }
     }
 
-    impl<T: Copy> IdTable<T> {
+    impl<T: Clone + Eq + Hash> IdTable<T> {
+        /// The number `id` is interned as, interning it when new.
+        fn intern_one(&mut self, id: T) -> Result<u32, JsError> {
+            if let Some(number) = self.numbers.get(&id) {
+                return Ok(*number);
+            }
+            let number = u32::try_from(self.ids.len())?;
+            self.ids.push(id.clone());
+            self.numbers.insert(id, number);
+            Ok(number)
+        }
+    }
+
+    impl<T> IdTable<T> {
+        /// The id interned as `number`, if any.
         fn get(&self, number: usize) -> Option<&T> {
             self.ids.get(number)
-        }
-
-        /// The id interned as `number`.
-        ///
-        /// # Errors
-        ///
-        /// Fails when the session interned no id as `number`.
-        fn require(&self, number: u32) -> Result<T, JsError> {
-            usize::try_from(number)
-                .ok()
-                .and_then(|number| self.get(number))
-                .copied()
-                .ok_or_else(|| JsError::new(&format!("no id was interned as {number}")))
         }
     }
 
@@ -184,6 +365,20 @@ mod exports {
         source_ids: Vec<String>,
     ) -> Result<Vec<u32>, JsError> {
         with_engine(handle, |engine| engine.ids.sources.intern(&source_ids))
+    }
+
+    /// Interns an ordered source set, as a glyph's interpolation basis lists
+    /// its sources, for [`EngineReads::interpolation_weights`], and returns
+    /// its number. A number stays the set's for the session's life, whether
+    /// or not the font has its sources.
+    ///
+    /// # Errors
+    ///
+    /// Fails on an unknown handle or an id that is not a source id.
+    #[wasm_bindgen(js_name = engineSourceSetNumber)]
+    pub fn engine_source_set_number(handle: u32, source_ids: Vec<String>) -> Result<u32, JsError> {
+        let set = values::parse_id_list::<SourceId>(&source_ids)?;
+        with_engine(handle, |engine| engine.ids.source_sets.intern_one(set))
     }
 
     /// Runs one [`EngineReads`] method on the session `handle`. An unknown
@@ -267,6 +462,68 @@ mod exports {
         fn source_metrics_at(&self, location: Vec<f64>) -> Option<InterpolatedMetrics> {
             interpolated_metrics(self.session.font(), &location)
         }
+
+        fn kerning_pairs_naming(&self, source: usize, glyph: usize) -> Vec<ResolvedKerning> {
+            let (Some(source_id), Some(glyph_id)) =
+                (self.ids.sources.get(source), self.ids.glyphs.get(glyph))
+            else {
+                return Vec::new();
+            };
+            self.session
+                .font()
+                .kerning()
+                .pairs_naming(*source_id, *glyph_id)
+                .collect()
+        }
+
+        fn missing_kerning_origin(&self, source: usize) -> MissingKerningOrigin {
+            match self.ids.sources.get(source) {
+                Some(source_id) => self.session.font().missing_kerning_origin(*source_id),
+                None => MissingKerningOrigin::Unkerned,
+            }
+        }
+
+        fn glyph_records(&self) -> Result<GlyphRecords, StoreReadError> {
+            Self::glyph_records(self)
+        }
+
+        fn source_set_weights(&self, location: Vec<f64>) -> SourceSetWeights {
+            let font = self.session.font();
+            let variation = self.variation();
+            let mut weights = SourceSetWeights::default();
+            for (set, source_ids) in self.ids.source_sets.ids.iter().enumerate() {
+                weights.starts.push(weights.weights.len());
+                let row = match variation.basis(set, font, &self.ids) {
+                    Some(basis) => weights_at(&basis, font.axes(), &location),
+                    None => vec![f64::NAN; source_ids.len()],
+                };
+                weights.weights.extend(row);
+            }
+            weights.starts.push(weights.weights.len());
+            weights
+        }
+
+        fn atlas_weights(&self, sets: Vec<usize>, external: Vec<f64>) -> Option<Vec<f64>> {
+            let font = self.session.font();
+            let variation = self.variation();
+            let design = design_values(font.axes(), &variation.mappings, &external);
+            let mut weights = Vec::new();
+            for set in sets {
+                let basis = variation.basis(set, font, &self.ids)?;
+                weights.extend(weights_at(&basis, font.axes(), &design));
+            }
+            Some(weights)
+        }
+
+        fn design_location(&self, external: Vec<f64>) -> Vec<f64> {
+            let font = self.session.font();
+            design_values(font.axes(), &self.variation().mappings, &external)
+        }
+
+        fn external_location(&self, design: Vec<f64>) -> Vec<f64> {
+            let font = self.session.font();
+            external_values(font.axes(), &self.variation().mappings, &design)
+        }
     }
 
     /// The glyphs themselves at zero, for a pair that names nothing known.
@@ -293,105 +550,6 @@ mod exports {
             second_group: matches!(resolved.pair.second, KerningSide::Group(_)),
             amount: resolved.value,
         }
-    }
-
-    /// An authored pair, its sides by id, and its value at a source.
-    #[derive(Serialize, Tsify)]
-    pub struct EngineKerningPair {
-        #[tsify(type = "GlyphId | KerningGroupId")]
-        first: String,
-        #[tsify(type = "GlyphId | KerningGroupId")]
-        second: String,
-        /// Font units added after the first glyph's advance.
-        amount: f64,
-    }
-
-    impl From<ResolvedKerning> for EngineKerningPair {
-        fn from(resolved: ResolvedKerning) -> Self {
-            Self {
-                first: side_id(&resolved.pair.first),
-                second: side_id(&resolved.pair.second),
-                amount: resolved.value,
-            }
-        }
-    }
-
-    fn side_id(side: &KerningSide) -> String {
-        match side {
-            KerningSide::Glyph(glyph_id) => glyph_id.to_string(),
-            KerningSide::Group(group_id) => group_id.to_string(),
-        }
-    }
-
-    /// Authored pairs, in the order the read returns them.
-    #[derive(Serialize, Tsify)]
-    #[serde(transparent)]
-    pub struct EngineKerningPairs(Vec<EngineKerningPair>);
-
-    /// The pairs authored at a source that name a glyph on a side, directly or
-    /// through its group at that side, as `Kerning::pairs_naming` finds them.
-    /// The source and glyph are numbers the session interned.
-    ///
-    /// # Errors
-    ///
-    /// Fails on an unknown handle, or a number the session never interned.
-    #[wasm_bindgen(js_name = engineKerningPairsNaming)]
-    pub fn engine_kerning_pairs_naming(
-        handle: u32,
-        source: u32,
-        glyph: u32,
-    ) -> Result<Ts<EngineKerningPairs>, JsError> {
-        let pairs = with_engine(handle, |engine| {
-            let source_id = engine.ids.sources.require(source)?;
-            let glyph_id = engine.ids.glyphs.require(glyph)?;
-            let kerning = engine.session.font().kerning();
-            Ok(EngineKerningPairs(
-                kerning
-                    .pairs_naming(source_id, glyph_id)
-                    .map(EngineKerningPair::from)
-                    .collect(),
-            ))
-        })?;
-        Ok(pairs.into_ts()?)
-    }
-
-    /// Where a pair's value comes from at a source that authors no pair for it.
-    #[derive(Serialize, Tsify)]
-    #[serde(rename_all = "lowercase")]
-    pub enum MissingKerningOrigin {
-        /// The source kerns on its own, or is the font's only one: the pair kerns zero.
-        Unkerned,
-        /// The pair's value blends the sources that author kerning.
-        Interpolated,
-    }
-
-    impl From<shift_font::MissingKerningOrigin> for MissingKerningOrigin {
-        fn from(origin: shift_font::MissingKerningOrigin) -> Self {
-            match origin {
-                shift_font::MissingKerningOrigin::Unkerned => Self::Unkerned,
-                shift_font::MissingKerningOrigin::Interpolated => Self::Interpolated,
-            }
-        }
-    }
-
-    /// Where a pair's value comes from at a source, by number, that authors
-    /// no pair for it: `Font::missing_kerning_origin`.
-    ///
-    /// # Errors
-    ///
-    /// Fails on an unknown handle, or a number the session never interned.
-    #[wasm_bindgen(js_name = engineMissingKerningOrigin)]
-    pub fn engine_missing_kerning_origin(
-        handle: u32,
-        source: u32,
-    ) -> Result<Ts<MissingKerningOrigin>, JsError> {
-        let origin = with_engine(handle, |engine| {
-            let source_id = engine.ids.sources.require(source)?;
-            Ok(MissingKerningOrigin::from(
-                engine.session.font().missing_kerning_origin(source_id),
-            ))
-        })?;
-        Ok(origin.into_ts()?)
     }
 
     fn interpolated_metrics(font: &Font, location: &[f64]) -> Option<InterpolatedMetrics> {

@@ -25,29 +25,7 @@ impl ShiftStore {
     pub fn glyph_component_references(
         &self,
     ) -> Result<HashMap<font::GlyphId, Vec<font::GlyphId>>, StoreError> {
-        let mut stmt = self.conn.prepare(
-            "
-            SELECT DISTINCT l.glyph_id, c.base_glyph_id
-            FROM glyph_components AS c
-            JOIN glyph_layers AS l ON l.id = c.layer_id
-            ORDER BY l.glyph_id, c.base_glyph_id
-            ",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, font::GlyphId>(0)?,
-                row.get::<_, font::GlyphId>(1)?,
-            ))
-        })?;
-        let mut references = HashMap::new();
-        for row in rows {
-            let (glyph_id, base_glyph_id) = row?;
-            references
-                .entry(glyph_id)
-                .or_insert_with(Vec::new)
-                .push(base_glyph_id);
-        }
-        Ok(references)
+        glyph_component_references_from_conn(&self.conn)
     }
 
     /// Returns direct component bases for one glyph from the relational index.
@@ -175,6 +153,60 @@ pub(super) fn validate_component_rows(
         });
     }
     Ok(())
+}
+
+/// Every direct glyph-component edge, by composite, each list in id order.
+pub(crate) fn glyph_component_references_from_conn(
+    conn: &Connection,
+) -> Result<HashMap<font::GlyphId, Vec<font::GlyphId>>, StoreError> {
+    let mut stmt = conn.prepare_cached(
+        "
+        SELECT DISTINCT l.glyph_id, c.base_glyph_id
+        FROM glyph_components AS c
+        JOIN glyph_layers AS l ON l.id = c.layer_id
+        ORDER BY l.glyph_id, c.base_glyph_id
+        ",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, font::GlyphId>(0)?,
+            row.get::<_, font::GlyphId>(1)?,
+        ))
+    })?;
+    let mut references = HashMap::new();
+    for row in rows {
+        let (glyph_id, base_glyph_id) = row?;
+        references
+            .entry(glyph_id)
+            .or_insert_with(Vec::new)
+            .push(base_glyph_id);
+    }
+    Ok(references)
+}
+
+/// Above this many glyphs, [`component_bases_from_conn`] reads every edge in
+/// one scan rather than querying glyph by glyph.
+const COMPONENT_BASES_SCAN_THRESHOLD: usize = 64;
+
+/// The direct component bases of each of `glyph_ids`, in request order, each
+/// list in id order; empty for a glyph with no components.
+pub(crate) fn component_bases_from_conn(
+    conn: &Connection,
+    glyph_ids: &[font::GlyphId],
+) -> Result<Vec<Vec<font::GlyphId>>, StoreError> {
+    if glyph_ids.len() <= COMPONENT_BASES_SCAN_THRESHOLD {
+        return glyph_ids
+            .iter()
+            .map(|glyph_id| {
+                referenced_glyph_ids_for_glyphs_from_conn(conn, std::slice::from_ref(glyph_id))
+            })
+            .collect();
+    }
+    let mut references = glyph_component_references_from_conn(conn)?;
+    Ok(glyph_ids
+        .iter()
+        .map(|glyph_id| references.remove(glyph_id).unwrap_or_default())
+        .collect())
 }
 
 pub(crate) fn referenced_glyph_ids_for_glyphs_from_conn(

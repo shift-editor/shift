@@ -1,6 +1,6 @@
 import type { MatModel } from "@shift/geo";
 import { anchors, geometry } from "@shift/wasm";
-import type { FollowingComponent } from "@shift/wasm/protocol";
+import type { AnchorKind, FollowingComponent } from "@shift/wasm/protocol";
 
 /**
  * Returns where each component shows while an edit is in progress.
@@ -15,3 +15,10 @@ export function followingPlacements(components: readonly FollowingComponent[]): 
     .followAnchors(components)
     .map((following) => geometry.composeTransform(following.transform));
 }
+
+/** The role fontc reads from an anchor's name in mark positioning. */
+export function anchorKind(name: string): AnchorKind {
+  return anchors.anchorKind(name);
+}
+
+export type { AnchorKind };

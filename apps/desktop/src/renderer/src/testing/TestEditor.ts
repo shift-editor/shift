@@ -36,6 +36,7 @@ import {
 import type { KerningTool, SpacingTool, ToolName } from "@shift/editor/tools";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { AuthoredGlyphAtlasSource } from "@/lib/graphics/backends/AuthoredGlyphAtlasSource";
+import type { GlyphAtlasPage } from "@/types/glyphAtlas";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
 import {
   alignSelection,
@@ -206,6 +207,22 @@ export function authoredGlyphAtlas(editor: EditorTestSurface): AuthoredGlyphAtla
     editor.workspaceEditCoordinator,
     () => font.getAxes(),
     () => font.getAxisMappingBases(),
+  );
+}
+
+/**
+ * The authored atlas page over every glyph of `editor`'s workspace, as the
+ * glyph grid prepares a one-page atlas, for subject tests of the atlas.
+ *
+ * @throws {Error} when `editor` did not come from {@link startTestEditor} or
+ * {@link openTestEditor}.
+ */
+export async function authoredAtlasPage(editor: EditorTestSurface): Promise<GlyphAtlasPage> {
+  if (!(editor instanceof TestEditor)) throw new Error("Expected an editor from startTestEditor");
+  const glyphIds = editor.font.glyphRecords().map((record) => record.id);
+  return authoredGlyphAtlas(editor).preparePage(
+    { glyphIds, pageIndex: 0, pageCount: 1, replacementPageIndices: [], coordinates: [] },
+    256,
   );
 }
 
@@ -1059,6 +1076,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   async renameSource(source: string, name: string): Promise<void> {
     await this.#actions.renameSource(source, name);
+    await this.settle();
+  }
+
+  async setSourceLocation(source: string, tag: string, value: number): Promise<void> {
+    await this.#actions.setSourceLocation(source, tag, value);
     await this.settle();
   }
 

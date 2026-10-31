@@ -189,3 +189,34 @@ describe("editing a variable glyph across sources", () => {
     expect((await editor.drawnGlyph()).advanceWidth).toBe(500);
   });
 });
+
+describe("the drawn interpolation follows the font's sources and mappings", () => {
+  const editor = useTestEditor({ file: FONTS.mutatorSans, glyph: "A" });
+  const between = { wdth: 0, wght: 500 };
+
+  it("draws a moved source's new weights at once", async () => {
+    editor.setLocation(between);
+    const before = (await editor.drawnGlyph()).advanceWidth;
+
+    await editor.setSourceLocation("BoldCondensed", "wght", 600);
+    const resolved = await editor.glyphAt(between);
+
+    expect(resolved?.advanceWidth).not.toBeCloseTo(before);
+    expect((await editor.drawnGlyph()).advanceWidth).toBeCloseTo(resolved!.advanceWidth);
+  });
+
+  it("draws an axis mapping edit's new weights at once", async () => {
+    editor.setLocation(between);
+    const before = (await editor.drawnGlyph()).advanceWidth;
+
+    await editor.setAxisMapping("wght", [
+      [0, 0],
+      [500, 800],
+      [1000, 1000],
+    ]);
+    const resolved = await editor.glyphAt(between);
+
+    expect(resolved?.advanceWidth).not.toBeCloseTo(before);
+    expect((await editor.drawnGlyph()).advanceWidth).toBeCloseTo(resolved!.advanceWidth);
+  });
+});

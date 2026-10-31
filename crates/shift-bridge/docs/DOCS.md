@@ -61,7 +61,7 @@ crates/shift-bridge/
 - `ExportFontTask` -- NAPI `Task` implementation for async font export.
 - `BridgeError` -- typed bridge error enum converted once at the NAPI boundary.
 - `AppliedChange` -- replace-grade mutation response returned by persist and apply.
-- `FontReplacement` -- selective complete font projections, with the changed glyph records as `glyphChanges`; a collection is `null` when the edit left it alone.
+- `FontReplacement` -- selective complete font projections, with the changed glyph records as `glyphChanges`, in name order; a collection is `null` when the edit left it alone.
 - Intents are shift-font's own `FontIntent` and payload structs, which derive `Pack` behind shift-font's `pack` feature; no copy of them lives in `shift-wire`. `shift_wire::values` keeps only the id parsing and the napi `Location` and `PointType` the remaining napi calls take.
 - `LanguagesReplacement` -- tracked Hyperglot language list replacement stored in the font lib under `com.shift.languages`; the replacement wrapper's `languageIds` is `null` when the key is absent, so `getLanguageIds()` and the echo distinguish "no list" from an empty list.
 - `LayerReplaced` -- one replaced glyph layer in an applied change.

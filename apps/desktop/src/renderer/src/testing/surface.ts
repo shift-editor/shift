@@ -399,6 +399,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   deleteAxis(tag: string): Promise<void>;
   /** Renames the source `source` to `name`, as Settings › Sources does. */
   renameSource(source: string, name: string): Promise<void>;
+  /** Moves the source `source` along the axis tagged `tag` to `value`, as Settings › Sources does. */
+  setSourceLocation(source: string, tag: string, value: number): Promise<void>;
   /** Sets the source `source`'s italic angle, as Settings › Sources does. */
   setSourceItalicAngle(source: string, italicAngle: number): Promise<void>;
   /** Sets the source `source`'s line gap, as Settings › Sources does. */

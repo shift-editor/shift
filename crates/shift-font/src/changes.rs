@@ -463,6 +463,18 @@ impl FontChangeSet {
             .collect()
     }
 
+    /// Whether this changeset moves glyphs in the font's name order
+    /// ([`crate::Font::glyph_ids_by_name`]): it creates, deletes or renames a
+    /// glyph.
+    pub fn reorders_glyphs(&self) -> bool {
+        self.changes.iter().any(|change| match change {
+            FontChange::Glyph(glyph) => {
+                glyph.before.as_ref().map(Glyph::name) != glyph.after.as_ref().map(Glyph::name)
+            }
+            _ => false,
+        })
+    }
+
     /// Every layer this changeset creates, updates or deletes, in change
     /// order: what replaying it, for undo or redo, reads.
     pub fn changed_layer_ids(&self) -> IndexSet<LayerId> {

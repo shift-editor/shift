@@ -12,10 +12,6 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
-    "./reference": {
-      "types": "./src/reference.ts",
-      "import": "./src/reference.ts"
-    },
     "./shaping": {
       "types": "./src/shaping.ts",
       "import": "./src/shaping.ts"
@@ -37,7 +33,6 @@
     "build": "node scripts/build.mjs",
     "build:debug": "node scripts/build.mjs",
     "build:e2e": "node scripts/build.mjs",
-    "build:reference": "node scripts/build.mjs --reference",
     "types": "node scripts/build.mjs --types",
     "lint": "oxlint --fix src/",
     "lint:check": "oxlint --deny-warnings src/"

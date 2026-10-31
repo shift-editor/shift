@@ -4,13 +4,14 @@
 
 use pack::{Bytes, Pack};
 use shift_font::{
-  FontChangeImpact, FontChangeSet, FontIntent, FontIntentSet, Glyph, GlyphId, LayerId,
+  FontChangeImpact, FontChangeSet, FontIntent, FontIntentSet, Glyph, GlyphId, GlyphRecordChanges,
+  GlyphRecords, LayerId, OpenTypeCategories,
 };
 use shift_wire::replacement::FontReplacement;
 use shift_wire::{
-  AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphChangedEntities, GlyphLayerRecord,
-  GlyphLayerSnapshot, GlyphRecord, GlyphRecordChanges, GlyphStructure, Ligature, MetricDefinition,
-  NamedInstance, SourceMetricsInterpolationSnapshot,
+  AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphChangedEntities,
+  GlyphLayerSnapshot, GlyphStructure, MetricDefinition, NamedInstance,
+  SourceMetricsInterpolationSnapshot,
 };
 use shift_workspace::{
   AcquireScope, DocumentIdentity as StoreDocumentIdentity, FontWorkspace, NewWorkspace,
@@ -152,7 +153,7 @@ pub(crate) trait NativeWorkspace {
   /// # Errors
   ///
   /// Fails when no workspace is open or the store cannot be read.
-  fn get_glyphs(&self) -> Result<Vec<GlyphRecord>, NativeWorkspaceError>;
+  fn get_glyphs(&self) -> Result<GlyphRecords, NativeWorkspaceError>;
 
   /// Applies `intents` as one atomic edit, one store transaction and one
   /// undo step, and returns what it changed. The editor edits in its window's
@@ -508,7 +509,7 @@ impl NativeWorkspace for Bridge {
     Ok(FontMetrics::from(self.font()?.metrics()))
   }
 
-  fn get_glyphs(&self) -> Result<Vec<GlyphRecord>, NativeWorkspaceError> {
+  fn get_glyphs(&self) -> Result<GlyphRecords, NativeWorkspaceError> {
     let workspace = self.workspace()?;
     let mut component_references = workspace.glyph_component_references()?;
     let glyphs: Vec<&Glyph> = workspace.font().glyphs().collect();
@@ -666,57 +667,39 @@ impl Bridge {
 
   /// The records of the glyphs `changes` changed, as they are now, and the
   /// glyphs it removed: what a reply to the edit carries instead of every
-  /// record, which on a 65K-glyph font took 128 ms to build.
+  /// record, which on a 65K-glyph font took 128 ms to build. No order: the
+  /// window lists records from its engine's replies.
   fn glyph_record_changes(&self, changes: &FontChangeSet) -> BridgeResult<GlyphRecordChanges> {
     let workspace = self.workspace()?;
-    let font = workspace.font();
-    let mut glyphs = Vec::new();
-    let mut removed = Vec::new();
-    for glyph_id in changes.record_glyph_ids() {
-      match font.glyph(glyph_id) {
-        Some(glyph) => glyphs.push(glyph),
-        None => removed.push(glyph_id),
-      }
-    }
-
-    let updated = self.glyph_records(&glyphs, |glyph_id| {
-      Ok(workspace.referenced_glyph_ids_for_glyph(glyph_id)?)
-    })?;
-    Ok(GlyphRecordChanges { updated, removed })
+    GlyphRecordChanges::of(workspace.font(), changes, |glyphs| {
+      self.glyph_records(glyphs, |glyph_id| {
+        Ok(workspace.referenced_glyph_ids_for_glyph(glyph_id)?)
+      })
+    })
   }
 
-  /// The records of `glyphs` sorted by name, each listing only layers on
+  /// The records of `glyphs`, each listing only layers on
   /// [`shift_font::Font::masters`] and the component bases
   /// `component_bases` reads for it.
   fn glyph_records(
     &self,
     glyphs: &[&Glyph],
     mut component_bases: impl FnMut(GlyphId) -> BridgeResult<Vec<GlyphId>>,
-  ) -> BridgeResult<Vec<GlyphRecord>> {
+  ) -> BridgeResult<GlyphRecords> {
     let font = self.font()?;
-    let categories = shift_backends::record_categories(glyphs.iter().copied(), font.lib());
-    let mut records = glyphs
+    let glyph_data = shift_backends::GlyphCategories::new();
+    let explicit = OpenTypeCategories::of(font.lib());
+    glyphs
       .iter()
       .map(|glyph| {
-        let mut record = GlyphRecord::from(*glyph);
-        if let Some(category) = categories.get(&glyph.id()) {
-          record.mark = category.mark;
-          record.nonspacing_mark = category.nonspacing_mark;
-          record.ligature = category.ligature.map(|ligature| match ligature {
-            shift_backends::PropagationLigature::Explicit => Ligature::Explicit,
-            shift_backends::PropagationLigature::Subcategory => Ligature::Subcategory,
-          });
-        }
-        record.component_base_glyph_ids = component_bases(glyph.id())?;
-        record.layers = font
-          .master_layers(glyph)
-          .map(|layer| GlyphLayerRecord::from(layer.as_ref()))
-          .collect();
-        Ok(record)
+        Ok(font.glyph_record(
+          glyph,
+          component_bases(glyph.id())?,
+          glyph_data.lookup(glyph.name(), glyph.unicodes()),
+          &explicit,
+        ))
       })
-      .collect::<BridgeResult<Vec<_>>>()?;
-    records.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(records)
+      .collect()
   }
 
   /// The pure-state echo of an applied outcome: replace-grade layers, the

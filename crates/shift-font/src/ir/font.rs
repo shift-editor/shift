@@ -102,6 +102,11 @@ pub struct Font {
     state: Arc<FontState>,
 }
 
+/// One copy of a [`Font`], named without holding it ([`Font::copy_id`]).
+/// Its allocation outlives the copy, so no later copy is named by mistake.
+#[derive(Clone, Debug, Default)]
+pub struct FontCopyId(std::sync::Weak<FontState>);
+
 #[derive(Clone, Debug)]
 struct FontState {
     data: FontData,
@@ -930,8 +935,27 @@ impl Font {
         self.index().id_by_name(name).copied()
     }
 
+    /// This copy's identity, which keeps none of its state alive: a
+    /// derived value can note the copy it was checked against without making
+    /// the next edit copy the font.
+    pub fn copy_id(&self) -> FontCopyId {
+        FontCopyId(Arc::downgrade(&self.state))
+    }
+
+    /// Whether `self` is the copy `copy` names: it has not been edited since.
+    /// A `false` says nothing about whether its contents differ.
+    pub fn is_copy(&self, copy: &FontCopyId) -> bool {
+        std::ptr::eq(copy.0.as_ptr(), Arc::as_ptr(&self.state))
+    }
+
     pub fn glyph_by_name(&self, name: &str) -> Option<&Glyph> {
         self.glyph(self.glyph_id_by_name(name)?)
+    }
+
+    /// Every glyph's id in name order, as the editor lists glyphs: by each
+    /// name's code points. Read from the name index, so it sorts nothing.
+    pub fn glyph_ids_by_name(&self) -> impl Iterator<Item = GlyphId> + '_ {
+        self.index().ids_by_name().copied()
     }
 
     pub fn glyphs_by_unicode(&self, unicode: u32) -> impl Iterator<Item = &Glyph> {
@@ -2701,6 +2725,18 @@ mod tests {
                 source_id: source
             } if source == source_id
         ));
+    }
+
+    #[test]
+    fn a_copy_id_names_its_copy_until_an_edit() {
+        let mut font = Font::new();
+        let copy = font.copy_id();
+
+        assert!(font.clone().is_copy(&copy));
+
+        font.metadata_mut().family_name = Some("Edited".to_string());
+
+        assert!(!font.is_copy(&copy));
     }
 
     #[test]

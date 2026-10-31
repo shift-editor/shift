@@ -29,4 +29,5 @@ export type {
   EngineStage,
   InterpolatedMetrics,
   MissingKerningOrigin,
+  SourceSetWeights,
 } from "./engineModule";

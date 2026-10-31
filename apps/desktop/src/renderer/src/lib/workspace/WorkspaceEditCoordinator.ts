@@ -49,8 +49,8 @@ const UNCHANGED: AppliedChange = { layers: [], dependents: [] };
  * Each edit applies in the window's engine first, in the frame it is made, and
  * the layers it touched are shown at once; an edit the engine rejects is never
  * sent. The workspace applies the same intents with the same shift-font code
- * and persists them, so its echo only adds what the engine cannot build: glyph
- * records and projections to rebuild. Undo and redo are the only
+ * and persists them, so its echo only adds what the engine cannot build:
+ * projections to rebuild. Undo and redo are the only
  * changes the engine did not make; their echo carries the change set the
  * workspace replayed, and the engine replays it too.
  *
@@ -84,6 +84,8 @@ export class WorkspaceEditCoordinator {
     readonly label: string;
     /** Each resident layer's state before the transaction first changed it. */
     readonly before: Map<LayerId, GlyphState>;
+    /** The glyphs whose layer records its edits changed. */
+    readonly relayered: Set<GlyphId>;
   } | null = null;
   #openEdit: StagedEdit | null = null;
 
@@ -118,6 +120,11 @@ export class WorkspaceEditCoordinator {
     return this.#applyStatus;
   }
 
+  /** The window's editing engine these edits apply in, which the open document's reads ask. */
+  get engine(): WindowEngine {
+    return this.#engine;
+  }
+
   /** Returns the session-local sequence of authored font state transitions. */
   get authoredRevisionCell(): Signal<number> {
     return this.#authoredRevisionCell;
@@ -148,7 +155,9 @@ export class WorkspaceEditCoordinator {
     this.#assertNoOpenEdit("edit");
     const transaction = this.#transaction;
     if (transaction) {
-      this.#applyInEngine(intents, transaction.before);
+      for (const glyphId of this.#applyInEngine(intents, transaction.before)) {
+        transaction.relayered.add(glyphId);
+      }
       return transaction.id;
     }
 
@@ -156,7 +165,8 @@ export class WorkspaceEditCoordinator {
     // queue on the workspace lane follows this edit rather than overtaking it.
     return batch(() => {
       const id = this.#mintPendingEditId();
-      this.#enqueuePersist(this.#applyEdit(intents), undefined, id);
+      const { changeSet, relayered } = this.#applyEdit(intents);
+      this.#enqueuePersist(changeSet, undefined, id, relayered);
       return id;
     });
   }
@@ -194,7 +204,7 @@ export class WorkspaceEditCoordinator {
 
     const id = this.#mintPendingEditId();
     const before = new Map<LayerId, GlyphState>();
-    this.#transaction = { id, label, before };
+    this.#transaction = { id, label, before, relayered: new Set() };
     this.#engine.beginEdit();
     const records = this.#store.recordsCheckpoint();
 
@@ -205,7 +215,9 @@ export class WorkspaceEditCoordinator {
         if (!transaction) throw new Error("workspace transaction ended without an active edit");
 
         this.#transaction = null;
-        this.#enqueuePersist(this.#engine.endEdit(), transaction.label, transaction.id);
+        this.#enqueuePersist(this.#engine.endEdit(), transaction.label, transaction.id, [
+          ...transaction.relayered,
+        ]);
         return result;
       } catch (error) {
         // The workspace never saw the transaction: take it back in the engine
@@ -261,16 +273,17 @@ export class WorkspaceEditCoordinator {
     if (this.#openEdit !== edit) return;
     this.#openEdit = null;
     batch(() => {
+      let relayered: readonly GlyphId[] = [];
       try {
         this.#engine.rewindEdit();
         this.#store.publishLayers(edit.before.values().toArray());
-        if (intents.length > 0) this.#applyInEngine(intents, null);
+        if (intents.length > 0) relayered = this.#applyInEngine(intents, null);
       } catch (error) {
         this.#engine.cancelEdit();
         this.#store.publishLayers(edit.before.values().toArray());
         throw error;
       }
-      this.#enqueuePersist(this.#engine.endEdit(), label, edit.id);
+      this.#enqueuePersist(this.#engine.endEdit(), label, edit.id, relayered);
     });
   }
 
@@ -328,9 +341,9 @@ export class WorkspaceEditCoordinator {
     try {
       // As in `push`, readers of the shown layers queue behind this edit.
       return batch(() => {
-        const changeSet = this.#applyEdit(intents);
+        const { changeSet, relayered } = this.#applyEdit(intents);
         if (!changeSet) return Promise.resolve(UNCHANGED);
-        const edit = this.#acceptEdit(changeSet, label, this.#mintPendingEditId());
+        const edit = this.#acceptEdit(changeSet, label, this.#mintPendingEditId(), relayered);
         return this.#serialize(() => this.#commitEdit(edit));
       });
     } catch (error) {
@@ -522,16 +535,23 @@ export class WorkspaceEditCoordinator {
     return this.#serialize(job);
   }
 
-  /** Applies `intents` in the engine as one edit and closes it; its change set, if it changed anything. */
-  #applyEdit(intents: readonly FontIntent[]): Uint8Array | undefined {
+  /**
+   * Applies `intents` in the engine as one edit and closes it: its change set,
+   * if it changed anything, and the glyphs whose layer records it changed.
+   */
+  #applyEdit(intents: readonly FontIntent[]): {
+    changeSet: Uint8Array | undefined;
+    relayered: readonly GlyphId[];
+  } {
     this.#engine.beginEdit();
+    let relayered: readonly GlyphId[];
     try {
-      this.#applyInEngine(intents, null);
+      relayered = this.#applyInEngine(intents, null);
     } catch (error) {
       this.#engine.cancelEdit();
       throw error;
     }
-    return this.#engine.endEdit();
+    return { changeSet: this.#engine.endEdit(), relayered };
   }
 
   /** Shows an undo or redo the engine made and persists its change set. */
@@ -540,11 +560,19 @@ export class WorkspaceEditCoordinator {
       return batch(() => {
         const replayed = replay();
         if (!replayed?.changeSet) return Promise.resolve(null);
+        const relayered = this.#store.glyphsRelayeredBy(replayed);
         this.#store.applyEngineEdit(replayed);
         // An undo or redo is not a new edit: persist it without announcing it.
         const id = this.#mintPendingEditId();
         const saveState = replayed.matchesSaved ? "matchesSaved" : "unsaved";
-        const edit = this.#acceptEdit(replayed.changeSet, undefined, id, "replay", saveState);
+        const edit = this.#acceptEdit(
+          replayed.changeSet,
+          undefined,
+          id,
+          relayered,
+          "replay",
+          saveState,
+        );
         return this.#serialize(() => this.#commitEdit(edit));
       });
     } catch (error) {
@@ -556,10 +584,11 @@ export class WorkspaceEditCoordinator {
     changeSet: Uint8Array | undefined,
     label: string | undefined,
     id: PendingEditId,
+    relayered: readonly GlyphId[],
   ): void {
     if (!changeSet) return;
 
-    const edit = this.#acceptEdit(changeSet, label, id);
+    const edit = this.#acceptEdit(changeSet, label, id, relayered);
     void this.#serialize(() => this.#commitQueuedEdit(edit));
   }
 
@@ -567,6 +596,7 @@ export class WorkspaceEditCoordinator {
     changeSet: Uint8Array,
     label: string | undefined,
     id: PendingEditId,
+    relayered: readonly GlyphId[],
     origin: WorkspaceEdit["origin"] = "edit",
     saveState: SaveState = "unsaved",
   ): WorkspaceEdit {
@@ -576,6 +606,7 @@ export class WorkspaceEditCoordinator {
       origin,
       saveState,
       label,
+      relayered,
     };
 
     batch(() => {
@@ -624,7 +655,7 @@ export class WorkspaceEditCoordinator {
   async #sendEdit(edit: WorkspaceEdit): Promise<AppliedChange> {
     this.#applyStatus.set("applying");
     const applied = await this.#session.persist(edit.changeSet, edit.saveState);
-    await this.#confirm(applied);
+    await this.#confirm(applied, edit.relayered);
     return applied;
   }
 
@@ -650,8 +681,8 @@ export class WorkspaceEditCoordinator {
     return run;
   }
 
-  async #confirm(applied: AppliedChange): Promise<void> {
-    const glyphIds = this.#store.confirmEdit(applied);
+  async #confirm(applied: AppliedChange, relayered: readonly GlyphId[]): Promise<void> {
+    const glyphIds = this.#store.confirmEdit(applied, relayered);
     if (glyphIds.length === 0) return;
 
     const projections = await this.#session.glyphProjections(glyphIds);
@@ -662,13 +693,21 @@ export class WorkspaceEditCoordinator {
    * Applies `intents` in the engine and shows what they did: every layer they
    * touched and the font-level records they changed. With `before`, records
    * each layer's state before its first change, for a transaction to restore.
+   *
+   * @returns The glyphs whose layer records they changed.
    */
-  #applyInEngine(intents: readonly FontIntent[], before: Map<LayerId, GlyphState> | null): void {
-    const previous = this.#store.applyEngineEdit(this.#engine.apply(intents));
-    if (!before) return;
+  #applyInEngine(
+    intents: readonly FontIntent[],
+    before: Map<LayerId, GlyphState> | null,
+  ): readonly GlyphId[] {
+    const edit = this.#engine.apply(intents);
+    const relayered = this.#store.glyphsRelayeredBy(edit);
+    const previous = this.#store.applyEngineEdit(edit);
+    if (!before) return relayered;
     for (const state of previous) {
       if (!before.has(state.layerId)) before.set(state.layerId, state);
     }
+    return relayered;
   }
 
   #afterJob(): void {

@@ -17,6 +17,7 @@ import {
   type FontIntent,
   type GlyphId,
   type GlyphName,
+  type GlyphRecord,
   type LayerId,
   type PointType,
   type SourceId,
@@ -189,6 +190,28 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const [source] = (await engineFor(sync)).fontRecords().sources;
     if (!source) throw new Error("the workspace has no source");
     return source.id;
+  }
+
+  /**
+   * The glyph records `sync`'s store holds, as a window opening it now reads
+   * them: from an editing engine opened fresh over the store. The store's
+   * snapshot has no glyph records.
+   */
+  async function storedGlyphRecords(sync: SyncChannel): Promise<readonly GlyphRecord[]> {
+    const location = await sync.storeLocation();
+    const directory = await sync.directory();
+    if (!location || !directory) throw new Error("the workspace has no store to read");
+    const reader = layerReaders.open(location);
+    const { EngineSession } = await loadEngine();
+    const session = EngineSession.open(
+      directory,
+      engineStoreRequest(layerReaders, () => reader),
+    );
+    try {
+      return session.fontRecords().glyphs;
+    } finally {
+      disposeEngine({ session, reader, location });
+    }
   }
 
   function disposeEngine(held: HeldEngine): void {
@@ -369,8 +392,8 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   async function reopenedGlyphNames(documentPath: string): Promise<string[]> {
     const reopened = await startAdditionalHost();
-    const snapshot = await openWorkspace(reopened.sync, reopened.shell, documentPath);
-    return snapshot.glyphs.map((glyph) => glyph.name);
+    await openWorkspace(reopened.sync, reopened.shell, documentPath);
+    return (await storedGlyphRecords(reopened.sync)).map((glyph) => glyph.name);
   }
 
   function canonicalGlyphNames(documentPath: string): string[] {
@@ -556,9 +579,10 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       needsSaveAs: false,
     });
     expect(snapshot?.workspaceId).toBe(state.workspaceId);
-    expect(snapshot?.glyphs.length).toBeGreaterThan(0);
+    const glyphs = await storedGlyphRecords(sync);
+    expect(glyphs.length).toBeGreaterThan(0);
     expect(canonicalGlyphNames(documentPath)).toEqual(
-      expect.arrayContaining(snapshot?.glyphs.map((glyph) => glyph.name) ?? []),
+      expect.arrayContaining(glyphs.map((glyph) => glyph.name)),
     );
   });
 
@@ -570,12 +594,13 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
     await shell.createFromSource(convertibleFontPath, path.join(tmpRoot, "Converted.shift"));
     const documentSync = await connectSyncLane();
-    const document = await documentSync.snapshot();
+    await documentSync.snapshot();
+    const document = await storedGlyphRecords(documentSync);
 
     const idsByName = (glyphs: readonly { name: string; id: string }[] = []) =>
       Object.fromEntries(glyphs.map((glyph) => [glyph.name, glyph.id]));
     expect(preview?.font.glyphs.length).toBeGreaterThan(0);
-    expect(idsByName(document?.glyphs)).toEqual(idsByName(preview?.font.glyphs));
+    expect(idsByName(document)).toEqual(idsByName(preview?.font.glyphs));
   });
 
   it("replaces an occupied destination during conversion", async () => {
@@ -894,10 +919,8 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     });
 
     const sync = await connectSyncLane();
-    await expect(sync.snapshot()).resolves.toMatchObject({
-      workspaceId: state.workspaceId,
-      glyphs: [],
-    });
+    await expect(sync.snapshot()).resolves.toMatchObject({ workspaceId: state.workspaceId });
+    await expect(storedGlyphRecords(sync)).resolves.toEqual([]);
   });
 
   it("creates an untitled workspace and returns it as the next state", async () => {
@@ -906,7 +929,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const snapshot = await createWorkspace(sync);
 
     expect(snapshot.workspaceId).toMatch(/^[0-9a-f]{8}-[0-9a-f-]{27}$/);
-    expect(snapshot.glyphs).toEqual([]);
+    await expect(storedGlyphRecords(sync)).resolves.toEqual([]);
     expect(snapshot.metrics.unitsPerEm).toBe(1000);
     const records = (await engineFor(sync)).fontRecords();
     expect(records.sources.length).toBeGreaterThan(0);
@@ -935,7 +958,8 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const restarted = await startAdditionalHost();
 
     const state = await restarted.shell.open(saved.path);
-    const snapshot = await restarted.sync.snapshot();
+    await restarted.sync.snapshot();
+    const glyphs = await storedGlyphRecords(restarted.sync);
 
     expect(state).toMatchObject({
       sourceKind: "document",
@@ -944,7 +968,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       dirty: false,
       needsSaveAs: false,
     });
-    expect(snapshot?.glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
+    expect(glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
   });
 
   it("recovers unsaved edits on the next document open", async () => {
@@ -957,7 +981,10 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const opened = await openWorkspace(restarted.sync, restarted.shell, saved.path);
 
     expect(opened.workspaceId).toBe(saved.workspaceId);
-    expect(opened.glyphs.map((glyph) => glyph.name)).toEqual(["A", "B"]);
+    expect((await storedGlyphRecords(restarted.sync)).map((glyph) => glyph.name)).toEqual([
+      "A",
+      "B",
+    ]);
     await expect(restarted.shell.documentState()).resolves.toMatchObject({
       sourceKind: "document",
       dirty: true,
@@ -988,7 +1015,8 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     ]);
 
     const state = await restarted.shell.resume(created.workspaceId);
-    const snapshot = await restarted.sync.snapshot();
+    await restarted.sync.snapshot();
+    const glyphs = await storedGlyphRecords(restarted.sync);
 
     expect(state).toMatchObject({
       workspaceId: created.workspaceId,
@@ -996,7 +1024,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       dirty: true,
       needsSaveAs: true,
     });
-    expect(snapshot?.glyphs.map((glyph) => glyph.name)).toEqual(["B"]);
+    expect(glyphs.map((glyph) => glyph.name)).toEqual(["B"]);
   });
 
   it("discard removes recovered edits without changing the canonical document", async () => {
@@ -1008,9 +1036,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
     await restarted.shell.close(true);
     const reopened = await startAdditionalHost();
-    const snapshot = await openWorkspace(reopened.sync, reopened.shell, saved.path);
+    await openWorkspace(reopened.sync, reopened.shell, saved.path);
 
-    expect(snapshot.glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
+    expect((await storedGlyphRecords(reopened.sync)).map((glyph) => glyph.name)).toEqual(["A"]);
     await expect(reopened.shell.documentState()).resolves.toMatchObject({
       dirty: false,
     });
@@ -1144,9 +1172,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(applied.next?.glyphChanges?.updated[0]?.layers).toEqual([]);
     expect(applied.layers).toEqual([]);
 
-    const snapshot = await sync.snapshot();
-    expect(snapshot?.glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
-    expect(snapshot?.glyphs[0]?.layers).toEqual([]);
+    const glyphs = await storedGlyphRecords(sync);
+    expect(glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
+    expect(glyphs[0]?.layers).toEqual([]);
   });
 
   it("apply createGlyphLayer echoes sparse membership and a structural layer", async () => {
@@ -1258,19 +1286,17 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     if (!glyphId) throw new Error("createGlyph must echo the record id");
 
     const undone = await undoWorkspace(sync);
-    expect(undone?.next?.glyphChanges).toEqual({ updated: [], removed: [glyphId] });
+    expect(undone?.next?.glyphChanges).toEqual({ updated: [], removed: [glyphId], order: null });
     expect(undone?.layers).toEqual([]);
-    await expect(sync.snapshot()).resolves.toMatchObject({
-      glyphs: [],
-    });
+    await expect(storedGlyphRecords(sync)).resolves.toEqual([]);
 
     const redone = await redoWorkspace(sync);
     expect(redone?.next?.glyphChanges?.updated.map((glyph) => glyph.name)).toEqual(["A"]);
     expect(redone?.next?.glyphChanges?.updated[0]?.layers).toEqual([]);
     expect(redone?.layers).toEqual([]);
-    await expect(sync.snapshot()).resolves.toMatchObject({
-      glyphs: [{ id: glyphId, name: "A", layers: [] }],
-    });
+    await expect(storedGlyphRecords(sync)).resolves.toMatchObject([
+      { id: glyphId, name: "A", layers: [] },
+    ]);
   });
 
   it("apply setXAdvance echoes values without structure or records", async () => {

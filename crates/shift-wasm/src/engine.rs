@@ -9,22 +9,24 @@
 //! layer comes back in the same shape as the workspace's echo.
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use js_sys::{Array, Float64Array, Function, Object, Reflect, Uint8Array};
 use pack::{CarryingNames, Packed};
 use serde::Serialize;
 use shift_engine::{
-    ApplyError, EditHistory, EngineSession, LayerSource, StoreReadError, StoreReaderClient,
+    ApplyError, EditHistory, EngineSession, LayerSource, RecordSource, StoreReadError,
+    StoreReaderClient,
 };
 use shift_font::{
-    AppliedIntents, Contour, Font, FontChangeImpact, FontIntent, FontIntentSet, GlyphId,
-    GlyphLayer, LayerId, TouchedLayer,
+    AppliedIntents, Contour, Font, FontChangeImpact, FontIntent, FontIntentSet, GlyphDataCategory,
+    GlyphId, GlyphLayer, LayerId, NamedGlyph, TouchedLayer,
 };
 use shift_wire::replacement::FontReplacement;
 use shift_wire::{AnchorData, ComponentData, ContourData, values};
 use wasm_bindgen::prelude::*;
 
-use crate::engine_reads::InternedIds;
+use crate::engine_reads::{FontVariation, InternedIds};
 
 #[wasm_bindgen(typescript_custom_section)]
 const ENGINE_TYPES: &str = r#"
@@ -208,6 +210,38 @@ impl LayerSource for HostLayers<'_> {
     }
 }
 
+impl RecordSource for HostLayers<'_> {
+    type Error = HostError;
+
+    fn component_bases(&mut self, glyph_ids: &[GlyphId]) -> Result<Vec<Vec<GlyphId>>, HostError> {
+        if glyph_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(self.client().component_bases(glyph_ids.to_vec())??)
+    }
+
+    fn glyph_data_categories(
+        &mut self,
+        glyphs: &[NamedGlyph],
+    ) -> Result<Vec<GlyphDataCategory>, HostError> {
+        if glyphs.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.client().glyph_data_categories(glyphs.to_vec())
+    }
+}
+
+impl From<HostError> for StoreReadError {
+    fn from(error: HostError) -> Self {
+        match error {
+            HostError::Store(error) => error,
+            error => Self::Unreadable {
+                detail: error.to_string(),
+            },
+        }
+    }
+}
+
 /// An open session, the store request it reads through, its undo history, the
 /// session as it stood when the open edit began, to go back to if it is
 /// cancelled, and the ids the editor's reads name by number.
@@ -223,23 +257,48 @@ pub(crate) struct Engine {
     /// The font-level records the latest apply, undo or redo changed, until
     /// `EngineEdits::replacement` takes them.
     pub(crate) replaced: Option<FontReplacement>,
+    /// The variation the reads evaluate, derived from the session's font on
+    /// first read and again once the font's axes, mappings or source
+    /// locations differ from the ones it was derived from; read it through
+    /// [`Engine::variation`].
+    variation: RefCell<Option<Rc<FontVariation>>>,
 }
 
 impl Engine {
     /// What an edit did as an `EngineEditLayers`: its touched layers. Keeps the
     /// font-level records it changed for `EngineEdits::replacement`, in the
-    /// native workspace's packed shape; glyph records are left to the
-    /// workspace's echo.
+    /// native workspace's packed shape, with the records of the glyphs it
+    /// changed as they now stand.
     fn edit_object(&mut self, before: &Font, applied: &AppliedIntents) -> Result<Object, JsError> {
         let layers = engine_layers(before, &applied.layers)?;
         let edit = Object::new();
         set(&edit, "layers", &layers)?;
-        let impact = applied
-            .changes
-            .impact()
-            .difference(FontChangeImpact::GLYPHS);
-        self.replaced = FontReplacement::changed_by(self.session.font(), impact)?;
+        let impact = applied.changes.impact();
+        let mut replaced = FontReplacement::changed_by(
+            self.session.font(),
+            impact.difference(FontChangeImpact::GLYPHS),
+        )?;
+        if impact.contains(FontChangeImpact::GLYPHS) {
+            let glyph_changes = self
+                .session
+                .glyph_record_changes(&mut HostLayers(&self.source), &applied.changes)
+                .map_err(js_error)?;
+            replaced
+                .get_or_insert_with(FontReplacement::default)
+                .glyph_changes = Some(glyph_changes);
+        }
+        self.replaced = replaced;
         Ok(edit)
+    }
+
+    /// The variation the reads evaluate for the session's font as it stands.
+    pub(crate) fn variation(&self) -> Rc<FontVariation> {
+        FontVariation::of(&self.variation, self.session.font())
+    }
+
+    /// Every glyph's record, in name order, as the session's font stands.
+    pub(crate) fn glyph_records(&self) -> Result<shift_font::GlyphRecords, StoreReadError> {
+        Ok(self.session.glyph_records(&mut HostLayers(&self.source))?)
     }
 
     /// The intents held for this apply, stage or preview, as one set.
@@ -255,7 +314,7 @@ impl Engine {
     pub(crate) fn load_layers(&mut self, layer_ids: Vec<LayerId>) -> Result<(), JsError> {
         self.session
             .load_layers(&mut HostLayers(&self.source), layer_ids)
-            .map_err(|error| JsError::new(&error.to_string()))
+            .map_err(js_error)
     }
 }
 
@@ -302,6 +361,7 @@ pub fn engine_open(
             ids: InternedIds::default(),
             held: Vec::new(),
             replaced: None,
+            variation: RefCell::default(),
         }));
         Ok(handle)
     })
@@ -551,10 +611,15 @@ pub fn engine_preview(handle: u32) -> Result<Array, JsError> {
     })
 }
 
+/// A Rust error as the `Error` an engine call throws, carrying its message.
+fn js_error(error: impl std::fmt::Display) -> JsError {
+    JsError::new(&error.to_string())
+}
+
 fn apply_error(error: ApplyError<HostError>) -> JsError {
     match error {
-        ApplyError::Load(error) => JsError::new(&error.to_string()),
-        ApplyError::Engine(error) => JsError::new(&error.to_string()),
+        ApplyError::Load(error) => js_error(error),
+        ApplyError::Engine(error) => js_error(error),
     }
 }
 
@@ -571,7 +636,7 @@ pub fn engine_preload(handle: u32, glyph_ids: Vec<String>) -> Result<(), JsError
         engine
             .session
             .load_glyph_closure(&mut HostLayers(&engine.source), glyph_ids)
-            .map_err(|error| JsError::new(&error.to_string()))
+            .map_err(js_error)
     })
 }
 

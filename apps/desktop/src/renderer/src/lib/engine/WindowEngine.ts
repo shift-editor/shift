@@ -6,6 +6,7 @@ import type {
   GlyphId,
   GlyphName,
   LayerId,
+  SlugWeightSet,
   SourceId,
 } from "@shift/types";
 import {
@@ -21,7 +22,7 @@ import {
   unkerned,
 } from "@shift/editor/model";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
-import type { FontEngine, KerningPlace } from "@shift/editor/types";
+import type { EngineVariation, FontEngine, KerningPlace } from "@shift/editor/types";
 import { engineStoreRequest } from "./engineStoreRequest";
 
 /** Which of the engine's reads a change may have changed. */
@@ -76,6 +77,10 @@ export class WindowEngine implements FontEngine {
     name: "windowEngine.sourceMetricsRevision",
   });
   #opened: Opened | null = null;
+  readonly #variation: WritableSignal<EngineVariation | null> = signal<EngineVariation | null>(
+    null,
+    { name: "windowEngine.variation" },
+  );
   /** Which reads the open edit changed so far, to show again when it is rewound or cancelled. */
   #inEdit: ChangedReads = UNCHANGED;
 
@@ -90,6 +95,10 @@ export class WindowEngine implements FontEngine {
 
   get sourceMetricsRevisionCell(): Signal<number> {
     return this.#sourceMetricsRevision;
+  }
+
+  get variationCell(): Signal<EngineVariation | null> {
+    return this.#variation;
   }
 
   get isOpen(): boolean {
@@ -118,9 +127,12 @@ export class WindowEngine implements FontEngine {
         directory,
         engineStoreRequest(this.#layers, () => this.#reader()),
       );
-      this.#close();
-      this.#opened = { session, reader, location };
-      this.#changed({ kerning: true, sourceMetrics: true });
+      batch(() => {
+        this.#close();
+        this.#opened = { session, reader, location };
+        this.#variation.set(session);
+        this.#changed({ kerning: true, sourceMetrics: true });
+      });
     } catch (error) {
       this.#layers.close(reader);
       throw error;
@@ -128,8 +140,8 @@ export class WindowEngine implements FontEngine {
   }
 
   /**
-   * The open font's axes, master sources and kerning, as the engine holds
-   * them, unsaved edits included.
+   * The open font's axes, master sources, kerning and glyph records, as the
+   * engine holds them, unsaved edits included.
    *
    * @throws When no session is open.
    */
@@ -290,6 +302,14 @@ export class WindowEngine implements FontEngine {
     return this.#opened?.session.sourceMetricsAt(location) ?? null;
   }
 
+  atlasWeights(
+    sets: readonly SlugWeightSet[],
+    weightCount: number,
+    external: readonly number[],
+  ): readonly number[] | null {
+    return this.#opened?.session.atlasWeights(sets, weightCount, external) ?? null;
+  }
+
   nextGlyphName(name: string): GlyphName {
     return this.#require().nextGlyphName(name);
   }
@@ -387,5 +407,6 @@ export class WindowEngine implements FontEngine {
     this.#opened.session.dispose();
     this.releaseStore();
     this.#opened = null;
+    this.#variation.set(null);
   }
 }

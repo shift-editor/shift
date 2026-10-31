@@ -1,5 +1,5 @@
 import type { PendingEditId } from "@shift/editor/types";
-import type { SaveState } from "@shift/types";
+import type { GlyphId, SaveState } from "@shift/types";
 
 /** An edit the window's engine applied, waiting to be persisted. */
 export interface WorkspaceEdit {
@@ -11,6 +11,11 @@ export interface WorkspaceEdit {
   /** Where the edit leaves the font, as the engine's history claims. */
   readonly saveState: SaveState;
   readonly label?: string;
+  /**
+   * The glyphs whose layer records the engine changed when it applied the
+   * edit, whose projections the workspace rebuilds once it has persisted it.
+   */
+  readonly relayered: readonly GlyphId[];
 }
 
 export type WorkspaceApplyStatus = "idle" | "queued" | "applying";
