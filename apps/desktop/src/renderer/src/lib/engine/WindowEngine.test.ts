@@ -6,7 +6,7 @@ import { createBridge, type ShiftBridge } from "@shift/bridge";
 import { mintContourId, mintGlyphId, mintLayerId, type LayerId } from "@shift/types";
 import type { LayerReaderHost } from "@shared/host/ShiftHost";
 import { layerReaderHost } from "../../../../preload/layerReaders";
-import { WindowEngine } from "./WindowEngine";
+import { WindowEngine, type EngineWorkspace } from "./WindowEngine";
 
 /**
  * Releasing the store closes the window's reader, so the workspace can delete
@@ -25,13 +25,21 @@ describe("the window's engine releases its store", () => {
     const storePath = path.join(dir, "working.sqlite");
     bridge = createBridge();
     bridge.workspace.createUntitledWorkspace(storePath);
+    const store: EngineWorkspace = {
+      storeLocation: () => Promise.resolve({ kind: "working", storePath }),
+      directory: () => Promise.resolve(bridge.workspace.encodedDirectory()),
+    };
+    const blank = new WindowEngine(layerReaderHost(), store);
+    await blank.reopen();
+    const sourceId = blank.fontRecords().sources[0]!.id;
+    blank.dispose();
     const glyphId = mintGlyphId();
     layerId = mintLayerId();
     bridge.workspace.apply([
       { kind: "createGlyph", createGlyph: { glyphId, name: "A", unicodes: [65] } },
       {
         kind: "createGlyphLayer",
-        createGlyphLayer: { layerId, glyphId, sourceId: bridge.workspace.getSources()[0]!.id },
+        createGlyphLayer: { layerId, glyphId, sourceId },
       },
     ]);
 
@@ -50,10 +58,7 @@ describe("the window's engine releases its store", () => {
         host.close(reader);
       },
     };
-    engine = new WindowEngine(layers, {
-      storeLocation: () => Promise.resolve({ kind: "working", storePath }),
-      directory: () => Promise.resolve(bridge.workspace.encodedDirectory()),
-    });
+    engine = new WindowEngine(layers, store);
     await engine.reopen();
   });
 

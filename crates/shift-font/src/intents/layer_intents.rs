@@ -3,6 +3,7 @@
 use super::*;
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AddPoints {
     pub layer_id: LayerId,
     /// Target contour; when `None`, derived from `before` (Rust owns
@@ -84,6 +85,7 @@ impl LayerIntent for AddPoints {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AddContour {
     pub layer_id: LayerId,
     pub contour_id: ContourId,
@@ -121,6 +123,7 @@ impl LayerIntent for AddContour {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetContourClosed {
     pub layer_id: LayerId,
     pub contour_id: ContourId,
@@ -150,6 +153,7 @@ impl LayerIntent for SetContourClosed {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct MovePoints {
     pub layer_id: LayerId,
     pub point_ids: Vec<PointId>,
@@ -198,6 +202,7 @@ impl LayerIntent for MovePoints {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetPointSmooth {
     pub layer_id: LayerId,
     pub point_id: PointId,
@@ -223,6 +228,7 @@ impl LayerIntent for SetPointSmooth {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct RemovePoints {
     pub layer_id: LayerId,
     pub point_ids: Vec<PointId>,
@@ -255,6 +261,7 @@ impl LayerIntent for RemovePoints {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AddAnchors {
     pub layer_id: LayerId,
     pub anchors: Vec<AnchorSeed>,
@@ -300,6 +307,7 @@ impl LayerIntent for AddAnchors {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct MoveAnchors {
     pub layer_id: LayerId,
     pub anchor_ids: Vec<AnchorId>,
@@ -354,10 +362,12 @@ impl LayerIntent for MoveAnchors {
 /// Sets every point and anchor position of a layer at once: a move of many
 /// points that names none of them, so it costs numbers, not ids.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetPositions {
     pub layer_id: LayerId,
     /// Every contour point, contour after contour, then every anchor, each as
     /// `x, y`.
+    #[cfg_attr(feature = "pack", pack(numbers))]
     pub positions: Vec<f64>,
 }
 
@@ -388,6 +398,7 @@ impl LayerIntent for SetPositions {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct RemoveAnchors {
     pub layer_id: LayerId,
     pub anchor_ids: Vec<AnchorId>,
@@ -419,6 +430,7 @@ impl LayerIntent for RemoveAnchors {
 
 /// Renames anchors in one layer; `names[i]` is the new name of `anchor_ids[i]`.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct RenameAnchors {
     pub layer_id: LayerId,
     pub anchor_ids: Vec<AnchorId>,
@@ -467,6 +479,7 @@ impl LayerIntent for RenameAnchors {
 
 /// Adds one direct reference after rejecting direct or transitive component cycles.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AddComponent {
     pub layer_id: LayerId,
     pub component_id: ComponentId,
@@ -521,6 +534,7 @@ impl LayerIntent for AddComponent {
 
 /// Replaces direct component transforms without changing component identity or order.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetComponentTransforms {
     pub layer_id: LayerId,
     pub component_ids: Vec<ComponentId>,
@@ -579,6 +593,7 @@ impl LayerIntent for SetComponentTransforms {
 /// Records whether components are placed by their anchors; anchoring one
 /// also places it on its anchors now.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetComponentAlignment {
     pub layer_id: LayerId,
     pub component_ids: Vec<ComponentId>,
@@ -612,6 +627,7 @@ impl LayerIntent for SetComponentAlignment {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct RemoveComponents {
     pub layer_id: LayerId,
     pub component_ids: Vec<ComponentId>,
@@ -646,6 +662,7 @@ impl LayerIntent for RemoveComponents {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct DecomposeComponents {
     pub layer_id: LayerId,
     pub component_ids: Vec<ComponentId>,
@@ -696,6 +713,7 @@ impl LayerIntent for DecomposeComponents {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct ReverseContour {
     pub layer_id: LayerId,
     pub contour_id: ContourId,
@@ -720,6 +738,7 @@ impl LayerIntent for ReverseContour {
 
 /// Rotates a closed contour to an existing on-curve point without changing its geometry.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetContourStart {
     pub layer_id: LayerId,
     pub contour_id: ContourId,
@@ -746,6 +765,7 @@ impl LayerIntent for SetContourStart {
 
 /// Affine move: O(selection-ids) wire instead of O(N) coords.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct TranslatePoints {
     pub layer_id: LayerId,
     pub point_ids: Vec<PointId>,
@@ -780,6 +800,7 @@ impl LayerIntent for TranslatePoints {
 /// Affine transform of the whole layer: every contour point, anchor, and
 /// component placement. The advance width is unchanged.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct TransformLayer {
     pub layer_id: LayerId,
     pub transform: Transform,
@@ -814,6 +835,7 @@ impl LayerIntent for TransformLayer {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetXAdvance {
     pub layer_id: LayerId,
     pub width: f64,
@@ -841,6 +863,7 @@ impl LayerIntent for SetXAdvance {
 /// Rust-only computation: the echo is the same replace-grade shape as
 /// every other intent — remote changes are not a special case.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct ApplyBooleanOp {
     pub layer_id: LayerId,
     pub contour_id_a: ContourId,
@@ -873,6 +896,7 @@ impl LayerIntent for ApplyBooleanOp {
 
 /// Deletes points and reconnects what survives: see [`GlyphLayer::delete_points`].
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct DeletePoints {
     pub layer_id: LayerId,
     pub point_ids: Vec<PointId>,
@@ -896,6 +920,7 @@ impl LayerIntent for DeletePoints {
 
 /// Splits a segment at `t`, keeping its shape: see [`GlyphLayer::split_segment`].
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SplitSegment {
     pub layer_id: LayerId,
     pub start_id: PointId,
@@ -926,6 +951,7 @@ impl LayerIntent for SplitSegment {
 
 /// Raises a line to a cubic of the same shape: see [`GlyphLayer::upgrade_line_to_cubic`].
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct UpgradeLineToCubic {
     pub layer_id: LayerId,
     pub start_id: PointId,
@@ -951,6 +977,7 @@ impl LayerIntent for UpgradeLineToCubic {
 
 /// Closes a contour or joins two by their ends: see [`GlyphLayer::join_contours`].
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct JoinContours {
     pub layer_id: LayerId,
     pub from: ContourEnd,
@@ -976,6 +1003,7 @@ impl LayerIntent for JoinContours {
 
 /// Moves points by one affine transform.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct TransformPoints {
     pub layer_id: LayerId,
     pub point_ids: Vec<PointId>,
@@ -1007,6 +1035,7 @@ impl LayerIntent for TransformPoints {
 
 /// Lines points up on an edge or centre of their box: see [`GlyphLayer::align_points`].
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AlignPoints {
     pub layer_id: LayerId,
     pub point_ids: Vec<PointId>,
@@ -1035,6 +1064,7 @@ impl LayerIntent for AlignPoints {
 
 /// Spaces points evenly along an axis: see [`GlyphLayer::distribute_points`].
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct DistributePoints {
     pub layer_id: LayerId,
     pub point_ids: Vec<PointId>,
@@ -1063,6 +1093,7 @@ impl LayerIntent for DistributePoints {
 
 /// Adds to one sidebearing: see [`GlyphLayer::shift_sidebearing`].
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct ShiftSidebearing {
     pub layer_id: LayerId,
     pub sidebearing: Sidebearing,
@@ -1113,6 +1144,7 @@ impl Font {
 /// Values use font units and supplied entity identities. The complete replacement
 /// is validated before installation and refreshes component dependencies.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct ReplaceGlyphLayerContent {
     pub layer_id: LayerId,
     pub width: f64,

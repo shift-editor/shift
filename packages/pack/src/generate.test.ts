@@ -344,6 +344,51 @@ describe("a generated union", () => {
   });
 });
 
+const LOCATION: Fragment = {
+  kind: "struct",
+  rust: "Location",
+  name: "Location",
+  doc: null,
+  fields: [{ name: "x", doc: null, type: { kind: "number" } }],
+};
+const PLACE: Fragment = {
+  kind: "alias",
+  rust: "Place",
+  name: "Place",
+  doc: null,
+  type: { kind: "ref", rust: "Location" },
+};
+const PLACES: Fragment = {
+  kind: "interface",
+  rust: "Places",
+  name: "Places",
+  doc: null,
+  methods: [
+    {
+      name: "echo",
+      doc: null,
+      params: [{ name: "place", type: { kind: "ref", rust: "Place" } }],
+      output: { kind: "list", item: { kind: "ref", rust: "Place" } },
+    },
+  ],
+};
+
+describe("an alias", () => {
+  it("crosses and reads as its field's type", async () => {
+    const generated = await load([LOCATION, PLACE, PLACES]);
+    const { requests, transport } = module((write) => {
+      for (const value of [1, 5]) write.number(value);
+    });
+    const places = new (generated.Places as new (t: unknown) => {
+      echo(place: unknown): unknown;
+    })(transport);
+
+    expect(places.echo({ x: 3 })).toEqual([{ x: 5 }]);
+    expect(requests[0]!.input).toEqual([3]);
+    expect(render([LOCATION, PLACE, PLACES])).not.toContain("Place ");
+  });
+});
+
 describe("bytes", () => {
   it("cross as an index into the request's blob list, without a copy", async () => {
     const generated = await load([READ_ERROR, GLYPH_ID, STORE]);
@@ -687,6 +732,64 @@ describe("render", () => {
 
     expect(() => render([{ ...SEGMENT_KIND, crate: "one" }, other, ANCHOR, MEASURE])).toThrow(
       "two types are named SegmentKind (in one and other)",
+    );
+  });
+
+  it("resolves a Rust name two crates use to the declaring crate's type, the renamed one in its crate", () => {
+    const kinds: Fragment = {
+      ...SEGMENT_KIND,
+      name: "CurveKind",
+      variants: ["cubic"],
+      crate: "other",
+    };
+    const curve: Fragment = {
+      kind: "struct",
+      rust: "Curve",
+      name: "Curve",
+      doc: null,
+      crate: "other",
+      fields: [{ name: "kind", doc: null, type: { kind: "ref", rust: "SegmentKind" } }],
+    };
+    const curves: Fragment = {
+      kind: "interface",
+      rust: "Curves",
+      name: "Curves",
+      doc: null,
+      crate: "other",
+      methods: [
+        {
+          name: "first",
+          doc: null,
+          params: [],
+          output: { kind: "ref", rust: "Curve" },
+        },
+      ],
+    };
+
+    const module = render([
+      { ...SEGMENT_KIND, crate: "one" },
+      kinds,
+      curve,
+      curves,
+      ANCHOR,
+      MEASURE,
+    ]);
+
+    expect(module).toContain('export type CurveKind = "cubic"');
+    expect(module).toContain('export type SegmentKind = "line" | "quad"');
+    expect(module).toMatch(/readonly kind: CurveKind;/);
+    expect(module).toMatch(/readonly kinds: readonly SegmentKind\[\];/);
+  });
+
+  it("fails when two types reached are called the same in TypeScript", () => {
+    const renamed: Fragment = { ...LOCATION, rust: "Spot", name: "Anchor" };
+    const spots: Fragment = {
+      ...PLACES,
+      methods: [{ name: "spot", doc: null, params: [], output: { kind: "ref", rust: "Spot" } }],
+    };
+
+    expect(() => render([renamed, spots, ANCHOR, SEGMENT_KIND, MEASURE])).toThrow(
+      "two types are called Anchor in TypeScript",
     );
   });
 });

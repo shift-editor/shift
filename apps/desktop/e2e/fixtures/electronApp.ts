@@ -364,7 +364,7 @@ export const recoveryTest = test.extend<{ recoveryApp: RecoveryApp }>({
         return page;
       },
       canonicalGlyphNames: () => readCanonicalGlyphNames(documentPath, testRoot),
-      canonicalVariableFont: () => readCanonicalVariableFont(documentPath, testRoot),
+      canonicalVariableFont: () => readCanonicalVariableFont(documentPath, testRoot, page),
     });
   },
 });
@@ -514,16 +514,22 @@ function readCanonicalGlyphNames(documentPath: string, testRoot: string): string
   }
 }
 
-function readCanonicalVariableFont(documentPath: string, testRoot: string): CanonicalVariableFont {
+/**
+ * The saved document's axes, sources and instances: the axes and sources as
+ * an engine in `page`'s window reads them from the document's directory.
+ */
+async function readCanonicalVariableFont(
+  documentPath: string,
+  testRoot: string,
+  page: Page,
+): Promise<CanonicalVariableFont> {
   const bridge = createBridge();
   const recoveryPath = path.join(testRoot, `${crypto.randomUUID()}.recovery.sqlite`);
   bridge.workspace.openDocument(documentPath, recoveryPath);
   try {
-    return {
-      axes: bridge.workspace.getAxes(),
-      sources: bridge.workspace.getSources(),
-      namedInstances: bridge.workspace.getNamedInstances(),
-    };
+    const directory = Buffer.from(bridge.workspace.encodedDirectory()).toString("base64");
+    const { axes, sources } = await hooksOf(page).session.fontRecordsOf(directory);
+    return { axes, sources, namedInstances: bridge.workspace.getNamedInstances() };
   } finally {
     bridge.workspace.closeWorkspace();
     fs.rmSync(recoveryPath, { force: true });

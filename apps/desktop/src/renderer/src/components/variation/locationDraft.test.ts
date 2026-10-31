@@ -1,20 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { asAxisId, asNamedInstanceId, type Axis, type NamedInstance } from "@shift/types";
+import { Axis } from "@shift/editor/model";
+import { asAxisId, asNamedInstanceId, type NamedInstance } from "@shift/types";
 import { instanceCreationIssue, instanceLocation } from "./instanceCreation";
 import { DraftIssues, LocationDraft, type DraftIssue } from "./locationDraft";
 
-const weight: Axis = {
+const weight = new Axis({
   id: asAxisId("axis_weight"),
   tag: "wght",
   name: "Weight",
   role: "external",
-  axisType: "continuous",
-  minimum: 100,
-  default: 400,
-  maximum: 900,
+  kind: { kind: "continuous", minimum: 100, default: 400, maximum: 900 },
   labels: [],
   hidden: false,
-};
+});
 
 const regular: NamedInstance = {
   id: asNamedInstanceId("instance-regular"),

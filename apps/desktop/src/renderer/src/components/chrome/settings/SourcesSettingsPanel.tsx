@@ -1,12 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
-import {
-  type Axis,
-  type MetricDefinition,
-  type Source,
-  type SourceId,
-  type SourceMetricValue,
-} from "@shift/types";
-import { sourceMetricValue, withSourceMetricValue } from "@shift/editor/model";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import type { MetricDefinition, MetricValue, Source as SourceRecord, SourceId } from "@shift/types";
+import { Source, type Axis } from "@shift/editor/model";
 import { Input, Tooltip } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
@@ -123,7 +117,7 @@ export const SourcesSettingsPanel = ({ initialSourceId, canAuthor }: SourcesSett
 };
 
 interface SourceEditorProps {
-  source: Source;
+  source: SourceRecord;
   axes: readonly Axis[];
   definitions: readonly MetricDefinition[];
   canAuthor: boolean;
@@ -131,7 +125,7 @@ interface SourceEditorProps {
 
 const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProps) => {
   const font = useFont();
-  const form = useSettingsForm<Source>({
+  const form = useSettingsForm<SourceRecord>({
     canonical: source,
     errorMessage: message("settings.sourceSaveFailed"),
     save: async (next) => {
@@ -139,7 +133,7 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
       return font.source(next.id) ?? next;
     },
   });
-  const draft = form.draft;
+  const draft = useMemo(() => new Source(form.draft), [form.draft]);
   const commit = async (): Promise<void> => {
     await form.commit();
   };
@@ -158,7 +152,7 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
           value={draft.name}
           onChange={(event) => {
             const name = event.currentTarget.value;
-            form.update((current) => ({ ...current, name }));
+            form.update((current) => new Source(current).withName(name));
           }}
           onBlur={commit}
           size="md"
@@ -173,14 +167,9 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
               <SourceNumberField
                 key={axis.id}
                 label={axis.name}
-                value={draft.location.values[axis.id] ?? axis.default}
+                value={draft.locationValue(axis)}
                 onChange={(value) => {
-                  form.update((current) => ({
-                    ...current,
-                    location: {
-                      values: { ...current.location.values, [axis.id]: value },
-                    },
-                  }));
+                  form.update((current) => new Source(current).withLocationValue(axis.id, value));
                 }}
                 onCommit={commit}
               />
@@ -192,14 +181,16 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
       <SettingsSection title="Metrics">
         <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-3 gap-y-2">
           {definitions.map((definition) => {
-            const value = sourceMetricValue(draft, definition.id);
+            const value = draft.metricValue(definition.id);
             return (
               <MetricFields
                 key={definition.id}
                 definition={definition}
                 value={value}
                 onChange={(next) => {
-                  form.update((current) => withSourceMetricValue(current, next));
+                  form.update((current) =>
+                    new Source(current).withMetricValue(definition.id, next),
+                  );
                 }}
                 onCommit={commit}
               />
@@ -213,20 +204,24 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
           <OptionalSourceNumberField
             label="Italic Angle"
             value={draft.italicAngle}
-            onChange={(italicAngle) => form.update((current) => ({ ...current, italicAngle }))}
+            onChange={(italicAngle) =>
+              form.update((current) => new Source(current).withItalicAngle(italicAngle))
+            }
             onCommit={commit}
           />
           <OptionalSourceNumberField
             label="Line Gap"
             value={draft.lineGap}
-            onChange={(lineGap) => form.update((current) => ({ ...current, lineGap }))}
+            onChange={(lineGap) =>
+              form.update((current) => new Source(current).withLineGap(lineGap))
+            }
             onCommit={commit}
           />
           <OptionalSourceNumberField
             label="Underline Position"
             value={draft.underlinePosition}
             onChange={(underlinePosition) =>
-              form.update((current) => ({ ...current, underlinePosition }))
+              form.update((current) => new Source(current).withUnderlinePosition(underlinePosition))
             }
             onCommit={commit}
           />
@@ -234,7 +229,9 @@ const SourceEditor = ({ source, axes, definitions, canAuthor }: SourceEditorProp
             label="Underline Thickness"
             value={draft.underlineThickness}
             onChange={(underlineThickness) =>
-              form.update((current) => ({ ...current, underlineThickness }))
+              form.update((current) =>
+                new Source(current).withUnderlineThickness(underlineThickness),
+              )
             }
             onCommit={commit}
           />
@@ -253,8 +250,8 @@ const SettingsSection = ({ title, children }: { title: string; children: ReactNo
 
 interface MetricFieldsProps {
   definition: MetricDefinition;
-  value: SourceMetricValue;
-  onChange: (value: SourceMetricValue) => void;
+  value: MetricValue;
+  onChange: (value: MetricValue) => void;
   onCommit: () => Promise<void>;
 }
 

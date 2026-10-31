@@ -23,11 +23,15 @@
 )]
 
 pub mod anchors;
+pub mod axis;
 pub mod blobs;
 pub mod decomposition;
 pub mod drag;
 #[cfg(feature = "engine")]
 pub mod engine;
+#[cfg(feature = "engine-protocol")]
+pub mod engine_edits;
+#[cfg(feature = "engine-protocol")]
 pub mod engine_reads;
 pub mod geometry;
 pub mod names;

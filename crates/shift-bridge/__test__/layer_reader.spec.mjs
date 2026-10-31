@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { engineFontRecords } from "./engineReads.mjs";
 import { createRequire } from "module";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
@@ -86,7 +87,7 @@ describe("LayerReader", () => {
       { kind: "createGlyph", createGlyph: { glyphId, name, unicodes: [] } },
       {
         kind: "createGlyphLayer",
-        createGlyphLayer: { layerId, glyphId, sourceId: bridge.workspace.getSources()[0].id },
+        createGlyphLayer: { layerId, glyphId, sourceId: engineFontRecords(bridge).sources[0].id },
       },
     ]);
     return { glyphId, layerId };

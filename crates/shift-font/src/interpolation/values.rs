@@ -25,7 +25,9 @@ pub const GLYPH_ANCHOR_VALUE_COUNT: usize = GLYPH_POSITION_VALUE_FIELDS.len();
 /// [`GlyphLayer`] so persistence and transport adapters do not define domain
 /// interpolation semantics.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack), pack(transparent))]
 pub struct GlyphInterpolationValues {
+    #[cfg_attr(feature = "pack", pack(numbers))]
     values: Vec<f64>,
 }
 

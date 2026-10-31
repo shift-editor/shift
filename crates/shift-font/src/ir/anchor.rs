@@ -3,6 +3,7 @@ use crate::point::Canonical;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Anchor {
     id: AnchorId,
     name: Option<String>,

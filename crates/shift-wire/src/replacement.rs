@@ -5,14 +5,12 @@
 //! the store's component references and glyph categories, so a session with a
 //! store adds them as [`FontReplacement::glyph_changes`].
 
-use std::collections::HashMap;
-
 use serde::Serialize;
 use shift_font::{CoreResult, Font, FontChangeImpact};
 
 use crate::{
-    Axis, AxisMapping, AxisMappingBasis, FontMetadata, GlyphRecordChanges, KerningSnapshot,
-    MetricDefinition, NamedInstance, Source, SourceMetricsInterpolationSnapshot,
+    AxisMapping, AxisMappingBasis, FontMetadata, GlyphRecordChanges, KerningSnapshot,
+    MetricDefinition, NamedInstance, SourceMetricsInterpolationSnapshot,
 };
 
 /// Each font-level collection an edit changed, whole; `None` for one it left
@@ -22,14 +20,14 @@ use crate::{
 #[serde(rename_all = "camelCase")]
 pub struct FontReplacement {
     pub metadata: Option<FontMetadata>,
-    pub axes: Option<Vec<Axis>>,
+    pub axes: Option<Vec<shift_font::Axis>>,
     pub axis_mappings: Option<Vec<AxisMapping>>,
     pub axis_mapping_bases: Option<Vec<AxisMappingBasis>>,
     pub metric_definitions: Option<Vec<MetricDefinition>>,
     pub source_metrics_interpolation: Option<SourceMetricsInterpolationReplacement>,
     pub named_instances: Option<Vec<NamedInstance>>,
     pub languages: Option<LanguagesReplacement>,
-    pub sources: Option<Vec<Source>>,
+    pub sources: Option<Vec<shift_font::Source>>,
     pub kerning: Option<KerningSnapshot>,
     /// The glyph records the edit changed, which a session with a store adds;
     /// `None` from [`Self::changed_by`] and when it changed none. Only the
@@ -69,9 +67,7 @@ impl FontReplacement {
         let changed = ChangedScopes { font, impact };
         Ok(Some(Self {
             metadata: changed.read(FontChangeImpact::METADATA, |font| font.metadata().into()),
-            axes: changed.read(FontChangeImpact::AXES, |font| {
-                font.axes().iter().map(Axis::from).collect()
-            }),
+            axes: changed.read(FontChangeImpact::AXES, |font| font.axes().to_vec()),
             axis_mappings: changed.read(FontChangeImpact::AXIS_MAPPINGS, |font| {
                 font.axis_mappings().iter().map(AxisMapping::from).collect()
             }),
@@ -99,7 +95,9 @@ impl FontReplacement {
                     .collect()
             }),
             languages: changed.read(FontChangeImpact::LANGUAGES, LanguagesReplacement::of),
-            sources: changed.read(FontChangeImpact::SOURCES, Source::masters_of),
+            sources: changed.read(FontChangeImpact::SOURCES, |font| {
+                font.masters().cloned().collect()
+            }),
             kerning: changed.read(FontChangeImpact::KERNING, KerningSnapshot::from),
             glyph_changes: None,
         }))
@@ -144,30 +142,5 @@ impl<'a> ChangedScopes<'a> {
         read: impl FnOnce(&'a Font) -> CoreResult<T>,
     ) -> CoreResult<Option<T>> {
         self.read(scope, read).transpose()
-    }
-}
-
-impl Source {
-    /// The font's sources, each with its metric values in the order of the
-    /// font's metric definitions.
-    pub fn masters_of(font: &Font) -> Vec<Self> {
-        let metric_order = font
-            .metric_definitions()
-            .iter()
-            .enumerate()
-            .map(|(index, definition)| (definition.id(), index))
-            .collect::<HashMap<_, _>>();
-        let position = |metric_id: &shift_font::MetricId| {
-            metric_order.get(metric_id).copied().unwrap_or(usize::MAX)
-        };
-        let mut sources: Vec<Self> = font.masters().map(Self::from).collect();
-        for source in &mut sources {
-            source.metric_values.sort_by(|left, right| {
-                position(&left.metric_id)
-                    .cmp(&position(&right.metric_id))
-                    .then_with(|| left.metric_id.cmp(&right.metric_id))
-            });
-        }
-        sources
     }
 }

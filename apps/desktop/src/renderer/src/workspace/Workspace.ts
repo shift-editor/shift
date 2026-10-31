@@ -97,8 +97,9 @@ export class Workspace {
         throw new Error("workspace connected without a snapshot");
       }
 
-      this.#store.replaceWorkspace(snapshot);
-      await this.#edits.reopenEngine();
+      // The font shows once the engine is open: it reads the axes, sources
+      // and kerning.
+      await this.#edits.open(snapshot);
       await this.#documentBridge.connect();
     } catch (error) {
       this.#connection = null;

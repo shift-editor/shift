@@ -5,6 +5,7 @@ use super::*;
 /// Creates glyph identity and metadata only. Authored editable data is
 /// created by explicit `CreateGlyphLayer` intents.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct CreateGlyph {
     /// Caller-minted id so the verb returns identity synchronously;
     /// `None` mints Rust-side.
@@ -26,6 +27,7 @@ impl FontLevelIntent for CreateGlyph {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct UpdateGlyph {
     /// Stable id of the existing glyph to rename.
     pub glyph_id: GlyphId,
@@ -47,6 +49,7 @@ impl FontLevelIntent for UpdateGlyph {
 
 /// Replaces authored font metadata without changing font metrics.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct UpdateFontMetadata {
     pub metadata: FontMetadata,
 }
@@ -66,6 +69,7 @@ impl FontLevelIntent for UpdateFontMetadata {
 /// keep their first position; an empty list is stored as an empty array,
 /// which is distinct from the key being absent.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetLanguages {
     pub language_ids: Vec<String>,
 }
@@ -79,6 +83,7 @@ impl FontLevelIntent for SetLanguages {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct CreateAxis {
     pub axis: Axis,
 }
@@ -92,6 +97,7 @@ impl FontLevelIntent for CreateAxis {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct UpdateAxis {
     pub axis: Axis,
 }
@@ -105,6 +111,7 @@ impl FontLevelIntent for UpdateAxis {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct DeleteAxis {
     pub axis_id: AxisId,
 }
@@ -118,6 +125,7 @@ impl FontLevelIntent for DeleteAxis {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetAxisMappings {
     pub mappings: Vec<AxisMapping>,
 }
@@ -131,6 +139,7 @@ impl FontLevelIntent for SetAxisMappings {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetMetricDefinitions {
     pub definitions: Vec<MetricDefinition>,
 }
@@ -144,6 +153,7 @@ impl FontLevelIntent for SetMetricDefinitions {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct CreateNamedInstance {
     pub instance: NamedInstance,
 }
@@ -157,6 +167,7 @@ impl FontLevelIntent for CreateNamedInstance {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct UpdateNamedInstance {
     pub instance: NamedInstance,
 }
@@ -170,6 +181,7 @@ impl FontLevelIntent for UpdateNamedInstance {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct DeleteNamedInstance {
     pub instance_id: NamedInstanceId,
 }
@@ -183,6 +195,7 @@ impl FontLevelIntent for DeleteNamedInstance {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct DeleteSource {
     pub source_id: SourceId,
 }
@@ -204,6 +217,7 @@ impl FontLevelIntent for DeleteSource {
 /// Creates a global source record only. Glyph layers are authored by
 /// explicit `CreateGlyphLayer` intents.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct CreateSource {
     pub source_id: SourceId,
     pub name: String,
@@ -224,6 +238,7 @@ impl FontLevelIntent for CreateSource {
 
 /// Replaces the editable authoring values of an existing master source.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct UpdateSource {
     pub source_id: SourceId,
     pub name: String,
@@ -252,6 +267,7 @@ impl FontLevelIntent for UpdateSource {
 
 /// Creates one sparse editable glyph layer at one source.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct CreateGlyphLayer {
     pub layer_id: LayerId,
     pub glyph_id: GlyphId,
@@ -272,6 +288,7 @@ impl FontLevelIntent for CreateGlyphLayer {
 
 /// Creates one editable glyph layer by copying another layer's shape with fresh internal ids.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct CloneGlyphLayer {
     pub layer_id: LayerId,
     pub glyph_id: GlyphId,
@@ -302,6 +319,7 @@ impl FontLevelIntent for CloneGlyphLayer {
 /// Every source, glyph side, and group side must exist; groups are
 /// created separately. Editing a value never changes group membership.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetKerningValues {
     pub edits: Vec<KerningValueEdit>,
 }
@@ -318,6 +336,7 @@ impl FontLevelIntent for SetKerningValues {
 /// caller mints. The name is trimmed, and must be non-blank, free of
 /// control characters, and unique at its position.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct CreateKerningGroup {
     pub group_id: KerningGroupId,
     pub position: KerningPosition,
@@ -348,6 +367,7 @@ impl FontLevelIntent for CreateKerningGroup {
 /// Moves a glyph into a group at the group's pair position, out of any
 /// other group there, or out of its group at `position` with `None`.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetKerningGroupMember {
     pub position: KerningPosition,
     pub glyph_id: GlyphId,
@@ -372,6 +392,7 @@ impl FontLevelIntent for SetKerningGroupMember {
 
 /// Renames a group. Pairs reference it by id, so its kerning is unchanged.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct RenameKerningGroup {
     pub group_id: KerningGroupId,
     pub name: String,
@@ -393,6 +414,7 @@ impl FontLevelIntent for RenameKerningGroup {
 /// Deletes a group. Pairs that reference it are kept and never resolve,
 /// so undoing the delete restores its kerning.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct DeleteKerningGroup {
     pub group_id: KerningGroupId,
 }
@@ -416,6 +438,7 @@ impl FontLevelIntent for DeleteKerningGroup {
 /// resolved values replace its advance, coordinates, and component
 /// transforms after fresh internal identities are minted.
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct MaterializeGlyphLayer {
     pub layer_id: LayerId,
     pub glyph_id: GlyphId,

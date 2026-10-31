@@ -1,4 +1,12 @@
-import type { FontIntent, GlyphId, GlyphName, LayerId, SourceId } from "@shift/types";
+import type {
+  EngineFontRecords,
+  FontIntent,
+  FontReplacement,
+  GlyphId,
+  GlyphName,
+  LayerId,
+  SourceId,
+} from "@shift/types";
 import {
   engineApply,
   engineBeginEdit,
@@ -6,6 +14,7 @@ import {
   engineDiscardRedo,
   engineEndEdit,
   engineGlyphNumbers,
+  engineEdits,
   engineKerningPairsNaming,
   engineMarkSaved,
   engineMissingKerningOrigin,
@@ -21,7 +30,7 @@ import {
   engineSourceNumbers,
   engineStage,
   engineUndo,
-  type EngineEdit,
+  type EngineEditLayers,
   type EngineKerningPair,
   type EngineLayer,
   type StoreRequest,
@@ -29,7 +38,12 @@ import {
   type EngineStage,
   type MissingKerningOrigin,
 } from "@shift/wasm/engine";
-import type { EditablePair, EngineReads, InterpolatedMetrics } from "@shift/wasm/protocol";
+import type {
+  EditablePair,
+  EngineEdits,
+  EngineReads,
+  InterpolatedMetrics,
+} from "@shift/wasm/protocol";
 
 export { svgPaths } from "@shift/wasm/engine";
 export type { ContourPoints } from "@shift/wasm/protocol";
@@ -37,6 +51,14 @@ import type { KerningPlace } from "../../types/font";
 import { unkerned } from "../model/Kerning";
 
 const released = new FinalizationRegistry<number>(engineRelease);
+
+/**
+ * What one edit did: the layers it touched, and each font-level collection it
+ * changed, whole, as the workspace's echo carries it (`next`, absent when it
+ * changed none). Glyph records never come from the engine: they need the
+ * store's component references and glyph categories.
+ */
+export type EngineEdit = EngineEditLayers & { readonly next?: FontReplacement };
 
 /**
  * An editing session in `@shift/wasm/engine`: shift-engine over the open
@@ -51,6 +73,7 @@ const released = new FinalizationRegistry<number>(engineRelease);
 export class EngineSession {
   readonly #handle: number;
   readonly #reads: EngineReads;
+  readonly #intents: EngineEdits;
   // non-reactive: numbers the session interned for each id; an id's number never changes
   readonly #glyphNumbers = new Map<GlyphId, number>();
   // non-reactive: as #glyphNumbers, for sources
@@ -59,6 +82,7 @@ export class EngineSession {
   private constructor(handle: number) {
     this.#handle = handle;
     this.#reads = engineReads(handle);
+    this.#intents = engineEdits(handle);
     released.register(this, handle, this);
   }
 
@@ -80,7 +104,8 @@ export class EngineSession {
    * as loading left it.
    */
   apply(intents: readonly FontIntent[]): EngineEdit {
-    return engineApply(this.#handle, [...intents]);
+    this.#intents.hold(intents);
+    return this.#withReplacement(engineApply(this.#handle));
   }
 
   /**
@@ -100,7 +125,8 @@ export class EngineSession {
    * @throws As {@link EngineSession.apply}.
    */
   preview(intents: readonly FontIntent[]): EngineLayer[] {
-    return enginePreview(this.#handle, [...intents]);
+    this.#intents.hold(intents);
+    return enginePreview(this.#handle);
   }
 
   /**
@@ -130,7 +156,8 @@ export class EngineSession {
    * @throws As {@link EngineSession.apply}.
    */
   stage(intents: readonly FontIntent[]): EngineStage {
-    return engineStage(this.#handle, [...intents]);
+    this.#intents.hold(intents);
+    return engineStage(this.#handle);
   }
 
   /**
@@ -188,6 +215,15 @@ export class EngineSession {
     return this.#reads.sourceMetricsAt(location);
   }
 
+  /** The session's font's axes, master sources and kerning, unsaved edits included. */
+  fontRecords(): EngineFontRecords {
+    return {
+      axes: this.#reads.axes(),
+      sources: this.#reads.sources(),
+      kerning: this.#reads.kerning(),
+    };
+  }
+
   /**
    * The name a new glyph asked to be called `name` takes in the session's
    * font: `name` trimmed, or `newGlyph` when blank, numbered `.1`, `.2`, …
@@ -242,7 +278,7 @@ export class EngineSession {
    * @throws When the inverse no longer applies; the edit stays undoable.
    */
   undo(): EngineEdit | undefined {
-    return engineUndo(this.#handle);
+    return this.#withReplacement(engineUndo(this.#handle));
   }
 
   /**
@@ -252,7 +288,7 @@ export class EngineSession {
    * to redo.
    */
   redo(): EngineEdit | undefined {
-    return engineRedo(this.#handle);
+    return this.#withReplacement(engineRedo(this.#handle));
   }
 
   /** Forgets every undone edit. */
@@ -268,6 +304,12 @@ export class EngineSession {
     engineMarkSaved(this.#handle);
   }
 
+  /** `edit` with the font-level records it changed, which cross packed beside it. */
+  #withReplacement<E extends EngineEditLayers | undefined>(edit: E): E & EngineEdit {
+    const next = edit && this.#intents.replacement();
+    return next ? { ...edit, next } : (edit as E & EngineEdit);
+  }
+
   /** Releases the session; it applies nothing afterwards. */
   dispose(): void {
     released.unregister(this);
@@ -277,7 +319,6 @@ export class EngineSession {
 
 export type {
   EditablePair,
-  EngineEdit,
   EngineKerningPair,
   EngineLayer,
   StoreRequest,

@@ -32,6 +32,17 @@ mod fragments;
 /// `String`, or the strings of a list, option or map key) as that id's brand,
 /// which crosses as its text too; `#[pack(numbers)]` types a `Vec<f64>` as a
 /// `Float64Array`, which crosses as the same count and values.
+///
+/// A variant may instead hold one unnamed value, written after the index;
+/// TypeScript reads it as a field named after the variant, as in
+/// `{ kind: "movePoints", movePoints: MovePoints }`.
+///
+/// `#[pack(skip)]` leaves a struct's field behind: it does not cross, and
+/// reads as its type's default.
+///
+/// A tuple struct of one field (`struct Name(Inner)`), or a struct of one
+/// named field marked `#[pack(transparent)]`, crosses as that field alone,
+/// and TypeScript reads it as the field's type.
 #[proc_macro_derive(Pack, attributes(pack))]
 pub fn derive_pack(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -81,16 +92,25 @@ fn derive(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             "a packed type cannot be generic",
         ));
     }
+    let options = TypeOptions::of(&input.attrs)?;
     match &input.data {
-        Data::Struct(data) => {
-            let Fields::Named(fields) = &data.fields else {
-                return Err(Error::new_spanned(
-                    &input.ident,
-                    "a packed struct needs named fields",
-                ));
-            };
-            derive_struct(input, fields)
-        }
+        Data::Struct(data) => match &data.fields {
+            Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
+                derive_transparent(input, &options, &data.fields)
+            }
+            Fields::Named(fields) if options.transparent && fields.named.len() == 1 => {
+                derive_transparent(input, &options, &data.fields)
+            }
+            Fields::Named(_) if options.transparent => Err(Error::new_spanned(
+                &input.ident,
+                "a transparent struct has one field",
+            )),
+            Fields::Named(fields) => derive_struct(input, fields),
+            _ => Err(Error::new_spanned(
+                &input.ident,
+                "a packed struct needs named fields, or one unnamed field",
+            )),
+        },
         Data::Enum(data)
             if data
                 .variants
@@ -109,8 +129,85 @@ fn names(input: &DeriveInput) -> syn::Result<(&syn::Ident, String)> {
     let name = &input.ident;
     Ok((
         name,
-        rename(&input.attrs)?.unwrap_or_else(|| name.to_string()),
+        TypeOptions::of(&input.attrs)?
+            .rename
+            .unwrap_or_else(|| name.to_string()),
     ))
+}
+
+/// A derived type's `#[pack(…)]` attributes.
+#[derive(Default)]
+struct TypeOptions {
+    rename: Option<String>,
+    /// Whether a struct of one named field crosses as that field.
+    transparent: bool,
+}
+
+impl TypeOptions {
+    fn of(attributes: &[Attribute]) -> syn::Result<Self> {
+        let mut options = Self::default();
+        for attribute in attributes.iter().filter(|a| a.path().is_ident("pack")) {
+            attribute.parse_nested_meta(|meta| {
+                if meta.path.is_ident("rename") {
+                    options.rename = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else if meta.path.is_ident("transparent") {
+                    options.transparent = true;
+                } else {
+                    return Err(meta.error("expected `rename = \"…\"` or `transparent`"));
+                }
+                Ok(())
+            })?;
+        }
+        Ok(options)
+    }
+}
+
+/// A struct of one field, which crosses as that field alone and which
+/// TypeScript reads as the field's type.
+fn derive_transparent(
+    input: &DeriveInput,
+    options: &TypeOptions,
+    fields: &Fields,
+) -> syn::Result<proc_macro2::TokenStream> {
+    let name = &input.ident;
+    let Some(field) = fields.iter().next() else {
+        return Err(Error::new_spanned(
+            name,
+            "a transparent struct has one field",
+        ));
+    };
+    let ty = &field.ty;
+    let (construct, value) = match &field.ident {
+        Some(ident) => (
+            quote! { Self { #ident: <#ty as ::pack::Pack>::read(read) } },
+            quote! { &self.#ident },
+        ),
+        None => (
+            quote! { Self(<#ty as ::pack::Pack>::read(read)) },
+            quote! { &self.0 },
+        ),
+    };
+    fragments::write(
+        &format!("alias-{name}"),
+        &json!({
+            "kind": "alias",
+            "rust": name.to_string(),
+            "name": options.rename.clone().unwrap_or_else(|| name.to_string()),
+            "doc": doc_of(&input.attrs),
+            "type": FieldOptions::of(&field.attrs)?.describe(field, type_of(ty)?)?,
+        }),
+    );
+    Ok(quote! {
+        impl ::pack::Pack for #name {
+            fn read(read: &mut ::pack::Reader) -> Self {
+                #construct
+            }
+
+            fn write(&self, write: &mut ::pack::Writer) {
+                ::pack::Pack::write(#value, write);
+            }
+        }
+    })
 }
 
 /// A named field's read and write, and its description for TypeScript.
@@ -127,6 +224,7 @@ fn packed_fields(
     path: Option<&proc_macro2::TokenStream>,
 ) -> syn::Result<Vec<PackedField>> {
     let mut packed = Vec::new();
+    let mut skipped = Vec::new();
     for field in &fields.named {
         let Some(ident) = &field.ident else { continue };
         let ty = &field.ty;
@@ -135,6 +233,16 @@ fn packed_fields(
             None => quote! { #ident },
         };
         let options = FieldOptions::of(&field.attrs)?;
+        if options.skip {
+            if path.is_none() {
+                return Err(Error::new_spanned(
+                    field,
+                    "`skip` leaves out a struct's field, not a variant's",
+                ));
+            }
+            skipped.push(quote! { #ident: ::std::default::Default::default() });
+            continue;
+        }
         packed.push(PackedField {
             read: quote! { #ident: <#ty as ::pack::Pack>::read(read) },
             write: quote! { ::pack::Pack::write(#value, write); },
@@ -144,6 +252,19 @@ fn packed_fields(
                 "type": options.describe(field, type_of(ty)?)?,
             }),
         });
+    }
+    // A skipped field reads as its default, after the fields that cross.
+    if skipped.is_empty() {
+        return Ok(packed);
+    }
+    if let Some(last) = packed.last_mut() {
+        let read = &last.read;
+        last.read = quote! { #read, #(#skipped),* };
+    } else {
+        return Err(Error::new_spanned(
+            &fields.named,
+            "a packed struct keeps a field that crosses",
+        ));
     }
     Ok(packed)
 }
@@ -242,15 +363,38 @@ fn derive_data_enum(
     let mut cases = Vec::new();
     for ((index, variant), tag) in data.variants.iter().enumerate().zip(variant_names(data)?) {
         let ident = &variant.ident;
-        let packed = match &variant.fields {
-            Fields::Named(fields) => packed_fields(fields, None)?,
-            Fields::Unit => Vec::new(),
-            Fields::Unnamed(_) => {
+        if let Fields::Unnamed(fields) = &variant.fields {
+            let [field] = fields.unnamed.iter().collect::<Vec<_>>()[..] else {
                 return Err(Error::new_spanned(
                     variant,
-                    "a packed enum's variants have named fields or none",
+                    "a packed enum's variants have named fields, one unnamed value, or none",
                 ));
+            };
+            let ty = &field.ty;
+            reads.push(quote! { #index => Self::#ident(<#ty as ::pack::Pack>::read(read)), });
+            if index == 0 {
+                reads.push(quote! { _ => Self::#ident(<#ty as ::pack::Pack>::read(read)), });
             }
+            writes.push(quote! {
+                Self::#ident(value) => {
+                    write.count(#index);
+                    ::pack::Pack::write(value, write);
+                }
+            });
+            cases.push(json!({
+                "name": tag,
+                "doc": doc_of(&variant.attrs),
+                "fields": [{
+                    "name": tag,
+                    "doc": Value::Null,
+                    "type": FieldOptions::of(&field.attrs)?.describe(field, type_of(ty)?)?,
+                }],
+            }));
+            continue;
+        }
+        let packed = match &variant.fields {
+            Fields::Named(fields) => packed_fields(fields, None)?,
+            _ => Vec::new(),
         };
         let bindings: Vec<_> = match &variant.fields {
             Fields::Named(fields) => fields
@@ -567,7 +711,7 @@ fn type_of(ty: &Type) -> syn::Result<Value> {
             let [ok, err] = two_arguments(ty, segment)?;
             json!({ "kind": "result", "ok": type_of(ok)?, "err": type_of(err)? })
         }
-        "HashMap" => {
+        "HashMap" | "BTreeMap" => {
             let [key, value] = two_arguments(ty, segment)?;
             json!({ "kind": "map", "key": type_of(key)?, "value": type_of(value)? })
         }
@@ -575,7 +719,7 @@ fn type_of(ty: &Type) -> syn::Result<Value> {
     })
 }
 
-/// The two type arguments of a `Result` or a `HashMap`.
+/// The two type arguments of a `Result` or a map.
 fn two_arguments<'a>(ty: &Type, segment: &'a syn::PathSegment) -> syn::Result<[&'a Type; 2]> {
     let PathArguments::AngleBracketed(arguments) = &segment.arguments else {
         return Err(Error::new_spanned(ty, "expected two type arguments"));
@@ -602,6 +746,9 @@ struct FieldOptions {
     id: Option<String>,
     /// Whether the field's `Vec<f64>` is typed as a `Float64Array`.
     numbers: bool,
+    /// Whether the field stays behind: it does not cross, and reads as its
+    /// type's default.
+    skip: bool,
 }
 
 impl FieldOptions {
@@ -615,8 +762,12 @@ impl FieldOptions {
                     options.id = Some(meta.value()?.parse::<LitStr>()?.value());
                 } else if meta.path.is_ident("numbers") {
                     options.numbers = true;
+                } else if meta.path.is_ident("skip") {
+                    options.skip = true;
                 } else {
-                    return Err(meta.error("expected `rename = \"…\"`, `id = \"…\"` or `numbers`"));
+                    return Err(
+                        meta.error("expected `rename = \"…\"`, `id = \"…\"`, `numbers` or `skip`")
+                    );
                 }
                 Ok(())
             })?;

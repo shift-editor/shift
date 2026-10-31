@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
-import type { Axis, NamedInstance, NamedInstanceId } from "@shift/types";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { NamedInstance, type Axis } from "@shift/editor/model";
+import type { NamedInstanceId, NamedInstance as NamedInstanceRecord } from "@shift/types";
 import { Input, Tooltip } from "@shift/ui";
 import { message } from "@shared/messages";
 import MinusIcon from "@/assets/general/minus.svg";
@@ -108,14 +109,14 @@ export const InstancesSettingsPanel = ({
 };
 
 interface InstanceEditorProps {
-  instance: NamedInstance;
+  instance: NamedInstanceRecord;
   axes: readonly Axis[];
   canAuthor: boolean;
 }
 
 const InstanceEditor = ({ instance, axes, canAuthor }: InstanceEditorProps) => {
   const font = useFont();
-  const form = useSettingsForm<NamedInstance>({
+  const form = useSettingsForm<NamedInstanceRecord>({
     canonical: instance,
     errorMessage: message("settings.instanceSaveFailed"),
     save: async (next) => {
@@ -123,7 +124,7 @@ const InstanceEditor = ({ instance, axes, canAuthor }: InstanceEditorProps) => {
       return font.namedInstances.find((candidate) => candidate.id === next.id) ?? next;
     },
   });
-  const draft = form.draft;
+  const draft = useMemo(() => new NamedInstance(form.draft), [form.draft]);
   const commit = async (): Promise<void> => {
     await form.commit();
   };
@@ -142,7 +143,7 @@ const InstanceEditor = ({ instance, axes, canAuthor }: InstanceEditorProps) => {
           value={draft.name}
           onChange={(event) => {
             const name = event.currentTarget.value;
-            form.update((current) => ({ ...current, name }));
+            form.update((current) => new NamedInstance(current).withName(name));
           }}
           onBlur={commit}
           size="md"
@@ -156,14 +157,11 @@ const InstanceEditor = ({ instance, axes, canAuthor }: InstanceEditorProps) => {
             <InstanceNumberField
               key={axis.id}
               label={axis.name}
-              value={draft.location.values[axis.id] ?? axis.default}
+              value={draft.locationValue(axis)}
               onChange={(value) => {
-                form.update((current) => ({
-                  ...current,
-                  location: {
-                    values: { ...current.location.values, [axis.id]: value },
-                  },
-                }));
+                form.update((current) =>
+                  new NamedInstance(current).withLocationValue(axis.id, value),
+                );
               }}
               onCommit={commit}
             />

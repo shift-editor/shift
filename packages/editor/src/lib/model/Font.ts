@@ -1,9 +1,11 @@
 import type {
   FontMetrics,
   MetricDefinition,
+  MetricId,
   MetricKind,
+  MetricValue,
   FontMetadata,
-  Axis,
+  Axis as AxisRecord,
   AxisDefinition,
   AxisMapping,
   AxisMappingBasis,
@@ -44,6 +46,7 @@ import {
   mintNamedInstanceId,
   mintSourceId,
 } from "@shift/types";
+import type { Axis } from "./Axis";
 import {
   batch,
   computed,
@@ -262,7 +265,7 @@ export class Font {
   readonly #metadataCell: Signal<FontMetadata>;
   readonly #sourcesCell: Signal<readonly Source[]>;
 
-  readonly #axesCell: Signal<readonly Axis[]>;
+  readonly #axesCell: ComputedSignal<readonly Axis[]>;
   readonly #externalAxesCell: Signal<readonly Axis[]>;
   readonly #axisMappingsCell: Signal<readonly AxisMapping[]>;
   readonly #axisMappingBasesCell: Signal<readonly AxisMappingBasis[]>;
@@ -311,17 +314,17 @@ export class Font {
 
     this.#metadataCell = computed(() => fontCell.value?.metadata ?? {});
     this.#sourcesCell = computed(() => fontCell.value?.sources ?? []);
-    this.#axesCell = computed(() => fontCell.value?.axes ?? []);
-    this.#externalAxesCell = computed(() =>
-      this.#axesCell.value.filter((axis) => axis.role === "external"),
-    );
     this.#axisMappingsCell = computed(() => fontCell.value?.axisMappings ?? []);
     this.#axisMappingBasesCell = computed(() => fontCell.value?.axisMappingBases ?? []);
     this.#designspace = new Designspace({
-      axesCell: this.#axesCell,
+      axesCell: computed(() => fontCell.value?.axes ?? NO_AXES),
       mappingBasesCell: this.#axisMappingBasesCell,
       sourcesCell: this.#sourcesCell,
     });
+    this.#axesCell = this.#designspace.axesCell;
+    this.#externalAxesCell = computed(() =>
+      this.#axesCell.value.filter((axis) => axis.role === "external"),
+    );
     this.#defaultSourceMetricsCell = computed(() => {
       const designspace = this.#designspace;
       track(this.#metricsCell);
@@ -1475,14 +1478,14 @@ export class Font {
       kind: "createSource",
       createSource: { sourceId, name, location: designLocation },
     });
-    if (metrics.metricValues.length === this.#metricDefinitionsCell.peek().length) {
+    if (Object.keys(metrics.metricValues).length === this.#metricDefinitionsCell.peek().length) {
       this.editCoordinator.push({
         kind: "updateSource",
         updateSource: {
           sourceId,
           name,
           location: designLocation,
-          metricValues: [...metrics.metricValues],
+          metricValues: metrics.metricValues,
           italicAngle: metrics.italicAngle,
           lineGap: metrics.lineGap,
           underlinePosition: metrics.underlinePosition,
@@ -1534,7 +1537,7 @@ export class Font {
    * @param axis - Complete replacement axis returned from the current font model.
    * @throws {Error} when the definition is invalid or cannot be persisted.
    */
-  async updateAxis(axis: Axis): Promise<void> {
+  async updateAxis(axis: AxisRecord): Promise<void> {
     await this.editCoordinator.apply(
       [
         {
@@ -1570,7 +1573,7 @@ export class Font {
    *
    * @throws {Error} when the resulting collection is invalid or cannot be persisted.
    */
-  async setIndependentAxisMapping(axis: Axis, mapping: AxisMapping): Promise<void> {
+  async setIndependentAxisMapping(axis: AxisRecord, mapping: AxisMapping): Promise<void> {
     await this.setAxisMappings(withIndependentMapping(this.getAxisMappings(), axis, mapping));
   }
 
@@ -1938,14 +1941,12 @@ export class Font {
     const definitions = this.#metricDefinitionsCell.peek();
     if (interpolated.metrics.length !== definitions.length) return null;
 
-    const metricValues = definitions.map((definition, index) => ({
-      metricId: definition.id,
-      position: interpolated.metrics[index]!.position,
-      overshoot: interpolated.metrics[index]!.overshoot,
-    }));
+    const metricValues: Record<MetricId, MetricValue> = Object.fromEntries(
+      definitions.map((definition, index) => [definition.id, interpolated.metrics[index]!]),
+    );
     const position = (kind: MetricKind): number | undefined => {
-      const index = definitions.findIndex((definition) => definition.kind === kind);
-      return index < 0 ? undefined : metricValues[index]!.position;
+      const definition = definitions.find((candidate) => candidate.kind === kind);
+      return definition ? metricValues[definition.id]?.position : undefined;
     };
     return {
       unitsPerEm,
@@ -1969,13 +1970,13 @@ export class Font {
       const definition = definitions.find((candidate) => candidate.kind === kind);
       if (!definition) return undefined;
 
-      return source?.metricValues.find((value) => value.metricId === definition.id)?.position;
+      return source?.metricValues[definition.id]?.position;
     };
     const unloaded = source === null;
 
     return {
       unitsPerEm,
-      metricValues: source?.metricValues ?? [],
+      metricValues: source?.metricValues ?? {},
       ascender: position("ascender") ?? unitsPerEm * 0.8,
       descender: position("descender") ?? unitsPerEm * -0.2,
       baseline: position("baseline") ?? 0,
@@ -2013,6 +2014,7 @@ export class Font {
 
 /** Never changes: the revision of reads a font without an engine answers. */
 const NO_REVISIONS: Signal<number> = computed(() => 0);
+const NO_AXES: readonly AxisRecord[] = [];
 
 /** The intent that moves one glyph into a kerning group, or out of its group with null. */
 function memberIntent(

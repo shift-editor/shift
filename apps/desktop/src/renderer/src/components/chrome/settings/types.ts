@@ -1,4 +1,5 @@
-import type { Axis, FontMetadata } from "@shift/types";
+import type { Axis } from "@shift/editor/model";
+import type { Axis as AxisRecord, FontMetadata } from "@shift/types";
 import type { FieldValues, UseFormReturn } from "react-hook-form";
 
 export type TextMetadataKey = {
@@ -9,7 +10,7 @@ export type NumberMetadataKey = {
   [Key in keyof FontMetadata]-?: FontMetadata[Key] extends number | null | undefined ? Key : never;
 }[keyof FontMetadata];
 
-export type AxisTransform = (axis: Axis) => Axis;
+export type AxisTransform = (axis: AxisRecord) => AxisRecord;
 
 export interface SettingsFormOptions<T extends FieldValues> {
   canonical: T;
@@ -28,9 +29,10 @@ export interface SettingsForm<T extends FieldValues> {
 
 /** Local axis replacement draft shared by the Definition and Styles tabs. */
 export interface AxisDraft {
+  /** The edited axis, rebuilt from the draft record on each change. */
   axis: Axis;
   error: string | null;
-  update: (transform: AxisTransform) => Axis;
-  commit: (candidate?: Axis) => Promise<void>;
+  update: (transform: AxisTransform) => AxisRecord;
+  commit: (candidate?: AxisRecord) => Promise<void>;
   updateAndCommit: (transform: AxisTransform) => Promise<void>;
 }

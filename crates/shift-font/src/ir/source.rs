@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 /// (e.g. a plain UFO background layer) and must never gain a designspace
 /// `<source>` entry on save.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[serde(rename_all = "camelCase")]
 pub enum SourceRole {
     #[default]
@@ -19,7 +20,9 @@ pub enum SourceRole {
     Layer,
 }
 
+// The editor reads a source without its lib, which only the file formats use.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[serde(rename_all = "camelCase")]
 pub struct Source {
     id: SourceId,
@@ -39,6 +42,7 @@ pub struct Source {
     #[serde(default)]
     color: Option<String>,
     #[serde(default)]
+    #[cfg_attr(feature = "pack", pack(skip))]
     lib: LibData,
     #[serde(default)]
     role: SourceRole,

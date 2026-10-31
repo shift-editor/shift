@@ -354,7 +354,7 @@
       ]
     },
     "shift-bridge#test": {
-      "dependsOn": ["build", "@shift/types#generate:bridge-types"],
+      "dependsOn": ["build", "@shift/types#generate:bridge-types", "@shift/wasm#build"],
       "outputs": [],
       "inputs": ["src/**", "*.config.ts"]
     },

@@ -58,10 +58,7 @@ async function createVariableNavigationFixture(page: Page): Promise<VariableNavi
       tag: "navw",
       name: "Navigation Weight",
       role: "external",
-      axisType: "continuous",
-      minimum: 100,
-      default: 400,
-      maximum: 900,
+      kind: { kind: "continuous", minimum: 100, default: 400, maximum: 900 },
       labels: [],
       hidden: false,
     });
@@ -89,7 +86,7 @@ async function createVariableNavigationFixture(page: Page): Promise<VariableNavi
       name: "Navigation Preview",
       location: {
         values: Object.fromEntries(
-          font.getAxes().map((axis) => [axis.id, axis.id === axisId ? 700 : axis.default]),
+          font.getAxes().map((axis) => [axis.id, axis.id === axisId ? 700 : axis.kind.default]),
         ),
       },
     });

@@ -6,7 +6,7 @@ import { SnapSet } from "./SnapSet";
 
 const metrics: SourceMetrics = {
   unitsPerEm: 1000,
-  metricValues: [],
+  metricValues: {},
   ascender: 800,
   descender: -200,
   baseline: 0,

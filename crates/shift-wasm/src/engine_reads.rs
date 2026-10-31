@@ -1,19 +1,23 @@
-//! What the editor reads from the editing engine's font: kerning and source
-//! metrics, answered by the same shift-font code the workspace and export run.
+//! What the editor reads from the editing engine's font: its axes, sources
+//! and kerning, as shift-font's own types, and kerning and source metrics at
+//! a place, answered by the same shift-font code the workspace and export run.
+//! Every read answers from the session's font as it stands, unsaved edits
+//! included.
 //!
 //! The [`EngineReads`] interface is answered only with the `engine` feature,
 //! beside the session it reads ([`crate::engine`]). The interface and its
-//! types are declared either way, so the editor's side generates without the
-//! feature.
+//! types are declared with `engine-protocol` alone, so the editor's side
+//! generates without building the session.
 //!
-//! The engine is a separate instance from `@shift/wasm`, with no name table of
-//! its own, so ids cross as numbers the session interns: the editor interns a
+//! The hot reads name glyphs and sources by numbers the session interns, not
+//! by the engine module's name table: the editor interns a
 //! glyph or source id once with `engineGlyphNumbers` or `engineSourceNumbers`
 //! and passes its number from then on. A location crosses as numbers in the
 //! font's axis order, NaN for an axis at its default.
 
 use pack::Pack;
-use shift_font::MetricValue;
+use shift_font::{Axis, MetricValue, Source};
+use shift_wire::KerningSnapshot;
 
 /// What the editor reads from one engine session's font. Glyphs and sources
 /// are named by the numbers the session interned for them; `glyphs` lists
@@ -40,6 +44,13 @@ pub trait EngineReads {
     /// `SourceMetricInterpolation::resolve`; null for a static font or one
     /// whose masters cannot be interpolated.
     fn source_metrics_at(&self, location: Vec<f64>) -> Option<InterpolatedMetrics>;
+    /// The font's axes, in order.
+    fn axes(&self) -> Vec<Axis>;
+    /// The font's master sources, each with its metric values by metric row.
+    fn sources(&self) -> Vec<Source>;
+    /// The font's kerning: its groups, each source's pairs, and the basis
+    /// kerning interpolates over.
+    fn kerning(&self) -> KerningSnapshot;
 }
 
 /// The authored pair an edit to the kerning between two glyphs at a source changes.
@@ -79,11 +90,14 @@ mod exports {
     use shift_font::{
         DesignLocation, Font, GlyphId, Kerning, KerningSide, LayerId, ResolvedKerning, SourceId,
     };
-    use shift_wire::intents::{self, WireParse};
+    use shift_wire::values::{self, WireParse};
     use tsify::{Ts, Tsify};
     use wasm_bindgen::prelude::*;
 
-    use super::{EditablePair, EngineReads, InterpolatedMetrics, engine_reads_request};
+    use super::{
+        Axis, EditablePair, EngineReads, InterpolatedMetrics, KerningSnapshot, Source,
+        engine_reads_request,
+    };
     use crate::engine::{Engine, with_engine};
     use crate::variation::to_location;
 
@@ -112,7 +126,7 @@ mod exports {
     impl<T: WireParse + Clone + Eq + Hash> IdTable<T> {
         /// Parses each of `ids` and returns its number, interning the new ones.
         fn intern(&mut self, ids: &[String]) -> Result<Vec<u32>, JsError> {
-            intents::parse_id_list::<T>(ids)?
+            values::parse_id_list::<T>(ids)?
                 .into_iter()
                 .map(|id| {
                     if let Some(number) = self.numbers.get(&id) {
@@ -192,6 +206,18 @@ mod exports {
     }
 
     impl EngineReads for Engine {
+        fn axes(&self) -> Vec<Axis> {
+            self.session.font().axes().to_vec()
+        }
+
+        fn sources(&self) -> Vec<Source> {
+            self.session.font().masters().cloned().collect()
+        }
+
+        fn kerning(&self) -> KerningSnapshot {
+            KerningSnapshot::from(self.session.font())
+        }
+
         fn kerning_run(
             &self,
             source: Option<usize>,
@@ -413,7 +439,7 @@ mod exports {
     /// Fails on an unknown handle or layer id, or when the source fails.
     #[wasm_bindgen(js_name = engineNewAnchorName)]
     pub fn engine_new_anchor_name(handle: u32, layer_ids: Vec<String>) -> Result<String, JsError> {
-        let layer_ids = intents::parse_id_list::<LayerId>(&layer_ids)?;
+        let layer_ids = values::parse_id_list::<LayerId>(&layer_ids)?;
         with_engine(handle, |engine| {
             engine.load_layers(layer_ids.clone())?;
             let font = engine.session.font();

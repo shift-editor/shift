@@ -6,10 +6,10 @@
 //! interned id ([`Names`]), and so is an id ([`derive@PackId`]), which
 //! TypeScript reads as its brand; a list is its length followed by its items,
 //! and [`Numbers`] is the same but read as one `Float64Array`; an optional
-//! value is a flag followed by the value when present; a [`HashMap`] is its
-//! length followed by each key and its value, read in TypeScript as a
-//! `Record`; `()` is nothing; a [`Result`] is a flag,
-//! set for `Ok`, followed by the value or the error; an enum is its variant's
+//! value is a flag followed by the value when present; a map ([`HashMap`],
+//! [`BTreeMap`]) is its length followed by each key and its value, read in
+//! TypeScript as a `Record`; `()` is nothing; a [`Result`] is a flag, set for
+//! `Ok`, followed by the value or the error; an enum is its variant's
 //! index, followed by the variant's fields when it has any, read in
 //! TypeScript as a string union for unit variants and otherwise as a union
 //! tagged by `kind`.
@@ -35,7 +35,7 @@
 // The derives name `::pack`, which inside this crate is itself.
 extern crate self as pack;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::hash::Hash;
 
 pub use pack_derive::{Pack, PackId, interface};
@@ -348,6 +348,28 @@ impl<K: Pack + Eq + Hash, V: Pack> Pack for HashMap<K, V> {
     }
 }
 
+/// As a [`HashMap`]: a count, then each key followed by its value, in key
+/// order.
+impl<K: Pack + Ord, V: Pack> Pack for BTreeMap<K, V> {
+    fn read(read: &mut Reader) -> Self {
+        let count = read.count();
+        let mut map = Self::new();
+        for _ in 0..count {
+            let key = K::read(read);
+            map.insert(key, V::read(read));
+        }
+        map
+    }
+
+    fn write(&self, write: &mut Writer) {
+        write.count(self.len());
+        for (key, value) in self {
+            key.write(write);
+            value.write(write);
+        }
+    }
+}
+
 /// A flag, set for `Ok`, then the value or the error. A short input reads as
 /// `Err`, so an empty reply, as for an unknown method, is a failure rather
 /// than a zero value.
@@ -526,7 +548,7 @@ impl Packed {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{BTreeMap, HashMap};
 
     use super::*;
 
@@ -779,6 +801,94 @@ mod tests {
             measure_request(&Ruler, 9, &[], Vec::new(), &mut names),
             Packed::default()
         );
+    }
+
+    #[derive(Clone, Debug, PartialEq, Pack)]
+    enum Wrapped {
+        Anchor(Anchor),
+        Count(usize),
+        Nothing,
+    }
+
+    #[test]
+    fn a_variant_holding_one_value_is_its_index_then_the_value() {
+        let mut names = Table::default();
+        let wrapped = vec![
+            Wrapped::Count(3),
+            Wrapped::Nothing,
+            Wrapped::Anchor(Anchor {
+                name: None,
+                x: 1.0,
+                y: 2.0,
+            }),
+        ];
+
+        let encoded = encode(&mut names, &wrapped);
+
+        assert_eq!(encoded, [3.0, 1.0, 3.0, 2.0, 0.0, 0.0, 1.0, 2.0]);
+        assert_eq!(decode::<Vec<Wrapped>>(&names, &encoded), wrapped);
+    }
+
+    #[derive(Clone, Debug, PartialEq, Pack)]
+    struct Labelled {
+        x: f64,
+        #[pack(skip)]
+        label: String,
+    }
+
+    #[test]
+    fn a_skipped_field_stays_behind_and_reads_as_its_default() {
+        let mut names = Table::default();
+        let labelled = Labelled {
+            x: 2.0,
+            label: "kept here".into(),
+        };
+
+        let encoded = encode(&mut names, &labelled);
+
+        assert_eq!(encoded, [2.0]);
+        assert_eq!(
+            decode::<Labelled>(&names, &encoded),
+            Labelled {
+                x: 2.0,
+                label: String::new()
+            }
+        );
+    }
+
+    #[derive(Clone, Debug, PartialEq, Pack)]
+    struct Width(f64);
+
+    #[derive(Clone, Debug, PartialEq, Pack)]
+    #[pack(transparent)]
+    struct Values {
+        #[pack(numbers)]
+        values: Vec<f64>,
+    }
+
+    #[test]
+    fn a_struct_of_one_field_crosses_as_the_field() {
+        let mut names = Table::default();
+        let values = Values {
+            values: vec![1.0, 2.0],
+        };
+
+        assert_eq!(encode(&mut names, &Width(5.0)), [5.0]);
+        assert_eq!(encode(&mut names, &values), [2.0, 1.0, 2.0]);
+        assert_eq!(decode::<Values>(&names, &[2.0, 1.0, 2.0]), values);
+    }
+
+    #[test]
+    fn an_ordered_map_crosses_in_key_order() {
+        let mut names = Table::default();
+        let map = BTreeMap::from([("wght".to_string(), 400.0), ("wdth".to_string(), 75.0)]);
+        let wdth = f64::from(names.id("wdth"));
+        let wght = f64::from(names.id("wght"));
+
+        let encoded = encode(&mut names, &map);
+
+        assert_eq!(encoded, [2.0, wdth, 75.0, wght, 400.0]);
+        assert_eq!(decode::<BTreeMap<String, f64>>(&names, &encoded), map);
     }
 
     #[derive(Clone, Debug, PartialEq, Pack)]

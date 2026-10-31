@@ -1,7 +1,8 @@
 import type { ShiftHost } from "@shared/host/ShiftHost";
 import type { CommandId } from "@shared/commands";
 import type { AppConfigState } from "@shared/config/config";
-import type { GlyphId, GlyphName } from "@shift/types";
+import type { EngineFontRecords, GlyphId, GlyphName } from "@shift/types";
+import { loadEngine } from "@shift/editor/model";
 import { storeReader } from "@shift/wasm/store-reader";
 import type { FontSession } from "@/types/fontSession";
 
@@ -29,6 +30,25 @@ export class SessionHooks {
   constructor(session: FontSession, host: ShiftHost) {
     this.#session = session;
     this.#host = host;
+  }
+
+  /**
+   * The axes, master sources and kerning of the font directory `directory`
+   * (base64 of a native workspace's `encodedDirectory`), as an engine opened
+   * over it reads them: how a spec reads a document's records outside the
+   * window's own session. Only reads run, so the engine loads no layer.
+   */
+  async fontRecordsOf(directory: string): Promise<EngineFontRecords> {
+    const { EngineSession } = await loadEngine();
+    const bytes = Uint8Array.from(atob(directory), (character) => character.charCodeAt(0));
+    const session = EngineSession.open(bytes, () => {
+      throw new Error("a font-record read loads no layers");
+    });
+    try {
+      return session.fontRecords();
+    } finally {
+      session.dispose();
+    }
   }
 
   /** Runs `command` in this window as its menu item does. */

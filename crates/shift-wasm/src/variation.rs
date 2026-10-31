@@ -26,14 +26,7 @@ pub struct VariationAxis {
     tag: String,
     name: String,
     role: VariationAxisRole,
-    axis_type: VariationAxisType,
-    #[tsify(optional, type = "number | null")]
-    minimum: Option<f64>,
-    default: f64,
-    #[tsify(optional, type = "number | null")]
-    maximum: Option<f64>,
-    #[tsify(optional, type = "readonly number[] | null")]
-    values: Option<Vec<f64>>,
+    kind: VariationAxisKind,
 }
 
 #[derive(Deserialize, Tsify)]
@@ -43,11 +36,20 @@ pub enum VariationAxisRole {
     Internal,
 }
 
+/// An axis's range, as shift-font's `AxisKind` crosses into the editor.
 #[derive(Deserialize, Tsify)]
-#[serde(rename_all = "lowercase")]
-pub enum VariationAxisType {
-    Continuous,
-    Discrete,
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum VariationAxisKind {
+    Continuous {
+        minimum: f64,
+        default: f64,
+        maximum: f64,
+    },
+    Discrete {
+        #[tsify(type = "readonly number[]")]
+        values: Vec<f64>,
+        default: f64,
+    },
 }
 
 /// Axes in order.
@@ -364,22 +366,15 @@ fn with_axes<R>(handle: u32, call: impl FnOnce(&[Axis]) -> R) -> R {
 
 pub(crate) fn axis(data: VariationAxis) -> Axis {
     let id = AxisId::from_raw(data.id);
-    let mut axis = match data.axis_type {
-        VariationAxisType::Discrete => Axis::discrete_with_id(
-            id,
-            data.tag,
-            data.name,
-            data.values.unwrap_or_else(|| vec![data.default]),
-            data.default,
-        ),
-        VariationAxisType::Continuous => Axis::continuous_with_id(
-            id,
-            data.tag,
-            data.name,
-            data.minimum.unwrap_or(data.default),
-            data.default,
-            data.maximum.unwrap_or(data.default),
-        ),
+    let mut axis = match data.kind {
+        VariationAxisKind::Discrete { values, default } => {
+            Axis::discrete_with_id(id, data.tag, data.name, values, default)
+        }
+        VariationAxisKind::Continuous {
+            minimum,
+            default,
+            maximum,
+        } => Axis::continuous_with_id(id, data.tag, data.name, minimum, default, maximum),
     };
     axis.set_role(match data.role {
         VariationAxisRole::External => AxisRole::External,

@@ -20,6 +20,7 @@ pub enum ComponentAlignment {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Component {
     id: ComponentId,
     base_glyph_id: GlyphId,

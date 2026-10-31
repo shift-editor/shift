@@ -1,13 +1,7 @@
 import type { GlyphCategory, GlyphCategorySummary, LanguageScript } from "@shift/glyph-info";
 import type { Rect2D } from "@shift/geo";
-import type {
-  CatalogAxis,
-  CatalogMetrics,
-  GlyphId,
-  GlyphName,
-  GlyphPreview,
-  SourceId,
-} from "@shift/types";
+import type { Axis } from "@shift/editor/model";
+import type { CatalogMetrics, GlyphId, GlyphName, GlyphPreview, SourceId } from "@shift/types";
 import type { ListSelectionMode, RenderGlyph } from "@shift/editor/types";
 import type { ColorTheme } from "@/lib/themes";
 import type { GlyphAtlasSource } from "./glyphAtlas";
@@ -78,7 +72,7 @@ export interface GlyphCatalogSource {
     location: CatalogLocation,
   ) => Promise<readonly GlyphPreview[]>;
   location: CatalogLocation;
-  axes: readonly CatalogAxis[];
+  axes: readonly Axis[];
   metrics: CatalogMetrics;
   sourceId: SourceId | null;
   canAuthor: boolean;

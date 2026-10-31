@@ -4,8 +4,8 @@ import {
   type GlyphId,
   type KerningGroup,
   type KerningGroupId,
-  type KerningPairValue,
   type KerningSide,
+  type KerningPairValue,
   type KerningSnapshot,
   type KerningValueEdit,
   type SourceId,
@@ -57,19 +57,26 @@ export function kerningRule(pair: KerningPairSides): KerningPairRule {
   return "glyph";
 }
 
-/** A side as the wire spells it, with its kind. */
-export function wireSide(side: KerningSideId): KerningSide {
-  return { kind: isGroupSide(side) ? "group" : "glyph", id: side };
+/** A side as shift-font's kerning names it, with its kind. */
+export function kerningSide(side: KerningSideId): KerningSide {
+  return isGroupSide(side) ? { kind: "group", group: side } : { kind: "glyph", glyph: side };
 }
 
-/** A value edit at one source for a pair, as the wire takes it; no amount removes the pair. */
+/** The glyph or group a side names. */
+export function kerningSideId(side: KerningSide): KerningSideId {
+  return side.kind === "group" ? side.group : side.glyph;
+}
+
+/** A value edit at one source for a pair, as the engine takes it; no amount removes the pair. */
 export function kerningValueEdit(
   sourceId: SourceId,
   pair: KerningPairSides,
   amount?: number,
 ): KerningValueEdit {
-  const edit = { sourceId, first: wireSide(pair.first), second: wireSide(pair.second) };
-  return amount === undefined ? edit : { ...edit, amount };
+  const sides = { first: kerningSide(pair.first), second: kerningSide(pair.second) };
+  return amount === undefined
+    ? { sourceId, pair: sides }
+    : { sourceId, pair: sides, value: amount };
 }
 
 /** The intent that sets each of `edits`' values, or removes the pair where it has no amount. */
@@ -183,8 +190,8 @@ export class KerningRecords {
   /** Returns every pair value authored at a source, in no set order; empty for a source without kerning. */
   authoredPairs(sourceId: SourceId): ResolvedKerning[] {
     return (this.#pairsAt(sourceId) ?? []).map(({ first, second, amount }) => ({
-      first: first.id as KerningSideId,
-      second: second.id as KerningSideId,
+      first: kerningSideId(first),
+      second: kerningSideId(second),
       amount,
     }));
   }

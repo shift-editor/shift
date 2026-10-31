@@ -1,11 +1,15 @@
+export { Axis } from "./lib/model/Axis";
+export { AxisMapping } from "./lib/model/AxisMapping";
 export { Font, type GlyphDirectoryPage, type MissingKerningOrigin } from "./lib/model/Font";
-export { sourceMetricValue, withSourceMetricValue } from "./lib/model/sourceMetrics";
+export { NamedInstance } from "./lib/model/NamedInstance";
+export { Source } from "./lib/model/Source";
 export {
   isGroupSide,
   kerningRule,
   kerningValueEdit,
   unkerned,
-  wireSide,
+  kerningSide,
+  kerningSideId,
 } from "./lib/model/Kerning";
 export type {
   Kerning,

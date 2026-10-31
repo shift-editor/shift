@@ -28,7 +28,7 @@ import {
   type SlugAtlasOrigin,
   type WorkspaceDocumentState,
   type WorkspaceShell,
-  type WorkspaceSnapshot,
+  type StoredWorkspaceSnapshot,
   type WorkspaceSync,
 } from "../../shared/workspace/lanes";
 import type {
@@ -40,7 +40,7 @@ import type {
   SyncStreamCallMap,
 } from "../../shared/workspace/protocol";
 import { client } from "../../shared/workspace/remote";
-import { loadEngine, type EngineEdit, type EngineSession } from "@shift/editor/model";
+import { Axis, loadEngine, type EngineEdit, type EngineSession } from "@shift/editor/model";
 import { engineStoreRequest } from "../../renderer/src/lib/engine/engineStoreRequest";
 import { storeReader } from "@shift/wasm/store-reader";
 import { WorkspaceHost } from "./WorkspaceHost";
@@ -184,6 +184,13 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     return session;
   }
 
+  /** The open font's first master, as the window's engine reads it; the store's snapshot has no sources. */
+  async function defaultSourceId(sync: SyncChannel): Promise<SourceId> {
+    const [source] = (await engineFor(sync)).fontRecords().sources;
+    if (!source) throw new Error("the workspace has no source");
+    return source.id;
+  }
+
   function disposeEngine(held: HeldEngine): void {
     held.session.dispose();
     layerReaders.close(held.reader);
@@ -322,7 +329,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
   async function createWorkspace(
     sync: SyncChannel,
     targetShell: ShellChannel = shell,
-  ): Promise<WorkspaceSnapshot> {
+  ): Promise<StoredWorkspaceSnapshot> {
     const state = await targetShell.create();
     const snapshot = await sync.snapshot();
     if (!snapshot) throw new Error("workspace.create did not create a snapshot");
@@ -334,7 +341,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     sync: SyncChannel,
     targetShell: ShellChannel,
     sourcePath: string,
-  ): Promise<WorkspaceSnapshot> {
+  ): Promise<StoredWorkspaceSnapshot> {
     const state = await targetShell.open(sourcePath);
     const snapshot = await sync.snapshot();
     if (!snapshot) throw new Error("workspace.open did not create a snapshot");
@@ -418,8 +425,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("points a window's layer reader at an untitled workspace's store", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await createWorkspace(sync);
-    const glyph = createGlyphALayer(snapshot.sources[0]!.id);
+    await createWorkspace(sync);
+    const sourceId = await defaultSourceId(sync);
+    const glyph = createGlyphALayer(sourceId);
     await applyWorkspace(sync, {
       intents: glyph.intents,
       label: "Add Glyph",
@@ -452,10 +460,11 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("points a window's layer reader at a document and its unsaved edits", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await createWorkspace(sync);
+    await createWorkspace(sync);
+    const sourceId = await defaultSourceId(sync);
     const documentPath = path.join(tmpRoot, "Reader.shift");
     await sync.saveAs(documentPath);
-    const unsaved = createGlyphALayer(snapshot.sources[0]!.id);
+    const unsaved = createGlyphALayer(sourceId);
     await applyWorkspace(sync, {
       intents: unsaved.intents,
       label: "Add Glyph",
@@ -496,7 +505,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const sync = await connectSyncLane();
     const snapshot = await sync.sourceSnapshot();
     if (!snapshot) throw new Error("source.open did not create a snapshot");
-    const coordinates = snapshot.font.axes.map((axis) => axis.default);
+    const coordinates = snapshot.font.axes.map((axis) => axis.kind.default);
     const pages = [];
 
     for (let start = 0, pageIndex = 0; start < snapshot.font.glyphs.length; start += 256) {
@@ -513,7 +522,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     }
 
     const weights = await sync.sourceAtlasWeights(coordinates);
-    const maximumCoordinates = snapshot.font.axes.map((axis) => axis.maximum ?? axis.default);
+    const maximumCoordinates = snapshot.font.axes.map((axis) => new Axis(axis).maximum);
     const maximumWeights = await sync.sourceAtlasWeights(maximumCoordinates);
     expect(weights.map((page) => page.pageIndex)).toEqual(pages.map((page) => page.pageIndex));
     expect(weights.map((page) => page.weights)).toEqual(pages.map((page) => page.weights));
@@ -602,8 +611,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("streams one authored Slug generation through bounded native chunks", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await createWorkspace(sync);
-    const glyph = createGlyphALayer(snapshot.sources[0]!.id);
+    await createWorkspace(sync);
+    const sourceId = await defaultSourceId(sync);
+    const glyph = createGlyphALayer(sourceId);
     await applyWorkspace(sync, { intents: glyph.intents });
 
     const atlas = await sync.prepareSlugAtlas(256);
@@ -616,15 +626,16 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("streams requested roots through one validated cached artifact", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await createWorkspace(sync);
-    const first = createGlyphALayer(snapshot.sources[0]!.id);
+    await createWorkspace(sync);
+    const sourceId = await defaultSourceId(sync);
+    const first = createGlyphALayer(sourceId);
     const secondGlyphId = mintGlyphId();
     const secondLayerId = mintLayerId();
     await applyWorkspace(sync, {
       intents: [
         ...first.intents,
         createGlyph("B" as GlyphName, 66 as Unicode, secondGlyphId),
-        createGlyphLayer(secondGlyphId, snapshot.sources[0]!.id, secondLayerId),
+        createGlyphLayer(secondGlyphId, sourceId, secondLayerId),
       ],
     });
 
@@ -661,8 +672,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("reuses saved document atlas bytes after a fresh workspace allocation", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await createWorkspace(sync);
-    const glyph = createGlyphALayer(snapshot.sources[0]!.id);
+    await createWorkspace(sync);
+    const sourceId = await defaultSourceId(sync);
+    const glyph = createGlyphALayer(sourceId);
     await applyWorkspace(sync, { intents: glyph.intents });
     const documentPath = path.join(tmpRoot, "Cached.shift");
     const saved = await sync.saveAs(documentPath);
@@ -701,8 +713,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const glyphId = mintGlyphId();
     const layerId = mintLayerId();
     const first = await createWorkspace(sync);
+    const firstSourceId = await defaultSourceId(sync);
     await applyWorkspace(sync, {
-      intents: [createGlyphA(glyphId), createGlyphLayer(glyphId, first.sources[0]!.id, layerId)],
+      intents: [createGlyphA(glyphId), createGlyphLayer(glyphId, firstSourceId, layerId)],
     });
     const request = {
       glyphIds: [glyphId],
@@ -716,8 +729,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await shell.close(true);
 
     const second = await createWorkspace(sync);
+    const secondSourceId = await defaultSourceId(sync);
     await applyWorkspace(sync, {
-      intents: [createGlyphA(glyphId), createGlyphLayer(glyphId, second.sources[0]!.id, layerId)],
+      intents: [createGlyphA(glyphId), createGlyphLayer(glyphId, secondSourceId, layerId)],
     });
     const isolated = await sync.prepareSlugAtlasPage(request);
 
@@ -730,15 +744,16 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("publishes cached pages after retrying one page before the build completes", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await createWorkspace(sync);
-    const first = createGlyphALayer(snapshot.sources[0]!.id);
+    await createWorkspace(sync);
+    const sourceId = await defaultSourceId(sync);
+    const first = createGlyphALayer(sourceId);
     const secondGlyphId = mintGlyphId();
     const secondLayerId = mintLayerId();
     await applyWorkspace(sync, {
       intents: [
         ...first.intents,
         createGlyph("B" as GlyphName, 66 as Unicode, secondGlyphId),
-        createGlyphLayer(secondGlyphId, snapshot.sources[0]!.id, secondLayerId),
+        createGlyphLayer(secondGlyphId, sourceId, secondLayerId),
       ],
     });
 
@@ -779,9 +794,10 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("cancels native Slug production when the renderer rejects a chunk", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await createWorkspace(sync);
+    await createWorkspace(sync);
+    const sourceId = await defaultSourceId(sync);
     await applyWorkspace(sync, {
-      intents: createGlyphALayer(snapshot.sources[0]!.id).intents,
+      intents: createGlyphALayer(sourceId).intents,
     });
     const atlas = await sync.prepareSlugAtlas(256);
     const lane = new MessageChannel();
@@ -892,8 +908,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     expect(snapshot.workspaceId).toMatch(/^[0-9a-f]{8}-[0-9a-f-]{27}$/);
     expect(snapshot.glyphs).toEqual([]);
     expect(snapshot.metrics.unitsPerEm).toBe(1000);
-    expect(snapshot.sources.length).toBeGreaterThan(0);
-    expect(snapshot.axes).toEqual([]);
+    const records = (await engineFor(sync)).fontRecords();
+    expect(records.sources.length).toBeGreaterThan(0);
+    expect(records.axes).toEqual([]);
   });
 
   it("writes the SQLite store under the workspace root", async () => {
@@ -1134,17 +1151,16 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("apply createGlyphLayer echoes sparse membership and a structural layer", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await createWorkspace(sync);
-    const { layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
+    await createWorkspace(sync);
+    const sourceId = await defaultSourceId(sync);
+    const { layerId, intents } = createGlyphALayer(sourceId);
 
     const applied = await applyWorkspace(sync, {
       intents,
       label: "Add Glyph Layer",
     });
 
-    expect(applied.next?.glyphChanges?.updated[0]?.layers).toEqual([
-      { id: layerId, sourceId: snapshot.sources[0].id },
-    ]);
+    expect(applied.next?.glyphChanges?.updated[0]?.layers).toEqual([{ id: layerId, sourceId }]);
     expect(applied.layers).toHaveLength(1);
     expect(applied.layers[0].layerId).toBe(layerId);
     expect(applied.layers[0].structure).toBeDefined();
@@ -1259,8 +1275,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("apply setXAdvance echoes values without structure or records", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await createWorkspace(sync);
-    const { layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
+    await createWorkspace(sync);
+    const sourceId = await defaultSourceId(sync);
+    const { layerId, intents } = createGlyphALayer(sourceId);
     const created = await applyWorkspace(sync, {
       intents,
     });
@@ -1287,8 +1304,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("pen intents apply atomically with client-minted ids through the channel", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await createWorkspace(sync);
-    const { glyphId, layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
+    await createWorkspace(sync);
+    const sourceId = await defaultSourceId(sync);
+    const { glyphId, layerId, intents } = createGlyphALayer(sourceId);
     const created = await applyWorkspace(sync, {
       intents,
     });
@@ -1330,7 +1348,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
         id: glyphId,
         name: "A",
         unicodes: [65],
-        layers: [{ id: layerId, sourceId: snapshot.sources[0].id }],
+        layers: [{ id: layerId, sourceId }],
         componentBaseGlyphIds: [],
         mark: false,
         nonspacingMark: false,
@@ -1342,8 +1360,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("layerMatch transports complete entity mappings", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await createWorkspace(sync);
-    const { layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
+    await createWorkspace(sync);
+    const sourceId = await defaultSourceId(sync);
+    const { layerId, intents } = createGlyphALayer(sourceId);
     const contourId = mintContourId();
     const pointId = mintPointId();
     await applyWorkspace(sync, {
@@ -1373,8 +1392,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("undo and redo replay ledger entries through the channel", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await createWorkspace(sync);
-    const { layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
+    await createWorkspace(sync);
+    const sourceId = await defaultSourceId(sync);
+    const { layerId, intents } = createGlyphALayer(sourceId);
     const created = await applyWorkspace(sync, {
       intents,
     });
@@ -1406,8 +1426,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("discarding redo prevents replay without changing document state", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await createWorkspace(sync);
-    await applyWorkspace(sync, createGlyphALayer(snapshot.sources[0].id));
+    await createWorkspace(sync);
+    const sourceId = await defaultSourceId(sync);
+    await applyWorkspace(sync, createGlyphALayer(sourceId));
     await undoWorkspace(sync);
     const before = await sync.documentState();
 
@@ -1427,14 +1448,13 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("glyphSnapshots pulls bounded source snapshots by stable glyph id", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await createWorkspace(sync);
-    const { layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
+    await createWorkspace(sync);
+    const sourceId = await defaultSourceId(sync);
+    const { layerId, intents } = createGlyphALayer(sourceId);
     const created = await applyWorkspace(sync, {
       intents,
     });
-    expect(created.next?.glyphChanges?.updated[0]?.layers).toEqual([
-      { id: layerId, sourceId: snapshot.sources[0].id },
-    ]);
+    expect(created.next?.glyphChanges?.updated[0]?.layers).toEqual([{ id: layerId, sourceId }]);
 
     const glyphId = created.next?.glyphChanges?.updated[0]?.id;
     if (!glyphId) throw new Error("createGlyph did not echo glyph id");
@@ -1452,8 +1472,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   it("CS0 skeleton: measures the apply round trip through the full stack", async () => {
     const sync = await connectSyncLane();
-    const snapshot = await createWorkspace(sync);
-    const { layerId, intents } = createGlyphALayer(snapshot.sources[0].id);
+    await createWorkspace(sync);
+    const sourceId = await defaultSourceId(sync);
+    const { layerId, intents } = createGlyphALayer(sourceId);
     const created = await applyWorkspace(sync, {
       intents,
     });

@@ -1,10 +1,11 @@
-import type { Axis, Location, NamedInstance } from "@shift/types";
+import type { Axis } from "@shift/editor/model";
+import type { Axis as AxisRecord, Location, NamedInstance } from "@shift/types";
 import type { InstanceCreationIssue } from "@shift/editor/types";
 import { LocationDraft, type LocationDraftValues } from "./locationDraft";
 
 /** Parses editable external-axis fields into a complete named-instance location. */
 export function instanceLocation(
-  axes: readonly Axis[],
+  axes: readonly AxisRecord[],
   values: LocationDraftValues["location"],
 ): Location | null {
   const coordinates = new LocationDraft({ name: "", location: values }).coordinates(axes);
@@ -32,21 +33,21 @@ export function instanceCreationIssue(
       };
     }
 
-    if (axis.axisType === "discrete" && !axis.values?.includes(value)) {
+    if (axis.isDiscrete && !axis.accepts(value)) {
       return {
         kind: "axis",
         axisId: axis.id,
         message: `Choose a defined value for ${axis.name}`,
       };
     }
-    if (axis.minimum != null && value < axis.minimum) {
+    if (!axis.isDiscrete && value < axis.minimum) {
       return {
         kind: "axis",
         axisId: axis.id,
         message: `${axis.name} must be at least ${axis.minimum}`,
       };
     }
-    if (axis.maximum != null && value > axis.maximum) {
+    if (!axis.isDiscrete && value > axis.maximum) {
       return {
         kind: "axis",
         axisId: axis.id,

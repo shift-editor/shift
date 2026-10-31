@@ -1,4 +1,5 @@
 import type {
+  StoredWorkspaceSnapshot,
   AppliedChange,
   SaveState,
   FontIntent,
@@ -697,8 +698,21 @@ export class WorkspaceEditCoordinator {
 
   /** Recovery: discard loaded projections, reload the workspace summary, and reopen the engine. */
   async #resync(): Promise<void> {
-    this.#store.replaceWorkspace(await this.#session.snapshot());
+    await this.open(await this.#session.snapshot());
+  }
+
+  /**
+   * Opens the window's engine over the workspace's store, then shows the
+   * font: `snapshot`'s records with the axes, sources and kerning the engine
+   * reads. Shows no font for a null snapshot.
+   */
+  async open(snapshot: StoredWorkspaceSnapshot | null): Promise<void> {
+    if (!snapshot) {
+      this.#store.replaceWorkspace(null);
+      return;
+    }
     await this.reopenEngine();
+    this.#store.replaceWorkspace({ ...snapshot, ...this.#engine.fontRecords() });
   }
 
   /**

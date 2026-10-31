@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { AnchorId, AxisId, PointId, SourceId } from "@shift/types";
+import type { AnchorId, AxisDefinition, AxisId, PointId, SourceId } from "@shift/types";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import { PositionEdits, PositionTargets, type GlyphLayer } from "@shift/editor/model";
 import type { PositionSelection } from "@shift/editor/types";
@@ -220,15 +220,12 @@ function requireLayer(layer: GlyphLayer | null): GlyphLayer {
   return layer;
 }
 
-function weightAxis() {
+function weightAxis(): AxisDefinition {
   return {
     tag: "wght",
     name: "Weight",
-    role: "external" as const,
-    axisType: "continuous" as const,
-    minimum: 100,
-    default: 400,
-    maximum: 900,
+    role: "external",
+    kind: { kind: "continuous", minimum: 100, default: 400, maximum: 900 },
     labels: [],
     hidden: false,
   };

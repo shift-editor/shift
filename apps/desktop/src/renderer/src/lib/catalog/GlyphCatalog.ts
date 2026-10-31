@@ -1,19 +1,11 @@
 import type { GlyphInfo } from "@shift/glyph-info";
-import type {
-  Axis,
-  CatalogAxis,
-  CatalogMetrics,
-  GlyphId,
-  GlyphName,
-  GlyphPreview,
-  SourceId,
-} from "@shift/types";
+import type { CatalogMetrics, GlyphId, GlyphName, GlyphPreview, SourceId } from "@shift/types";
 import { computed, track, type ComputedSignal, type Signal } from "@shift/editor/signals";
 import type { Editor } from "@shift/editor";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import type { GlyphAtlasSource } from "@/types/glyphAtlas";
 import type { CatalogLocation, GlyphCatalogItem } from "@/types/glyphCatalog";
-import { RenderGlyph, type GlyphInvalidation } from "@shift/editor/model";
+import { RenderGlyph, type Axis, type GlyphInvalidation } from "@shift/editor/model";
 
 /** Projects the editor model into the source-independent catalog boundary. */
 export class GlyphCatalog {
@@ -21,7 +13,8 @@ export class GlyphCatalog {
   readonly #derived: readonly ComputedSignal<unknown>[];
 
   readonly glyphsCell: ComputedSignal<readonly GlyphCatalogItem[]>;
-  readonly axesCell: ComputedSignal<readonly CatalogAxis[]>;
+  /** The font's axes, in the order {@link GlyphCatalog.locationCell} lists coordinates. */
+  readonly axesCell: Signal<readonly Axis[]>;
   readonly locationCell: ComputedSignal<CatalogLocation>;
   readonly metricsCell: ComputedSignal<CatalogMetrics>;
   readonly familyNameCell: ComputedSignal<string | null>;
@@ -41,9 +34,7 @@ export class GlyphCatalog {
         ),
       { name: "catalog.glyphs" },
     );
-    this.axesCell = computed(() => font.axesCell.value.map(catalogAxis), {
-      name: "catalog.axes",
-    });
+    this.axesCell = font.axesCell;
     this.locationCell = computed(
       () => {
         const location = editor.externalLocationCell.value;
@@ -80,7 +71,6 @@ export class GlyphCatalog {
     this.atlas = atlas;
     this.#derived = [
       this.glyphsCell,
-      this.axesCell,
       this.locationCell,
       this.metricsCell,
       this.familyNameCell,
@@ -142,19 +132,5 @@ function glyphCatalogItem(
     name,
     displayName: glyphInfo.resolveGlyphName(name, unicode),
     unicode,
-  };
-}
-
-function catalogAxis(axis: Axis, index: number): CatalogAxis {
-  return {
-    index,
-    tag: axis.tag,
-    name: axis.name,
-    hidden: axis.hidden,
-    axisType: axis.axisType,
-    minimum: axis.minimum ?? undefined,
-    default: axis.default,
-    maximum: axis.maximum ?? undefined,
-    values: [...(axis.values ?? [])],
   };
 }

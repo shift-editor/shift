@@ -23,7 +23,7 @@ import type {
   Source,
   SourceId,
   Unicode,
-  SetComponentAlignmentIntent,
+  SetComponentAlignment,
 } from "@shift/types";
 import { mintAnchorId, mintComponentId, mintContourId, mintPointId, EntityMap } from "@shift/types";
 import {
@@ -308,9 +308,7 @@ class GlyphLayerWriter {
   transformLayer(matrix: MatModel): void {
     // Six numbers on the wire whatever the layer's size; Rust does the authoritative math.
     const { a, b, c, d, e, f } = matrix;
-    this.#workspaceIntents.transformLayer({
-      matrix: [a, b, c, d, e, f],
-    });
+    this.#workspaceIntents.transformLayer({ transform: { a, b, c, d, e, f } });
   }
 
   translateLayer(dx: number, dy: number): void {
@@ -322,7 +320,7 @@ class GlyphLayerWriter {
     const { a, b, c, d, e, f } = matrix;
     this.#workspaceIntents.transformPoints({
       pointIds: [...pointIds],
-      matrix: [a, b, c, d, e, f],
+      transform: { a, b, c, d, e, f },
     });
   }
 
@@ -492,7 +490,7 @@ class GlyphLayerWriter {
 
   setComponentAlignment(
     componentIds: readonly ComponentId[],
-    alignment: SetComponentAlignmentIntent["alignment"],
+    alignment: SetComponentAlignment["alignment"],
   ): void {
     if (componentIds.length === 0) return;
     // Applied by the workspace: anchoring moves the component, which the echo carries.
@@ -1264,7 +1262,7 @@ export class GlyphLayer {
    */
   setComponentAlignment(
     componentIds: readonly ComponentId[],
-    alignment: SetComponentAlignmentIntent["alignment"],
+    alignment: SetComponentAlignment["alignment"],
   ): void {
     this.#writer.setComponentAlignment(componentIds, alignment);
   }

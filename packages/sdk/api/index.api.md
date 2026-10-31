@@ -142,12 +142,13 @@ export type DesignAxisLocation = AxisLocation<"design">;
 // @public
 export class Designspace {
     constructor(cells: {
-        axesCell: Signal<readonly Axis[]>;
+        axesCell: Signal<readonly Axis$1[]>;
         mappingBasesCell: Signal<readonly AxisMappingBasis[]>;
         sourcesCell: Signal<readonly Source[]>;
     });
     // (undocumented)
     get axes(): readonly Axis[];
+    get axesCell(): ComputedSignal<readonly Axis[]>;
     // (undocumented)
     axis(axisId: AxisId): Axis | null;
     axisTagged(tag: string): Axis | null;
@@ -581,7 +582,7 @@ export class Font {
     renameKerningGroup(groupId: KerningGroupId, name: string): Promise<void>;
     resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]>;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
-    setIndependentAxisMapping(axis: Axis, mapping: AxisMapping): Promise<void>;
+    setIndependentAxisMapping(axis: Axis$1, mapping: AxisMapping): Promise<void>;
     setKerningException(sourceId: SourceId, first: GlyphId, second: GlyphId, position: KerningPairPosition, exception: boolean): boolean;
     setKerningValues(edits: readonly KerningValueEdit[], label: string): void;
     setLanguageIds(languageIds: readonly string[]): void;
@@ -599,7 +600,7 @@ export class Font {
     get unicodes(): readonly Unicode[];
     get unicodesCell(): Signal<Unicode[]>;
     unicodesForName(name: GlyphName): readonly Unicode[];
-    updateAxis(axis: Axis): Promise<void>;
+    updateAxis(axis: Axis$1): Promise<void>;
     updateGlyphIdentity(glyphId: GlyphId, newName: GlyphName, newUnicodes: Unicode[]): void;
     updateMetadata(metadata: FontMetadata): Promise<void>;
     updateNamedInstance(instance: NamedInstance): Promise<void>;
@@ -609,7 +610,7 @@ export class Font {
 // @public
 export interface FontOverview {
     // (undocumented)
-    axes: Axis[];
+    axes: Axis$1[];
     axisMappings: AxisMapping[];
     // (undocumented)
     glyphCount: number;
@@ -632,7 +633,7 @@ export type FontRevision = string;
 // @public
 export interface FontSnapshot {
     // (undocumented)
-    readonly axes: readonly Axis[];
+    readonly axes: readonly Axis$1[];
     // (undocumented)
     readonly axisMappingBases: readonly AxisMappingBasis[];
     // (undocumented)

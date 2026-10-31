@@ -35,6 +35,7 @@ pub const LANGUAGES_LIB_KEY: &str = "com.shift.languages";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct FontMetadata {
     pub family_name: Option<String>,
     pub style_name: Option<String>,
