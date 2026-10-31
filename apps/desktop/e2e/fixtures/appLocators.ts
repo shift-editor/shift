@@ -9,6 +9,12 @@ export function glyphCatalogViewport(page: Page) {
   return page.getByLabel("Glyph catalog", { exact: true });
 }
 
+/** Opens the font's info in Settings, from the document menu on the font's name. */
+export async function openFontInfo(page: Page): Promise<void> {
+  await page.getByRole("button", { name: /document menu$/ }).click();
+  await page.getByRole("menuitem", { name: "Font Info", exact: true }).click();
+}
+
 /** The glyph search field, which the Glyphs header shows while a search is open. */
 export function glyphSearchField(page: Page): Locator {
   return page.getByPlaceholder("Search glyphs...");
@@ -61,7 +67,7 @@ export function editorSidebar(page: Page) {
 }
 
 export function variationControls(page: Page) {
-  return editorSidebar(page).getByRole("tabpanel", { name: "Variations" });
+  return editorSidebar(page).getByRole("tabpanel", { name: "Designspace" });
 }
 
 /** The Variations panel's row for the source named `name`, as a screen reader finds it. */
@@ -80,7 +86,7 @@ export function instanceRow(controls: Locator, name: string): Locator {
 
 export async function openVariationControls(page: Page) {
   const sidebar = editorSidebar(page);
-  await sidebar.getByRole("tab", { name: "Variations", exact: true }).click();
+  await sidebar.getByRole("tab", { name: "Designspace", exact: true }).click();
   return variationControls(page);
 }
 

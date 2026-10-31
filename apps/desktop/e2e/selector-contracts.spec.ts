@@ -9,6 +9,7 @@ import {
   glyphProperties,
   openVariationControls,
   settingsDetails,
+  openFontInfo,
 } from "./fixtures/appLocators";
 import { WEIGHT } from "@/testing/fonts";
 
@@ -26,7 +27,7 @@ test("exposes stable semantic selectors for major application surfaces", async (
   await navigation.getByRole("button", { name: "Sources", exact: true }).click();
   await expect(page.getByTestId(`source-${defaultSourceId}`)).toBeVisible();
 
-  await page.getByRole("button", { name: /font info$/ }).click();
+  await openFontInfo(page);
   const settings = page.getByRole("dialog", { name: "Settings" });
   await expect(settings.getByRole("navigation", { name: "Settings categories" })).toBeVisible();
   await expect(settingsDetails(page)).toBeVisible();
@@ -43,10 +44,9 @@ test("exposes stable semantic selectors for major application surfaces", async (
   await navigateToEditor(page, "41");
   await expect(editorShell(page)).toBeVisible();
   await expect(editorSidebar(page)).toBeVisible();
-  await expect(editorSidebar(page).getByRole("tab", { name: "Objects" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(
+    editorSidebar(page).getByRole("tab", { name: "Layers", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
   await expect(await openVariationControls(page)).toBeVisible();
   await expect(glyphProperties(page)).toBeVisible();
   await expect(glyphProperties(page).getByLabel("Advance width", { exact: true })).toBeVisible();

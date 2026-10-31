@@ -11,6 +11,7 @@ import {
   glyphProperties,
   openFirstCatalogGlyph,
   glyphSearch,
+  openFontInfo,
 } from "./fixtures/appLocators";
 import type { EditorDriver } from "./fixtures/EditorDriver";
 import { afterNextPaint, observeRenameTransition } from "./fixtures/glyphCatalogProbe";
@@ -50,7 +51,7 @@ test.describe("Home view", () => {
     const glyphs = page.getByRole("tab", { name: "Glyphs", exact: true });
     await expect(glyphs).toHaveAttribute("aria-selected", "true");
 
-    await page.getByRole("button", { name: /font info$/ }).click();
+    await openFontInfo(page);
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
@@ -60,7 +61,12 @@ test.describe("Home view", () => {
     await clickFirstCatalogGlyph(page);
     await page.waitForURL(/#\/editor\//);
     await expect(glyphs).toHaveAttribute("aria-selected", "false");
-    await expect(page.getByTestId("tab-glyph")).toHaveAttribute("aria-selected", "true");
+    // A role query, unlike a test id, skips the held Home view's own title bar.
+    const openTabs = page.getByRole("tablist", { name: "Open tabs" });
+    await expect(openTabs.getByRole("tab", { selected: true })).toHaveAttribute(
+      "data-testid",
+      "tab-glyph",
+    );
   });
 
   test(
@@ -100,10 +106,16 @@ test.describe("Home view", () => {
 
   test("shows an empty Glyph section before a glyph is selected", async ({ page }) => {
     const properties = glyphProperties(page);
-    const fields = ["Left sidebearing", "Right sidebearing", "Advance width"];
+    // The name and Unicode fields stand empty and disabled where a glyph's would show.
+    const fields = [
+      "Glyph name",
+      "Unicode",
+      "Left sidebearing",
+      "Right sidebearing",
+      "Advance width",
+    ];
 
     await expect(properties.getByRole("heading", { name: "Glyph", exact: true })).toBeVisible();
-    await expect(properties.getByText("—", { exact: true })).toHaveCount(2);
     for (const field of fields) {
       await expect(properties.getByLabel(field)).toBeDisabled();
       await expect(properties.getByLabel(field)).toHaveValue("");
@@ -141,19 +153,19 @@ test.describe("Home view", () => {
     const catalogSurface: Locator = glyphCatalogSurface(page);
 
     if ((await elementWidth(leftPanel)) <= 1) {
-      await page.getByRole("button", { name: "Toggle left sidebar" }).click();
+      await page.getByRole("button", { name: /^(Hide|Show) left sidebar$/ }).click();
       await expect.poll(() => elementWidth(leftPanel)).toBeGreaterThan(0);
     }
 
     if ((await elementWidth(rightPanel)) <= 1) {
-      await page.getByRole("button", { name: "Toggle right sidebar" }).click();
+      await page.getByRole("button", { name: /^(Hide|Show) right sidebar$/ }).click();
       await expect.poll(() => elementWidth(rightPanel)).toBeGreaterThan(0);
     }
 
     const leftWidth = await elementWidth(leftContent);
     const rightWidth = await elementWidth(rightContent);
 
-    await page.getByRole("button", { name: "Toggle left sidebar" }).click();
+    await page.getByRole("button", { name: /^(Hide|Show) left sidebar$/ }).click();
     await expect.poll(() => elementWidth(leftPanel)).toBe(0);
     await expect
       .poll(async () => Math.abs((await elementWidth(leftContent)) - leftWidth))
@@ -162,7 +174,7 @@ test.describe("Home view", () => {
     const catalogSamples = await catalogSurface.evaluate(async (element) => {
       const catalogPanel = element.parentElement;
       const button = document.querySelector<HTMLButtonElement>(
-        'button[aria-label="Toggle right sidebar"]',
+        'button[aria-label="Hide right sidebar"]',
       );
       if (!catalogPanel || !button) {
         throw new Error("Expected catalog panel and right sidebar toggle");
@@ -202,22 +214,22 @@ test.describe("Home view", () => {
     await expect
       .poll(async () => Math.abs((await elementWidth(rightContent)) - rightWidth))
       .toBeLessThanOrEqual(1);
-    await page.getByRole("button", { name: "Toggle right sidebar" }).click();
+    await page.getByRole("button", { name: /^(Hide|Show) right sidebar$/ }).click();
     await expect.poll(() => elementWidth(rightPanel)).toBeGreaterThan(0);
 
-    await page.getByRole("button", { name: "Toggle left sidebar" }).click();
+    await page.getByRole("button", { name: /^(Hide|Show) left sidebar$/ }).click();
     await expect.poll(() => elementWidth(leftPanel)).toBeGreaterThan(0);
   });
 
   test("finds encoded characters and unencoded glyph names", async ({ editor, page }) => {
+    // Create glyph is on the Glyphs header, which the search field replaces while it is open.
+    const unencoded = await createQuickGlyph(page, editor);
     const search = await glyphSearch(page);
     const surface = glyphCatalogSurface(page);
     const encodedId = (await editor.glyphNamed("A"))?.id;
 
     await search.fill("A");
     await expect(surface).toHaveAttribute("data-first-glyph-id", encodedId ?? "");
-
-    const unencoded = await createQuickGlyph(page, editor);
 
     await search.fill(unencoded.name);
     await expect(surface).toHaveAttribute("data-filtered-glyph-count", "1");
@@ -251,7 +263,7 @@ test.describe("Home view", () => {
     await afterNextPaint(page);
     await clickFirstCatalogGlyphName(page);
 
-    const input = page.getByLabel("Glyph name", { exact: true });
+    const input = page.getByLabel("Rename glyph", { exact: true });
     await input.fill(nextName);
     const remainedVisible = observeRenameTransition(page, glyph.id, nextName);
     await input.press("Enter");

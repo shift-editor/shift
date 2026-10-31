@@ -122,7 +122,7 @@ test("clears transient editor state when navigating between glyphs", async ({ pa
   expect(await editor.editedNodeIds()).toEqual([glyph?.nodeId]);
 
   await returnHome(page);
-  await openCatalogGlyph(page, "navigationA", glyphs.firstId);
+  await openCatalogGlyph(page, "navigationA", glyphs.firstId, "open");
   await expect
     .poll(() => editor.activeGlyph())
     .toMatchObject({

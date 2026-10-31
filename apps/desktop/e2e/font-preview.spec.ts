@@ -10,6 +10,7 @@ import {
   glyphProperties,
   openFirstCatalogGlyph,
   settingsDetails,
+  openFontInfo,
 } from "./fixtures/appLocators";
 import type { EditorDriver } from "./fixtures/EditorDriver";
 import {
@@ -92,7 +93,7 @@ test.describe("retained font source Grid preview", () => {
   test("shows preview font settings with disabled authoring controls", async ({ page, editor }) => {
     await expect.poll(async () => (await editor.fontOverview()).mode).toBe("preview");
 
-    await page.getByRole("button", { name: /font info$/ }).click();
+    await openFontInfo(page);
     const settingsDialog = page.getByRole("dialog", { name: "Settings" });
     await expect(settingsDialog).toBeVisible();
     await expect(page.getByText("Read-only preview")).toBeHidden();

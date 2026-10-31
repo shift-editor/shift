@@ -210,7 +210,7 @@ test("keeps variable preview and exact-source editability coherent across Grid n
       ]),
     });
 
-  await openCatalogGlyph(page, "navigationSparse", fixture.secondGlyphId);
+  await openCatalogGlyph(page, "navigationSparse", fixture.secondGlyphId, "open");
   await openVariationControls(page);
   await expect
     .poll(async () => (await editor.glyphNamed("navigationSparse"))?.layers)
@@ -234,7 +234,7 @@ test("keeps variable preview and exact-source editability coherent across Grid n
 
   await editorShell(page).getByRole("tab", { name: "Glyphs", exact: true }).click();
   await page.waitForURL(/#\/home$/);
-  await openCatalogGlyph(page, "navigationVariable", fixture.firstGlyphId);
+  await openCatalogGlyph(page, "navigationVariable", fixture.firstGlyphId, "open");
   await expectPreview(page, fixture, {
     location: 650,
     activeSourceId: null,

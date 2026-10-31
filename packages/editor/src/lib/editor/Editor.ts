@@ -1986,15 +1986,14 @@ export class Editor {
    * opening replaces its text with the glyph, and opening the glyph the run
    * already edits re-enters it. Runs on other pages keep their text. Opening is
    * navigation, never a history entry. Tools activate against the glyph node
-   * they find, so they reset whenever that node is replaced: on a page switch
-   * (`Pages.activate`), or here when the shown page's run changes glyph.
+   * they find, so they reset once it is placed.
    *
    * @param glyphId - A glyph whose model is already loaded.
    * @param page - The page to show and open it on.
    * @returns the glyph node now being edited, or null when the glyph cannot be placed.
    */
   public openGlyphInText(glyphId: GlyphId, page: PageNode): GlyphNode | null {
-    return this.history.withoutRecording(() => {
+    const node = this.history.withoutRecording(() => {
       this.pages.activate(page.id);
       const runs = this.nodeDefinition("textRun");
       const existing = this.scene.first("textRun");
@@ -2018,10 +2017,12 @@ export class Editor {
       this.text.setItems(existing.runId, [item]);
       const child = runs.editItem(existing, item.id);
       if (child) this.enterNode(child.id);
-      // The page stayed, so Pages.activate did not reset the tools; the node they edit did change.
-      this.toolManager.reset();
       return child;
     });
+    // Tools activate against the glyph node they find: Pages.activate reset them before this
+    // one was placed, so they reset again now that it is.
+    this.toolManager.reset();
+    return node;
   }
 
   /** Frames a glyph node's editing frame (`GlyphNodeDefinition.frameBounds`) until the user moves the camera. */
