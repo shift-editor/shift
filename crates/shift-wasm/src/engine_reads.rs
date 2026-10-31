@@ -1,9 +1,9 @@
-//! What the editor reads from the editing engine's font: its axes, sources
-//! and kerning, as shift-font's own types; kerning and source metrics at a
-//! place; and the per-frame variation reads, interpolation weights and axis
-//! mapping, answered by the same shift-font code the workspace and export
-//! run. Every read answers from the session's font as it stands, unsaved
-//! edits included.
+//! What the editor reads from the editing engine's font: its axes, sources,
+//! kerning and glyph records, as shift-font's own types; kerning and source
+//! metrics at a place; and the per-frame variation reads, interpolation
+//! weights and axis mapping, answered by the same shift-font code the
+//! workspace and export run. Every read answers from the session's font as it
+//! stands, unsaved edits included.
 //!
 //! The [`EngineReads`] interface is answered only with the `engine` feature,
 //! beside the session it reads ([`crate::engine`]). The interface and its
@@ -22,7 +22,8 @@
 //! edit changes the axes, mappings or sources they were built from.
 
 use pack::Pack;
-use shift_font::{Axis, MetricValue, MissingKerningOrigin, ResolvedKerning, Source};
+use shift_engine::StoreReadError;
+use shift_font::{Axis, GlyphRecord, MetricValue, MissingKerningOrigin, ResolvedKerning, Source};
 use shift_wire::KerningSnapshot;
 
 /// What the editor reads from one engine session's font. Glyphs and sources
@@ -65,6 +66,14 @@ pub trait EngineReads {
     /// for it: `Font::missing_kerning_origin`; unkerned for a number the
     /// session never interned.
     fn missing_kerning_origin(&self, source: usize) -> MissingKerningOrigin;
+    /// Every glyph's record, sorted by name: its own fields from the
+    /// session's font, the component bases of glyphs it has not loaded and
+    /// glyph data's categories from the store's reader.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreReadError`] when the store's reader cannot answer.
+    fn glyph_records(&self) -> Result<Vec<GlyphRecord>, StoreReadError>;
     /// One weight per source of the interned source set `set`, in its order,
     /// at a design location, from the basis the session's font gives that
     /// set: `InterpolationBasis::weights_at`. Empty for a set the session
@@ -120,10 +129,12 @@ mod exports {
     use std::hash::Hash;
     use std::rc::Rc;
 
+    use shift_engine::StoreReadError;
     use shift_font::naming::new_anchor_name;
     use shift_font::{
-        AxisMappingBasis, DesignLocation, Font, FontChangeImpact, GlyphId, InterpolationBasis,
-        Kerning, KerningSide, LayerId, MissingKerningOrigin, ResolvedKerning, SourceId,
+        AxisMappingBasis, DesignLocation, Font, FontChangeImpact, GlyphId, GlyphRecord,
+        InterpolationBasis, Kerning, KerningSide, LayerId, MissingKerningOrigin, ResolvedKerning,
+        SourceId,
     };
     use shift_wire::values::{self, WireParse};
     use wasm_bindgen::prelude::*;
@@ -386,6 +397,10 @@ mod exports {
                 Some(source_id) => self.session.font().missing_kerning_origin(*source_id),
                 None => MissingKerningOrigin::Unkerned,
             }
+        }
+
+        fn glyph_records(&self) -> Result<Vec<GlyphRecord>, StoreReadError> {
+            Self::glyph_records(self)
         }
 
         fn interpolation_weights(&self, set: usize, location: Vec<f64>) -> Vec<f64> {

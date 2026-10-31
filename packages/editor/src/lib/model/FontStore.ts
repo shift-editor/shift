@@ -297,15 +297,33 @@ export class FontStore {
 
   /**
    * Shows what the window's engine did for an edit: the font-level records it
-   * changed and the layers it touched.
+   * changed, the records of the glyphs it changed, and the layers it touched.
    *
    * @returns The resident layers' states before, to restore if the edit is undone locally.
    */
   applyEngineEdit(edit: EngineEdit): GlyphState[] {
     return batch(() => {
-      if (edit.next) this.#applyRecords(edit.next);
+      const next = edit.next;
+      if (next) {
+        const current = this.#workspace.peek();
+        const glyphChanges = next.glyphChanges;
+        const glyphs =
+          current && glyphChanges ? withGlyphRecordChanges(current.glyphs, glyphChanges) : null;
+        this.#applyRecords(next, glyphs);
+      }
       return this.publishLayers(edit.layers);
     });
+  }
+
+  /**
+   * The glyphs whose layer records `edit` changes, added or removed among
+   * them, read before it is shown: their projections are rebuilt once the
+   * workspace has persisted it.
+   */
+  glyphsRelayeredBy(edit: EngineEdit): GlyphId[] {
+    const glyphChanges = edit.next?.glyphChanges;
+    if (!glyphChanges) return [];
+    return glyphIdsWithChangedLayers(this.#indexCell.peek().recordsById, glyphChanges);
   }
 
   /** The font-level records as they stand, for {@link restoreRecords}; copies nothing. */
@@ -345,22 +363,20 @@ export class FontStore {
 
   /**
    * Confirms an edit the window's engine made and showed, from the workspace's
-   * receipt. The engine already showed the layers it touched and the
-   * font-level records it changed, so only glyph records, which the workspace
-   * alone builds, and layers that had no state to show come from the receipt.
+   * receipt. The engine already showed the layers it touched and every record
+   * it changed, so only layers that had no state to show come from the
+   * receipt.
    *
+   * @param relayered - The glyphs whose layer records the engine changed for
+   * the edit ({@link glyphsRelayeredBy}).
    * @returns The resident glyphs whose projections need rebuilding natively.
    */
-  confirmEdit(applied: AppliedChange): readonly GlyphId[] {
+  confirmEdit(applied: AppliedChange, relayered: readonly GlyphId[] = []): readonly GlyphId[] {
     const current = this.#workspace.peek();
     if (!current) return [];
     const next = applied.next;
-    const glyphChanges = next?.glyphChanges;
-    const glyphsWithNewLayers = glyphChanges
-      ? glyphIdsWithChangedLayers(this.#indexCell.peek().recordsById, glyphChanges)
-      : [];
-    const restructured = new Set(glyphsWithNewLayers);
-    const invalid = new Set<GlyphId>([...glyphsWithNewLayers, ...applied.dependents]);
+    const restructured = new Set(relayered);
+    const invalid = new Set<GlyphId>([...relayered, ...applied.dependents]);
     const { glyphByLayer } = this.#indexCell.peek();
     for (const layer of applied.layers) {
       const glyphId = glyphByLayer.get(layer.layerId);
@@ -369,12 +385,7 @@ export class FontStore {
       if (layer.structure) restructured.add(glyphId);
     }
 
-    batch(() => {
-      if (glyphChanges) {
-        this.#applyRecords({}, withGlyphRecordChanges(current.glyphs, glyphChanges));
-      }
-      this.#showUnshownLayers(applied.layers);
-    });
+    batch(() => this.#showUnshownLayers(applied.layers));
 
     const topologyChanged = Boolean(next?.axes || next?.sources || next?.axisMappingBases);
     if (topologyChanged) this.#invalidGlyphs.set({ glyphIds: null });

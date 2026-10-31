@@ -14,11 +14,12 @@ use js_sys::{Array, Float64Array, Function, Object, Reflect, Uint8Array};
 use pack::{CarryingNames, Packed};
 use serde::Serialize;
 use shift_engine::{
-    ApplyError, EditHistory, EngineSession, LayerSource, StoreReadError, StoreReaderClient,
+    ApplyError, EditHistory, EngineSession, LayerSource, RecordSource, StoreReadError,
+    StoreReaderClient,
 };
 use shift_font::{
-    AppliedIntents, Contour, Font, FontChangeImpact, FontIntent, FontIntentSet, GlyphId,
-    GlyphLayer, LayerId, TouchedLayer,
+    AppliedIntents, Contour, Font, FontChangeImpact, FontIntent, FontIntentSet, GlyphDataCategory,
+    GlyphId, GlyphLayer, LayerId, NamedGlyph, TouchedLayer,
 };
 use shift_wire::replacement::FontReplacement;
 use shift_wire::{AnchorData, ComponentData, ContourData, values};
@@ -208,6 +209,38 @@ impl LayerSource for HostLayers<'_> {
     }
 }
 
+impl RecordSource for HostLayers<'_> {
+    type Error = HostError;
+
+    fn component_bases(&mut self, glyph_ids: &[GlyphId]) -> Result<Vec<Vec<GlyphId>>, HostError> {
+        if glyph_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(self.client().component_bases(glyph_ids.to_vec())??)
+    }
+
+    fn glyph_data_categories(
+        &mut self,
+        glyphs: &[NamedGlyph],
+    ) -> Result<Vec<GlyphDataCategory>, HostError> {
+        if glyphs.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.client().glyph_data_categories(glyphs.to_vec())
+    }
+}
+
+impl From<HostError> for StoreReadError {
+    fn from(error: HostError) -> Self {
+        match error {
+            HostError::Store(error) => error,
+            error => Self::Unreadable {
+                detail: error.to_string(),
+            },
+        }
+    }
+}
+
 /// An open session, the store request it reads through, its undo history, the
 /// session as it stood when the open edit began, to go back to if it is
 /// cancelled, and the ids the editor's reads name by number.
@@ -231,19 +264,34 @@ pub(crate) struct Engine {
 impl Engine {
     /// What an edit did as an `EngineEditLayers`: its touched layers. Keeps the
     /// font-level records it changed for `EngineEdits::replacement`, in the
-    /// native workspace's packed shape; glyph records are left to the
-    /// workspace's echo.
+    /// native workspace's packed shape, with the records of the glyphs it
+    /// changed as they now stand.
     fn edit_object(&mut self, before: &Font, applied: &AppliedIntents) -> Result<Object, JsError> {
         let layers = engine_layers(before, &applied.layers)?;
         let edit = Object::new();
         set(&edit, "layers", &layers)?;
         let impact = applied.changes.impact();
         self.variation.forget_if_changed(impact);
-        self.replaced = FontReplacement::changed_by(
+        let mut replaced = FontReplacement::changed_by(
             self.session.font(),
             impact.difference(FontChangeImpact::GLYPHS),
         )?;
+        if impact.contains(FontChangeImpact::GLYPHS) {
+            let glyph_changes = self
+                .session
+                .glyph_record_changes(&mut HostLayers(&self.source), &applied.changes)
+                .map_err(js_error)?;
+            replaced
+                .get_or_insert_with(FontReplacement::default)
+                .glyph_changes = Some(glyph_changes);
+        }
+        self.replaced = replaced;
         Ok(edit)
+    }
+
+    /// Every glyph's record, as the session's font stands.
+    pub(crate) fn glyph_records(&self) -> Result<Vec<shift_font::GlyphRecord>, StoreReadError> {
+        Ok(self.session.glyph_records(&mut HostLayers(&self.source))?)
     }
 
     /// The intents held for this apply, stage or preview, as one set.
