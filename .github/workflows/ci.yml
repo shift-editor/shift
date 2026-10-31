@@ -22,6 +22,10 @@ concurrency:
 # main's Rust caches, so macOS builds compiled the workspace from scratch.
 env:
   CARGO_INCREMENTAL: 0
+  # Every turbo run writes .turbo/runs/<id>.json (each task's hash, cache hit or
+  # miss, timings and inputs). The ci-telemetry artifacts carry them off the
+  # runner so cache misses and task times can be tracked across runs.
+  TURBO_RUN_SUMMARY: "true"
   CARGO_PROFILE_TEST_DEBUG: 0
   RUSTFLAGS: "-D warnings"
 
@@ -366,6 +370,17 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Upload CI telemetry
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-telemetry-typecheck
+          path: |
+            .turbo/runs/
+            **/vitest-report.json
+            !**/node_modules/**
+          if-no-files-found: ignore
+
       - name: Save Typecheck Turbo results
         if: github.ref == 'refs/heads/main' && steps.typecheck-turbo-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
@@ -445,7 +460,18 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Run unit tests
-        run: pnpm test:unit
+        run: pnpm test:unit -- --reporter=default --reporter=json --outputFile.json=vitest-report.json
+
+      - name: Upload CI telemetry
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-telemetry-unit-test
+          path: |
+            .turbo/runs/
+            **/vitest-report.json
+            !**/node_modules/**
+          if-no-files-found: ignore
 
       - name: Save native Turbo build
         if: github.ref == 'refs/heads/main' && steps.native-turbo-cache.outputs.cache-hit != 'true'
@@ -692,7 +718,18 @@ jobs:
         run: pnpm build:native
 
       - name: Run shift-bridge tests
-        run: pnpm test:native
+        run: pnpm test:native -- --reporter=default --reporter=json --outputFile.json=vitest-report.json
+
+      - name: Upload CI telemetry
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-telemetry-integration
+          path: |
+            .turbo/runs/
+            **/vitest-report.json
+            !**/node_modules/**
+          if-no-files-found: ignore
 
   # ---------------------------------------------------------------------------
   # Required end-to-end correctness

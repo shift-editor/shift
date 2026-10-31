@@ -108,6 +108,7 @@ npm/
 **/settings.local.json
 
 .turbo
+vitest-report.json
 *.settings.local.json*
 
 .plans/
