@@ -165,17 +165,13 @@ export class SurfaceActions {
     this.#editor.selectSourceForEditing(this.#sourceNamed(name).id, mode);
   }
 
-  /**
-   * Edits the sources `names` together, as clicking the first and Cmd-clicking the rest does,
-   * and waits until their layers are matched to the active one.
-   */
-  async editSources(names: readonly string[]): Promise<void> {
+  /** Edits the sources `names` together, as clicking the first and Cmd-clicking the rest does. */
+  editSources(names: readonly string[]): void {
     const [first, ...rest] = names.map((name) => this.#sourceNamed(name).id);
     if (!first) throw new Error("editSources needs at least one source");
 
     this.#editor.selectSourceForEditing(first);
     for (const sourceId of rest) this.#editor.selectSourceForEditing(sourceId, "toggle");
-    await this.#editor.editingLayersMatched();
   }
 
   /** Selects the objects `ids`, replacing the selection, as clicking them in the Objects tab does. */

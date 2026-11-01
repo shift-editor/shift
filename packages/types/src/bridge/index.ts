@@ -4,11 +4,8 @@ import type { Unicode } from "./generated";
 export type { GlyphName } from "../ids";
 
 export type {
-  AnchorMatch,
   BridgeApi,
   CatalogMetrics,
-  ComponentMatch,
-  ContourMatch,
   LayerRead,
   BoundsCorner,
   OutlineBounds,
@@ -24,10 +21,6 @@ export type {
   ResolvedOutline,
   GlyphPreview,
   GlyphSnapshotRequest,
-  LayerDifference,
-  LayerDifferenceKind,
-  LayerMatch,
-  PointMatch,
   NameFit,
   NameSpecimen,
   Specimen,

@@ -5,15 +5,20 @@ import path from "node:path";
 import { createBridge, type ShiftBridge } from "@shift/bridge";
 import {
   mintAnchorId,
+  mintAxisId,
   mintComponentId,
   mintContourId,
   mintGlyphId,
   mintLayerId,
   mintPointId,
+  mintSourceId,
   type FontIntent,
+  type GlyphId,
   type LayerId,
   type PointId,
+  type SourceId,
 } from "@shift/types";
+import type { Counterparts } from "@shift/wasm/protocol";
 import { loadEngine, type EngineSession } from "@shift/editor/model";
 import { layerReaderHost } from "../../../../preload/layerReaders";
 import { engineStoreRequest } from "./engineStoreRequest";
@@ -30,6 +35,7 @@ describe("the window's engine edits from the store", () => {
   let bridge: ShiftBridge;
   let engine: EngineSession;
   let openEngine: () => Promise<EngineSession>;
+  let glyphId: GlyphId;
   let layerId: LayerId;
   let pointIds: PointId[];
 
@@ -50,7 +56,7 @@ describe("the window's engine edits from the store", () => {
     const blank = await openEngine();
     const sourceId = blank.fontRecords().sources[0]!.id;
     blank.dispose();
-    const glyphId = mintGlyphId();
+    glyphId = mintGlyphId();
     layerId = mintLayerId();
     const contourId = mintContourId();
     pointIds = [mintPointId(), mintPointId(), mintPointId()];
@@ -241,6 +247,130 @@ describe("the window's engine edits from the store", () => {
     expect(layer, "the engine loads and moves the composite").toBeDefined();
     expect(holdsPair(layer!.values, 210, 720)).toBe(true);
   });
+
+  describe("matching the layers of two sources", () => {
+    let boldId: SourceId;
+    let boldLayerId: LayerId;
+    let boldPointIds: PointId[];
+
+    beforeEach(async () => {
+      const axisId = mintAxisId();
+      const contourId = mintContourId();
+      boldId = mintSourceId();
+      boldLayerId = mintLayerId();
+      boldPointIds = [mintPointId(), mintPointId(), mintPointId()];
+      bridge.workspace.apply([
+        {
+          kind: "createAxis",
+          createAxis: {
+            axis: {
+              id: axisId,
+              tag: "wght",
+              name: "Weight",
+              role: "external",
+              kind: { kind: "continuous", minimum: 400, default: 400, maximum: 700 },
+              labels: [],
+              hidden: false,
+            },
+          },
+        },
+        {
+          kind: "createSource",
+          createSource: { sourceId: boldId, name: "Bold", location: { values: { [axisId]: 700 } } },
+        },
+        {
+          kind: "createGlyphLayer",
+          createGlyphLayer: { layerId: boldLayerId, glyphId, sourceId: boldId },
+        },
+        { kind: "addContour", addContour: { layerId: boldLayerId, contourId, closed: true } },
+        {
+          kind: "addPoints",
+          addPoints: {
+            layerId: boldLayerId,
+            contourId,
+            points: boldPointIds.map((id, index) => ({
+              id,
+              x: index * 120,
+              y: index * 60,
+              pointType: "onCurve" as const,
+              smooth: false,
+            })),
+          },
+        },
+      ]);
+      engine.dispose();
+      engine = await openEngine();
+      engine.preload([glyphId]);
+    });
+
+    it("names the Bold points matching the Regular ones, in the order asked", () => {
+      const counterparts = engine.counterparts(
+        layerId,
+        boldLayerId,
+        pointsOnly(pointIds[2]!, pointIds[0]!),
+      );
+
+      expect(counterparts).toEqual(pointsOnly(boldPointIds[2]!, boldPointIds[0]!));
+    });
+
+    it("names none once the outlines match but the anchors no longer do", () => {
+      edit({
+        kind: "addAnchors",
+        addAnchors: {
+          layerId: boldLayerId,
+          anchors: [{ id: mintAnchorId(), name: "top", x: 60, y: 300 }],
+        },
+      });
+
+      expect(engine.counterparts(layerId, boldLayerId, pointsOnly(...pointIds))).toBeNull();
+    });
+
+    it("names none once the Bold contour has a point fewer", () => {
+      edit({
+        kind: "removePoints",
+        removePoints: { layerId: boldLayerId, pointIds: [boldPointIds[1]!] },
+      });
+
+      expect(engine.counterparts(layerId, boldLayerId, pointsOnly(pointIds[0]!))).toBeNull();
+    });
+
+    it("says why it cannot match a point Regular lacks, or layers of two glyphs", () => {
+      const point = mintPointId();
+      const otherGlyphId = mintGlyphId();
+      const otherLayerId = mintLayerId();
+      edit({
+        kind: "createGlyph",
+        createGlyph: { glyphId: otherGlyphId, name: "B", unicodes: [] },
+      });
+      edit({
+        kind: "createGlyphLayer",
+        createGlyphLayer: { layerId: otherLayerId, glyphId: otherGlyphId, sourceId: boldId },
+      });
+
+      expect(() => engine.counterparts(layerId, boldLayerId, pointsOnly(point))).toThrow(
+        expect.objectContaining({
+          error: { kind: "font", error: { kind: "unknownPoint", point } },
+        }),
+      );
+      expect(() => engine.counterparts(layerId, otherLayerId, pointsOnly())).toThrow(
+        expect.objectContaining({
+          error: {
+            kind: "font",
+            error: { kind: "differentGlyphs", reference: layerId, target: otherLayerId },
+          },
+        }),
+      );
+    });
+
+    it("refuses a layer it has not loaded", async () => {
+      engine.dispose();
+      engine = await openEngine();
+
+      expect(() => engine.counterparts(layerId, boldLayerId, pointsOnly())).toThrow(
+        expect.objectContaining({ error: { kind: "notLoaded", layer: layerId } }),
+      );
+    });
+  });
 });
 
 /** `value` as JSON would carry it: typed arrays as arrays, absent fields dropped. */
@@ -250,4 +380,9 @@ function asJson(value: unknown): unknown {
       field instanceof Float64Array ? [...field] : field,
     ),
   );
+}
+
+/** A counterparts request, or answer, naming only `points`. */
+function pointsOnly(...points: PointId[]): Counterparts {
+  return { points, anchors: [], components: [] };
 }

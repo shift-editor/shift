@@ -10,7 +10,6 @@ import type {
   GlyphSnapshot,
   GlyphState,
   LayerId,
-  LayerMatch,
   LayerRead,
   NodeId,
   Location,
@@ -480,11 +479,6 @@ export class WorkspaceEditCoordinator {
     if (layerIds.length === 0) return [];
 
     return this.#withFlush(() => this.#session.resolveLayers(layerIds));
-  }
-
-  /** Derives cross-layer entity matches behind pending authored edits. */
-  matchLayers(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch> {
-    return this.#withFlush(() => this.#session.layerMatch(referenceLayerId, targetLayerId));
   }
 
   /** Pulls drawable previews at one internal location behind pending edits. */
