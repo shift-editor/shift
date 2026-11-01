@@ -365,11 +365,13 @@ mod exports {
 
     /// What `node` is to layout.
     fn layout_kind(node: &SceneNode) -> NodeKind {
+        if let Some(frame) = node.frame_layout() {
+            return NodeKind::Frame(frame);
+        }
         match &node.content {
             NodeContent::Page { .. } => NodeKind::Page,
             NodeContent::TextRun { .. } => NodeKind::Text,
-            NodeContent::Frame { .. } => NodeKind::Frame(node.frame_layout().unwrap_or_default()),
-            NodeContent::Glyph { .. } => NodeKind::Fixed(Size::ZERO),
+            NodeContent::Frame { .. } | NodeContent::Glyph { .. } => NodeKind::Fixed(Size::ZERO),
         }
     }
 
