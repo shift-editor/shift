@@ -2,20 +2,9 @@
 
 use std::collections::BTreeSet;
 
-use shift_shape::Unit;
-use unicode_segmentation::UnicodeSegmentation;
-
 use crate::font::LayoutFont;
 use crate::paragraph::Paragraph;
 use crate::{CaretStop, Direction, LayoutLine, PlacedGlyph, SecondaryCaret, TextLayout};
-
-/// What a glyph inserted by name reads as when finding graphemes: an inline
-/// object, a grapheme of its own.
-const OBJECT_REPLACEMENT: char = '\u{FFFC}';
-
-/// The prefix of a ligature's caret anchors, `caret_1`, `caret_2`, which
-/// export compiles into `GDEF` ligature carets.
-const CARET_ANCHOR_PREFIX: &str = "caret_";
 
 /// Finds caret stops over a laid-out text.
 pub(crate) struct Carets<'f, 'l, 'a> {
@@ -30,10 +19,6 @@ impl<'f, 'l, 'a> Carets<'f, 'l, 'a> {
 
     /// A stop at each grapheme boundary of each line, in logical order.
     pub(crate) fn stops(&self, paragraphs: &[Paragraph]) -> Vec<CaretStop> {
-        let boundaries: Vec<BTreeSet<u32>> = paragraphs
-            .iter()
-            .map(Paragraph::grapheme_boundaries)
-            .collect();
         let mut stops = Vec::new();
         for (number, line) in (0u32..).zip(&self.layout.lines) {
             let Some(paragraph) = usize::try_from(line.paragraph)
@@ -42,12 +27,7 @@ impl<'f, 'l, 'a> Carets<'f, 'l, 'a> {
             else {
                 continue;
             };
-            let Some(boundaries) = usize::try_from(line.paragraph)
-                .ok()
-                .and_then(|index| boundaries.get(index))
-            else {
-                continue;
-            };
+            let boundaries = &paragraph.graphemes;
             let text_end = line.end.min(paragraph.end);
             for &boundary in boundaries.range(line.start..=text_end) {
                 stops.push(self.stop(number, line, boundary, text_end, boundaries));
@@ -75,13 +55,23 @@ impl<'f, 'l, 'a> Carets<'f, 'l, 'a> {
             x: self.edge(glyph, boundary, boundaries),
             direction: glyph.direction,
         });
-        let (x, direction) = match (after, trailing) {
-            (Some(glyph), _) => (self.edge(glyph, boundary, boundaries), glyph.direction),
-            (None, Some(trailing)) => (trailing.x, trailing.direction),
-            (None, None) => (line.left, line.direction),
+        let side = match (after, trailing) {
+            (Some(glyph), _) => StopSide::BeforeGlyph(glyph),
+            (None, Some(trailing)) => StopSide::LineEnd(trailing),
+            (None, None) => StopSide::EmptyLine,
         };
-        let secondary =
-            trailing.filter(|trailing| after.is_some() && trailing.direction != direction);
+        let (x, direction) = match side {
+            StopSide::BeforeGlyph(glyph) => {
+                (self.edge(glyph, boundary, boundaries), glyph.direction)
+            }
+            StopSide::LineEnd(trailing) => (trailing.x, trailing.direction),
+            StopSide::EmptyLine => (line.left, line.direction),
+        };
+        // A boundary where directions meet also shows at the trailing edge
+        // of the glyph before it.
+        let secondary = trailing.filter(|trailing| {
+            matches!(side, StopSide::BeforeGlyph(_)) && trailing.direction != direction
+        });
         CaretStop {
             unit: boundary,
             line: number,
@@ -140,22 +130,10 @@ impl<'f, 'l, 'a> Carets<'f, 'l, 'a> {
         component: usize,
         graphemes: usize,
     ) -> Option<f64> {
-        let anchors = self.font.anchors(glyph.glyph_id?)?;
-        let mut carets: Vec<f64> = anchors
-            .anchors
-            .iter()
-            .filter(|anchor| {
-                anchor
-                    .name
-                    .strip_prefix(CARET_ANCHOR_PREFIX)
-                    .is_some_and(|index| index.parse::<u32>().is_ok())
-            })
-            .map(|anchor| anchor.x)
-            .collect();
+        let carets = self.font.anchors(glyph.glyph_id?)?.carets();
         if carets.len() + 1 != graphemes {
             return None;
         }
-        carets.sort_by(f64::total_cmp);
         let index = match glyph.direction {
             Direction::Ltr => component.checked_sub(1)?,
             Direction::Rtl => carets.len().checked_sub(component)?,
@@ -171,29 +149,13 @@ fn share(part: usize, whole: usize) -> f64 {
     f64::from(part) / f64::from(whole)
 }
 
-impl Paragraph {
-    /// The paragraph's grapheme boundaries as unit indices in the text, its
-    /// start and end included.
-    fn grapheme_boundaries(&self) -> BTreeSet<u32> {
-        let text: String = self
-            .units
-            .iter()
-            .map(|unit| match unit {
-                Unit::Character(character) => *character,
-                Unit::Glyph(_) => OBJECT_REPLACEMENT,
-            })
-            .collect();
-        // Each unit is one char, so a char's index is its unit's.
-        let mut unit_at_byte = vec![0u32; text.len() + 1];
-        for (unit, (byte, _)) in (0u32..).zip(text.char_indices()) {
-            unit_at_byte[byte] = unit;
-        }
-        let mut boundaries: BTreeSet<u32> = text
-            .grapheme_indices(true)
-            .map(|(byte, _)| self.start + unit_at_byte[byte])
-            .collect();
-        boundaries.insert(self.start);
-        boundaries.insert(self.end);
-        boundaries
-    }
+/// Which side of a caret stop's boundary places it.
+#[derive(Clone, Copy)]
+enum StopSide<'l> {
+    /// The leading edge of the glyph after the boundary.
+    BeforeGlyph(&'l PlacedGlyph),
+    /// The trailing edge of the glyph before it, at a line's end.
+    LineEnd(SecondaryCaret),
+    /// A line with no glyphs: its start.
+    EmptyLine,
 }

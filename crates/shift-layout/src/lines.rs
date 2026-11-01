@@ -6,7 +6,7 @@ use std::ops::Range;
 use shift_shape::{line_breaks, visual_order};
 
 use crate::font::LayoutFont;
-use crate::paragraph::{Paragraph, ShapedText};
+use crate::paragraph::{Paragraph, RunGlyph, ShapedText};
 use crate::request::{LayoutError, LineHeight, LineMetrics, TextAlign, TextOptions};
 use crate::{Direction, LayoutLine, LineRun, PlacedGlyph, TextLayout};
 
@@ -157,13 +157,7 @@ impl<'o> Placement<'o> {
         for index in visual_order(&levels) {
             let mut segment = segments[index].clone();
             segment.glyph_start = crate::index_count(layout.glyphs.len())?;
-            let glyphs = text
-                .runs
-                .iter()
-                .filter(|run| run.start <= segment.start && segment.end <= run.end)
-                .flat_map(|run| &run.glyphs)
-                .filter(|glyph| (segment.start..segment.end).contains(&glyph.start));
-            for glyph in glyphs {
+            for glyph in text.glyphs_in(&segment) {
                 layout.glyphs.push(PlacedGlyph {
                     glyph_id: glyph.glyph_id,
                     start: glyph.start,
@@ -247,5 +241,21 @@ impl LayoutLine {
         let first = self.runs.first().map_or(0, |run| run.glyph_start);
         let last = self.runs.last().map_or(0, |run| run.glyph_end);
         crate::slice_index(first)..crate::slice_index(last)
+    }
+}
+
+impl ShapedText {
+    /// The glyphs one line shows of a run, in display order: those of the
+    /// shaped run that holds `segment` whose first unit falls in it. A run
+    /// is shaped across the whole paragraph, so a line cut through it shows
+    /// only the glyphs that start on its side of the break; a ligature
+    /// spanning the break stays on the line its first unit is on.
+    fn glyphs_in<'t>(&'t self, segment: &LineRun) -> impl Iterator<Item = &'t RunGlyph> {
+        let units = segment.start..segment.end;
+        self.runs
+            .iter()
+            .filter(move |run| run.start <= units.start && units.end <= run.end)
+            .flat_map(|run| &run.glyphs)
+            .filter(move |glyph| (segment.start..segment.end).contains(&glyph.start))
     }
 }
