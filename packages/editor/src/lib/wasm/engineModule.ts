@@ -58,7 +58,7 @@ import type {
   PlacedText,
 } from "@shift/wasm/protocol";
 
-export { svgPaths, typedText } from "@shift/wasm/engine";
+export { initEngine, svgPaths, typedText } from "@shift/wasm/engine";
 export type { ContourPoints } from "@shift/wasm/protocol";
 import type { KerningPlace } from "../../types/font";
 import { unkerned } from "../model/Kerning";

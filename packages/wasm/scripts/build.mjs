@@ -1,7 +1,7 @@
 // Builds crates/shift-wasm into src/generated: the wasm-bindgen glue and the
 // module embedded as base64, so every consumer loads it synchronously with no
 // bundler plugin. The engine variant is the exception: it ships as its own
-// shift_wasm_bg.wasm, which `@shift/wasm/engine` compiles on import, because
+// shift_wasm_bg.wasm, which `@shift/wasm/engine` compiles in initEngine, because
 // parsing and decoding its 3.8 MB of base64 cost a window about 60 MB. No
 // output is committed: rustc's output depends on the build host, so both are built like
 // the native addon, by turbo, before anything that imports them. Needs the Nix

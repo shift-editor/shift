@@ -1,8 +1,8 @@
 /**
  * The editing engine, compiled from `crates/shift-wasm` with its `engine`
  * feature: shift-engine's session over shift-font, the same code the native
- * workspace runs. Instantiated at import, from its own `.wasm` file rather
- * than embedded like `@shift/wasm`, so importing it waits for the compile.
+ * workspace runs. Instantiated by {@link initEngine}, from its own `.wasm`
+ * file rather than embedded like `@shift/wasm`.
  *
  * @remarks
  * Built into `src/generated-engine` as `shift_wasm_bg.wasm`, which bundlers
@@ -46,7 +46,24 @@ async function engineModule(): Promise<WebAssembly.Module> {
   return WebAssembly.compile(await response.arrayBuffer());
 }
 
-initSync({ module: await engineModule() });
+let initializing: Promise<void> | null = null;
+
+/**
+ * Compiles and instantiates the engine module, once; every other export
+ * calls into it, so callers await this first.
+ *
+ * @remarks
+ * Not a top-level `await`: a consumer bundling the SDK for its default
+ * browser targets cannot build a chunk that uses one.
+ */
+export function initEngine(): Promise<void> {
+  initializing ??= instantiate();
+  return initializing;
+}
+
+async function instantiate(): Promise<void> {
+  initSync({ module: await engineModule() });
+}
 
 const names = moduleNames(internName, nameOf);
 
