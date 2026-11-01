@@ -444,19 +444,50 @@ fn layout_timing() {
 }
 
 #[test]
-fn the_placement_key_is_shared_by_layouts_that_place_alike_and_only_by_them() {
+fn layouts_share_a_placement_key_only_when_they_place_alike() {
     let fixture = Fixture::open("ShapingTest.ufo");
+    let mut keys = PlacementKeys::default();
+    let mut first = fixture.lay_out("fi", shaped());
+    let mut again = fixture.lay_out("fi", shaped());
+    let mut unshaped = fixture.lay_out("fi", TextOptions::default());
 
-    let first = fixture.lay_out("fi", shaped());
-    let again = fixture.lay_out("fi", shaped());
-    let unshaped = fixture.lay_out("fi", TextOptions::default());
+    for layout in [&mut first, &mut again, &mut unshaped] {
+        keys.assign(layout);
+    }
 
     assert_eq!(first.placement, again.placement);
     assert_ne!(first.placement, unshaped.placement);
-    // Glyph bounds are not placement.
-    let mut unbounded = first.clone();
+}
+
+#[test]
+fn a_hash_collision_does_not_share_a_placement_key() {
+    let fixture = Fixture::open("ShapingTest.ufo");
+    // Every layout hashes alike, as two colliding layouts would.
+    let mut keys = PlacementKeys::with_hash(|_| 7);
+    let mut shaped_text = fixture.lay_out("fi", shaped());
+    let mut typed = fixture.lay_out("fi", TextOptions::default());
+    let mut shaped_again = fixture.lay_out("fi", shaped());
+
+    for layout in [&mut shaped_text, &mut typed, &mut shaped_again] {
+        keys.assign(layout);
+    }
+
+    assert_ne!(shaped_text.placement, typed.placement);
+    assert_eq!(shaped_text.placement, shaped_again.placement);
+}
+
+#[test]
+fn glyph_bounds_are_not_placement() {
+    let fixture = Fixture::open("ShapingTest.ufo");
+    let mut keys = PlacementKeys::default();
+    let mut bounded = fixture.lay_out("fi", shaped());
+    let mut unbounded = bounded.clone();
     for glyph in &mut unbounded.glyphs {
         glyph.bounds = None;
     }
-    assert_eq!(unbounded.placement_key(), first.placement);
+
+    keys.assign(&mut bounded);
+    keys.assign(&mut unbounded);
+
+    assert_eq!(bounded.placement, unbounded.placement);
 }

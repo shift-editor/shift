@@ -28,6 +28,8 @@ mod units;
 
 #[cfg(feature = "layout")]
 pub use font::LayoutFont;
+#[cfg(feature = "layout")]
+pub use placement::PlacementKeys;
 pub use request::{
     CharacterGlyph, FeatureSetting, LayoutError, LayoutRequest, LayoutUnit, LineHeight,
     LineMetrics, TextAlign, TextOptions, TypedFont, TypedGlyph,
@@ -90,10 +92,10 @@ pub struct TextLayout {
     pub width: f64,
     /// Why some text was laid out as typed instead of shaped, when it was.
     pub unshaped: Option<String>,
-    /// A key that is the same for two layouts exactly when they place every
-    /// line, run, glyph and caret alike, glyph bounds aside, so a reader can
-    /// tell an edit that moved nothing in the text without comparing the
-    /// layouts ([`TextLayout::placement_key`]).
+    /// A key that two layouts share exactly when they place every line,
+    /// run, glyph and caret alike, glyph bounds aside, so a reader can tell
+    /// an edit that moved nothing in the text without comparing them; set
+    /// by [`PlacementKeys::assign`], empty until then.
     pub placement: String,
 }
 
@@ -241,7 +243,6 @@ impl TextLayout {
         layout.unit_glyphs = layout.glyphs_by_unit(request.units.len());
         layout.carets = carets::Carets::new(font, &layout).stops(&paragraphs);
         layout.unshaped = unshaped;
-        layout.placement = layout.placement_key();
         Ok(layout)
     }
 }

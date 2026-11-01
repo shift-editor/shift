@@ -23,10 +23,20 @@ pub trait TypedText {
 
 #[cfg(feature = "engine")]
 mod exports {
-    use shift_layout::{LayoutError, LayoutFont, LayoutRequest, TextLayout, TypedFont};
+    use std::cell::RefCell;
+
+    use shift_layout::{
+        LayoutError, LayoutFont, LayoutRequest, PlacementKeys, TextLayout, TypedFont,
+    };
     use wasm_bindgen::prelude::wasm_bindgen;
 
     use super::{TypedText, typed_text_request};
+
+    thread_local! {
+        /// The placement keys typed layouts carry, shared by every window
+        /// without an engine in this module.
+        static PLACEMENTS: RefCell<PlacementKeys> = RefCell::default();
+    }
 
     /// The layout [`TypedText`] calls.
     pub struct TypedLayout;
@@ -37,7 +47,9 @@ mod exports {
             text: LayoutRequest,
             font: TypedFont,
         ) -> Result<TextLayout, LayoutError> {
-            TextLayout::new(&LayoutFont::typed(&font), &text)
+            let mut layout = TextLayout::new(&LayoutFont::typed(&font), &text)?;
+            PLACEMENTS.with_borrow_mut(|keys| keys.assign(&mut layout));
+            Ok(layout)
         }
     }
 

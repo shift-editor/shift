@@ -28,7 +28,9 @@ mod exports {
 
     use shift_font::interpolation::KerningBlend;
     use shift_font::{DesignLocation, ExternalLocation, Font, FontChangeImpact, ShaperFontSource};
-    use shift_layout::{LayoutError, LayoutFont, LayoutRequest, LineMetrics, TextLayout};
+    use shift_layout::{
+        LayoutError, LayoutFont, LayoutRequest, LineMetrics, PlacementKeys, TextLayout,
+    };
     use shift_shape::ShapeError;
     use shift_shaper_font::{LiveShaper, ShaperFontError, ShaperFontRequest, ShaperFontState};
 
@@ -43,6 +45,8 @@ mod exports {
     /// bring it up to date.
     pub(crate) struct TextShaping {
         state: RefCell<ShaperState>,
+        /// The placement keys this session's layouts carry.
+        placements: RefCell<PlacementKeys>,
     }
 
     struct ShaperState {
@@ -66,6 +70,7 @@ mod exports {
                     failure: None,
                     stale: true,
                 }),
+                placements: RefCell::default(),
             }
         }
     }
@@ -151,7 +156,9 @@ mod exports {
                 &class,
                 LineMetrics::at(font, &place.design),
             );
-            TextLayout::new(&layout_font, request)
+            let mut layout = TextLayout::new(&layout_font, request)?;
+            self.placements.borrow_mut().assign(&mut layout);
+            Ok(layout)
         }
 
         /// The shaper state, brought up to date with `font` when an edit may
