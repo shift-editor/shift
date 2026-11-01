@@ -1495,7 +1495,8 @@ export class Font {
    * the shaper font reads, so a computed that lists them does again after an
    * edit that may change it.
    *
-   * @returns empty without an open engine or a shaper.
+   * @returns empty without an open engine, as in a preview.
+   * @throws When the engine has no shaper font, saying why, or it cannot be read.
    */
   fontFeatures(): readonly FontFeature[] {
     const engine = this.#store.engine;

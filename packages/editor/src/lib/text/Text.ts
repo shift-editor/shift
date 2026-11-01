@@ -7,6 +7,7 @@ import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunNode } from "../../types/node";
 import type {
+  FeatureListing,
   StoredTextRunRecord,
   TextLayoutFailure,
   TextRunRecord,
@@ -101,11 +102,19 @@ export class Text {
    *
    * @remarks
    * Follows the shaper font: editing what it compiles from lists the new
-   * features once it recompiles. Empty in a preview, which has no engine.
+   * features once it recompiles. Empty in a preview, which has no engine;
+   * `failed`, with why, when the font has no shaper font or it cannot be
+   * read, so a list that could not be read is never shown as empty.
    */
-  readonly featuresCell: Signal<readonly FontFeature[]> = computed(
-    () => this.#editor.font.fontFeatures(),
-    { name: "text.features", equals: sameFeatures },
+  readonly featuresCell: Signal<FeatureListing> = computed(
+    (): FeatureListing => {
+      try {
+        return { kind: "listed", features: this.#editor.font.fontFeatures() };
+      } catch (error) {
+        return { kind: "failed", error };
+      }
+    },
+    { name: "text.features", equals: sameListing },
   );
 
   /**
@@ -456,6 +465,12 @@ export class Text {
       this.#loading.delete(id);
     }
   }
+}
+
+/** Whether two listings list the same features, or are the same failure. */
+function sameListing(a: FeatureListing, b: FeatureListing): boolean {
+  if (a.kind === "listed" && b.kind === "listed") return sameFeatures(a.features, b.features);
+  return a === b;
 }
 
 /** Whether two feature lists list the same features, every field alike, in the same order. */

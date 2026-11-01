@@ -927,7 +927,9 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   textFeatures(): readonly TextFeature[] {
-    return this.text.featuresCell.peek().map(({ tag, name, default: shown, group }) => ({
+    const listing = this.text.featuresCell.peek();
+    if (listing.kind === "failed") throw listing.error;
+    return listing.features.map(({ tag, name, default: shown, group }) => ({
       tag,
       name: name ?? null,
       default: shown,

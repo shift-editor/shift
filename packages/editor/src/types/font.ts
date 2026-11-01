@@ -216,7 +216,8 @@ export interface FontEngine {
    * The features the engine's shaper font defines, in tag order, each with
    * the name it is shown by, its default and its group.
    *
-   * @returns null only while the engine is not open; empty when it has no shaper.
+   * @returns null only while the engine is not open.
+   * @throws When the engine has no shaper font, saying why, or it cannot be read.
    */
   fontFeatures(): readonly FontFeature[] | null;
 }

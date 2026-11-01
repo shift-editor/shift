@@ -353,7 +353,9 @@ export class EngineSession {
 
   /**
    * The features the session's shaper font defines, in tag order, as
-   * shift-shape lists them: name, default and group. Empty without a shaper.
+   * shift-shape lists them: name, default and group.
+   *
+   * @throws When the session has no shaper font, saying why, or it cannot be read.
    */
   fontFeatures(): readonly FontFeature[] {
     return this.#reads.fontFeatures();
