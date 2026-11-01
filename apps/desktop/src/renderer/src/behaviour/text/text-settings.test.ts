@@ -42,6 +42,12 @@ describe("features turned on or off in the text", () => {
       ]),
     );
   });
+
+  it("says why the font's features cannot be listed, rather than listing none", () => {
+    editor.failFeatureLists("the shaper font could not be read");
+
+    expect(() => editor.textFeatures()).toThrow("the shaper font could not be read");
+  });
 });
 
 describe("the language and script the text is shaped in", () => {

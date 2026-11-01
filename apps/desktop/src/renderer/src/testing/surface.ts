@@ -514,6 +514,12 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   toolState(): ActiveTool | null;
   /** The canvas text as it shows now: items, placed glyphs, and caret; null when there is none. */
   canvasText(): CanvasText | null;
+  /**
+   * Why the canvas says proof text is not shown, as its notice reads it
+   * (`Text.layoutFailureCell`): the stage that failed and the error's
+   * message; null while every run lays out.
+   */
+  textLayoutFailure(): TextLayoutFailureRead | null;
   /** What the Spacing tool shows; null when it is not active. */
   spacingTool(): SpacingToolState | null;
   /** What the Kerning tool shows; null when it is not active. */
@@ -620,6 +626,15 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   settle(): Promise<void>;
   /** Makes the workspace refuse the next edit it is sent, as a failed write does. Test-only. */
   failNextWorkspaceApply(): void;
+  /** Makes the window's engine fail its next text layout with `message`. Test-only. */
+  failNextTextLayout(message: string): void;
+  /** Makes the window's engine fail its next glyph preload with `message`. Test-only. */
+  failNextGlyphPreload(message: string): void;
+  /**
+   * Makes the window's engine fail to list the font's features with
+   * `message`, as a shaper font that cannot be read would. Test-only.
+   */
+  failFeatureLists(message: string): void;
   /**
    * Saves the document, as File › Save does. A document never saved yet is
    * saved to a temporary file, as if Save As chose one; {@link close} removes it.
@@ -636,4 +651,10 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
 
   /** The editor itself, only to pass to code under test that takes an `Editor`. */
   asEditor(): Editor;
+}
+
+/** A text layout failure as the canvas notice shows it. */
+export interface TextLayoutFailureRead {
+  readonly stage: "layout" | "preload" | "module";
+  readonly message: string;
 }
