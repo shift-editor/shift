@@ -218,11 +218,15 @@ export interface ShiftHost {
   };
   /**
    * Synchronous, read-only access to the open workspace's stored layers, so
-   * the window's editing engine can load what an edit reads within the edit.
+   * the window's editing engine can load what an edit reads within the edit,
+   * and to the glyphs of a UFO, designspace or Glyphs file the window
+   * previews.
    *
    * @remarks
-   * Every call blocks on SQLite and returns committed state, including unsaved
-   * edits in a document's recovery overlay. Writes stay in the utility process.
+   * A store's calls block on SQLite and return committed state, including
+   * unsaved edits in a document's recovery overlay. A source file's calls
+   * convert the glyphs they read from the file, and never write. Writes stay
+   * in the utility process.
    */
   layers: LayerReaderHost;
 }
@@ -236,8 +240,25 @@ export interface LayerReaderHost {
    */
   open: (location: FontStoreLocation) => number;
   /**
+   * Opens a reader for the UFO, designspace, `.glyphs` or `.glyphspackage`
+   * file at `path`, read glyph by glyph: it imports nothing, and converts a
+   * glyph's outlines only when a request reads its layers. Its glyph ids are
+   * the ones the utility's preview of the same file uses.
+   *
+   * @throws {Error} when `path` is not an authored font format or cannot be read.
+   */
+  openSource: (path: string) => number;
+  /**
+   * The font a source reader opened, with every layer a placeholder that
+   * keeps its advance, as named-field MessagePack: what an engine session
+   * opens with, as from a workspace's `encodedDirectory`.
+   *
+   * @throws {Error} for an unknown reader, one that reads a store, or one closed.
+   */
+  sourceDirectory: (reader: number) => Uint8Array;
+  /**
    * Answers one request of shift-engine's `StoreReader` protocol, as the
-   * engine encoded it, from the reader's store; the window passes it on
+   * engine encoded it, from the reader's store or file; the window passes it on
    * unchanged. A store failure comes back in the reply, as the method's error.
    *
    * @param blobs - The request's blobs, the last of them the names it uses.

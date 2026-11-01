@@ -4,7 +4,7 @@ import type {} from "../../src/main/dialogs/NativeDialogs";
 import type { CommandId } from "../../src/shared/commands";
 import type { GlyphId } from "@shift/types";
 import type { FontSummary } from "@/testing/reads";
-import type { PreloadLayerRead } from "@/testing/e2e/SessionHooks";
+import type { PreloadLayerRead, PreloadSourceGlyphRead } from "@/testing/e2e/SessionHooks";
 import { execFile, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import path from "node:path";
@@ -350,6 +350,15 @@ export async function quitApp(
  */
 export async function readFirstLayerThroughPreload(page: Page): Promise<PreloadLayerRead> {
   return hooksOf(page).session.firstLayerThroughPreload();
+}
+
+/** Reads the glyph `name` of the source file at `path` through the window's preload. */
+export async function readSourceGlyphThroughPreload(
+  page: Page,
+  path: string,
+  name: string,
+): Promise<PreloadSourceGlyphRead> {
+  return hooksOf(page).session.sourceGlyphThroughPreload(path, name);
 }
 
 /** Clicks the launcher's Open Font… (with a scripted dialog) and returns the workspace window once its Grid shows. */

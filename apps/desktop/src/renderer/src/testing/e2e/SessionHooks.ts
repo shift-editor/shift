@@ -15,6 +15,16 @@ export interface PreloadLayerRead {
   readonly glyphId: GlyphId;
 }
 
+/** One glyph of a source file, read through the preload's source reader as an engine reads it. */
+export interface PreloadSourceGlyphRead {
+  /** The names of the glyphs its components use, directly, from the engine's records, sorted. */
+  readonly componentNames: readonly string[];
+  /** The names of the glyphs its components use, transitively, from the reader, sorted. */
+  readonly baseNames: readonly string[];
+  /** Each of its layers' ids, and the layer read alone, its bytes decoded as text. */
+  readonly layers: readonly { readonly id: string; readonly bytes: string }[];
+}
+
 /**
  * The window's font session and host, for E2E specs: commands as the menu runs them, the
  * document's Save As, the preload's layer store, the config, and what a preview keeps in memory.
@@ -113,6 +123,39 @@ export class SessionHooks {
         glyphId: record.id,
       };
     } finally {
+      layers.close(reader);
+    }
+  }
+
+  /**
+   * Opens the source file at `path` through the preload's source reader, opens an engine over
+   * its directory reading through that reader, and reads the glyph named `name`: its records
+   * from the engine, and its bases and layers from the reader, each in one synchronous call.
+   */
+  async sourceGlyphThroughPreload(path: string, name: string): Promise<PreloadSourceGlyphRead> {
+    const { EngineSession } = await loadEngine();
+    const layers = this.#host.layers;
+    const reader = layers.openSource(path);
+    const request = (method: number, numbers: Float64Array, blobs: readonly Uint8Array[]) =>
+      layers.request(reader, method, numbers, blobs);
+    const session = EngineSession.open(layers.sourceDirectory(reader), request);
+    try {
+      const records = session.fontRecords().glyphs;
+      const names = new Map(records.map((record) => [record.id, record.name]));
+      const nameOf = (id: GlyphId): string => names.get(id) ?? id;
+      const record = records.find((glyph) => glyph.name === name);
+      if (!record) throw new Error(`the source has a glyph named ${name}`);
+      const store = storeReader(request);
+      return {
+        componentNames: record.componentBaseGlyphIds.map(nameOf).toSorted(),
+        baseNames: store.basesOf([record.id]).map(nameOf).toSorted(),
+        layers: record.layers.map(({ id }) => ({
+          id,
+          bytes: new TextDecoder().decode(store.layers([id])),
+        })),
+      };
+    } finally {
+      session.dispose();
       layers.close(reader);
     }
   }
