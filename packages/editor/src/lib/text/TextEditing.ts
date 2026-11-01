@@ -160,7 +160,10 @@ export class TextEditing {
     this.#edit("Delete text", (buffer) => buffer.delete(-1));
   }
   deleteForward(): void {
-    this.#edit("Delete text", (buffer) => buffer.delete(1));
+    const layout = this.#layout();
+    this.#edit("Delete text", (buffer) =>
+      layout ? buffer.delete(1, (cluster) => layout.graphemeStep(cluster, 1)) : buffer.delete(1),
+    );
   }
 
   /**
@@ -185,7 +188,7 @@ export class TextEditing {
     let target = cluster;
     switch (granularity) {
       case "character":
-        target = layout.visualStep(cluster, direction) ?? buffer.graphemeStep(cluster, logical);
+        target = layout.visualStep(cluster, direction) ?? layout.graphemeStep(cluster, logical);
         break;
       case "word": {
         const edges = buffer.wordEdges(direction, (cluster) => layout.directionAt(cluster));

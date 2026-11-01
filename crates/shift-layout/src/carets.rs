@@ -49,11 +49,52 @@ impl<'f, 'l, 'a> Carets<'f, 'l, 'a> {
                 continue;
             };
             let text_end = line.end.min(paragraph.end());
+            let first = stops.len();
             for &boundary in boundaries.range(line.start..=text_end) {
                 stops.push(self.stop(number, line, boundary, text_end, boundaries));
             }
+            if let Some(line_stops) = stops.get_mut(first..) {
+                self.order_on_screen(line_stops, number, line, text_end);
+            }
         }
         stops
+    }
+
+    /// Numbers one line's stops left to right ([`CaretStop::screen`]): by
+    /// `x`, then by where the glyph after each is drawn, the line's end
+    /// last left to right and first right to left, then in logical order.
+    fn order_on_screen(
+        &self,
+        stops: &mut [CaretStop],
+        number: u32,
+        line: &LayoutLine,
+        text_end: u32,
+    ) {
+        let line_end = match line.direction {
+            Direction::Ltr => i64::MAX,
+            Direction::Rtl => -1,
+        };
+        let drawn = |stop: &CaretStop| {
+            (stop.unit < text_end)
+                .then(|| self.glyph_index_for(number, stop.unit))
+                .flatten()
+                .map_or(line_end, i64::from)
+        };
+        let drawn: Vec<i64> = stops.iter().map(drawn).collect();
+        let mut order: Vec<usize> = (0..stops.len()).collect();
+        // A stable sort: stops that also meet in drawing order keep their
+        // logical order.
+        order.sort_by(|&first, &second| {
+            stops[first]
+                .x
+                .total_cmp(&stops[second].x)
+                .then(drawn[first].cmp(&drawn[second]))
+        });
+        for (screen, index) in (0u32..).zip(order) {
+            if let Some(stop) = stops.get_mut(index) {
+                stop.screen = screen;
+            }
+        }
     }
 
     /// The stop at `boundary` on `line`, whose text ends at `text_end`.
@@ -88,6 +129,7 @@ impl<'f, 'l, 'a> Carets<'f, 'l, 'a> {
             x,
             direction,
             secondary,
+            screen: 0,
         }
     }
 
@@ -95,13 +137,22 @@ impl<'f, 'l, 'a> Carets<'f, 'l, 'a> {
     /// character the font decomposes into a body and a dot answers with the
     /// body.
     fn glyph_for(&self, number: u32, unit: u32) -> Option<&'l PlacedGlyph> {
-        let shown = self.layout.unit_glyphs.get(usize::try_from(unit).ok()?)?;
+        let index = self.glyph_index_for(number, unit)?;
+        self.layout.glyphs.get(crate::slice_index(index))
+    }
+
+    /// The index in [`TextLayout::glyphs`] of the glyph [`Self::glyph_for`]
+    /// answers with.
+    fn glyph_index_for(&self, number: u32, unit: u32) -> Option<u32> {
+        let shown = self.layout.unit_glyphs.get(crate::slice_index(unit))?;
+        let layout = self.layout;
         shown
             .glyphs
             .iter()
-            .filter_map(|&index| self.layout.glyphs.get(usize::try_from(index).ok()?))
-            .filter(|glyph| glyph.line == number)
-            .max_by(|first, second| first.advance.total_cmp(&second.advance))
+            .filter_map(|&index| Some((index, layout.glyphs.get(crate::slice_index(index))?)))
+            .filter(|(_, glyph)| glyph.line == number)
+            .max_by(|(_, first), (_, second)| first.advance.total_cmp(&second.advance))
+            .map(|(index, _)| index)
     }
 
     /// Where `boundary`, at or inside `glyph`'s units, falls on screen: an

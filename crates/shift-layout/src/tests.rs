@@ -214,6 +214,13 @@ fn a_right_to_left_caret_starts_at_the_right_edge() {
             .iter()
             .all(|stop| stop.direction == Direction::Rtl)
     );
+    // Screen order runs against reading order in right-to-left text.
+    let screen: Vec<(u32, u32)> = layout
+        .carets
+        .iter()
+        .map(|stop| (stop.unit, stop.screen))
+        .collect();
+    assert_eq!(screen, [(0, 2), (1, 1), (2, 0)]);
 }
 
 #[test]

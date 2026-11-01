@@ -1,6 +1,5 @@
 import type { TextItem } from "./types";
 
-const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 const words = new Intl.Segmenter(undefined, { granularity: "word" });
 
 /** A segment of the items, in item indexes. */
@@ -33,11 +32,6 @@ function segmentItems(items: readonly TextItem[], segmenter: Intl.Segmenter): It
     end: itemAt.get(segment.index + segment.segment.length)!,
     isWordLike: segment.isWordLike ?? false,
   }));
-}
-
-/** Returns the user-perceived characters of the items: a base with its marks, an emoji sequence. */
-export function graphemeSegments(items: readonly TextItem[]): ItemSegment[] {
-  return segmentItems(items, graphemes);
 }
 
 /** Returns the word-like segments of the items, such as words and numbers, not spaces or punctuation. */

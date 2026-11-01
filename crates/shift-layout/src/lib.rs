@@ -188,6 +188,10 @@ pub struct CaretStop {
     /// At a direction boundary, the other place the same boundary shows:
     /// the trailing edge of the unit before it.
     pub secondary: Option<SecondaryCaret>,
+    /// Its place among its line's stops left to right on screen, from 0:
+    /// by `x`, and where stops meet at one `x` (beside a glyph of no
+    /// advance) in the order their glyphs are drawn.
+    pub screen: u32,
 }
 
 /// The second place a caret stop shows at a direction boundary.

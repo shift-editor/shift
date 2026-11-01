@@ -8,7 +8,13 @@
  * `origin.y - lineHeight * n`. Cluster is whole-buffer monotonic.
  */
 import type { Bounds as BoundsType } from "@shift/geo";
-import { EntityMap, type GlyphId, type GlyphName, type ReadonlyEntityMap } from "@shift/types";
+import {
+  ascending,
+  EntityMap,
+  type GlyphId,
+  type GlyphName,
+  type ReadonlyEntityMap,
+} from "@shift/types";
 import type { CaretStop, TextLayout as LaidOutText } from "@shift/wasm/protocol";
 import { Caret } from "./Caret";
 import { CaretStops } from "./CaretStops";
@@ -67,6 +73,8 @@ export class TextLayout {
   readonly #placedByItem: ReadonlyEntityMap<TextItemId, PlacedGlyph>;
   /** Each line's caret stops, indexed for moves and hit tests. */
   readonly #carets: readonly CaretStops[];
+  /** Every grapheme boundary Rust put a stop at, in reading order. */
+  readonly #boundaries: readonly number[];
 
   constructor(params: TextLayoutParams) {
     const { items, origin, font, metrics, laidOut } = params;
@@ -130,14 +138,19 @@ export class TextLayout {
       });
     }
     this.lines = lines;
+    const caretsByLine = Map.groupBy(laidOut.carets, (stop) => stop.line);
     this.#carets = lines.map(
       (_, lineIndex) =>
         new CaretStops(
-          laidOut.carets
-            .filter((stop) => stop.line === lineIndex)
-            .map((stop): CaretStop => ({ ...stop, x: origin.x + stop.x })),
+          (caretsByLine.get(lineIndex) ?? []).map(
+            (stop): CaretStop => ({ ...stop, x: origin.x + stop.x }),
+          ),
         ),
     );
+    this.#boundaries = new Set(laidOut.carets.map((stop) => stop.unit))
+      .values()
+      .toArray()
+      .toSorted(ascending);
     this.placedGlyphs = placed;
     this.totalAdvance = laidOut.lines.reduce((sum, line) => sum + line.advance, 0);
 
@@ -277,6 +290,21 @@ export class TextLayout {
    */
   visualStep(cluster: number, side: -1 | 1, accept?: (cluster: number) => boolean): number | null {
     return this.#carets[this.lineIndexForCluster(cluster)]?.step(cluster, side, accept) ?? null;
+  }
+
+  /**
+   * Returns the next grapheme boundary after (`1`) or before (`-1`)
+   * `cluster` in reading order, across lines, from the stops Rust placed at
+   * each one: a base and its marks, or an emoji sequence, are crossed whole.
+   *
+   * @returns `cluster` when there is none that way.
+   */
+  graphemeStep(cluster: number, direction: -1 | 1): number {
+    const boundary =
+      direction === 1
+        ? this.#boundaries.find((unit) => unit > cluster)
+        : this.#boundaries.findLast((unit) => unit < cluster);
+    return boundary ?? cluster;
   }
 
   /** Returns the cluster at a line's left (`-1`) or right (`1`) end on screen. */
