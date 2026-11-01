@@ -29,7 +29,7 @@ use shift_font::{
     Axis, FontChangeFlag, GlyphId, GlyphRecords, MetricValue, MissingKerningOrigin,
     ResolvedKerning, Source,
 };
-use shift_layout::{LayoutRequest, TextLayout};
+use shift_layout::{LayoutError, LayoutRequest, TextLayout};
 pub use shift_shape::{FeatureDefault, FeatureGroup, FontFeature};
 use shift_wire::KerningSnapshot;
 
@@ -99,7 +99,11 @@ pub trait EngineReads {
     /// Glyphs whose layers the session has not loaded lay out from their
     /// placeholders; `unloaded` lists them, for the editor to load and lay
     /// out again.
-    fn layout_text(&self, request: TextLayoutRequest) -> PlacedText;
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LayoutError::TooLong`] for text too long to index.
+    fn layout_text(&self, request: TextLayoutRequest) -> Result<PlacedText, LayoutError>;
     /// The flags whose change may change what [`Self::layout_text`]
     /// returns.
     fn layout_inputs(&self) -> Vec<FontChangeFlag>;
@@ -213,7 +217,7 @@ mod exports {
 
     use super::{
         Axis, EditablePair, EngineReads, FontChangeFlag, FontFeature, InterpolatedMetrics,
-        KerningSnapshot, PlacedText, Source, SourceSetWeights, TextLayoutRequest,
+        KerningSnapshot, LayoutError, PlacedText, Source, SourceSetWeights, TextLayoutRequest,
         engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
@@ -546,16 +550,19 @@ mod exports {
             Self::glyph_records(self)
         }
 
-        fn layout_text(&self, request: TextLayoutRequest) -> PlacedText {
+        fn layout_text(&self, request: TextLayoutRequest) -> Result<PlacedText, LayoutError> {
             // A gesture's preview shows in text while it is under way.
             let font = self
                 .previewed
                 .as_ref()
                 .unwrap_or_else(|| self.session.font());
             let place = self.text_place(&request);
-            let layout =
-                self.shaping
-                    .layout_text(font, || self.shaper_font_source(), &request.text, place);
+            let layout = self.shaping.layout_text(
+                font,
+                || self.shaper_font_source(),
+                &request.text,
+                place,
+            )?;
             let shown: BTreeSet<GlyphId> = layout
                 .glyphs
                 .iter()
@@ -570,7 +577,7 @@ mod exports {
                         .any(|layer| residency.is_unloaded(layer))
                 })
                 .collect();
-            PlacedText { layout, unloaded }
+            Ok(PlacedText { layout, unloaded })
         }
 
         fn layout_inputs(&self) -> Vec<FontChangeFlag> {

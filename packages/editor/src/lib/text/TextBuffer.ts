@@ -1,6 +1,5 @@
-import type { Direction, TextItem } from "./layout";
-import { wordSegments, type ItemSegment } from "./layout/segmentation";
-import type { TextCaret, TextSelectionRange, WordEdge } from "../../types/text";
+import type { TextItem } from "./layout";
+import type { TextCaret, TextSelectionRange } from "../../types/text";
 
 /**
  * A run's items with a selection, edited by value.
@@ -15,7 +14,6 @@ export class TextBuffer {
   readonly items: readonly TextItem[];
   readonly anchor: TextCaret;
   readonly focus: TextCaret;
-  #words: readonly ItemSegment[] | null = null;
 
   /** @param anchor - Selection anchor; defaults to `focus`, a collapsed caret. */
   constructor(items: readonly TextItem[], focus: TextCaret = null, anchor: TextCaret = focus) {
@@ -81,37 +79,6 @@ export class TextBuffer {
     }
     if (start === end) return null;
     return collapsed([...this.items.slice(0, start), ...this.items.slice(end)], start);
-  }
-
-  /** The word-like segments of the items, such as words and numbers, not spaces or punctuation. */
-  get words(): readonly ItemSegment[] {
-    this.#words ??= wordSegments(this.items);
-    return this.#words;
-  }
-
-  /**
-   * Returns each word's left (`-1`) or right (`1`) edge on screen, as the
-   * cluster there and the word's direction: a left-to-right word's start is
-   * its left edge, a right-to-left word's end is. The direction picks the
-   * caret place at a boundary where directions meet: the edge of this word,
-   * not of the text beside it.
-   *
-   * @param directionAt - the direction the text at a cluster reads in, as the layout says.
-   */
-  wordEdges(side: -1 | 1, directionAt: (cluster: number) => Direction): readonly WordEdge[] {
-    return this.words.map((word) => {
-      const direction = directionAt(word.start);
-      const unit = (side === 1) !== (direction === "rtl") ? word.end : word.start;
-      return { unit, direction };
-    });
-  }
-
-  /** Returns the end of the next word, or the start of the previous one, in reading order. */
-  wordStep(cluster: number, direction: -1 | 1): number {
-    if (direction === 1) {
-      return this.words.find((segment) => segment.end > cluster)?.end ?? this.items.length;
-    }
-    return this.words.findLast((segment) => segment.start < cluster)?.start ?? 0;
   }
 }
 

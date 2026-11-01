@@ -15,7 +15,7 @@ import {
   type GlyphName,
   type ReadonlyEntityMap,
 } from "@shift/types";
-import type { CaretStop, TextLayout as LaidOutText } from "@shift/wasm/protocol";
+import type { CaretStop, LayoutWord, TextLayout as LaidOutText } from "@shift/wasm/protocol";
 import { Caret } from "./Caret";
 import { CaretStops } from "./CaretStops";
 import type {
@@ -34,7 +34,7 @@ import type {
   TextItemId,
 } from "./types";
 import type { Font } from "../../model/Font";
-import type { TextSelectionRange } from "../../../types/text";
+import type { TextSelectionRange, WordEdge } from "../../../types/text";
 
 export interface TextLayoutParams {
   items: readonly TextItem[];
@@ -77,6 +77,8 @@ export class TextLayout {
   readonly #carets: readonly CaretStops[];
   /** Every grapheme boundary Rust put a stop at, in reading order. */
   readonly #boundaries: readonly number[];
+  /** The words Rust found, in reading order, with their screen edges. */
+  readonly #words: readonly LayoutWord[];
 
   constructor(params: TextLayoutParams) {
     const { items, origin, font, metrics, laidOut } = params;
@@ -149,6 +151,7 @@ export class TextLayout {
           ),
         ),
     );
+    this.#words = laidOut.words;
     this.#boundaries = new Set(laidOut.carets.map((stop) => stop.unit))
       .values()
       .toArray()
@@ -325,6 +328,27 @@ export class TextLayout {
         ? this.#boundaries.find((unit) => unit > cluster)
         : this.#boundaries.findLast((unit) => unit < cluster);
     return boundary ?? cluster;
+  }
+
+  /**
+   * Returns each word's left (`-1`) or right (`1`) edge on screen, as Rust
+   * found the words and their edges: the boundary there, and the direction
+   * the word reads in, which picks the caret place on the word's own side
+   * where directions meet.
+   */
+  wordEdges(side: -1 | 1): readonly WordEdge[] {
+    return this.#words.map((word) => ({
+      unit: side === 1 ? word.right : word.left,
+      direction: word.direction,
+    }));
+  }
+
+  /** Returns the end of the next word, or the start of the previous one, in reading order. */
+  wordStep(cluster: number, direction: -1 | 1): number {
+    if (direction === 1) {
+      return this.#words.find((word) => word.end > cluster)?.end ?? this.bufferLength;
+    }
+    return this.#words.findLast((word) => word.start < cluster)?.start ?? 0;
   }
 
   /** Returns the caret place at a line's left (`-1`) or right (`1`) end on screen. */

@@ -3,7 +3,7 @@
 //! (`TextLayout::new` over `LayoutFont::typed`). Answered in the engine
 //! module only, which holds shift-layout; the call is stateless.
 
-use shift_layout::{LayoutRequest, TextLayout, TypedFont};
+use shift_layout::{LayoutError, LayoutRequest, TextLayout, TypedFont};
 
 /// Text laid out over what a window knows of a font without its engine.
 #[pack::interface]
@@ -13,12 +13,17 @@ pub trait TypedText {
     /// mark of no advance at the editor's stand-in, lines at each line break
     /// and the request's width, aligned, with caret stops, and the reason it
     /// was not shaped.
-    fn layout_typed(&self, text: LayoutRequest, font: TypedFont) -> TextLayout;
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LayoutError::TooLong`] for text too long to index.
+    fn layout_typed(&self, text: LayoutRequest, font: TypedFont)
+    -> Result<TextLayout, LayoutError>;
 }
 
 #[cfg(feature = "engine")]
 mod exports {
-    use shift_layout::{LayoutFont, LayoutRequest, TextLayout, TypedFont};
+    use shift_layout::{LayoutError, LayoutFont, LayoutRequest, TextLayout, TypedFont};
     use wasm_bindgen::prelude::wasm_bindgen;
 
     use super::{TypedText, typed_text_request};
@@ -27,7 +32,11 @@ mod exports {
     pub struct TypedLayout;
 
     impl TypedText for TypedLayout {
-        fn layout_typed(&self, text: LayoutRequest, font: TypedFont) -> TextLayout {
+        fn layout_typed(
+            &self,
+            text: LayoutRequest,
+            font: TypedFont,
+        ) -> Result<TextLayout, LayoutError> {
             TextLayout::new(&LayoutFont::typed(&font), &text)
         }
     }

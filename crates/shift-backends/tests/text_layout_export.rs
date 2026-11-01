@@ -106,7 +106,8 @@ fn laid_out(font: &Font, text: &str) -> Vec<Placed> {
                 ..TextOptions::default()
             },
         },
-    );
+    )
+    .unwrap();
     layout
         .glyphs
         .iter()

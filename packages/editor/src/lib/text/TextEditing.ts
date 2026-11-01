@@ -202,13 +202,13 @@ export class TextEditing {
           reading(layout.graphemeStep(cluster, logical));
         break;
       case "word": {
-        const edges = buffer.wordEdges(direction, (cluster) => layout.directionAt(cluster));
+        const edges = layout.wordEdges(direction);
         // A word's edge is the place on its own side of a direction boundary.
         const isWordEdge = (place: CaretPlace) =>
           edges.some(({ unit, direction }) => unit === place.unit && direction === place.direction);
         target =
           layout.visualStep(cluster, edge, direction, isWordEdge) ??
-          reading(buffer.wordStep(cluster, logical));
+          reading(layout.wordStep(cluster, logical));
         break;
       }
       case "line":
