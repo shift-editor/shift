@@ -28,6 +28,7 @@ crates/shift-text/src/layout/
 ## Key Types
 
 - `TextLayout::new(&LayoutFont, &LayoutRequest)` -- lays the units out. Units count line breaks, and every index in the result counts units. Font units, y up: line 0's baseline is 0, each later one a line height lower (`LineHeight::Auto`: ascender minus descender plus line gap; `Em`: a multiple of units per em)
+- `TextMeasure::new(&LayoutFont, &LayoutRequest)` -- shapes each paragraph once; `size(font, width)` gives the widest line, line count and line height at any width without placing glyphs or carets, and `layout(font, width)` lays out from the same shaping. `TextLayout::new` is `TextMeasure::new` then `layout` at the request's width, so a measure and a layout at one width break alike. Page layout measures runs with it (`crates/shift-wasm/src/page_layout.rs`)
 - `LayoutLine` -- a paragraph, or the part of one that fits `TextOptions::width`, with its runs in display order (`LineRun`: units, bidi level, direction, script, its glyph range). `left` is where alignment put it in `TextLayout::width`; with no `align`, a line starts where its paragraph's direction starts
 - `PlacedGlyph` -- a glyph's pen position (`left`, `baseline`), offset, advance, the units it shows (a ligature several), its run's direction, the `GDEF` mark flag, and its outline bounds
 - `UnitGlyphs` -- for each unit, the glyphs that show it in logical order, so a decomposed character's body comes before its dot in either direction

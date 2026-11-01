@@ -33,6 +33,8 @@ use shift_font::{
     Source,
 };
 use shift_text::layout::{LayoutError, TextLayout};
+
+pub use crate::page_layout::{NodeBox, PageLayout, PageLayoutError, PageLayoutRequest, RunLines};
 pub use shift_text::shape::{FeatureDefault, FeatureGroup, FontFeature};
 use shift_wire::{
     AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphSnapshot, KerningSnapshot,
@@ -115,6 +117,23 @@ pub trait EngineReads {
     /// The flags whose change may change what [`Self::layout_text`]
     /// returns.
     fn layout_inputs(&self) -> Vec<FontChangeFlag>;
+    /// Lays out a page of the session's scene: a box for the page and each
+    /// node under it, frames placing their children in rows and columns as
+    /// shift-layout does, and each text run's lines at the width the page
+    /// gives it. Text is laid out as [`Self::layout_text`] lays it out, at
+    /// the request's location or source, so a run wraps where UAX #14 lets
+    /// it, as anywhere else; `unloaded` lists the glyphs it laid out from
+    /// placeholders. Computed afresh on each call: a reader lays the page
+    /// out again when a flag [`Self::page_layout_inputs`] lists changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PageLayoutError::NotAPage`] when the request's page is not
+    /// a page of the scene.
+    fn page_layout(&self, request: PageLayoutRequest) -> Result<PageLayout, PageLayoutError>;
+    /// The flags whose change may change what [`Self::page_layout`]
+    /// returns: the scene's, and what text layout reads.
+    fn page_layout_inputs(&self) -> Vec<FontChangeFlag>;
     /// The features the session's shaper font defines, once per tag in tag
     /// order, each with the name it is shown by, what it does when text does
     /// not set it, and its group, as `shift_text::shape::Shaper::features` lists
@@ -387,16 +406,16 @@ pub(crate) use exports::{FontVariation, InternedIds};
 #[cfg(feature = "engine")]
 mod exports {
     use std::cell::RefCell;
-    use std::collections::{HashMap, HashSet};
+    use std::collections::{BTreeSet, HashMap, HashSet};
     use std::hash::Hash;
     use std::rc::Rc;
 
     use shift_engine::StoreReadError;
     use shift_font::naming::new_anchor_name;
     use shift_font::{
-        AxisMapping, AxisMappingBasis, DesignLocation, ExternalLocation, Font, FontCopyId, Glyph,
-        GlyphId, GlyphRecords, InterpolationBasis, Kerning, KerningSide, MissingKerningOrigin,
-        ResolvedKerning, SourceId,
+        AxisMapping, AxisMappingBasis, DesignLocation, ExternalLocation, Font, FontChangeImpact,
+        FontCopyId, Glyph, GlyphId, GlyphRecords, InterpolationBasis, Kerning, KerningSide,
+        MissingKerningOrigin, ResolvedKerning, SourceId,
     };
     use shift_text::layout::FeatureSetting;
     use shift_wire::values::{self, WireParse};
@@ -407,10 +426,12 @@ mod exports {
         AnchorId, Axis, ComponentId, Counterparts, CounterpartsReadError, EditablePair,
         EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag, FontFeature,
         FontHeader, FontRecordsError, GlyphIdentityChange, GlyphSnapshot, InterpolatedMetrics,
-        KerningSnapshot, LayerId, LayoutError, NodeId, PlacedText, PointId, RevisedNode, SceneNode,
-        Source, SourceSetWeights, TextLayoutRequest, engine_reads_request,
+        KerningSnapshot, LayerId, LayoutError, NodeId, PageLayout, PageLayoutError,
+        PageLayoutRequest, PlacedText, PointId, RevisedNode, SceneNode, Source, SourceSetWeights,
+        TextLayoutRequest, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
+    use crate::page_layout::{PlaceKey, RunLayouts, lay_out_page};
     use crate::shaping::{TextPlace, TextShaping};
     use crate::variation::{design_values, external_values, to_location, weights_at};
 
@@ -757,24 +778,54 @@ mod exports {
                 .previewed
                 .as_ref()
                 .unwrap_or_else(|| self.session.font());
-            let place = self.text_place(&request);
+            let place = self.text_place(&request.location, request.source);
             let layout = self.shaping.layout_text(
                 font,
                 || self.shaper_font_source(),
                 &request.run.layout_request(),
                 place,
             )?;
-            let residency = self.session.residency();
-            let unloaded = layout
-                .glyph_ids()
-                .into_iter()
-                .filter(|glyph| {
-                    font.layer_ids_of_glyphs([glyph])
-                        .into_iter()
-                        .any(|layer| residency.is_unloaded(layer))
-                })
-                .collect();
+            let unloaded = self.unloaded(font, layout.glyph_ids());
             Ok(PlacedText { layout, unloaded })
+        }
+
+        fn page_layout(&self, request: PageLayoutRequest) -> Result<PageLayout, PageLayoutError> {
+            let font = self
+                .previewed
+                .as_ref()
+                .unwrap_or_else(|| self.session.font());
+            let place = self.text_place(&request.location, request.source);
+            let units_per_em = font.metrics().units_per_em;
+            let at = PlaceKey::new(&request.location, request.source);
+            let mut runs = self.page_runs.borrow_mut();
+            // A preview's font lays out once, keeping nothing.
+            let mut previewed = RunLayouts::default();
+            let kept = if self.previewed.is_some() {
+                &mut previewed
+            } else {
+                &mut *runs
+            };
+            let (mut layout, glyphs) = self.shaping.with_layout_font(
+                font,
+                || self.shaper_font_source(),
+                place,
+                |layout_font| {
+                    lay_out_page(
+                        self.session.scene(),
+                        &request.page,
+                        units_per_em,
+                        layout_font,
+                        at,
+                        kept,
+                    )
+                },
+            )?;
+            layout.unloaded = self.unloaded(font, glyphs);
+            Ok(layout)
+        }
+
+        fn page_layout_inputs(&self) -> Vec<FontChangeFlag> {
+            FontChangeFlag::of(TextShaping::LAYOUT_INPUTS.union(FontChangeImpact::SCENE)).collect()
         }
 
         fn glyph_rename(&self, glyph: GlyphId, name: String) -> Option<GlyphIdentityChange> {
@@ -1015,24 +1066,36 @@ mod exports {
             })
         }
 
-        /// Where `request` lays out: at its source, when it names one the
-        /// font has, otherwise at its location mapped through the font's axis
-        /// mappings; with the kerning there, none when it cannot be blended.
-        fn text_place(&self, request: &TextLayoutRequest) -> TextPlace {
+        /// Of `glyphs`, those whose layers the session has not loaded in
+        /// `font`.
+        fn unloaded(&self, font: &Font, glyphs: BTreeSet<GlyphId>) -> Vec<GlyphId> {
+            let residency = self.session.residency();
+            glyphs
+                .into_iter()
+                .filter(|glyph| {
+                    font.layer_ids_of_glyphs([glyph])
+                        .into_iter()
+                        .any(|layer| residency.is_unloaded(layer))
+                })
+                .collect()
+        }
+
+        /// Where text lays out: at `source`, when it names one the font has,
+        /// otherwise at `location` mapped through the font's axis mappings;
+        /// with the kerning there, none when it cannot be blended.
+        fn text_place(&self, location: &[f64], source: Option<usize>) -> TextPlace {
             let font = self.session.font();
-            let source = request
-                .source
-                .and_then(|number| self.ids.source(number, font));
+            let source = source.and_then(|number| self.ids.source(number, font));
             let external_of = |design: &[f64]| {
                 let values = external_values(font.axes(), &self.variation().mappings, design);
                 ExternalLocation::from_untyped(to_location(font.axes(), &values))
             };
             let Some(source) = source else {
                 return TextPlace {
-                    design: design_location(font, &request.location),
-                    external: external_of(&request.location),
+                    design: design_location(font, location),
+                    external: external_of(location),
                     kerning: font
-                        .kerning_blend_at(&design_location(font, &request.location))
+                        .kerning_blend_at(&design_location(font, location))
                         .unwrap_or_default(),
                 };
             };

@@ -916,6 +916,8 @@ fn scene_page(id: &str) -> shift_engine::scene::SceneNode {
         index: key(0),
         x: 0.0,
         y: 0.0,
+        sizing: shift_engine::scene::BoxSizing::default(),
+        placement: shift_engine::scene::Placement::Absolute,
         content: shift_engine::scene::NodeContent::Page {
             name: id.into(),
             role: None,
@@ -925,7 +927,7 @@ fn scene_page(id: &str) -> shift_engine::scene::SceneNode {
 
 #[test]
 fn scene_and_font_edits_share_one_history_and_undo_in_order() {
-    use shift_engine::scene::{NodeContent, SceneIntent, SceneNode};
+    use shift_engine::scene::{BoxSizing, NodeContent, Placement, SceneIntent, SceneNode};
     use shift_font::{NodeId, RunId};
 
     let font = composite_font();
@@ -958,6 +960,8 @@ fn scene_and_font_edits_share_one_history_and_undo_in_order() {
                 index: key(0),
                 x: 0.0,
                 y: 0.0,
+                sizing: BoxSizing::default(),
+                placement: Placement::Absolute,
                 content: NodeContent::TextRun {
                     run_id: RunId::from_raw("run"),
                     size: 1000.0,
@@ -1088,7 +1092,9 @@ fn an_unrecorded_scene_edit_is_kept_but_never_reaches_the_saved_position() {
 
 #[test]
 fn opening_a_glyph_page_keeps_the_history_at_its_save() {
-    use shift_engine::scene::{NodeContent, PageRole, SceneIntent, SceneNode};
+    use shift_engine::scene::{
+        BoxSizing, NodeContent, PageRole, Placement, SceneIntent, SceneNode,
+    };
 
     let font = composite_font();
     let mut session = EngineSession::open_directory(placeholders(&font));
@@ -1099,6 +1105,8 @@ fn opening_a_glyph_page_keeps_the_history_at_its_save() {
     history.record_scene(
         session
             .apply_scene(&[SceneIntent::CreateNode(SceneNode {
+                sizing: BoxSizing::default(),
+                placement: Placement::Absolute,
                 content: NodeContent::Page {
                     name: "Glyph".into(),
                     role: Some(PageRole::Glyph),

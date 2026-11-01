@@ -1,6 +1,8 @@
 import type { NodeId } from "@shift/types";
 import type {
+  BoxSizing,
   EditLocation,
+  Placement,
   RevisedNode,
   RunSettings,
   SceneIntent,
@@ -8,7 +10,7 @@ import type {
 } from "@shift/wasm/protocol";
 import type { Signal } from "../lib/signals";
 
-export type { RevisedNode, RunSettings, SceneIntent, SceneNode };
+export type { BoxSizing, Placement, RevisedNode, RunSettings, SceneIntent, SceneNode };
 
 /**
  * Whether a scene edit is an undo step, as shift-engine's `Recording` says:

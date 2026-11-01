@@ -2512,6 +2512,7 @@ dependencies = [
  "rmp-serde",
  "serde",
  "shift-font",
+ "shift-layout",
  "shift-text",
  "thiserror",
 ]
@@ -2536,6 +2537,19 @@ dependencies = [
  "serde",
  "serde_json",
  "svgtypes",
+ "thiserror",
+]
+
+[[package]]
+name = "shift-layout"
+version = "0.1.0"
+dependencies = [
+ "kurbo",
+ "pack",
+ "serde",
+ "shift-font",
+ "shift-text",
+ "taffy",
  "thiserror",
 ]
 
@@ -2635,6 +2649,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "shift-engine",
  "shift-font",
+ "shift-layout",
  "shift-text",
  "shift-wire",
  "thiserror",
@@ -2701,6 +2716,15 @@ name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
+
+[[package]]
+name = "slotmap"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bdd58c3c93c3d278ca835519292445cb4b0d4dc59ccfdf7ceadaab3f8aeb4038"
+dependencies = [
+ "version_check",
+]
 
 [[package]]
 name = "smallvec"
@@ -2827,6 +2851,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.7",
+]
+
+[[package]]
+name = "taffy"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "31f7bd2d97198df05186f93a3a3c306845f40e8b3c22bf9279cdd7e5cf5fea7d"
+dependencies = [
+ "serde",
+ "slotmap",
 ]
 
 [[package]]
