@@ -9,6 +9,7 @@ import type { TextRunNode } from "../../types/node";
 import type {
   FeatureHighlight,
   FeatureListing,
+  RunPlacement,
   StoredTextRunRecord,
   SubstitutionListing,
   TextHighlight,
@@ -46,6 +47,9 @@ export class Text {
   // non-reactive: dedupes in-flight glyph loads; only read by the imperative load path
   readonly #loading = new Map<GlyphId, Promise<void>>();
   readonly #runsByItem: StoreIndex<TextItemId, StoredTextRunRecord>;
+  // non-reactive: run nodes placed this session that go again if editing leaves them empty;
+  // read only when editing ends.
+  readonly #provisionalRuns = new Set<NodeId>();
   readonly #unsubscribeStore: () => void;
   readonly #parseContext: TextParseContext = {
     glyphNamed: (name) => {
@@ -454,6 +458,59 @@ export class Text {
   /** The direction a run's first paragraph reads in, as layout resolved it; left to right for no text. */
   directionCell(id: RunId): Signal<Direction> {
     return this.#runs.get(id).directionCell;
+  }
+
+  /**
+   * Places a new text run on a page: the only way a run node is made.
+   *
+   * @remarks
+   * The run is set at the font's units per em, so its glyphs show at font
+   * size. A run placed empty, to type into, is provisional: if text editing
+   * leaves it with nothing typed, {@link leaveRun} removes it again. Placing is
+   * not an undo step; what is typed into the run is.
+   *
+   * @returns the run node.
+   */
+  placeRun({ page, at, glyphs }: RunPlacement): TextRunNode {
+    const items = glyphs.flatMap((glyphId) => this.glyphItem(glyphId) ?? []);
+    const node = this.#editor.history.withoutRecording(() =>
+      this.#editor.scene.createNode<TextRunNode>({
+        kind: "textRun",
+        parentId: page.id,
+        runId: this.createRun(items).id,
+        size: this.#editor.font.metricsCell.peek().unitsPerEm,
+        position: { x: at.x, y: at.y },
+      }),
+    );
+    if (items.length === 0) this.#provisionalRuns.add(node.id);
+    return node;
+  }
+
+  /**
+   * Called when text editing leaves a run node: a provisional run left empty
+   * is removed, without an undo step; one with text in it is kept for good.
+   */
+  leaveRun(nodeId: NodeId): void {
+    if (!this.#provisionalRuns.delete(nodeId)) return;
+
+    const node = this.#editor.scene.nodeOfKind(nodeId, "textRun");
+    if (!node || this.items(node).length > 0) return;
+
+    this.#editor.history.withoutRecording(() => {
+      this.#editor.scene.deleteNode(node.id);
+      this.deleteRun(node.runId);
+    });
+  }
+
+  /**
+   * Deletes the runs that only `deleted` placed, as when their page goes.
+   *
+   * @param deleted - nodes already removed from the scene.
+   */
+  deleteRunsPlacedBy(deleted: readonly TextRunNode[]): void {
+    for (const node of deleted) {
+      if (this.#editor.scene.nodesReferencing(node.runId).length === 0) this.deleteRun(node.runId);
+    }
   }
 
   /** Returns a stable computed whose layout invalidates on content, location, source, or glyph acquisition. */

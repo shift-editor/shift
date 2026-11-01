@@ -16,6 +16,7 @@ import {
   X,
 } from "@shift/ui";
 import PlusIcon from "@/assets/general/plus.svg";
+import { useSidebarPanelAnchor } from "@/hooks/useSidebarPanelAnchor";
 import WarningIcon from "@/assets/general/warning.svg";
 import { SidebarActionButton } from "@/components/sidebar";
 import { useExternalAxes } from "@/hooks/useAxes";
@@ -76,6 +77,8 @@ export const CreateInstanceMenu = ({
     handleOpenChange(false);
   };
 
+  const panelAnchor = useSidebarPanelAnchor();
+
   if (axes.length === 0) {
     return (
       <Tooltip content="Create instance">
@@ -90,6 +93,7 @@ export const CreateInstanceMenu = ({
     <Popover open={open} onOpenChange={handleOpenChange} modal={false}>
       <Tooltip content="Create instance">
         <PopoverTrigger
+          ref={panelAnchor.triggerRef}
           render={
             <SidebarActionButton label="Create instance">
               <PlusIcon className="h-3 w-3" />
@@ -98,7 +102,7 @@ export const CreateInstanceMenu = ({
         />
       </Tooltip>
       <PopoverPortal>
-        <PopoverPositioner sideOffset={4} align="start">
+        <PopoverPositioner {...panelAnchor.positioner}>
           <PopoverPopup className="w-50 p-0" initialFocus={nameInputRef}>
             <div className="flex h-8 items-center justify-between border-b border-line-subtle px-2">
               <PopoverTitle>Create Instance</PopoverTitle>

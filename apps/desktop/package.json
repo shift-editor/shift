@@ -19,6 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build:e2e": "tsx build.ts --e2e",
+    "build:perf": "tsx build.ts --e2e",
     "test:e2e": "playwright test --project=visual --project=gpu",
     "test:e2e:visual": "playwright test --project=visual",
     "test:e2e:visual:update": "playwright test --project=visual --update-snapshots=all",

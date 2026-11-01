@@ -35,6 +35,7 @@ import type {
   FeatureSubstitution,
   FontChangeFlag,
   FontFeature,
+  GlyphIdentityChange,
   LayoutRequest,
   PlacedText,
 } from "@shift/wasm/protocol";
@@ -149,6 +150,20 @@ export interface FontEngine {
    * @returns `unkerned` while the engine is not open, since nothing kerns.
    */
   missingKerningOrigin(sourceId: SourceId): MissingKerningOrigin;
+
+  /**
+   * What renaming a glyph to `name` does, as shift-font decides
+   * (`Font::glyph_rename`): the name and codepoints it would have, nothing,
+   * or why it is refused. Null for a glyph the engine's font lacks.
+   */
+  glyphRename(glyphId: GlyphId, name: string): GlyphIdentityChange | null;
+
+  /**
+   * What making `codepoint` a glyph's primary codepoint does, or removing it
+   * with null, as shift-font decides (`Font::glyph_primary_codepoint`). Null
+   * for a glyph the engine's font lacks.
+   */
+  glyphPrimaryCodepoint(glyphId: GlyphId, codepoint: number | null): GlyphIdentityChange | null;
 
   /**
    * Interpolates the masters' source metrics at a design location.

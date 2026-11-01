@@ -239,7 +239,7 @@ test.describe("Editor view", () => {
         throw new Error("Expected contour fixture points");
       }
 
-      await expect(sidebar.getByRole("tab", { name: "Objects" })).toHaveAttribute(
+      await expect(sidebar.getByRole("tab", { name: "Layers", exact: true })).toHaveAttribute(
         "aria-selected",
         "true",
       );
@@ -294,6 +294,9 @@ test.describe("Editor view", () => {
         { x: index * 20 + 10, y: 10, name: endNames.get(index) },
       ),
     );
+    // An empty glyph, so the tree starts with the drawn lines however tall the panel is.
+    await editor.addGlyph("objectTree", null);
+    await editor.openGlyphByName("objectTree");
     const drawn = await editor.draw({ contours: lines });
     const { first: firstId, last: lastId } = drawn;
     await editor.waitForIdle();
@@ -404,7 +407,12 @@ test.describe("Editor view", () => {
   test("full editor matches snapshot", { tag: "@golden" }, async ({ page, editor }) => {
     await editor.waitForCanvasRender();
     await page.mouse.move(0, 0);
-    await expectPageSnapshot(page, "editor-glyph-A.png", [editorToolbar(page)]);
+    // The kerning group fields' rounded corners antialias a few pixels differently between
+    // the snapshot runner and CI's, so the capture leaves them out.
+    await expectPageSnapshot(page, "editor-glyph-A.png", [
+      editorToolbar(page),
+      page.getByLabel(/kerning group of/),
+    ]);
   });
 
   test("resets sidebars to their default width on divider double-click", async ({ page }) => {
@@ -484,7 +492,7 @@ test.describe("Editor view", () => {
     await expect.poll(() => elementWidth(editorSidebarPanel)).toBeGreaterThan(initialWidth + 1);
     const widenedWidth = await elementWidth(editorSidebarPanel);
 
-    await page.getByRole("button", { name: "Font overview", exact: true }).click();
+    await page.getByRole("tab", { name: "Glyphs", exact: true }).click();
     await page.waitForURL(/#\/home/);
     await expect.poll(() => elementWidth(homeSidebarPanel)).toBeCloseTo(widenedWidth, 0);
 
@@ -508,33 +516,33 @@ test.describe("Editor view", () => {
     const rightContent = page.getByRole("complementary", { name: "Glyph properties" });
 
     if ((await elementWidth(leftPanel)) <= 1) {
-      await page.getByRole("button", { name: "Toggle left sidebar" }).click();
+      await page.getByRole("button", { name: /^(Hide|Show) left sidebar$/ }).click();
       await expect.poll(() => elementWidth(leftPanel)).toBeGreaterThan(0);
     }
 
     if ((await elementWidth(rightPanel)) <= 1) {
-      await page.getByRole("button", { name: "Toggle right sidebar" }).click();
+      await page.getByRole("button", { name: /^(Hide|Show) right sidebar$/ }).click();
       await expect.poll(() => elementWidth(rightPanel)).toBeGreaterThan(0);
     }
 
     const leftWidth = await elementWidth(leftContent);
     const rightWidth = await elementWidth(rightContent);
 
-    await page.getByRole("button", { name: "Toggle left sidebar" }).click();
+    await page.getByRole("button", { name: /^(Hide|Show) left sidebar$/ }).click();
     await expect.poll(() => elementWidth(leftPanel)).toBe(0);
     await expect
       .poll(async () => Math.abs((await elementWidth(leftContent)) - leftWidth))
       .toBeLessThanOrEqual(1);
 
-    await page.getByRole("button", { name: "Toggle right sidebar" }).click();
+    await page.getByRole("button", { name: /^(Hide|Show) right sidebar$/ }).click();
     await expect.poll(() => elementWidth(rightPanel)).toBe(0);
     await expect
       .poll(async () => Math.abs((await elementWidth(rightContent)) - rightWidth))
       .toBeLessThanOrEqual(1);
-    await page.getByRole("button", { name: "Toggle right sidebar" }).click();
+    await page.getByRole("button", { name: /^(Hide|Show) right sidebar$/ }).click();
     await expect.poll(() => elementWidth(rightPanel)).toBeGreaterThan(0);
 
-    await page.getByRole("button", { name: "Toggle left sidebar" }).click();
+    await page.getByRole("button", { name: /^(Hide|Show) left sidebar$/ }).click();
     await expect.poll(() => elementWidth(leftPanel)).toBeGreaterThan(0);
   });
 

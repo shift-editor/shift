@@ -5,10 +5,12 @@ import { getShiftHost } from "@/host/shiftHost";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
 import type { SettingsTarget } from "@/types/settings";
 import { useFontSession } from "@/workspace/WorkspaceContext";
+import { useWindowTabs } from "@/hooks/useWindowTabs";
 import { SettingsNavigationContext, type SettingsNavigation } from "./SettingsNavigationContext";
 
 export const SettingsNavigationProvider = ({ children }: { children: ReactNode }) => {
   const session = useFontSession();
+  const { closeShown } = useWindowTabs();
   const [target, setTarget] = useState<SettingsTarget | null>(null);
   const [componentPickerOpen, setComponentPickerOpen] = useState(false);
   const open = useCallback((next: SettingsTarget) => setTarget(next), []);
@@ -19,6 +21,11 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
       getShiftHost().commands.onRunRendererCommand(async (id) => {
         if (id === "app.showSettings") {
           setTarget({ category: "font" });
+          return;
+        }
+        if (id === "tab.close") {
+          // Only the pinned Glyphs tab is left: Close Tab closes the window, prompting as usual.
+          if (!closeShown()) await getShiftHost().commands.run("window.close");
           return;
         }
         if (id === "glyph.addComponent") {
@@ -34,7 +41,7 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
           console.error("renderer command failed", id, error);
         }
       }),
-    [session.editor, session.mode],
+    [closeShown, session.editor, session.mode],
   );
 
   return (

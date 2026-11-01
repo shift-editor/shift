@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { ResizablePanelHandle, ResizablePanelProps } from "@shift/ui";
 
@@ -46,10 +46,19 @@ export const useSidebarLayout = (view: "home" | "editor") => {
   const contentRefs = { left: useRef<HTMLDivElement>(null), right: useRef<HTMLDivElement>(null) };
   const layoutRef = useRef<SidebarLayout>(null);
   layoutRef.current ??= loadLayout();
+  // Re-renders only when a sidebar opens or closes, never while one is dragged.
+  const [open, setOpen] = useState(() => openSides(layoutRef.current!));
+  const syncOpen = (layout: SidebarLayout) => {
+    const next = openSides(layout);
+    setOpen((previous) =>
+      previous.left === next.left && previous.right === next.right ? previous : next,
+    );
+  };
   const animationTimeoutRef = useRef<number | null>(null);
 
   const applyLayout = (layout: SidebarLayout) => {
     layoutRef.current = layout;
+    syncOpen(layout);
     for (const side of SIDES) {
       const panel = panelRefs[side].current;
       if (!panel) continue;
@@ -62,12 +71,21 @@ export const useSidebarLayout = (view: "home" | "editor") => {
     mountedLayouts.add(applyLayout);
     return () => {
       mountedLayouts.delete(applyLayout);
-      if (animationTimeoutRef.current !== null) window.clearTimeout(animationTimeoutRef.current);
     };
   });
 
+  // Only on unmount: toggling re-renders mid-animation, and cancelling then
+  // would leave the content pinned to its animation width.
+  useEffect(
+    () => () => {
+      if (animationTimeoutRef.current !== null) window.clearTimeout(animationTimeoutRef.current);
+    },
+    [],
+  );
+
   const commit = (layout: SidebarLayout) => {
     layoutRef.current = layout;
+    syncOpen(layout);
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
     } catch {
@@ -146,9 +164,15 @@ export const useSidebarLayout = (view: "home" | "editor") => {
     rightSidebarContentRef: contentRefs.right,
     onLayoutChanged,
     sidebarPanelProps,
+    leftSidebarOpen: open.left,
+    rightSidebarOpen: open.right,
     toggleLeftSidebar: () => toggleSidebar("left"),
     toggleRightSidebar: () => toggleSidebar("right"),
     resetLeftSidebar: () => resetSidebar("left"),
     resetRightSidebar: () => resetSidebar("right"),
   };
 };
+
+function openSides(layout: SidebarLayout): Record<Side, boolean> {
+  return { left: !layout.left.collapsed, right: !layout.right.collapsed };
+}

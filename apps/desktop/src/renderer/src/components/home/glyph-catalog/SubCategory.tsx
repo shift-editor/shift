@@ -1,5 +1,6 @@
 import type { ListSelectionMode } from "@shift/editor/types";
 import { SidebarActionRow } from "@/components/sidebar";
+import { GuideSlot } from "@/components/editor/object-tree/ObjectSectionRow";
 import { listSelectionMode } from "@/hooks/useListSelection";
 
 export interface SubCategoryProps {
@@ -22,7 +23,8 @@ export const SubCategory = ({
     joinsPrevious={joinsPrevious}
     joinsNext={joinsNext}
     onClick={(event) => onSelect(listSelectionMode(event))}
-    contentClassName="pl-7"
+    leading={<GuideSlot />}
+    contentClassName="pl-5"
   >
     <span className="truncate">{label}</span>
   </SidebarActionRow>

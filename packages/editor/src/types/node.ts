@@ -1,5 +1,6 @@
 import type { Point2D } from "@shift/geo";
 import type { GlyphId, NodeId, RunId, SourceId, TextItemId } from "@shift/types";
+import type { IndexKey } from "./indexKey";
 
 /**
  * Describes a placed object in the editor scene.
@@ -23,7 +24,7 @@ export interface Node {
   parentId: NodeId | null;
 
   /** Sort key among siblings under the same parent. */
-  index: string;
+  index: IndexKey;
 
   /**
    * Origin of this node's frame within its parent's frame, or within the scene
@@ -77,6 +78,39 @@ export interface TextRunNode extends Node {
 }
 
 /**
+ * A top-level canvas.
+ *
+ * @remarks
+ * Every other node descends from exactly one page. A page has no parent, sits
+ * at the scene origin, and draws nothing itself; the canvas shows one page at
+ * a time (`Scene.shownPageIdCell`). Pages are ordered among themselves by
+ * `index`, which is their order in the pages list.
+ */
+export interface PageNode extends Node {
+  readonly kind: "page";
+
+  /** Shown in the pages list. */
+  readonly name: string;
+
+  /**
+   * `glyph` for a page that shows one glyph outside the user's pages, such as
+   * a glyph tab's. It never shows in the pages list, so boards stay as the
+   * user arranged them. Absent for an ordinary page.
+   */
+  readonly role?: "glyph";
+}
+
+export const PageNode = {
+  /**
+   * Whether two page lists hold the same page records in the same order, so a
+   * list derived from the scene keeps its identity while no page changes.
+   */
+  sameList(a: readonly PageNode[], b: readonly PageNode[]): boolean {
+    return a.length === b.length && a.every((page, index) => page === b[index]);
+  },
+};
+
+/**
  * Maps each scene node kind to its node type.
  *
  * @remarks
@@ -99,6 +133,7 @@ export interface TextRunNode extends Node {
 export interface SceneNodeKinds {
   glyph: GlyphNode;
   textRun: TextRunNode;
+  page: PageNode;
 }
 
 /** Identifies a registered scene node kind. */

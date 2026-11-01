@@ -1,12 +1,9 @@
-import { Mat, Polygon } from "@shift/geo";
+import { Polygon } from "@shift/geo";
 import type { Contour, GlyphGeometry, Point } from "@shift/glyph-state";
-import { ContourPath } from "@shift/editor/rendering";
 import { Validate } from "@shift/validation";
 import type { ContourId } from "@shift/types";
 import type { ContourDirection, ObjectTree, ObjectTreeItem } from "@/types/objectTree";
-
-const CONTOUR_ICON_SIZE = 14;
-const CONTOUR_ICON_PADDING = 1;
+import { CONTOUR_ICON } from "./IconBox";
 
 /**
  * Builds the Objects panel tree for a glyph's geometry.
@@ -125,7 +122,7 @@ function contourItem(contour: Contour, contourIndex: number): ObjectTreeItem {
     id: contour.id,
     kind: "contour",
     icon: "contour",
-    iconPath: createContourIconPath(contour),
+    iconPath: CONTOUR_ICON.contourPath(contour),
     direction: contourDirection(contour),
     label: `Contour ${contourIndex + 1}`,
     children: contour.points.map((point, pointIndex) => {
@@ -145,26 +142,6 @@ function contourItem(contour: Contour, contourIndex: number): ObjectTreeItem {
       };
     }),
   };
-}
-
-export function createContourIconPath(contour: Contour): string | undefined {
-  const bounds = contour.bounds;
-  if (!bounds) return undefined;
-
-  const width = bounds.max.x - bounds.min.x;
-  const height = bounds.max.y - bounds.min.y;
-  const longestSide = Math.max(width, height);
-  if (longestSide === 0) return undefined;
-
-  const contentSize = CONTOUR_ICON_SIZE - CONTOUR_ICON_PADDING * 2;
-  const scale = contentSize / longestSide;
-  const scaledWidth = width * scale;
-  const scaledHeight = height * scale;
-  const translateX = CONTOUR_ICON_PADDING + (contentSize - scaledWidth) / 2 - bounds.min.x * scale;
-  const translateY = CONTOUR_ICON_PADDING + (contentSize - scaledHeight) / 2 + bounds.max.y * scale;
-  const transform = new Mat(scale, 0, 0, -scale, translateX, translateY);
-
-  return ContourPath.fromContour(contour, transform).svgPath;
 }
 
 function contourDirection(contour: Contour): ContourDirection | undefined {

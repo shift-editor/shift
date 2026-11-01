@@ -25,6 +25,7 @@
 
 use pack::Pack;
 use shift_engine::StoreReadError;
+use shift_font::glyph_identity::GlyphIdentityChange;
 use shift_font::{
     Axis, FontChangeFlag, GlyphId, GlyphRecords, MetricValue, MissingKerningOrigin,
     ResolvedKerning, Source,
@@ -148,6 +149,17 @@ pub trait EngineReads {
     /// Returns [`FeatureListError`] when there is no shaper font, saying
     /// why, or it cannot be read.
     fn feature_applies(&self, tag: String, setting: Option<u32>) -> Result<bool, FeatureListError>;
+    /// What renaming `glyph` to `name` does: `Font::glyph_rename`. Null for a
+    /// glyph the session's font lacks.
+    fn glyph_rename(&self, glyph: GlyphId, name: String) -> Option<GlyphIdentityChange>;
+    /// What making `codepoint` `glyph`'s primary codepoint does, or removing
+    /// it with none: `Font::glyph_primary_codepoint`. Null for a glyph the
+    /// session's font lacks.
+    fn glyph_primary_codepoint(
+        &self,
+        glyph: GlyphId,
+        codepoint: Option<u32>,
+    ) -> Option<GlyphIdentityChange>;
     /// Every interned source set's weights at a design location, as the
     /// basis the session's font gives each set evaluates them
     /// (`InterpolationBasis::weights_at`): the weights of the sets a frame
@@ -283,8 +295,8 @@ mod exports {
 
     use super::{
         Axis, EditablePair, EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag,
-        FontFeature, InterpolatedMetrics, KerningSnapshot, LayoutError, PlacedText, Source,
-        SourceSetWeights, TextLayoutRequest, engine_reads_request,
+        FontFeature, GlyphIdentityChange, InterpolatedMetrics, KerningSnapshot, LayoutError,
+        PlacedText, Source, SourceSetWeights, TextLayoutRequest, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::shaping::{TextPlace, TextShaping};
@@ -644,6 +656,21 @@ mod exports {
                 })
                 .collect();
             Ok(PlacedText { layout, unloaded })
+        }
+
+        fn glyph_rename(&self, glyph: GlyphId, name: String) -> Option<GlyphIdentityChange> {
+            self.session.font().glyph_rename(glyph, &name).ok()
+        }
+
+        fn glyph_primary_codepoint(
+            &self,
+            glyph: GlyphId,
+            codepoint: Option<u32>,
+        ) -> Option<GlyphIdentityChange> {
+            self.session
+                .font()
+                .glyph_primary_codepoint(glyph, codepoint)
+                .ok()
         }
 
         fn layout_inputs(&self) -> Vec<FontChangeFlag> {

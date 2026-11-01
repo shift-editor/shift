@@ -106,8 +106,11 @@ export class TextEditing {
   /** Hides the caret and keeps it for {@link resume}; callers decide whether the change is history-bearing. */
   end(): void {
     const kept = this.#store.get(currentTextEditingId);
-    if (kept?.type === "textEditing") this.#store.put({ ...kept, active: false });
     this.#goalX = null;
+    if (kept?.type !== "textEditing") return;
+
+    this.#store.put({ ...kept, active: false });
+    this.#editor.text.leaveRun(kept.nodeId);
   }
 
   /**

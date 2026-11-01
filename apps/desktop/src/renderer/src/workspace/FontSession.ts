@@ -5,6 +5,8 @@ import type { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
 import type { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import type { PreviewFontSession, WorkspaceFontSession } from "@/types/fontSession";
 import type { Workspace } from "./Workspace";
+import { WindowTabs } from "@/lib/tabs/WindowTabs";
+import { PageRenameGesture } from "@/lib/pages/PageRenameGesture";
 
 /**
  * Creates a renderer composition with durable workspace capabilities.
@@ -25,6 +27,8 @@ export function createWorkspaceFontSession(
     workspace,
     font: workspace.font,
     editor: workspace.editor,
+    tabs: workspace.tabs,
+    pageRename: new PageRenameGesture(),
     dispose() {
       catalog.dispose();
       workspace.dispose();
@@ -55,6 +59,8 @@ export function createPreviewFontSession(
     workspace: null,
     font,
     editor,
+    tabs: new WindowTabs(editor),
+    pageRename: new PageRenameGesture(),
     dispose() {
       catalog.dispose();
       font.dispose();

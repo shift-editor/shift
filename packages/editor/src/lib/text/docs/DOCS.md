@@ -2,12 +2,12 @@
 
 <!-- reviewed: 2026-11-01 review-every: 90d -->
 
-Proof text is document-scoped item content projected through one implicit page run, edited by one session caret, with the edited glyph placed inside the run.
+Proof text is document-scoped item content projected through one run per page, edited by one session caret, with the edited glyph placed inside the run.
 
 ## Architecture Invariants
 
 - `TextRunRecord.items` stores stable, client-minted `TextItemId` identities for glyphs and linebreaks. Indices/clusters are derived, never identity. Input syntax such as `/name` belongs to the `TextParser` that turns typed and pasted text into items (`Text.parser`, `GlyphNameParser` by default), not the stored representation.
-- Until pages exist, the canvas has one run. The desktop editor route creates it at the scene origin on the first open and replaces its text with each glyph opened from the grid; that interim policy lives in the route, not the editor package. Users never place runs and the Text tool never creates one.
+- Each page has at most one run, at its origin. Opening a glyph from the grid (`Editor.openGlyphInText`, used by the desktop editor route, window tabs and `TestEditor`) shows the page, creates its run on the first open there and replaces its text with that glyph. Runs on other pages keep their text. Users never place runs and the Text tool never creates one.
 - The edited glyph is the run's child `GlyphNode { parentId: run, itemId }`. `TextRunNodeDefinition.childPlacement` places it at its item's layout position and the run's size, and the run skips drawing items a child occupies. A run has at most one child; switching replaces it (delete + create) so per-node caches never see a node change glyph.
 - `Text` owns records and layout only. `TextRunNodeDefinition` owns the run's child: it places it (`childPlacement`), skips its item, switches it (`editItem`, also from `onDoubleClick`), and deletes it when its item leaves the run (`onContentChange`, run when the capture finishes, whoever removed the item), so undo restores an item and its child together.
 - `Text.layoutCell(runId)` is the shared reactive layout, owned by one `RunText`. Every layout rule runs in Rust: `RunText` asks the window's engine to lay the run's items out (`Font.layoutText`, `EngineReads.layoutText`, shift-layout over the engine's own font, unsaved edits and a drag frame under way included), which shapes, positions kerning, marks and cursive joins at the font's insert markers, breaks lines, orders bidi runs and places caret stops, and `TextLayout` only indexes the result for drawing, hits, carets and selection. The read tracks the revision of each change flag layout reads (`FontEngine.layoutInputs`), the location, the source and glyph loads; a result that places everything as before keeps the layout, so an edit that moves nothing (an anchor no mark uses, a point) rebuilds nothing drawn from it. A drag frame the editor draws itself is shown in text through `GlyphLayer.previewInText` (`FontEngine.showPreview`), ended with the gesture (`endPreview`). The layout read is pure: glyphs it showed that the engine has not loaded come back in `PlacedText.unloaded`, and `RunText`'s reporting effect, not the computed, loads them into the engine (`Font.preloadLaidOut`), once each, and the layout reads again; `Text` loads them into the model too and logs, once, why text laid out unshaped. A window with no engine, such as a preview's, has shift-layout lay its text out as typed too (`TypedText.layoutTyped` in the engine module, over each glyph's advance and mark class), once the effect has loaded that module; nothing lays text out in TypeScript. Even an empty run has a caret at its origin.
@@ -37,7 +37,7 @@ Proof text is document-scoped item content projected through one implicit page r
 - `TextEditing.ts`: session caret, navigation, selected items, history boundaries.
 - `TextBuffer.ts`: immutable items-plus-selection value for splice, deletion, and grapheme and word steps.
 - `layout/`: TextLayout (an index over the Rust layout, including selection rectangles) and Caret.
-- `apps/desktop/src/renderer/src/views/Editor.tsx`: the interim one-run open policy.
+- `apps/desktop/src/renderer/src/lib/editor/openGlyph.ts`: the interim one-run-per-page open policy, called by `views/Editor.tsx`.
 - `lib/nodes/TextRunNodeDefinition.ts`: scaled presentation, child placement, outline hits, caret lookup, spacing gaps.
 - `lib/objects/TextItemObject.ts`: resolved object for a selected or hovered item.
 - `lib/tools/text/`: Text mode and caret gestures.

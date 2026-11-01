@@ -17,6 +17,7 @@ import {
   sessionMode,
   writeClipboardText,
 } from "./fixtures/documentLifecycle";
+import { glyphSearch, openFontInfo } from "./fixtures/appLocators";
 import { EditorDriver } from "./fixtures/EditorDriver";
 import { selectedComponentHitPoint } from "./fixtures/editorInteractions";
 import { openCubicPointTypes, openScratchGlyph, WAVE_CONTOUR } from "./fixtures/scratchGlyph";
@@ -73,6 +74,7 @@ launcherTest(
 
     expect(menu.settingsInstalled).toBe(true);
     expect(menu.fileIds).not.toContain("app.showSettings");
+    expect(menu.fileIds).toEqual(expect.arrayContaining(["tab.close", "window.close"]));
     expect(menu.editIds.includes("app.showSettings")).toBe(menu.platform !== "darwin");
     expect(menu.glyphIds).toContain("glyph.addComponent");
     expect(menu.addComponentAccelerator).toBe("CmdOrCtrl+Shift+C");
@@ -293,7 +295,7 @@ authoredTest(
 authoredTest(
   "Settings rounds mapping display without losing editing precision",
   async ({ editor, page }) => {
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await openFontInfo(page);
     const settings = page.getByRole("dialog", { name: "Settings" });
     await settings.getByRole("button", { name: "Axes", exact: true }).click();
     await settings.getByRole("button", { name: "Create axis", exact: true }).click();
@@ -328,7 +330,7 @@ authoredTest(
 authoredTest(
   "Mapping graph keeps a crossed-point drag as one undoable edit",
   async ({ editor, electronApp, page }) => {
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await openFontInfo(page);
     const settings = page.getByRole("dialog", { name: "Settings" });
     await settings.getByRole("button", { name: "Axes", exact: true }).click();
     await settings.getByRole("button", { name: "Create axis", exact: true }).click();
@@ -577,9 +579,9 @@ authoredTest(
       .toBe(true);
     await expect.poll(() => applicationMenuItemEnabled(page, electronApp, "edit.copy")).toBe(true);
 
-    const search = page.getByPlaceholder("Search glyphs...");
+    const search = await glyphSearch(page);
     await search.fill("Alpha");
-    await search.evaluate((input: HTMLInputElement) => input.select());
+    await search.selectText();
     await clickApplicationMenuItem(page, electronApp, "edit.copy");
     await expect.poll(() => clipboardText(electronApp)).toBe("Alpha");
 

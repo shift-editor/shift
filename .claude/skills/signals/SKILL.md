@@ -42,6 +42,8 @@ _Origin:_ `Glyph` kept component glyphs in a plain `Map` mutated in place; rende
 - In React the same rule applies to context. A context whose value is built from a high-frequency signal (location, selection, metrics) re-renders **every** consumer on every change, whatever field each one reads. Read the specific cell with `useSignalState` instead, split the rarely changing field into its own context, or hold the value for subtrees that are hidden (`HeldGlyphCatalog`). A component that needs a value only on an event (opening a menu, submitting) reads `cell.peek()` in the handler instead of subscribing.
 - A reader that needs one part of a broad cell subscribes to a narrowed cell owned next to the source, not to the source with a check after it. `editor.toolCell` changes on every pointer move during a marquee or drag; readers that only branch on which tool is active use `editor.toolIdCell`, and readers that follow one tool use `editor.toolCellIf(id)`. Build such cells once on the owner rather than per component in `useMemo`, so non-React readers (`track(...)` in render passes) get them too.
 
+- Engine invalidation reaches TypeScript as one revision per Rust `FontChangeFlag`: track `engine.revision("kerning")`, not a revision signal of your own. Never add a `#shapingRevision` beside `#kerningRevision` for each new concern; when readers need a finer cut than a flag gives (a `layers` flag that fires on every layer edit), add the flag in Rust's `FontChangeImpact` and its revision appears with it.
+
 _Origin:_ the glyph catalog context changes with the axis location, so `Editor` and the hidden home grid re-rendered on every scrub step.
 
 _Origin:_ `FontStore.glyphForId` once tracked the whole loaded-glyph map, so the scene and text layout reran on every glyph load (#454).
@@ -77,6 +79,29 @@ _Origin:_ typing a character whose glyph wasn't loaded laid it out at advance 0 
 ### 6. Effects are for side effects
 
 - Effects render, sync, and start work; derivations belong in `computed`.
+- **A computed has no side effects.** It may run any number of times, at any read, or not at all; work started inside it (a preload into the engine, a load, a signal write, a tab opened) runs at those times too. Read what is there, and start the load from a method or an effect (rule 4).
+- **An effect never maintains a derived value.** An effect that writes `#tabs` to close the tabs of deleted pages, or a React `useEffect` that opens a tab when a page has none, is a `computed` written the long way, and it leaves the value wrong for a frame. Derive it.
+
+```ts
+// Before: reading the layout writes into the engine.
+readonly layoutCell = computed(() => {
+  this.#engine.preloadGlyphs(this.#missingGlyphs());
+  return this.#engine.layoutText(this.#request());
+});
+
+// After: the computed only reads; the owner loads what it missed (rule 4).
+readonly layoutCell = computed(() => this.#engine.layoutText(this.#request()));
+readonly #loadMissing = effect(() => void this.#loadGlyphs(this.missingGlyphsCell.value));
+
+async #loadGlyphs(glyphIds: readonly GlyphId[]): Promise<void> {
+  try {
+    await this.#font.loadGlyphs(glyphIds);
+  } catch (error) {
+    console.error("Failed to load glyphs for layout", error);
+  }
+}
+```
+
 - Don't write a signal an effect also reads unless the loop is intended and terminates.
 - Async work started from an effect is fire-and-forget: wrap it in an `async` method with `try`/`catch` that logs, and call it with `void` (see `Font.#loadComponentGlyphs`).
 - Render effects use `schedule` to coalesce to one frame; React uses `useSignalState(cell, { schedule: "frame" })` for high-frequency cells.
@@ -121,6 +146,8 @@ Reproduce the realistic precondition: data saved and reopened so it is _not_ alr
 
 - [ ] Every collection field in a signal-using class is derived, holds signals, or is annotated `// non-reactive:` with a verified reason.
 - [ ] Every `peek()` inside reactive code is intentional and commented.
+- [ ] No `computed` that loads, preloads, writes a signal or calls into the engine to mutate; no effect that keeps a derived value in step.
+- [ ] No new revision signal per concern; invalidation tracks `engine.revision(flag)`.
 - [ ] Lookups that can miss subscribe to a per-key cell and trigger the load.
 - [ ] No reader subscribes to a whole collection when it needs one entry.
 - [ ] Writes on broad triggers skip unchanged values.

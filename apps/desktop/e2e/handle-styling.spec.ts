@@ -93,6 +93,8 @@ previewTest(
     await workspacePage.waitForURL(/#\/home$/);
     await clickFirstCatalogGlyph(workspacePage);
     const workspace = new EditorDriver(workspacePage, electronApp);
+    // Every handle of no glyph is idle too, so wait for the glyph to open first.
+    await expect.poll(async () => (await workspace.editorView()).glyph).not.toBeNull();
     await expectEveryHandleDrawnAs(workspace, "idle");
 
     // The glyph's first point as the canvas draws it.
