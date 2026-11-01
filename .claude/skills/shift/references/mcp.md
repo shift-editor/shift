@@ -42,7 +42,7 @@ async () => {
 
 ## Control the window
 
-MCP can change what a window shows, as the user would with its menus, toolbar, pages list and glyph overview. None of this changes font data or a file, or moves `fontRevision`. Opening a glyph in a new tab adds a glyph page to the document, as the glyph overview does, so the document then shows unsaved changes.
+MCP can change what a window shows, as the user would with its menus, toolbar, pages list and glyph overview. None of this changes the font or a file, marks the document unsaved, or moves `fontRevision`.
 
 ```js
 async () => {

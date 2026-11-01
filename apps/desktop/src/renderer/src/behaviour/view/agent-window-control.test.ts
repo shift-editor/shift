@@ -68,21 +68,20 @@ describe("agents change what the window shows without touching the font", () => 
     expect(value.shownPageId).not.toBe(proofs.id);
   });
 
-  it("opens a glyph with no tab on a new glyph page, unsaved as when the user opens it", async () => {
+  it("opens a glyph with no tab on a new glyph page, and the document stays saved as for the user", async () => {
     await editor.addGlyph("B", 66);
     await editor.addGlyph("C", 67);
     await editor.save();
     await editor.openGlyph("B");
     const openedByUser = await editor.documentState();
     const userPageId = editor.shownPageId();
-    await editor.save();
 
     const { value } = await editor.agentControl("editor.openGlyph", { glyph: { name: "C" } });
 
-    expect(openedByUser).toMatchObject({ dirty: true });
+    expect(openedByUser).toMatchObject({ dirty: false });
     expect(value.shownPageId).not.toBe(userPageId);
     expect(editor.pageExists(value.shownPageId!)).toBe(true);
-    expect(await editor.documentState()).toMatchObject({ dirty: true });
+    expect(await editor.documentState()).toMatchObject({ dirty: false });
   });
 
   it("refuses a glyph the font does not have and keeps the open one", async () => {

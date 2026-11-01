@@ -595,10 +595,10 @@ export interface ShiftCapabilities {
   };
   /**
    * Inspects the editor, and changes what it shows: the tool, page, open
-   * glyph, camera and selection. None of these change font data or move
-   * `fontRevision`. Opening a glyph that has no tab yet adds a glyph page to
-   * the document, as the glyph overview does, so the document then has unsaved
-   * changes; the other calls leave it as it was.
+   * glyph, camera and selection. None of these change font data, mark the
+   * document unsaved or move `fontRevision`; opening a glyph that has no tab
+   * yet adds a glyph page, as the glyph overview does, and the document stays
+   * saved.
    */
   editor: {
     inspect(input: ShiftTarget): Promise<ShiftObservation<EditorInspection>>;
