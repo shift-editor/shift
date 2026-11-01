@@ -18,6 +18,10 @@ describe("what a feature changes in proof text", () => {
     expect(editor.featureSubstitutions("smcp")).toEqual([]);
   });
 
+  it("says why a feature's substitutions cannot be read, rather than listing none", () => {
+    expect(() => editor.featureSubstitutions("ligatures")).toThrow("FeatureListError.invalidTag");
+  });
+
   it("highlights what a feature brings in while it is on, and what it replaces while off", async () => {
     editor.typeText("fi");
     await editor.settle();
