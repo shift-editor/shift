@@ -66,6 +66,10 @@ pub struct Specimen {
     /// or `None` when the font cannot draw it legibly there; the tile then
     /// shows this specimen instead.
     pub family_name: Option<NameSpecimen>,
+    /// The font's name for a caption: the family and its style, as
+    /// `Host Grotesk Bold`, leaving out a `Regular` style; `None` when the
+    /// font has no family name.
+    pub display_name: Option<String>,
 }
 
 /// Rectangle in SVG viewport coordinates.
@@ -391,6 +395,7 @@ impl<'a> SpecimenFont<'a> {
         let specimen = self.short_specimen(coverage)?;
         Some(Specimen {
             family_name: self.name_specimen(NameBox::WIDE_TILE),
+            display_name: self.display_name(),
             ..specimen
         })
     }
@@ -575,6 +580,7 @@ impl<'a> SpecimenFont<'a> {
             units_per_em: self.units_per_em,
             right_to_left,
             family_name: None,
+            display_name: None,
         })
     }
 

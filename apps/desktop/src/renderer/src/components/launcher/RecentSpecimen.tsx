@@ -1,18 +1,10 @@
 import { cn } from "@shift/ui";
-import type { NameFit, NameSpecimen, Specimen } from "@shift/types";
+import type { NameSpecimen, Specimen } from "@shift/types";
 
 /** Font size of the specimen on a small tile, in CSS pixels. */
 const TILE_SPECIMEN_SIZE = 56;
 /** Font size of the specimen the wide tile falls back to, in CSS pixels. */
 const WIDE_TILE_SPECIMEN_SIZE = 72;
-
-/** Space under the wide tile's name, by the rule that fitted it, or under its fallback specimen. */
-const WIDE_TILE_BOTTOM_PADDING: Record<NameFit | "specimen", string> = {
-  full: "pb-4",
-  scaled: "pb-4",
-  twoLines: "pb-[18px]",
-  specimen: "pb-3.5",
-};
 
 /**
  * Draws a cached specimen outline as text set at `fontSize` CSS pixels,
@@ -28,7 +20,10 @@ export const SpecimenOutline = ({
   className?: string;
 }) => {
   const viewBoxWidth = specimen.viewBox[2] ?? 0;
-  const width = (viewBoxWidth * fontSize) / specimen.unitsPerEm;
+  // Specimens cached before unitsPerEm was stored lack it; their box height,
+  // about an em, stands in until the next open rebuilds them.
+  const unitsPerEm = specimen.unitsPerEm || (specimen.viewBox[3] ?? 0);
+  const width = unitsPerEm > 0 ? (viewBoxWidth * fontSize) / unitsPerEm : undefined;
 
   return (
     <svg
@@ -90,16 +85,15 @@ export const TileSpecimen = ({ specimen }: { specimen: Specimen | null }) => {
 };
 
 /**
- * The wide tile's content: "Last opened", then the family name drawn in the
- * font, or the specimen when the name does not fit legibly.
+ * The wide tile's content: the family name drawn in the font, centred
+ * vertically and set from the left, or the specimen when the name does not
+ * fit legibly.
  */
 export const LastOpenedSpecimen = ({ specimen }: { specimen: Specimen | null }) => {
   const familyName = specimen?.familyName ?? null;
-  const padding = WIDE_TILE_BOTTOM_PADDING[familyName?.fit ?? "specimen"];
 
   return (
-    <div className={cn("flex h-full flex-col justify-between px-6 pt-4", padding)}>
-      <span className="text-ui/3.5 font-medium text-secondary">Last opened</span>
+    <div className="flex h-full flex-col justify-center px-5 py-4">
       {familyName && <FamilyNameOutline name={familyName} />}
       {!familyName && specimen && (
         <SpecimenOutline

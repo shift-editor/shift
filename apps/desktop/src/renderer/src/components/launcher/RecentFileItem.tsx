@@ -4,8 +4,8 @@ import { pathBasename, recentOpenedLabel, type RecentDocument } from "@shared/re
 import { RecentFileMenu } from "./RecentFileMenu";
 import { FittedSpecimen, LastOpenedSpecimen, TileSpecimen } from "./RecentSpecimen";
 import { useAltKeyHeld } from "./useRecentDocuments";
-import type { RecentFileActions } from "./useRecentFileActions";
 import { filenameParts, longestFittingName } from "./recentFileName";
+import type { RecentFileActions } from "./useRecentFileActions";
 
 interface RecentFileItemProps {
   document: RecentDocument;
@@ -15,72 +15,87 @@ interface RecentFileItemProps {
   actions: RecentFileActions;
 }
 
-/** A filename with its extension in a lighter shade. */
-const FileNameLabel = ({ label }: { label: string }) => {
-  const { stem, extension } = filenameParts(label);
-
-  return (
-    <span className="min-w-0 overflow-hidden">
-      {stem}
-      <span className="text-secondary/60">{extension}</span>
-    </span>
-  );
-};
-
 /**
- * One line under a tile: the filename, its extension dimmed, then " · " and
- * when it was opened.
+ * A name on one line that loses its middle when the line is too short,
+ * keeping its end, as Finder and Glyphs do: `shantellsans-w…INFM`.
  *
  * @remarks
- * A name too long for the line loses its middle, keeping the extension. An
- * invisible copy measures each candidate against the width the date leaves.
+ * An invisible copy measures each candidate against the line's width.
  */
-const RecentFileCaption = ({ name, when }: { name: string; when: string }) => {
-  const captionRef = useRef<HTMLParagraphElement>(null);
-  const whenRef = useRef<HTMLSpanElement>(null);
+const OneLineName = ({ name, className }: { name: string; className?: string }) => {
+  const lineRef = useRef<HTMLParagraphElement>(null);
   const measureRef = useRef<HTMLSpanElement>(null);
   const [width, setWidth] = useState(0);
   const [label, setLabel] = useState(name);
 
   useLayoutEffect(() => {
-    const caption = captionRef.current;
-    if (!caption) return undefined;
+    const line = lineRef.current;
+    if (!line) return undefined;
 
     const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
-    observer.observe(caption);
+    observer.observe(line);
     return () => observer.disconnect();
   }, []);
 
   useLayoutEffect(() => {
-    const caption = captionRef.current;
+    const line = lineRef.current;
     const measure = measureRef.current;
-    const whenLabel = whenRef.current;
-    if (!caption || !measure || !whenLabel) return;
+    if (!line || !measure) return;
 
-    const available = caption.clientWidth - whenLabel.offsetWidth;
     setLabel(
       longestFittingName(name, (candidate) => {
         measure.textContent = candidate;
-        return measure.offsetWidth <= available;
+        return measure.offsetWidth <= line.clientWidth;
       }),
     );
-  }, [name, when, width]);
+  }, [name, width]);
 
   return (
-    <p
-      ref={captionRef}
-      className="relative mx-0.5 flex min-w-0 text-sm/4 whitespace-nowrap text-secondary"
-    >
-      <FileNameLabel label={label} />
-      <span ref={whenRef} className="shrink-0">
-        &nbsp;· {when}
-      </span>
+    <p ref={lineRef} className={cn("relative min-w-0 whitespace-nowrap", className)}>
+      {label}
       <span
         ref={measureRef}
         aria-hidden="true"
         className="invisible absolute top-0 left-0 whitespace-nowrap"
       />
     </p>
+  );
+};
+
+/**
+ * A tile's caption: the font's name (`Host Grotesk Bold`) on its own line,
+ * then the file's extension as written, in monospace, and when it was opened
+ * (`.glyphspackage · 18 Oct`), both quieter than the name.
+ *
+ * @remarks
+ * Before the specimen is cached, or for a font with no name, the filename
+ * without its extension stands in for the font's name. The extension tells
+ * apart a family's `.shift` and `.glyphspackage`; the tooltip has the full
+ * path.
+ */
+const RecentFileTileCaption = ({
+  filename,
+  fontName,
+  when,
+}: {
+  filename: string;
+  fontName: string | undefined;
+  when: string;
+}) => {
+  const { stem, extension } = filenameParts(filename);
+
+  return (
+    <div className="mx-0.5 flex min-w-0 flex-col gap-0.5 text-sm/4">
+      <OneLineName name={fontName ?? stem} className="font-medium text-primary" />
+      <p className="truncate text-secondary">
+        {extension && (
+          <>
+            <code className="font-mono text-ui/4">{extension}</code> ·{" "}
+          </>
+        )}
+        {when}
+      </p>
+    </div>
   );
 };
 
@@ -118,8 +133,8 @@ const ROW_MENU_CLASS =
   "relative shrink-0 self-center opacity-0 group-hover:opacity-100 group-has-focus-visible:opacity-100 data-[popup-open]:opacity-100";
 
 /**
- * Grid tile for one recent file: its specimen on a muted tile, then one line
- * with the filename and when it was opened.
+ * Grid tile for one recent file: its specimen on a muted tile, then the
+ * font's name over its filename and when it was opened.
  *
  * @remarks
  * The newest file gets the wide tile, which draws the family name in the font
@@ -164,7 +179,11 @@ export const RecentFileTile = ({
         <RecentFileMenu document={document} actions={actions} className={TILE_MENU_CLASS} />
       </div>
       <div className={cn(document.missing && "opacity-50")}>
-        <RecentFileCaption name={name} when={whenLabel(document, now)} />
+        <RecentFileTileCaption
+          filename={name}
+          fontName={document.specimen?.displayName ?? undefined}
+          when={whenLabel(document, now)}
+        />
       </div>
       {document.missing && <MissingActions document={document} actions={actions} />}
     </li>

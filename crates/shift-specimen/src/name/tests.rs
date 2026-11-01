@@ -175,3 +175,31 @@ fn uses_the_family_name_without_a_typographic_one() {
         Some("Inter Tight".to_string())
     );
 }
+
+/// Inter renamed to `family` with the legacy style `style` (ID 2).
+fn inter_styled(family: &str, style: &str) -> Vec<u8> {
+    let data = inter();
+    let record = |id: u16, text: &str| {
+        NameRecord::new(3, 1, 0x409, NameId::new(id), text.to_string().into())
+    };
+
+    FontBuilder::new()
+        .add_table(&Name::new(vec![record(1, family), record(2, style)]))
+        .expect("name table should compile")
+        .copy_missing_tables(WriteFontRef::new(&data).expect("Inter should parse"))
+        .build()
+}
+
+#[test]
+fn the_display_name_adds_a_style_other_than_regular() {
+    let display_name = |data: &[u8]| specimen(data).expect("Inter draws Ag").display_name;
+
+    assert_eq!(
+        display_name(&inter_styled("Host Grotesk", "Bold")).as_deref(),
+        Some("Host Grotesk Bold")
+    );
+    assert_eq!(
+        display_name(&inter_styled("Host Grotesk", "Regular")).as_deref(),
+        Some("Host Grotesk")
+    );
+}

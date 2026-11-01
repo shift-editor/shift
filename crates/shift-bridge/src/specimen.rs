@@ -25,6 +25,9 @@ pub struct NapiSpecimen {
   /// The family name drawn in the font for the launcher's wide tile, or null
   /// when it does not fit legibly and the tile shows this specimen instead.
   pub family_name: Option<NapiNameSpecimen>,
+  /// The font's name for a caption, as `Host Grotesk Bold`; null when the
+  /// font has no family name.
+  pub display_name: Option<String>,
 }
 
 /// A font's family name drawn in the font and fitted to the launcher's wide
@@ -91,6 +94,7 @@ impl From<shift_specimen::Specimen> for NapiSpecimen {
       units_per_em: specimen.units_per_em,
       right_to_left: specimen.right_to_left,
       family_name: specimen.family_name.map(Into::into),
+      display_name: specimen.display_name,
     }
   }
 }

@@ -140,6 +140,24 @@ impl SpecimenFont<'_> {
             .find(|name| !name.is_empty())
     }
 
+    /// The family name followed by its style (`name` ID 17, else ID 2), with
+    /// a `Regular` style left out: `Host Grotesk Bold`, `Inter`.
+    pub(super) fn display_name(&self) -> Option<String> {
+        let family = self.family_name()?;
+        let style = [
+            StringId::TYPOGRAPHIC_SUBFAMILY_NAME,
+            StringId::SUBFAMILY_NAME,
+        ]
+        .into_iter()
+        .filter_map(|id| self.font.localized_strings(id).english_or_first())
+        .map(|name| name.to_string().trim().to_string())
+        .find(|name| !name.is_empty());
+        Some(match style {
+            Some(style) if !style.eq_ignore_ascii_case("regular") => format!("{family} {style}"),
+            _ => family,
+        })
+    }
+
     /// Draws the family name fitted to `name_box`, or `None` when the font
     /// has no family name, cannot draw every character of it, or it would be
     /// smaller than the last rule allows.

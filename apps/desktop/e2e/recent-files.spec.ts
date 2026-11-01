@@ -35,7 +35,6 @@ test("a font opened once is listed in Recent files after relaunch and reopens fr
   // MutatorSans has capitals only, so its thumbnail specimen is "AG", and its mixed-case family
   // name cannot be drawn: the newest file's wide tile falls back to the specimen.
   await expect(recentFile(launcher)).toHaveAttribute("data-specimen-text", "AG");
-  await expect(recentFile(launcher).getByText("Last opened", { exact: true })).toBeVisible();
   await expect(recentFile(launcher)).not.toHaveAttribute("data-family-name");
 
   const workspaceWindow = restarted.waitForEvent("window");
