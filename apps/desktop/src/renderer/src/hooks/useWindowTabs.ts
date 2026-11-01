@@ -1,8 +1,8 @@
-import { useCallback, useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { NodeId } from "@shift/types";
-import { CANVAS_PATH, editorPath } from "@/lib/editorRoute";
-import { windowLocation, type WindowTab, type WindowTabs } from "@/lib/tabs/WindowTabs";
+import { WindowNavigation } from "@/lib/tabs/WindowNavigation";
+import type { WindowTab, WindowTabs } from "@/lib/tabs/WindowTabs";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 
 /** The window's tabs, and the navigation that shows them. */
@@ -29,59 +29,22 @@ export const useWindowTabs = (): WindowTabNavigation => {
   const editor = useEditor();
   const { tabs } = useFontSession();
   const navigate = useNavigate();
-
-  const show = useCallback(
-    (tab: WindowTab) => {
-      switch (tab.kind) {
-        case "glyphs":
-          // The overview shows its selected glyph again, so the glyph sidebar describes it.
-          tabs.showSelection();
-          navigate("/home");
-          return;
-        case "page":
-          editor.pages.activate(tab.pageId);
-          navigate(CANVAS_PATH);
-          return;
-        case "glyph":
-          navigate(editorPath(tab.glyphId));
-          return;
-      }
-    },
-    [editor, navigate, tabs],
-  );
-
   const { pathname } = useLocation();
-  const location = useCallback(
-    () => windowLocation(pathname, editor.scene.shownPageIdCell.peek()),
-    [editor, pathname],
-  );
+  // Read at the time of a click, not when the navigation was built.
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
 
-  const showPage = useCallback(
-    (pageId: NodeId, options?: { readonly newTab?: boolean }) => {
-      const shown = tabs.activeTab(location());
-      show(tabs.navigateToPage(pageId, shown, options?.newTab ?? false));
-    },
-    [location, show, tabs],
-  );
-
-  const close = useCallback(
-    (tab: WindowTab, shown: boolean) => {
-      const next = tabs.close(tab.id);
-      if (shown) show(next);
-    },
-    [show, tabs],
-  );
-
-  const closeShown = useCallback(() => {
-    const outcome = tabs.closeShown(location());
-    if (outcome.kind === "closeWindow") return false;
-
-    show(outcome.tab);
-    return true;
-  }, [location, show, tabs]);
-
-  return useMemo(
-    () => ({ tabs, show, showPage, close, closeShown }),
-    [close, closeShown, show, showPage, tabs],
-  );
+  return useMemo(() => {
+    const navigation = new WindowNavigation(editor, tabs, {
+      pathname: () => pathnameRef.current,
+      navigate: (path) => navigate(path),
+    });
+    return {
+      tabs,
+      show: (tab) => navigation.show(tab),
+      showPage: (pageId, options) => navigation.showPage(pageId, options),
+      close: (tab, shown) => navigation.close(tab, shown),
+      closeShown: () => navigation.closeShown(),
+    };
+  }, [editor, navigate, tabs]);
 };
