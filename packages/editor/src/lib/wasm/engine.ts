@@ -19,6 +19,7 @@ export function loadEngine(): Promise<EngineModule> {
 }
 
 export type {
+  EditRecording,
   EditablePair,
   EngineEdit,
   EngineKerningPair,

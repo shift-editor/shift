@@ -8,7 +8,11 @@ use std::{
 use shift_backends::{
     FontExportRequest, FontExportResult, FontExporter, ImportBatchLimit, font_loader::FontLoader,
 };
-use shift_engine::{ApplyError, EngineError, EngineSession, LayerSource, LoadError, StagedEdit};
+use shift_engine::scene::{Scene, SceneError};
+use shift_engine::{
+    ApplyError, CompactDocumentChangeSet, EngineError, EngineSession, LayerSource, LoadError,
+    StagedEdit,
+};
 use shift_font::{
     AppliedIntents, FontChangeSet, FontIntentSet, GlyphId, GlyphLayer, LayerId, error::CoreError,
 };
@@ -46,6 +50,9 @@ pub enum WorkspaceError {
 
     #[error("refusing to persist unloaded glyph layer {0}")]
     UnloadedLayerMutation(LayerId),
+
+    #[error(transparent)]
+    Scene(#[from] SceneError),
 
     #[error("invalid UTF-8 in workspace path: {0}")]
     InvalidPathUtf8(PathBuf),
@@ -317,23 +324,43 @@ impl FontWorkspace {
         Ok(outcome)
     }
 
-    /// Persists a change set another process sent compacted, loading the
-    /// layers it sent as values and rebuilding them from this font first.
+    /// Persists a document change set another process sent compacted: its
+    /// font changes, loading the layers it sent as values and rebuilding them
+    /// from this font first, and its scene changes, which the session holds.
     ///
     /// # Errors
     ///
-    /// As [`Self::persist_change_set`], and [`WorkspaceError::Font`] when a
-    /// layer sent as values no longer has the change's before values.
+    /// As [`Self::persist_change_set`], [`WorkspaceError::Font`] when a layer
+    /// sent as values no longer has the change's before values, and
+    /// [`WorkspaceError::Scene`] when a scene node is no longer what the
+    /// change found. Nothing is kept on failure.
     pub fn persist_compact_change_set(
         &mut self,
-        change_set: shift_font::CompactChangeSet,
+        change_set: CompactDocumentChangeSet,
         save_state: SaveState,
     ) -> Result<AppliedIntents, WorkspaceError> {
         self.session
-            .load_layers(&mut StoreLayers(&self.store), change_set.value_layer_ids())
+            .load_layers(
+                &mut StoreLayers(&self.store),
+                change_set.font.value_layer_ids(),
+            )
             .map_err(WorkspaceError::from_load)?;
-        let change_set = change_set.expand(self.session.font())?;
-        self.persist_change_set(change_set, save_state)
+        let font_changes = change_set.font.expand(self.session.font())?;
+        self.session
+            .load_changed(&mut StoreLayers(&self.store), &font_changes)
+            .map_err(WorkspaceError::from_load)?;
+        let staged = self.session.stage_change_set(font_changes)?;
+        let mut scene = self.session.scene().clone();
+        scene.apply_change_set(&change_set.scene)?;
+        self.store
+            .apply_change_set_with_font(staged.changes(), staged.font(), save_state)?;
+        self.session.replace_scene(scene);
+        Ok(self.session.commit(staged))
+    }
+
+    /// The document's scene as this session holds it, unsaved edits included.
+    pub fn scene(&self) -> &Scene {
+        self.session.scene()
     }
 
     /// Persists a change set already applied to a session over this font,
@@ -768,6 +795,7 @@ impl From<EngineError> for WorkspaceError {
         match error {
             EngineError::Font(error) => Self::Font(error),
             EngineError::UnloadedLayerMutation(layer_id) => Self::UnloadedLayerMutation(layer_id),
+            EngineError::Scene(error) => Self::Scene(error),
         }
     }
 }

@@ -540,11 +540,17 @@ impl NativeWorkspace for Bridge {
     change_set: Bytes,
     save_state: SaveState,
   ) -> Result<AppliedChange, NativeWorkspaceError> {
-    let change_set: shift_font::CompactChangeSet = rmp_serde::from_slice(&change_set.0)?;
+    let change_set: shift_engine::CompactDocumentChangeSet = rmp_serde::from_slice(&change_set.0)?;
+    let font_changed = !change_set.font.is_empty();
     let outcome = self
       .workspace_mut()?
       .persist_compact_change_set(change_set, save_state.into())?;
-    self.mark_font_changed();
+    // A scene edit leaves the font, and the atlas built from it, as they were.
+    if font_changed {
+      self.mark_font_changed();
+    } else {
+      self.bump_live_version();
+    }
     Ok(self.applied_echo(outcome)?)
   }
 

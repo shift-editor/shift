@@ -239,7 +239,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   /** The change set `intents` make in `engine`, as one edit. */
   function changeSetOf(engine: EngineSession, intents: FontIntent[]): Uint8Array | undefined {
-    engine.beginEdit();
+    engine.beginEdit(null);
     try {
       engine.apply(intents);
     } catch (error) {

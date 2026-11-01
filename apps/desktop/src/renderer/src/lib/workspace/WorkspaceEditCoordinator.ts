@@ -28,6 +28,7 @@ import type { EngineEdit, EngineLayer, FontStore } from "@shift/editor/model";
 import type {
   OpenEdit,
   PendingEditId,
+  ReplayedChange,
   WorkspaceEditEvent,
   WorkspaceEditListener,
 } from "@shift/editor/types";
@@ -204,7 +205,7 @@ export class WorkspaceEditCoordinator {
     const id = this.#mintPendingEditId();
     const before = new Map<LayerId, GlyphState>();
     this.#transaction = { id, label, before, relayered: new Set() };
-    this.#engine.beginEdit();
+    this.#engine.beginEdit(null);
     const records = this.#store.recordsCheckpoint();
 
     return batch(() => {
@@ -244,7 +245,7 @@ export class WorkspaceEditCoordinator {
   openEdit(): OpenEdit {
     this.#assertNoTransaction("open an edit");
     this.#assertNoOpenEdit("open an edit");
-    this.#engine.beginEdit();
+    this.#engine.beginEdit(null);
     const edit = new StagedEdit(this, this.#mintPendingEditId());
     this.#openEdit = edit;
     return edit;
@@ -356,7 +357,7 @@ export class WorkspaceEditCoordinator {
    *
    * @returns The workspace's receipt; null when there is nothing to undo.
    */
-  undo(): Promise<AppliedChange | null> {
+  undo(): Promise<ReplayedChange | null> {
     this.#assertNoTransaction("undo");
     this.#assertNoOpenEdit("undo");
     return this.#persistReplay(() => this.#engine.undo());
@@ -464,7 +465,7 @@ export class WorkspaceEditCoordinator {
   }
 
   /** Makes the latest undone edit again, as {@link undo} takes one back. */
-  redo(): Promise<AppliedChange | null> {
+  redo(): Promise<ReplayedChange | null> {
     this.#assertNoTransaction("redo");
     this.#assertNoOpenEdit("redo");
     return this.#persistReplay(() => this.#engine.redo());
@@ -534,7 +535,7 @@ export class WorkspaceEditCoordinator {
     changeSet: Uint8Array | undefined;
     relayered: readonly GlyphId[];
   } {
-    this.#engine.beginEdit();
+    this.#engine.beginEdit(null);
     let relayered: readonly GlyphId[];
     try {
       relayered = this.#applyInEngine(intents, null);
@@ -546,7 +547,7 @@ export class WorkspaceEditCoordinator {
   }
 
   /** Shows an undo or redo the engine made and persists its change set. */
-  #persistReplay(replay: () => EngineEdit | undefined): Promise<AppliedChange | null> {
+  #persistReplay(replay: () => EngineEdit | undefined): Promise<ReplayedChange | null> {
     try {
       return batch(() => {
         const replayed = replay();
@@ -564,7 +565,8 @@ export class WorkspaceEditCoordinator {
           "replay",
           saveState,
         );
-        return this.#serialize(() => this.#commitEdit(edit));
+        const location = replayed.location ?? null;
+        return this.#serialize(async () => ({ ...(await this.#commitEdit(edit)), location }));
       });
     } catch (error) {
       return Promise.reject(error);

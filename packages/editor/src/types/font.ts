@@ -31,7 +31,12 @@ import type {
   MissingKerningOrigin,
   SourceSetWeights,
 } from "../lib/wasm/engine";
-import type { FontChangeFlag, ParagraphRequest, ShapedParagraph } from "@shift/wasm/protocol";
+import type {
+  EditLocation,
+  FontChangeFlag,
+  ParagraphRequest,
+  ShapedParagraph,
+} from "@shift/wasm/protocol";
 import type { PendingEditId } from "./editing";
 import type { WorkspaceEditListener } from "./history";
 import type { GlyphReader } from "./glyph";
@@ -239,6 +244,13 @@ export interface OpenEdit {
   cancel(): void;
 }
 
+/**
+ * What an undo or redo persisted, and where the edit it replayed was made:
+ * the page it was made on and what it changed, so the editor can show that
+ * page first; null when the engine kept no location.
+ */
+export type ReplayedChange = AppliedChange & { readonly location: EditLocation | null };
+
 export interface WorkspaceEditCoordinator {
   push(intent: FontIntent): PendingEditId;
   /**
@@ -266,8 +278,8 @@ export interface WorkspaceEditCoordinator {
   matchLayers(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch>;
   mapLocation(location: Location): Promise<Location>;
   settled(): Promise<void>;
-  undo(): Promise<AppliedChange | null>;
-  redo(): Promise<AppliedChange | null>;
+  undo(): Promise<ReplayedChange | null>;
+  redo(): Promise<ReplayedChange | null>;
   discardRedo(): Promise<void>;
   onEdit(listener: WorkspaceEditListener): () => void;
   state(): Promise<WorkspaceDocumentState | null>;

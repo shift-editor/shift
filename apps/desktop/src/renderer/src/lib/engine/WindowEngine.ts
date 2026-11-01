@@ -6,11 +6,13 @@ import type {
   GlyphId,
   GlyphName,
   LayerId,
+  NodeId,
   SlugWeightSet,
   SourceId,
 } from "@shift/types";
 import {
   loadEngine,
+  type EditRecording,
   type EditablePair,
   type EngineEdit,
   type EngineKerningPair,
@@ -25,6 +27,7 @@ import {
   FontChangeFlagSchema,
   type FontChangeFlag,
   type ParagraphRequest,
+  type SceneIntent,
   type ShapedParagraph,
 } from "@shift/wasm/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
@@ -181,10 +184,45 @@ export class WindowEngine implements FontEngine {
     opened.reader = null;
   }
 
-  /** Opens an edit: the applies until {@link endEdit} become one undo step and one change set. */
-  beginEdit(): void {
-    this.#require().beginEdit();
+  /**
+   * Opens an edit: the applies until {@link endEdit} become one undo step and
+   * one change set, recorded as made on `pageId`, the page the window shows.
+   */
+  beginEdit(pageId: NodeId | null): void {
+    this.#require().beginEdit(pageId);
     this.#inEdit = 0;
+  }
+
+  /**
+   * Applies scene `intents` within the open edit.
+   *
+   * @throws When the engine is not open, no edit is open, or an intent is refused.
+   */
+  applyScene(intents: readonly SceneIntent[]): EngineEdit {
+    const session = this.#require();
+    performance.mark("engine.applyScene.start");
+    try {
+      return this.#shown(session.applyScene(intents));
+    } finally {
+      performance.measure("engine.applyScene", "engine.applyScene.start");
+    }
+  }
+
+  /**
+   * Applies scene `intents` within the open edit as one frame of a gesture.
+   *
+   * @throws As {@link applyScene}.
+   */
+  stageScene(intents: readonly SceneIntent[]): EngineStage {
+    const session = this.#require();
+    performance.mark("engine.stageScene.start");
+    try {
+      const staged = session.stageScene(intents);
+      this.#record(staged.impact);
+      return staged;
+    } finally {
+      performance.measure("engine.stageScene", "engine.stageScene.start");
+    }
   }
 
   /**
@@ -257,8 +295,8 @@ export class WindowEngine implements FontEngine {
    * @returns Its change set, as named MessagePack, to persist; `undefined`
    * when it changed nothing.
    */
-  endEdit(): Uint8Array | undefined {
-    const changeSet = this.#require().endEdit();
+  endEdit(recording: EditRecording = "undoable"): Uint8Array | undefined {
+    const changeSet = this.#require().endEdit(recording);
     this.#inEdit = 0;
     return changeSet;
   }
