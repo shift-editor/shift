@@ -185,21 +185,15 @@ impl Paragraph {
         let mut positions = GeneratedPositions::new(font);
         let kerned = shaper.runs_generated(KERN, &features);
         match shaper.shape_paragraph_live(&request, font, &mut positions) {
-            Ok(shaped) => (self.shaped(font, shaped, &positions, kerned), None),
+            Ok(shaped) => (self.shaped(font, shaped, kerned), None),
             Err(error) => (self.typed(font), Some(error.to_string())),
         }
     }
 
     /// The shaped runs as layout reads them, with unit indices in the text,
-    /// each glyph's kerning apart from its advance (when the generated `kern`
-    /// ran), and a mark nothing attached shown at its own advance.
-    fn shaped(
-        &self,
-        font: &LayoutFont<'_>,
-        shaped: ShapedParagraph,
-        positions: &GeneratedPositions<'_, '_>,
-        kerned: bool,
-    ) -> ShapedText {
+    /// each glyph at the advance shaping gave it, as export sets it, with its
+    /// kerning apart from its advance (when the generated `kern` ran).
+    fn shaped(&self, font: &LayoutFont<'_>, shaped: ShapedParagraph, kerned: bool) -> ShapedText {
         let runs = shaped
             .runs
             .into_iter()
@@ -210,7 +204,6 @@ impl Paragraph {
                     .iter()
                     .map(|glyph| {
                         RunGlyph::from_shaped(glyph, self.start, clusters.end_of(glyph), font)
-                            .shown_unattached(glyph.cluster, positions, font)
                     })
                     .collect();
                 let mut shaped = ShapedRun {
@@ -259,7 +252,7 @@ impl Paragraph {
                     && font.class(glyph_id) == Some(OpenTypeCategory::Mark)
                     && glyph.x_advance <= 0.0
                 {
-                    glyph.x_advance = shown_advance(glyph.x_advance);
+                    glyph.x_advance = NONSPACING_MARK_EDITOR_ADVANCE;
                     (glyph.x_offset, glyph.y_offset) =
                         font.typed_mark_offset(glyph_id, glyph.bounds);
                 }
@@ -329,34 +322,6 @@ impl RunGlyph {
             is_mark: glyph.is_mark,
             bounds: glyph.glyph_id.and_then(|glyph| font.bounds(glyph)),
         }
-    }
-
-    /// The glyph, or, when it is a mark nothing attached, shown at its own
-    /// advance ([`shown_advance`]) so it does not sit on the glyph before.
-    fn shown_unattached(
-        mut self,
-        cluster: u32,
-        positions: &GeneratedPositions<'_, '_>,
-        font: &LayoutFont<'_>,
-    ) -> Self {
-        if let Some(glyph_id) = self.glyph_id
-            && self.is_mark
-            && !positions.attached(cluster, glyph_id)
-        {
-            self.x_advance = shown_advance(font.advance(glyph_id));
-        }
-        self
-    }
-}
-
-/// The advance a mark nothing attached shows at: its own, or a visible
-/// stand-in for a nonspacing mark of no width. Export sets such a mark at no
-/// advance; the editor shows it so it can be seen and edited.
-fn shown_advance(own: f64) -> f64 {
-    if own > 0.0 {
-        own
-    } else {
-        NONSPACING_MARK_EDITOR_ADVANCE
     }
 }
 

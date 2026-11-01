@@ -182,15 +182,27 @@ describe("nonspacing marks in typed text", () => {
   // Glyph data reads `fatha-ar` as a nonspacing mark; neither name nor Unicode says so.
   it("gives a nonspacing mark a visible advance though its name does not look like one", async () => {
     editor.pasteText("/fatha-ar");
+    editor.setTextShaping(false);
 
     expect(editor.canvasText()).toMatchObject({
       glyphs: [expect.anything(), { name: "fatha-ar", advance: NONSPACING_MARK_EDITOR_ADVANCE }],
     });
   });
 
+  // Shaped, the mark takes the advance shaping gives it, as in the exported font.
+  it("sets a nonspacing mark nothing attaches at no advance when the text is shaped", async () => {
+    editor.pasteText("/fatha-ar");
+    await editor.settle();
+
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [expect.anything(), { name: "fatha-ar", advance: 0 }],
+    });
+  });
+
   // The window's engine builds the renamed glyph's record in the edit, before the workspace persists it.
   it("lays out a glyph renamed to a nonspacing mark as one in the frame it is renamed", () => {
     editor.pasteText("/x.comb");
+    editor.setTextShaping(false);
 
     editor.setGlyphIdentity("x.comb", "kasra-ar", []);
 
@@ -220,8 +232,9 @@ describe("nonspacing marks in typed text", () => {
 
     await editor.addGlyph("damma-ar", 0x064f);
 
+    // A mark, so shaping sets it at no advance, as export does.
     expect(editor.canvasText()).toMatchObject({
-      glyphs: [expect.anything(), { name: "damma-ar", advance: 500 }],
+      glyphs: [expect.anything(), { name: "damma-ar", advance: 0 }],
     });
   });
 });

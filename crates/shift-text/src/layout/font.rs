@@ -2,7 +2,7 @@
 //! window without one knows of each glyph.
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::shape::{GlyphPosition, Tag, TextDirection};
@@ -274,25 +274,14 @@ impl LiveAdvances for LayoutFont<'_> {
 }
 
 /// Positions the generated features with the live font, as shaping reaches
-/// each one's place among the font's lookups, and remembers the marks it
-/// attached.
+/// each one's place among the font's lookups.
 pub(crate) struct GeneratedPositions<'f, 'a> {
     font: &'f LayoutFont<'a>,
-    /// Each attached mark, by its cluster and glyph.
-    attached: HashSet<(u32, GlyphId)>,
 }
 
 impl<'f, 'a> GeneratedPositions<'f, 'a> {
     pub(crate) fn new(font: &'f LayoutFont<'a>) -> Self {
-        Self {
-            font,
-            attached: HashSet::new(),
-        }
-    }
-
-    /// Whether the mark `glyph` at `cluster` attached to a glyph before it.
-    pub(crate) fn attached(&self, cluster: u32, glyph: GlyphId) -> bool {
-        self.attached.contains(&(cluster, glyph))
+        Self { font }
     }
 }
 
@@ -324,13 +313,7 @@ impl GeneratedPositioning for GeneratedPositions<'_, '_> {
             TextDirection::RightToLeft => RunDirection::RightToLeft,
         };
         let mut reads = FontReads(self.font);
-        let attached =
-            RunPositioning::new(&run, &mut run_positions, direction, &mut reads).apply(feature);
-        for index in attached {
-            if let (Some(cluster), Some(glyph)) = (glyphs.cluster(index), glyphs.glyph(index)) {
-                self.attached.insert((cluster, glyph));
-            }
-        }
+        RunPositioning::new(&run, &mut run_positions, direction, &mut reads).apply(feature);
         for (position, positioned) in positions.iter_mut().zip(&run_positions) {
             position.set_run_position(positioned);
         }

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<glyph name="hamzabelow-ar" format="2">
+  <advance width="0"/>
+  <unicode hex="0655"/>
+  <outline>
+    <contour>
+      <point x="-150" y="-180" type="line"/>
+      <point x="-50" y="-180" type="line"/>
+      <point x="-50" y="-120" type="line"/>
+      <point x="-150" y="-120" type="line"/>
+    </contour>
+  </outline>
+</glyph>
