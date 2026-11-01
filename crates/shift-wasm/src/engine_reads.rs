@@ -26,9 +26,10 @@
 use pack::Pack;
 use shift_engine::StoreReadError;
 use shift_engine::scene::{RevisedNode, SceneNode};
+use shift_font::glyph_identity::GlyphIdentityChange;
 use shift_font::{
-    Axis, FontChangeFlag, GlyphRecords, MetricValue, MissingKerningOrigin, NodeId, ResolvedKerning,
-    Source,
+    Axis, FontChangeFlag, GlyphId, GlyphRecords, MetricValue, MissingKerningOrigin, NodeId,
+    ResolvedKerning, Source,
 };
 use shift_wire::KerningSnapshot;
 
@@ -99,6 +100,17 @@ pub trait EngineReads {
     /// The flags whose change may change what [`Self::shape_paragraphs`]
     /// returns.
     fn shaping_inputs(&self) -> Vec<FontChangeFlag>;
+    /// What renaming `glyph` to `name` does: `Font::glyph_rename`. Null for a
+    /// glyph the session's font lacks.
+    fn glyph_rename(&self, glyph: GlyphId, name: String) -> Option<GlyphIdentityChange>;
+    /// What making `codepoint` `glyph`'s primary codepoint does, or removing
+    /// it with none: `Font::glyph_primary_codepoint`. Null for a glyph the
+    /// session's font lacks.
+    fn glyph_primary_codepoint(
+        &self,
+        glyph: GlyphId,
+        codepoint: Option<u32>,
+    ) -> Option<GlyphIdentityChange>;
     /// Every interned source set's weights at a design location, as the
     /// basis the session's font gives each set evaluates them
     /// (`InterpolationBasis::weights_at`): the weights of the sets a frame
@@ -189,8 +201,8 @@ mod exports {
     use wasm_bindgen::prelude::*;
 
     use super::{
-        Axis, EditablePair, EngineReads, FontChangeFlag, InterpolatedMetrics, KerningSnapshot,
-        NodeId, ParagraphRequest, RevisedNode, SceneNode, ShapedParagraph, Source,
+        Axis, EditablePair, EngineReads, FontChangeFlag, GlyphIdentityChange, InterpolatedMetrics,
+        KerningSnapshot, NodeId, ParagraphRequest, RevisedNode, SceneNode, ShapedParagraph, Source,
         SourceSetWeights, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
@@ -529,6 +541,21 @@ mod exports {
                 || self.shaper_font_source(),
                 &paragraphs,
             )
+        }
+
+        fn glyph_rename(&self, glyph: GlyphId, name: String) -> Option<GlyphIdentityChange> {
+            self.session.font().glyph_rename(glyph, &name).ok()
+        }
+
+        fn glyph_primary_codepoint(
+            &self,
+            glyph: GlyphId,
+            codepoint: Option<u32>,
+        ) -> Option<GlyphIdentityChange> {
+            self.session
+                .font()
+                .glyph_primary_codepoint(glyph, codepoint)
+                .ok()
         }
 
         fn shaping_inputs(&self) -> Vec<FontChangeFlag> {

@@ -4,7 +4,6 @@ import type {
   ContourId,
   GlyphEntry,
   GlyphId,
-  GlyphName,
   GlyphPreview,
   GlyphProjection,
   GlyphSnapshot,
@@ -13,8 +12,8 @@ import type {
   SegmentId,
   SourceId,
   ReadonlyEntityMap,
-  Unicode,
 } from "@shift/types";
+import type { GlyphIdentityConflict as EngineGlyphIdentityConflict } from "@shift/wasm/protocol";
 import type { Designspace } from "../lib/variation/Designspace";
 import type { Glyph, GlyphLayer } from "../lib/model/Glyph";
 import type { Signal } from "../lib/signals/signal";
@@ -78,15 +77,16 @@ export interface GlyphOptions {
   readonly anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
 }
 
-/** Why a glyph's name or codepoint was not changed, so the field can say. */
+/**
+ * Why a glyph's name or codepoint was not changed, so the field can say: shift-font's
+ * conflicts, and a codepoint field's text that is not a codepoint.
+ */
 export type GlyphIdentityConflict =
-  | { readonly kind: "blankName" }
-  | { readonly kind: "nameTaken"; readonly name: GlyphName }
-  | { readonly kind: "invalidCodepoint"; readonly text: string }
-  | { readonly kind: "codepointTaken"; readonly codepoint: Unicode; readonly owner: GlyphName };
+  | EngineGlyphIdentityConflict
+  | { readonly kind: "invalidCodepoint"; readonly text: string };
 
-/** What a glyph identity change did: changed it, left it as it was, or refused it. */
-export type GlyphIdentityChange =
+/** What a glyph identity edit did: changed it, left it as it was, or refused it. */
+export type GlyphIdentityEdit =
   | { readonly kind: "changed" }
   | { readonly kind: "unchanged" }
   | { readonly kind: "refused"; readonly conflict: GlyphIdentityConflict };

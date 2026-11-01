@@ -32,7 +32,7 @@ crates/shift-wasm/src/
   engine_reads.rs   engineGlyphNumbers, engineSourceNumbers, engineSourceSetNumber; EngineReads (axes, sources, kerning, glyphRecords, kerningRun, kerningPairs, kerningPairsNaming, missingKerningOrigin, sourceMetricsAt, sourceSetWeights, atlasWeights, designLocation, externalLocation, scenePages, sceneNodes, pageNodes, sceneNode) per session; FontVariation
   scene.rs       Scenes (openScene, applyScene, sceneNodes), releaseScene: a scene for a session with no engine
   geometry.rs    Geometry: contourGeometry (a contour's segments and bounds), composeTransform and decomposeMatrix (component placements), called by glyph-state
-  index_keys.rs  IndexKeys (between, compare): shift-font's sibling order keys, called by the editor's `IndexKey`
+  index_keys.rs  IndexKeys (between): shift-font's sibling order keys, called by the editor's `IndexKey`; keys compare as plain strings
   svg.rs         SvgPaths (svgPathContours), answered in the engine module only
   variation.rs   Variation (interpolationWeights, evaluateVariation, mapLocation, unmapLocation, atlasWeights): stateless, for fonts without an engine; blendSourceValues
   names.rs       interned anchor names, the pack::Names every request reads and writes them through

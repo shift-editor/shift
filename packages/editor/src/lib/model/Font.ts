@@ -65,9 +65,9 @@ import type {
   WorkspaceEditCoordinator,
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
-import type { ParagraphRequest, ShapedParagraph } from "@shift/wasm/protocol";
+import type { GlyphIdentityChange, ParagraphRequest, ShapedParagraph } from "@shift/wasm/protocol";
 import { EngineVariationReader, StatelessVariationReader, locationValues } from "../wasm/variation";
-import type { GlyphIdentityChange, GlyphReader } from "../../types/glyph";
+import type { GlyphIdentityEdit, GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
@@ -777,62 +777,46 @@ export class Font {
   }
 
   /**
-   * Renames a glyph, refusing a blank name or one another glyph has.
+   * Renames a glyph, as shift-font allows (`Font::glyph_rename`): surrounding
+   * whitespace dropped, a blank, invalid or taken name refused.
    *
    * @remarks
-   * Surrounding whitespace is dropped. The rename is undoable; an unchanged
-   * name changes nothing.
+   * The rename is undoable; an unchanged name changes nothing.
+   *
+   * @throws When the window's engine is not open.
    */
-  renameGlyph(glyphId: GlyphId, name: string): GlyphIdentityChange {
-    const entry = this.entryForId(glyphId);
-    const trimmed = name.trim();
-    if (!entry || trimmed === entry.name) return { kind: "unchanged" };
-    if (trimmed === "") return { kind: "refused", conflict: { kind: "blankName" } };
-    if (this.recordForName(trimmed)) {
-      return { kind: "refused", conflict: { kind: "nameTaken", name: trimmed } };
-    }
-
-    this.updateGlyphIdentity(glyphId, trimmed, [...entry.unicodes]);
-    return { kind: "changed" };
+  renameGlyph(glyphId: GlyphId, name: string): GlyphIdentityEdit {
+    return this.#applyIdentityChange(glyphId, this.#requireEngine().glyphRename(glyphId, name));
   }
 
   /**
-   * Sets a glyph's primary codepoint, the one it is listed and typed by.
+   * Sets a glyph's primary codepoint, the one it is listed and typed by, as
+   * shift-font allows (`Font::glyph_primary_codepoint`).
    *
    * @remarks
    * The codepoint replaces the primary one and the glyph keeps its others; a
-   * blank `text` removes the primary one. A codepoint another glyph has is refused, since one
-   * codepoint maps to one glyph. Undoable.
+   * blank `text` removes the primary one. A codepoint another glyph has is
+   * refused. Undoable.
    *
    * @param text - the codepoint as hex, `U+` optional; blank removes it.
+   * @throws When the window's engine is not open.
    */
-  setPrimaryCodepoint(glyphId: GlyphId, text: string): GlyphIdentityChange {
-    const entry = this.entryForId(glyphId);
-    if (!entry) return { kind: "unchanged" };
-
-    const [primary = null, ...others] = entry.unicodes;
-    if (text.trim() === "") {
-      if (primary === null) return { kind: "unchanged" };
-      this.updateGlyphIdentity(glyphId, entry.name, others);
-      return { kind: "changed" };
-    }
-
-    const codepoint = parseCodepoint(text);
-    if (codepoint === null) {
+  setPrimaryCodepoint(glyphId: GlyphId, text: string): GlyphIdentityEdit {
+    const blank = text.trim() === "";
+    const codepoint = blank ? null : parseCodepoint(text);
+    if (!blank && codepoint === null) {
       return { kind: "refused", conflict: { kind: "invalidCodepoint", text } };
     }
-    if (codepoint === primary) return { kind: "unchanged" };
 
-    const owner = this.entryForUnicode(codepoint);
-    if (owner && owner.id !== glyphId) {
-      return {
-        kind: "refused",
-        conflict: { kind: "codepointTaken", codepoint, owner: owner.name },
-      };
-    }
+    const change = this.#requireEngine().glyphPrimaryCodepoint(glyphId, codepoint);
+    return this.#applyIdentityChange(glyphId, change);
+  }
 
-    const rest = others.filter((value) => value !== codepoint);
-    this.updateGlyphIdentity(glyphId, entry.name, [codepoint, ...rest]);
+  #applyIdentityChange(glyphId: GlyphId, change: GlyphIdentityChange | null): GlyphIdentityEdit {
+    if (!change || change.kind === "unchanged") return { kind: "unchanged" };
+    if (change.kind === "refused") return change;
+
+    this.updateGlyphIdentity(glyphId, change.name, [...change.unicodes] as Unicode[]);
     return { kind: "changed" };
   }
 

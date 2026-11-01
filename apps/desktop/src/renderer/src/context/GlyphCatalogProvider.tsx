@@ -88,7 +88,6 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   // The window's tabs keep the overview's selection; the catalog only shows it.
   const selectedGlyphId = useSignalState(session.tabs.selectedGlyphCell);
   const selectRequestRef = useRef(new LatestRequest());
-  const pendingSelectionRef = useRef<GlyphId | null>(null);
   const observeAtlasInvalidation = useCallback<GlyphCatalogSource["observeAtlasInvalidation"]>(
     (listener) => {
       const subscription = effect(
@@ -198,18 +197,26 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     [catalog],
   );
 
-  const selectGlyph = useCallback<GlyphCatalogSource["selectGlyph"]>(
-    async (glyph) => {
-      session.tabs.selectGlyph(glyph.id);
+  const selectGlyphById = useCallback(
+    async (glyphId: GlyphId) => {
+      session.tabs.selectGlyph(glyphId);
       if (!workspace) return;
 
       // Loaded as opening loads it, then shown on the overview's own page, never navigated to.
-      const result = await selectRequestRef.current.run(() => catalog.openGlyph(glyph.id));
-      if (result.status === "stale") return;
+      try {
+        const result = await selectRequestRef.current.run(() => catalog.openGlyph(glyphId));
+        if (result.status === "stale") return;
 
-      session.tabs.showSelection();
+        session.tabs.showSelection();
+      } catch (error) {
+        console.error("could not show the selected glyph", glyphId, error);
+      }
     },
     [catalog, session.tabs, workspace],
+  );
+  const selectGlyph = useCallback<GlyphCatalogSource["selectGlyph"]>(
+    (glyph) => selectGlyphById(glyph.id),
+    [selectGlyphById],
   );
 
   useEffect(() => {
@@ -262,20 +269,10 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     setQuery("");
     setCategoryFilters([]);
     setSelectedLanguageId(null);
-    // Selected once it reaches the grid, which then scrolls to it.
-    pendingSelectionRef.current = record.id;
+    // Selected now; the grid scrolls to it once it shows the new glyph.
+    void selectGlyphById(record.id);
     return record.name;
-  }, [workspace]);
-
-  useEffect(() => {
-    const pendingId = pendingSelectionRef.current;
-    if (pendingId === null) return;
-    const glyph = availableGlyphs.find((candidate) => candidate.id === pendingId);
-    if (!glyph) return;
-
-    pendingSelectionRef.current = null;
-    void selectGlyph(glyph);
-  }, [availableGlyphs, selectGlyph]);
+  }, [selectGlyphById, workspace]);
 
   const setTrackedLanguageIds = useCallback<GlyphCatalogSource["setTrackedLanguageIds"]>(
     (languageIds) => {

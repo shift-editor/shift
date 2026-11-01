@@ -43,6 +43,7 @@ pub mod curve;
 pub mod curve_fit;
 pub mod drag_rules;
 pub mod error;
+pub mod glyph_identity;
 pub mod glyph_record;
 pub mod index_key;
 pub mod intents;

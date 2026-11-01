@@ -2,7 +2,7 @@
 
 use pack::Pack;
 use serde::{Deserialize, Serialize};
-use shift_font::{GlyphId, NodeId, RunId, SourceId, TextItemId};
+use shift_font::{GlyphId, NodeId, RunId, SourceId, TextItemId, index_key};
 
 /// One placed object on the canvas.
 ///
@@ -21,10 +21,6 @@ pub struct SceneNode {
     pub y: f64,
     pub content: NodeContent,
 }
-
-/// The index of the only node among its siblings, as
-/// `index_key::between(None, None)` makes it.
-const FIRST_INDEX: &str = "a0";
 
 /// What a node is, and the fields only that kind has.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Pack)]
@@ -74,6 +70,11 @@ pub enum TextItem {
     Linebreak { id: TextItemId },
 }
 
+/// The index of a node with no siblings yet.
+fn first_index() -> String {
+    index_key::between(None, None).expect("a key with no neighbours always exists")
+}
+
 /// The name of the page a document gets when it has none.
 pub const DEFAULT_PAGE_NAME: &str = "Page 1";
 
@@ -84,7 +85,7 @@ impl SceneNode {
         Self {
             id: NodeId::new(),
             parent_id: None,
-            index: FIRST_INDEX.to_owned(),
+            index: first_index(),
             x: 0.0,
             y: 0.0,
             content: NodeContent::Page {

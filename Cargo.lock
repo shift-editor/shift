@@ -904,6 +904,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fractional_index"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce01fad85c73f947e62a39152c7b0f785af7f44859da36e421c42a3023bcbe3a"
+
+[[package]]
 name = "futures"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2516,6 +2522,7 @@ version = "0.1.0"
 dependencies = [
  "bitflags 2.9.1",
  "fontdrasil",
+ "fractional_index",
  "getrandom 0.3.3",
  "icu_properties",
  "imbl",

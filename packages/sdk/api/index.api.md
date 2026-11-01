@@ -587,7 +587,7 @@ export class Font {
     recordForId(glyphId: GlyphId): GlyphRecord | null;
     // (undocumented)
     recordForName(name: GlyphName): GlyphRecord | null;
-    renameGlyph(glyphId: GlyphId, name: string): GlyphIdentityChange;
+    renameGlyph(glyphId: GlyphId, name: string): GlyphIdentityEdit;
     renameKerningGroup(groupId: KerningGroupId, name: string): Promise<void>;
     resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]>;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
@@ -596,7 +596,7 @@ export class Font {
     setKerningValues(edits: readonly KerningValueEdit[], label: string): void;
     setLanguageIds(languageIds: readonly string[]): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
-    setPrimaryCodepoint(glyphId: GlyphId, text: string): GlyphIdentityChange;
+    setPrimaryCodepoint(glyphId: GlyphId, text: string): GlyphIdentityEdit;
     shapeParagraphs(paragraphs: readonly ParagraphRequest[]): readonly ShapedParagraph[] | null;
     source(sourceId: SourceId): Source | null;
     sourceAt(location: ExternalAxisLocation): Source | null;

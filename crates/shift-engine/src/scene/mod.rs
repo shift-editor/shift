@@ -8,7 +8,8 @@
 //! change as the font edits made with it.
 //!
 //! Pages are the roots; every other node descends from one. Siblings are
-//! ordered by their fractional `index` ([`index_key`]), then by id. A
+//! ordered by their fractional `index` ([`shift_font::index_key`]), which
+//! compares as a plain string, then by id. A
 //! scene copies in O(1) and changes in O(log n), like a font.
 
 mod changes;
@@ -22,7 +23,7 @@ use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 use pack::Pack;
 
-use shift_font::{NodeId, PersistentMap, Replacement, index_key};
+use shift_font::{NodeId, PersistentMap, Replacement};
 
 pub use changes::{SceneChange, SceneChangeSet};
 pub use intents::{DeleteNode, MoveNode, SceneIntent, SetRunItems};
@@ -63,24 +64,12 @@ pub enum SceneError {
     ChangeOriginMismatch(NodeId),
 }
 
-/// Where a node is filed among its siblings: by index, in shift-font's
-/// [`index_key`] order, then by id.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Where a node is filed among its siblings: by index, which
+/// [`shift_font::index_key`] makes to compare as a plain string, then by id.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct SiblingKey {
     index: String,
     id: NodeId,
-}
-
-impl Ord for SiblingKey {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        index_key::compare(&self.index, &other.index).then_with(|| self.id.cmp(&other.id))
-    }
-}
-
-impl PartialOrd for SiblingKey {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
 }
 
 impl SiblingKey {

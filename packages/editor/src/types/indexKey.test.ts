@@ -2,21 +2,21 @@ import { describe, expect, it } from "vitest";
 import { IndexKey } from "./indexKey";
 
 describe("IndexKey", () => {
-  it("keeps the order sibling keys have always sorted in", () => {
-    // The keys scenes have written so far, `a` and the sibling count, in the order the
-    // scene sorted them: as plain strings, so `a10` before `a2`.
-    const existing = Array.from({ length: 12 }, (_, count) => `a${count}`);
-    const sorted = ["a0", "a1", "a10", "a11", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9"];
+  it("makes a key between any two neighbours, and before the first and after the last", () => {
+    const middle = IndexKey.between(null, null);
+    const last = IndexKey.between(middle, null);
+    const first = IndexKey.between(null, middle);
+    const between = IndexKey.between(middle, last);
+    const keys = [last, between, first, middle];
 
-    expect([...existing].sort(IndexKey.compare)).toEqual(sorted);
+    expect(keys.sort(IndexKey.compare)).toEqual([first, middle, between, last]);
   });
 
-  it("makes a key between any two neighbours, and after the last", () => {
+  it("refuses keys that are equal or out of order", () => {
     const first = IndexKey.between(null, null);
-    const last = IndexKey.between(first, null);
-    const middle = IndexKey.between(first, last);
-    const keys = [last, middle, first];
+    const second = IndexKey.between(first, null);
 
-    expect(keys.sort(IndexKey.compare)).toEqual([first, middle, last]);
+    expect(() => IndexKey.between(second, first)).toThrow();
+    expect(() => IndexKey.between(first, first)).toThrow();
   });
 });
