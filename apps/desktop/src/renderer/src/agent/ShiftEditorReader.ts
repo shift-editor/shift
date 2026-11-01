@@ -421,7 +421,7 @@ export class ShiftEditorReader {
     if (item.kind === "linebreak") return { id: item.id, text: "\n" };
     if (item.kind === "character")
       return { id: item.id, text: String.fromCodePoint(item.codepoint) };
-    return { id: item.id, text: `/${this.#editor.font.glyphName(item.glyphId) ?? ""}` };
+    return { id: item.id, text: this.#editor.text.formatItems([item]) };
   }
 
   #spacingHalf(half: NonNullable<SpacingTool["currentHalf"]>): SpacingHalfView {

@@ -2,6 +2,7 @@ export { shiftInputSchemas } from "./inputs";
 export { FontChangedError, ShiftReadScope } from "./read";
 export {
   PageNotFoundError,
+  ProofTextError,
   TextCaretError,
   TextRunNotFoundError,
   UnknownGlyphNameError,

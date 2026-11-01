@@ -54,6 +54,7 @@ pub mod naming;
 pub mod placed_blend;
 pub mod point_arrange;
 pub mod projection;
+pub mod proof_text;
 pub mod shaper_font_source;
 mod string_enum;
 pub mod svg_path;
@@ -78,4 +79,5 @@ pub use ir::{
 pub use kurbo;
 pub use point_arrange::{DistributeAxis, PointAlignment, Sidebearing};
 pub use projection::*;
+pub use proof_text::{ProofItem, ProofText, ProofTextError};
 pub use shaper_font_source::{GlyphOrderEntry, NOTDEF, ShaperFontGlyph, ShaperFontSource};

@@ -46,6 +46,14 @@ export class UnknownGlyphNameError extends Error {
   }
 }
 
+/**
+ * Thrown when text is not proof text: a `/` that names no glyph, at the end
+ * of the text or before a space. A slash is written `//`.
+ */
+export class ProofTextError extends Error {
+  override readonly name = "ProofTextError";
+}
+
 /** Thrown when a caret position or selection falls outside its run, or the position is not at one end of the selection. */
 export class TextCaretError extends Error {
   override readonly name = "TextCaretError";

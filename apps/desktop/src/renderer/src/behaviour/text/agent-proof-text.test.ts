@@ -31,6 +31,17 @@ describe("agents write proof text through the Text tool's edit path", () => {
     expect(await runs()).toMatchObject([{ text: "A" }]);
   });
 
+  it("reads a run back as the proof text it was created from", async () => {
+    await editor.addGlyph("a.alt", null);
+
+    const { value: created } = await editor.agentText("text.create", { text: "1//2 /a.alt b" });
+
+    expect(created).toMatchObject({
+      items: ["1", "/", "2", " ", "/a.alt", "b"].map((text) => ({ text })),
+    });
+    expect(await runs()).toMatchObject([{ text: "A" }, { text: "1//2 /a.alt b" }]);
+  });
+
   it("replaces a run's text and deletes the run, each one undo step", async () => {
     const [run] = await runs();
     const runId = run!.id;
@@ -114,6 +125,9 @@ describe("agents write proof text through the Text tool's edit path", () => {
     const [run] = await runs();
     const missing = asNodeId("missing");
 
+    await expect(editor.agentText("text.create", { text: "A /" })).rejects.toMatchObject({
+      name: "ProofTextError",
+    });
     await expect(editor.agentText("text.create", { text: "A/nope" })).rejects.toMatchObject({
       name: "UnknownGlyphNameError",
       names: ["nope"],

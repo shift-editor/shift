@@ -77,6 +77,13 @@ export function lineBreakTextItem(id: TextItemId = mintTextItemId()): LineBreakT
   return { id, kind: "linebreak" };
 }
 
+/** Items for text as typed: every character literally, with each line ending a line break. */
+export function typedTextItems(text: string): TextItem[] {
+  return [...text.replaceAll("\r\n", "\n")].map((char) =>
+    char === "\n" ? lineBreakTextItem() : characterTextItem(char.codePointAt(0)!),
+  );
+}
+
 export interface PositionedGlyph {
   /** Stable document glyph identity resolved during layout; null when unresolved. */
   glyphId: GlyphId | null;

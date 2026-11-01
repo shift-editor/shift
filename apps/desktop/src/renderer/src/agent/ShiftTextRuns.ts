@@ -1,5 +1,6 @@
 import {
   PageNotFoundError,
+  ProofTextError,
   TextCaretError,
   TextRunNotFoundError,
   UnknownGlyphNameError,
@@ -15,7 +16,7 @@ import {
   type TextRunView,
 } from "@shift/runtime";
 import type { Editor } from "@shift/editor";
-import type { TextItem } from "@shift/editor/text";
+import type { ParsedText, TextItem } from "@shift/editor/text";
 import type { PageNode, TextRunNode } from "@shift/editor/types";
 import type { NodeId } from "@shift/types";
 import type { ShiftEditorReader } from "./ShiftEditorReader";
@@ -125,10 +126,7 @@ export class ShiftTextRuns {
   }
 
   #summary(node: TextRunNode, page: PageNode): TextRunSummary {
-    const text = this.#editor.text
-      .items(node)
-      .map((item) => this.#reader.textRunItem(item).text)
-      .join("");
+    const text = this.#editor.text.formatItems(this.#editor.text.items(node));
     return { id: node.id, pageId: page.id, text, at: { x: node.position.x, y: node.position.y } };
   }
 
@@ -138,11 +136,26 @@ export class ShiftTextRuns {
     return view;
   }
 
-  /** @throws {UnknownGlyphNameError} when the text picks a glyph the font lacks. */
+  /**
+   * @throws {ProofTextError} when the text is not proof text.
+   * @throws {UnknownGlyphNameError} when the text picks a glyph the font lacks.
+   */
   #items(text: string): TextItem[] {
-    const { items, unknownGlyphNames } = this.#editor.text.parseText(text);
+    const { items, unknownGlyphNames } = this.#parse(text);
     if (unknownGlyphNames.length > 0) throw new UnknownGlyphNameError(unknownGlyphNames);
     return items;
+  }
+
+  /** @throws {ProofTextError} when the text is not proof text, as Rust's parser says (`PackError`). */
+  #parse(text: string): ParsedText {
+    try {
+      return this.#editor.text.parseText(text);
+    } catch (error) {
+      if (error instanceof Error && error.name === "PackError") {
+        throw new ProofTextError(error.message);
+      }
+      throw error;
+    }
   }
 
   /**

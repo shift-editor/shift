@@ -16,11 +16,14 @@ import {
   characterTextItem,
   glyphTextItem,
   glyphIdForItem,
+  lineBreakTextItem,
+  typedTextItems,
   type TextItem,
   type TextLayout,
 } from "./layout";
 import { RunText, type ShapedText } from "./RunText";
-import { GlyphNameParser, type TextParseContext, type TextParser } from "./parsing";
+import { proofTexts } from "@shift/wasm";
+import type { ProofTextItem } from "@shift/wasm/protocol";
 
 /**
  * Owns proof text: each run's items, kept in the scene's text run nodes, and
@@ -36,13 +39,6 @@ export class Text {
   // read only when editing ends.
   readonly #provisionalRuns = new Set<NodeId>();
   readonly #acquiring: Effect;
-  readonly #parseContext: TextParseContext = {
-    glyphNamed: (name) => {
-      const entry = this.#editor.font.entryForName(name);
-      return entry ? this.glyphItem(entry.id) : null;
-    },
-  };
-  #parser: TextParser = new GlyphNameParser();
   /** The last reason text could not be shaped, so each is said once. */
   #lastUnshapable: string | null = null;
   readonly #runs = keyedCache({
@@ -243,35 +239,83 @@ export class Text {
     return this.layoutCell(id).peek();
   }
 
-  /** The parser for typed and pasted text; replace it to change the input syntax for every run. */
-  get parser(): TextParser {
-    return this.#parser;
-  }
-
-  set parser(parser: TextParser) {
-    this.#parser = parser;
-  }
-
-  /** Parses typed, pasted, or imported text with {@link parser}. */
+  /**
+   * Reads pasted or imported proof text into items, as shift-font's
+   * `ProofText` parses it: `/name` picks the glyph named `name` (the name
+   * ends at a space, which it consumes), `//` is a slash and `\n` a line
+   * break.
+   *
+   * @remarks
+   * Lenient, as pasting must be: a `/name` the font lacks stays as its
+   * characters, and text that is not proof text (a `/` naming nothing) is
+   * taken character by character.
+   */
   itemsFromText(text: string): TextItem[] {
-    return this.#parser.parse(text, this.#parseContext);
+    let parsed: readonly ProofTextItem[];
+    try {
+      parsed = proofTexts.parse(text);
+    } catch {
+      return typedTextItems(text);
+    }
+    return parsed.flatMap((item) => this.#textItems(item) ?? typedTextItems(`/${nameOf(item)}`));
   }
 
   /**
-   * Parses text as {@link itemsFromText} does, and says which glyph names the
-   * parser asked for that the font lacks, for a caller that must refuse them
-   * rather than keep them as literal text.
+   * Reads proof text as {@link itemsFromText} does, strictly: each `/name`
+   * the font lacks is reported rather than kept as text.
+   *
+   * @throws {PackError} carrying a `ProofTextFailure` for text that is not
+   * proof text, such as a `/` naming nothing.
    */
   parseText(text: string): ParsedText {
     const unknownGlyphNames: GlyphName[] = [];
-    const items = this.#parser.parse(text, {
-      glyphNamed: (name) => {
-        const item = this.#parseContext.glyphNamed(name);
-        if (!item) unknownGlyphNames.push(name);
-        return item;
-      },
+    const items = proofTexts.parse(text).flatMap((item) => {
+      const items = this.#textItems(item);
+      if (!items && item.kind === "glyph") unknownGlyphNames.push(item.name);
+      return items ?? [];
     });
     return { items, unknownGlyphNames };
+  }
+
+  /**
+   * Writes items as proof text, as shift-font's `ProofText` formats it, so
+   * {@link parseText} reads them back as the same items. A picked glyph the
+   * font no longer has is left out.
+   *
+   * @throws {PackError} carrying a `ProofTextFailure` for a glyph name that
+   * cannot be written as `/name` (one with a space in it).
+   */
+  formatItems(items: readonly TextItem[]): string {
+    const font = this.#editor.font;
+    return proofTexts.format(
+      items.flatMap((item): ProofTextItem[] => {
+        switch (item.kind) {
+          case "character":
+            return [{ kind: "character", codepoint: item.codepoint }];
+          case "linebreak":
+            return [{ kind: "lineBreak" }];
+          case "glyph": {
+            const name = font.glyphName(item.glyphId);
+            return name ? [{ kind: "glyph", name }] : [];
+          }
+        }
+      }),
+    );
+  }
+
+  /** The editor items for one parsed item; null for a glyph name the font lacks. */
+  #textItems(item: ProofTextItem): TextItem[] | null {
+    switch (item.kind) {
+      case "character":
+        return [characterTextItem(item.codepoint)];
+      case "lineBreak":
+        return [lineBreakTextItem()];
+      case "glyph": {
+        const entry = this.#editor.font.entryForName(item.name);
+        const picked = entry ? this.glyphItem(entry.id) : null;
+        return picked ? [picked] : null;
+      }
+    }
   }
 
   /**
@@ -345,4 +389,9 @@ export class Text {
       this.#loading.delete(id);
     }
   }
+}
+
+/** The name a parsed glyph pick gives; empty for any other item. */
+function nameOf(item: ProofTextItem): string {
+  return item.kind === "glyph" ? item.name : "";
 }

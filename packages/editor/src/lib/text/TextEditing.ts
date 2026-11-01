@@ -10,8 +10,7 @@ import {
 } from "../../types/text";
 import {
   Caret,
-  characterTextItem,
-  lineBreakTextItem,
+  typedTextItems,
   type CaretPosition,
   type SelectionRect,
   type TextItem,
@@ -162,7 +161,7 @@ export class TextEditing {
     this.#edit("Insert text", (buffer) => buffer.splice(items));
   }
 
-  /** Inserts text as pasted: `/name` picks the glyph named `name`. */
+  /** Inserts text as pasted, read as proof text: `/name` picks the glyph named `name` (`Text.itemsFromText`). */
   insertText(text: string): void {
     this.insert(this.#editor.text.itemsFromText(text));
   }
@@ -172,11 +171,7 @@ export class TextEditing {
    * a line break.
    */
   typeText(text: string): void {
-    this.insert(
-      [...text.replaceAll("\r\n", "\n")].map((char) =>
-        char === "\n" ? lineBreakTextItem() : characterTextItem(char.codePointAt(0)!),
-      ),
-    );
+    this.insert(typedTextItems(text));
   }
   deleteBackward(): void {
     this.#edit("Delete text", (buffer) => buffer.delete(-1));

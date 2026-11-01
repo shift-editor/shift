@@ -81,7 +81,7 @@ async () => {
   const windowId = session.windowId;
   const { value: run } = await shift.text.create({
     windowId,
-    text: "Hamburgefonstiv\n/a.alt/g.ss01",
+    text: "Hamburgefonstiv\n/a.alt /g.ss01 1//2",
   });
   await shift.text.setCaret({
     windowId,
@@ -96,10 +96,12 @@ async () => {
 - `text.runs({ pageId? })` lists a page's runs (`{ id, pageId, text, at }`); the shown page when `pageId` is omitted. Pages come from `editor.inspect`'s `pages`.
 - `text.get({ runId })` returns the run as it shows: `items` (`text` is a character, `"\n"`, or `/name`), the laid-out `glyphs`, `baselines`, and the `caret` while Text mode shows one there.
 - `text.create({ text, pageId?, at? })` adds a run; `at` is in the page's space, y down, and defaults to one line below the page's last run. `text.setText({ runId, text })` replaces a run's text, and `text.delete({ runId })` removes it.
-- Text reads as pasted into the Text tool: characters, `"\n"` for a line break, and `/name` for the glyph named `name`, the name ending at whitespace or the next `/`. A name the font lacks fails with `UnknownGlyphNameError` and nothing changes; check names with `glyphs.list`.
+- Text is proof text, as pasted into the Text tool and as Glyphs writes it. `/` starts a glyph name, which runs to the next space or the end of the text; that one space ends the name and is not text, so `"/a b"` is glyph `a` then `b`, and `"/a  b"` is `a`, a space, then `b`. `//` is a slash (`"1//2"` is 1/2) and `"\n"` a line break. A `/` that names nothing fails with `ProofTextError`, and a name the font lacks with `UnknownGlyphNameError`. Nothing changes on either error; check names with `glyphs.list`.
+  - `"/a.alt /g.ss01"`: two glyphs, nothing between them. `"/a.alt  b"`: the glyph, a space, `b`. `"1//2"`: 1/2. `"/a/b"`: one glyph named `a/b`.
+- `text.runs` returns each run's `text` in the same syntax, and it always reads back as the same items: `"1//2 /a.alt b"` creates a run that lists as `"1//2 /a.alt b"`.
 - `text.setCaret({ runId, position, selection? })` puts the Text mode caret in a run, positions between items (0 is before the first). With `selection`, `position` must be its `start` or `end`. It shows the run's page and switches to the Text tool, as the user would.
 - `create`, `setText`, and `delete` are one undo step each and mark the document unsaved, as typing does; tell the user they can undo them. `setCaret` is neither.
-- Pass `ifFontRevision` to write only if the font is still the one you read: otherwise the call fails with `FontChangedError` and changes nothing. Other failures are typed: `TextRunNotFoundError`, `PageNotFoundError`, `TextCaretError`.
+- Pass `ifFontRevision` to write only if the font is still the one you read: otherwise the call fails with `FontChangedError` and changes nothing. Other failures are typed: `TextRunNotFoundError`, `PageNotFoundError`, `ProofTextError`, `TextCaretError`.
 - Inside `shift.read`, `read.text.runs()` and `read.text.get()` read at the bound revision; writes are not part of a read scope.
 - Run options (OpenType features, language, script, line height, alignment) cannot be written yet.
 

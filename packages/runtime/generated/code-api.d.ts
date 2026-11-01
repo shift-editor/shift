@@ -824,10 +824,13 @@ export interface TextRunGetInput extends ShiftTarget {
 /**
  * A new canvas text run.
  *
- * `text` is read as the Text tool reads pasted text: characters, `"\n"` for a
- * line break, and `/name` for the glyph named `name` (the name ends at
- * whitespace or the next slash). A `/name` the font has no glyph for fails
- * with `UnknownGlyphNameError`.
+ * `text` is proof text, as the Text tool reads pasted text and Glyphs writes
+ * it: `/` starts a glyph name, which runs to the next space or the end of the
+ * text; that one space ends the name and is not text, so `"/a b"` is glyph
+ * `a` then `b`, and `"/a  b"` is `a`, a space, then `b`. `//` is a slash
+ * (`"1//2"` is 1/2) and `"\n"` a line break. A `/` that names nothing fails
+ * with `ProofTextError`, and a name the font has no glyph for with
+ * `UnknownGlyphNameError`.
  */
 export interface TextRunCreateInput extends ShiftTarget {
   /** The page to put it on; the page the canvas shows when omitted. */
@@ -865,9 +868,8 @@ export interface TextRunSummary {
   id: NodeId;
   pageId: NodeId;
   /**
-   * Its items' text joined: characters, `"\n"`, and `/name` for a glyph
-   * picked by name. A `/name` directly followed by a letter reads back as one
-   * longer name; `text.get` gives each item.
+   * Its items as proof text, read as {@link TextRunCreateInput.text} is, so
+   * creating a run from it gives the same items.
    */
   text: string;
   /** Its origin in the page's space, y down. */

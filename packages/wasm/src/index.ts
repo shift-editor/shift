@@ -20,6 +20,7 @@ import {
   initSync,
   internName,
   nameOf,
+  proofTextsRequest,
   scenesRequest,
   takeReplyBlobs,
   variationRequest,
@@ -34,6 +35,7 @@ import {
   Drag,
   Geometry,
   IndexKeys,
+  ProofTexts,
   Scenes,
   Variation,
 } from "./generated-protocol";
@@ -58,6 +60,11 @@ export const drag = new Drag(syncTransport(dragRequest, names, takeReplyBlobs));
 export const geometry = new Geometry(syncTransport(geometryRequest, names, takeReplyBlobs));
 /** The keys that order a scene node among its siblings, as shift-font makes and compares them. */
 export const indexKeys = new IndexKeys(syncTransport(indexKeysRequest, names, takeReplyBlobs));
+/**
+ * Proof text read and written as shift-font's `ProofText` does: `/name`
+ * picks a glyph by name, ending at a space it consumes; `//` is a slash.
+ */
+export const proofTexts = new ProofTexts(syncTransport(proofTextsRequest, names, takeReplyBlobs));
 /**
  * Scenes held apart from any editing engine, for a session that has none:
  * shift-engine's scene, with nothing persisted.
