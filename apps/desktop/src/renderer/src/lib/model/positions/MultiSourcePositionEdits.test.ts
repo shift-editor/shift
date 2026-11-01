@@ -8,7 +8,7 @@ import type { GlyphFixture } from "@/testing/fixtures";
 import { drawPoints, startWorkspaceGlyph, type WorkspaceStack } from "@/testing/workspaceStack";
 
 // Position edits over a selection that spans matched layers in two sources, on the real
-// workspace stack: the selection is assembled from the engine's layer match, as the editor's
+// workspace stack: the selection is assembled from the engine's counterparts, as the editor's
 // multi-source editing assembles it.
 describe("multi-source position edits", () => {
   let stack: WorkspaceStack;
@@ -45,7 +45,7 @@ describe("multi-source position edits", () => {
     await stack.editCoordinator.settled();
     targetLayer = requireLayer(glyph.layerForSource(boldId));
 
-    const selection = await positionSelection(new PositionTargets([firstId, lastId], []));
+    const selection = positionSelection(new PositionTargets([firstId, lastId], []));
     const [firstTarget, lastTarget] = selection.additionalLayers[0]!.targets.points;
     if (!firstTarget || !lastTarget) throw new Error("Expected matched target points");
     targetFirstId = firstTarget;
@@ -55,37 +55,28 @@ describe("multi-source position edits", () => {
   afterEach(() => stack.dispose());
 
   /** `targets` in the default source with their counterparts in Bold, as the engine matches the two layers. */
-  async function positionSelection(targets: PositionTargets): Promise<PositionSelection> {
-    const match = await stack.font.matchLayers(layer.id, targetLayer.id);
-    if (!match.complete) throw new Error("Expected the Bold layer to match completely");
-    const points = new Map(
-      match.points.map(({ referenceId, targetId }) => [referenceId, targetId]),
-    );
-    const anchors = new Map(
-      match.anchors.map(({ referenceId, targetId }) => [referenceId, targetId]),
-    );
-    const counterpart = <Id>(ids: ReadonlyMap<Id, Id>, id: Id): Id => {
-      const target = ids.get(id);
-      if (!target) throw new Error("Expected a matched counterpart");
-      return target;
-    };
+  function positionSelection(targets: PositionTargets): PositionSelection {
+    const { points, anchors } = targets;
+    const counterparts = stack.font.counterparts(layer.id, targetLayer.id, {
+      points,
+      anchors,
+      components: [],
+    });
+    if (!counterparts) throw new Error("Expected the Bold layer to match completely");
     return {
       layer,
       targets,
       additionalLayers: [
         {
           layer: targetLayer,
-          targets: new PositionTargets(
-            targets.points.map((id) => counterpart(points, id)),
-            targets.anchors.map((id) => counterpart(anchors, id)),
-          ),
+          targets: new PositionTargets(counterparts.points, counterparts.anchors),
         },
       ],
     };
   }
 
   it("moves matched anchors and discards every source preview", async () => {
-    const selection = await positionSelection(new PositionTargets([], [anchorId]));
+    const selection = positionSelection(new PositionTargets([], [anchorId]));
     const targetSelection = selection.additionalLayers[0];
     const targetAnchorId = targetSelection?.targets.anchors[0];
     if (!targetSelection || !targetAnchorId) throw new Error("Expected matched target anchor");
@@ -108,7 +99,7 @@ describe("multi-source position edits", () => {
     targetOffset.commit();
     await stack.editCoordinator.settled();
 
-    const selection = await positionSelection(new PositionTargets([firstId, lastId], []));
+    const selection = positionSelection(new PositionTargets([firstId, lastId], []));
     const scale = PositionEdits.fromSelection(selection).scale(selection.targets, {
       x: 150,
       y: 150,
@@ -135,7 +126,7 @@ describe("multi-source position edits", () => {
     targetOffset.commit();
     await stack.editCoordinator.settled();
 
-    const selection = await positionSelection(new PositionTargets([firstId, lastId], []));
+    const selection = positionSelection(new PositionTargets([firstId, lastId], []));
     const rotate = PositionEdits.fromSelection(selection).rotate(selection.targets, {
       x: 150,
       y: 150,
@@ -177,7 +168,7 @@ describe("editing several sources edits the layers matched to the active one", (
     await editor.addSource("Bold", { wght: 700 });
   });
 
-  it("publishes only matches for the latest editing source set", async () => {
+  it("edits only the layers of the latest editing source set", async () => {
     await editor.addSource("Black", { wght: 900 });
     editor.clickSource("Regular");
     editor.clickSource("Bold", "toggle");
@@ -198,7 +189,7 @@ describe("editing several sources edits the layers matched to the active one", (
     expect(await editor.layerAt("Bold")).toEqual(boldBefore);
   });
 
-  it("invalidates complete mappings after a target structure change", async () => {
+  it("leaves a source alone once its layer no longer matches the active one", async () => {
     editor.clickSource("Bold");
     editor.selectTool("pen");
     await editor.clickAt({ x: 250, y: 250 });

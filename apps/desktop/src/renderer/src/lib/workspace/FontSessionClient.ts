@@ -28,7 +28,6 @@ import type {
   GlyphSnapshot,
   GlyphProjection,
   LayerId,
-  LayerMatch,
   LayerRead,
   Location,
   SlugAtlas,
@@ -236,13 +235,6 @@ export class FontSessionClient {
     await this.connect();
 
     return this.#workspace().glyphSnapshots([...requests]);
-  }
-
-  /** Derives cross-layer entity matches behind the serialized workspace lane. */
-  async layerMatch(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch> {
-    await this.connect();
-
-    return this.#workspace().layerMatch(referenceLayerId, targetLayerId);
   }
 
   /**

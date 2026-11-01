@@ -1,4 +1,4 @@
-//! Shapes text with HarfRust and outlines glyphs with skrifa at a bound
+//! Shapes text with shift-text and outlines glyphs with skrifa at a bound
 //! location.
 //!
 //! Every coordinate is in font units with the y axis pointing up.
@@ -7,14 +7,14 @@
 //! into runs whose outlines are already placed and whose missing glyphs are
 //! flagged.
 
-use harfrust::{ShapeOptions, UnicodeBuffer};
 use serde::Serialize;
+use shift_text::shape::{FontGlyphs, NOTDEF, ShapeDirection, ShapeRequest, Unit};
 use skrifa::instance::Size;
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::raw::TableProvider;
 use skrifa::{GlyphId, MetadataProvider};
 
-use crate::{ProofFont, ShapingOptions, TextDirection};
+use crate::{LanguageSetting, ProofError, ProofFont, ScriptSetting, ShapingOptions, TextDirection};
 
 /// Width of the placeholder box drawn for an inkless missing glyph, in ems.
 const PLACEHOLDER_MIN_ADVANCE_EM: f32 = 0.5;
@@ -48,7 +48,7 @@ impl Segment {
     }
 }
 
-/// One glyph as HarfRust placed it, before outlining.
+/// One glyph as shaping placed it, before outlining.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ShapedGlyph {
     /// Glyph id in the font; `0` is `.notdef`.
@@ -63,7 +63,7 @@ pub struct ShapedGlyph {
     pub y_offset: f32,
 }
 
-/// HarfRust's output for one run, in visual order.
+/// Shaping's output for one run, in visual order.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ShapedText {
     pub glyphs: Vec<ShapedGlyph>,
@@ -121,6 +121,16 @@ pub(crate) struct RunGlyph {
     pub missing: bool,
 }
 
+impl RunGlyph {
+    /// A shaped glyph, missing when it is `.notdef`.
+    pub(crate) fn shaped(glyph: ShapedGlyph) -> Self {
+        Self {
+            missing: glyph.glyph_id == NOTDEF,
+            glyph,
+        }
+    }
+}
+
 impl ProofFont<'_> {
     /// Shapes `text` as one run at the bound location with `options`; the
     /// script, language, and direction it leaves out are guessed from the
@@ -128,42 +138,60 @@ impl ProofFont<'_> {
     /// included).
     ///
     /// Characters the font does not map come back as glyph `0`.
-    pub fn shape_glyphs(&self, text: &str, options: &ShapingOptions) -> ShapedText {
-        let shaper = self
-            .shaper_data
-            .shaper(&self.shaper_font)
-            .instance(self.shaper_instance.as_ref())
-            .build();
-        let mut buffer = UnicodeBuffer::new();
-        buffer.push_str(text);
-        if let Some(direction) = options.direction {
-            buffer.set_direction(direction.to_harfrust());
-        }
-        if let Some(script) = &options.script {
-            buffer.set_script(script.script());
-        }
-        if let Some(language) = &options.language {
-            buffer.set_language(language.language());
-        }
-        buffer.guess_segment_properties();
-        let direction = TextDirection::from_harfrust(buffer.direction());
-        let features = options.harfrust_features();
-        let shaped = shaper.shape(buffer, ShapeOptions::new().features(&features));
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProofError::Shape`] when the text is too long to shape.
+    pub fn shape_glyphs(
+        &self,
+        text: &str,
+        options: &ShapingOptions,
+    ) -> Result<ShapedText, ProofError> {
+        let units: Vec<Unit<u32>> = text.chars().map(Unit::Character).collect();
+        let starts: Vec<usize> = text.char_indices().map(|(start, _)| start).collect();
+        let script = options.script.as_ref().map(ScriptSetting::tag);
+        let direction = options.direction.map(ShapeDirection::from);
+        self.shape_units(&units, &starts, direction, script, options)
+    }
 
+    /// Shapes `units` as one run with shift-text, in `direction` (`None`
+    /// guesses it from the script) and `script` (`None` guesses it from the
+    /// characters), with `options`' language and features. `starts` holds
+    /// each unit's byte offset, which the glyphs' clusters become.
+    pub(crate) fn shape_units(
+        &self,
+        units: &[Unit<u32>],
+        starts: &[usize],
+        direction: Option<ShapeDirection>,
+        script: Option<&str>,
+        options: &ShapingOptions,
+    ) -> Result<ShapedText, ProofError> {
+        let features = options.shape_features();
+        let request = ShapeRequest {
+            units,
+            location: self.coords.as_slice(),
+            direction,
+            script,
+            language: options.language.as_ref().map(LanguageSetting::tag),
+            features: &features,
+        };
+        let shaped = self.shaper.shape(&FontGlyphs, &request, None)?;
         let glyphs = shaped
-            .glyph_infos()
-            .iter()
-            .zip(shaped.glyph_positions())
-            .map(|(info, position)| ShapedGlyph {
-                glyph_id: info.glyph_id,
-                cluster: info.cluster as usize,
-                x_advance: position.x_advance as f32,
-                y_advance: position.y_advance as f32,
-                x_offset: position.x_offset as f32,
-                y_offset: position.y_offset as f32,
+            .glyphs
+            .into_iter()
+            .map(|glyph| ShapedGlyph {
+                glyph_id: glyph.glyph_id.unwrap_or(NOTDEF),
+                cluster: byte_offset(starts, glyph.cluster),
+                x_advance: glyph.x_advance as f32,
+                y_advance: glyph.y_advance as f32,
+                x_offset: glyph.x_offset as f32,
+                y_offset: glyph.y_offset as f32,
             })
             .collect();
-        ShapedText { glyphs, direction }
+        Ok(ShapedText {
+            glyphs,
+            direction: shaped.direction.into(),
+        })
     }
 
     /// Draws one glyph unhinted at the bound location, with its origin at
@@ -210,13 +238,14 @@ impl ProofFont<'_> {
     /// A `.notdef` glyph is flagged `missing`; when it has no ink it becomes
     /// a hollow placeholder box at least half an em wide, so the gap is
     /// visible.
-    pub fn shape(&self, text: &str, options: &ShapingOptions) -> ShapedRun {
-        let shaped = self.shape_glyphs(text, options);
-        let glyphs = shaped.glyphs.into_iter().map(|glyph| RunGlyph {
-            missing: glyph.glyph_id == 0,
-            glyph,
-        });
-        self.place(glyphs, shaped.direction)
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProofError::Shape`] when the text is too long to shape.
+    pub fn shape(&self, text: &str, options: &ShapingOptions) -> Result<ShapedRun, ProofError> {
+        let shaped = self.shape_glyphs(text, options)?;
+        let glyphs = shaped.glyphs.into_iter().map(RunGlyph::shaped);
+        Ok(self.place(glyphs, shaped.direction))
     }
 
     /// Describes each glyph of `run` with its name.
@@ -287,6 +316,16 @@ impl ProofFont<'_> {
             direction,
         }
     }
+}
+
+/// The byte offset of the unit a cluster indexes. Shaping returns clusters
+/// only of the units it was given, so every cluster has one.
+fn byte_offset(starts: &[usize], cluster: u32) -> usize {
+    usize::try_from(cluster)
+        .ok()
+        .and_then(|index| starts.get(index))
+        .copied()
+        .unwrap_or_default()
 }
 
 fn placeholder_box(

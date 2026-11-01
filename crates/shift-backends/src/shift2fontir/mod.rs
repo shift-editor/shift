@@ -22,5 +22,5 @@ mod stat;
 mod tests;
 
 pub use propagation::{PropagatedAnchor, PropagatedGlyphAnchors, PropagatedSourceAnchors};
-pub use shift_shaper_font::{AxisConversionError, MappingSide};
+pub use shift_text::shaper_font::{AxisConversionError, MappingSide};
 pub(crate) use source::{ShiftIrSource, ShiftIrSourceError};

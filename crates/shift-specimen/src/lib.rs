@@ -506,6 +506,7 @@ impl<'a> SpecimenFont<'a> {
         let shaped = self
             .proof
             .shape_glyphs(text, &ShapingOptions::default())
+            .ok()?
             .glyphs;
         let mut line = ShapedLine::default();
         let mut pen_x = 0.0;

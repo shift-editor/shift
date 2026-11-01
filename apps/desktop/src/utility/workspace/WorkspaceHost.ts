@@ -8,7 +8,6 @@ import type {
   GlyphProjection,
   GlyphSnapshot,
   LayerId,
-  LayerMatch,
   LayerRead,
   Location,
   SaveState,
@@ -269,10 +268,6 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
 
   resolveLayers(layerIds: LayerId[]): Promise<LayerRead[]> {
     return this.#serialize(() => this.#bridge.napi.resolveLayers(layerIds));
-  }
-
-  layerMatch(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch> {
-    return this.#serialize(() => this.#bridge.napi.getLayerMatch(referenceLayerId, targetLayerId));
   }
 
   glyphProjections(glyphIds: GlyphId[]): Promise<GlyphProjection[]> {

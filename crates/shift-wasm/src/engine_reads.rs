@@ -28,11 +28,12 @@ use shift_engine::StoreReadError;
 use shift_engine::scene::{RevisedNode, SceneNode, TextRun};
 use shift_font::glyph_identity::GlyphIdentityChange;
 use shift_font::{
-    Axis, FontChangeFlag, GlyphId, GlyphRecords, MetricValue, MissingKerningOrigin, NodeId,
-    ResolvedKerning, Source,
+    AnchorId, Axis, ComponentId, Counterparts, CounterpartsError, FontChangeFlag, GlyphId,
+    GlyphRecords, LayerId, MetricValue, MissingKerningOrigin, NodeId, PointId, ResolvedKerning,
+    Source,
 };
-use shift_layout::{LayoutError, TextLayout};
-pub use shift_shape::{FeatureDefault, FeatureGroup, FontFeature};
+use shift_text::layout::{LayoutError, TextLayout};
+pub use shift_text::shape::{FeatureDefault, FeatureGroup, FontFeature};
 use shift_wire::KerningSnapshot;
 
 /// What the editor reads from one engine session's font. Glyphs and sources
@@ -86,7 +87,7 @@ pub trait EngineReads {
     /// Lays a run's text out over the session's font, unsaved edits
     /// included, with the options its settings give
     /// (`TextRun::layout_request`), as
-    /// `shift_layout::TextLayout::new` does: shaped with the session's
+    /// `shift_text::layout::TextLayout::new` does: shaped with the session's
     /// shaper (brought up to date as [`Self::shape_paragraphs`] does), with
     /// kerning, mark attachment and cursive joins at each generated feature's
     /// insert marker, then broken into lines, ordered, aligned, and given
@@ -113,7 +114,7 @@ pub trait EngineReads {
     fn layout_inputs(&self) -> Vec<FontChangeFlag>;
     /// The features the session's shaper font defines, once per tag in tag
     /// order, each with the name it is shown by, what it does when text does
-    /// not set it, and its group, as `shift_shape::Shaper::features` lists
+    /// not set it, and its group, as `shift_text::shape::Shaper::features` lists
     /// them. The shaper is brought up to date first, as for
     /// [`Self::layout_text`].
     ///
@@ -127,7 +128,7 @@ pub trait EngineReads {
     fn shaper_inputs(&self) -> Vec<FontChangeFlag>;
     /// Every substitution feature `tag` can make in the session's shaper
     /// font, ordered by output glyph then input, as
-    /// `shift_shape::Shaper::feature_substitutions` reads them from its
+    /// `shift_text::shape::Shaper::feature_substitutions` reads them from its
     /// `GSUB`: lookups that contextual rules call included, glyphs no
     /// character reaches included. Empty for a positioning feature or a tag
     /// the font does not define. Changes when a flag in
@@ -193,6 +194,25 @@ pub trait EngineReads {
     /// The external location a design location's mapping came from, NaN on
     /// internal axes: `unmap_location_with_bases`.
     fn external_location(&self, design: Vec<f64>) -> Vec<f64>;
+    /// The `target` layer's ids for `points`, `anchors` and `components` in
+    /// `reference`, each in the order given, as `Font::counterparts` pairs
+    /// them, unsaved edits included; null when the layers don't match
+    /// completely.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CounterpartsReadError::NotLoaded`] for a layer the session
+    /// has not loaded, whose placeholder has no entities to match, and
+    /// [`CounterpartsReadError::Font`] as `Font::counterparts` fails: an
+    /// unknown layer, layers of two glyphs, or an id `reference` lacks.
+    fn counterparts(
+        &self,
+        reference: LayerId,
+        target: LayerId,
+        points: Vec<PointId>,
+        anchors: Vec<AnchorId>,
+        components: Vec<ComponentId>,
+    ) -> Result<Option<Counterparts>, CounterpartsReadError>;
 }
 
 /// A text run to lay out, and where.
@@ -233,6 +253,20 @@ impl FeatureListError {
             detail: error.to_string(),
         }
     }
+}
+
+/// Why [`EngineReads::counterparts`] could not answer.
+#[derive(Clone, Debug, PartialEq, Eq, Pack, thiserror::Error)]
+pub enum CounterpartsReadError {
+    /// The session has not loaded `layer`; load its glyph first.
+    #[error("layer {layer} is not loaded")]
+    NotLoaded { layer: LayerId },
+    /// The font could not match the layers.
+    #[error(transparent)]
+    Font {
+        #[from]
+        error: CounterpartsError,
+    },
 }
 
 /// Text as [`EngineReads::layout_text`] laid it out.
@@ -304,17 +338,18 @@ mod exports {
     use shift_font::naming::new_anchor_name;
     use shift_font::{
         AxisMapping, AxisMappingBasis, DesignLocation, ExternalLocation, Font, FontCopyId, GlyphId,
-        GlyphRecords, InterpolationBasis, Kerning, KerningSide, LayerId, MissingKerningOrigin,
+        GlyphRecords, InterpolationBasis, Kerning, KerningSide, MissingKerningOrigin,
         ResolvedKerning, SourceId,
     };
-    use shift_layout::FeatureSetting;
+    use shift_text::layout::FeatureSetting;
     use shift_wire::values::{self, WireParse};
     use wasm_bindgen::prelude::*;
 
     use super::{
-        Axis, EditablePair, EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag,
-        FontFeature, GlyphIdentityChange, InterpolatedMetrics, KerningSnapshot, LayoutError,
-        NodeId, PlacedText, RevisedNode, SceneNode, Source, SourceSetWeights, TextLayoutRequest,
+        AnchorId, Axis, ComponentId, Counterparts, CounterpartsReadError, EditablePair,
+        EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag, FontFeature,
+        GlyphIdentityChange, InterpolatedMetrics, KerningSnapshot, LayerId, LayoutError, NodeId,
+        PlacedText, PointId, RevisedNode, SceneNode, Source, SourceSetWeights, TextLayoutRequest,
         engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
@@ -789,6 +824,30 @@ mod exports {
 
         fn scene_node(&self, id: NodeId) -> Option<SceneNode> {
             self.session.scene().node(&id).cloned()
+        }
+
+        fn counterparts(
+            &self,
+            reference: LayerId,
+            target: LayerId,
+            points: Vec<PointId>,
+            anchors: Vec<AnchorId>,
+            components: Vec<ComponentId>,
+        ) -> Result<Option<Counterparts>, CounterpartsReadError> {
+            let residency = self.session.residency();
+            if let Some(layer) = [reference, target]
+                .into_iter()
+                .find(|layer| residency.is_unloaded(*layer))
+            {
+                return Err(CounterpartsReadError::NotLoaded { layer });
+            }
+            Ok(self.session.font().counterparts(
+                reference,
+                target,
+                &points,
+                &anchors,
+                &components,
+            )?)
         }
     }
 

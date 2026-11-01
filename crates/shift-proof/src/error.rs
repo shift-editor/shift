@@ -1,5 +1,6 @@
 //! Failures a proof can report.
 
+use shift_text::shape::ShapeError;
 use skrifa::raw::ReadError;
 use thiserror::Error;
 
@@ -71,6 +72,10 @@ pub enum ProofError {
     /// A fixed page width of zero was requested.
     #[error("the proof width must be greater than 0")]
     ZeroWidth,
+
+    /// Text could not be shaped, such as a line too long to index.
+    #[error("text could not be shaped: {0}")]
+    Shape(#[from] ShapeError),
 
     /// The page exceeds what the rasterizer can allocate.
     #[error(

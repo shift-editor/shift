@@ -81,8 +81,8 @@ pub(crate) struct ProofArgs {
     #[arg(long)]
     pub metrics: bool,
 
-    /// Fixed image width in pixels; text wraps at spaces and grids wrap
-    /// cells to fit. A grid defaults to 1200.
+    /// Fixed image width in pixels; text wraps at line break opportunities
+    /// and grids wrap cells to fit. A grid defaults to 1200.
     #[arg(long, value_name = "PX")]
     pub width: Option<u32>,
 

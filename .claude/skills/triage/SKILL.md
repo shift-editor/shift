@@ -58,7 +58,7 @@ Mark the lines and say what to check. These are review comments he has made more
   `rust` → "Phases are an enum, events are an enum".
 - **Unreadable types and closures.** Three or more nested generics; a `filter_map` doing two `?`s
   into a tuple; nested ternaries in props. `rust` → "Name a type instead of nesting generics".
-- **A type or component declared twice**: a wire enum in `shift-wasm` beside `shift-shape`'s, a
+- **A type or component declared twice**: a wire enum in `shift-wasm` beside `shift-text`'s, a
   test listing restating a node's fields, two inline-rename fields, `sameNodes` beside
   `samePages`.
 - **Cost per frame or per edit.** A computed that rebuilds a whole tree because it also tracks

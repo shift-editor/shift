@@ -70,7 +70,7 @@ const names = moduleNames(internName, nameOf);
 /** Contours from SVG path data, as shift-font parses them. */
 export const svgPaths = new SvgPaths(syncTransport(svgPathsRequest, names, takeReplyBlobs));
 
-/** Text laid out as typed, by shift-layout, over a font the window has no engine for. */
+/** Text laid out as typed, by shift-text, over a font the window has no engine for. */
 export const typedText = new TypedText(syncTransport(typedTextRequest, names, takeReplyBlobs));
 
 /** What the editor reads from the engine session `handle`'s font. */

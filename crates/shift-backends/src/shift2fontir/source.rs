@@ -16,7 +16,7 @@ use crate::glyph_category::GlyphCategories;
 use crate::traits::FontView;
 use write_fonts::tables::gdef::GlyphClassDef;
 
-use shift_shaper_font::{AxisConversionError, ToGlyphClassDef, UnitsPerEm, to_ir_axes};
+use shift_text::shaper_font::{AxisConversionError, ToGlyphClassDef, UnitsPerEm, to_ir_axes};
 
 use super::axes::normalized_source_location;
 use super::glyph::GlyphWork;

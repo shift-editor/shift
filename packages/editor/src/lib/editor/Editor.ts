@@ -23,7 +23,6 @@ import {
   type Unicode,
   type FontSessionMode,
   type LayerId,
-  type LayerMatch,
   type NodeId,
   type SegmentId,
   type SelectableId,
@@ -302,7 +301,6 @@ export class Editor {
     );
     this.#multiSourceEditing = new MultiSourceEditing(
       this.font,
-      this.scene,
       (glyphId) => this.#fontStore.glyphForId(glyphId),
       this.#activeSourceIdCell,
       this.#editingSourceIdsCell,
@@ -771,29 +769,6 @@ export class Editor {
     return this.#editingSourceIdsCell.peek();
   }
 
-  /**
-   * Returns the live topology matches for selected non-reference layers.
-   *
-   * @remarks
-   * The map is keyed by target layer ID and may contain incomplete matches for
-   * diagnostics. Coordinate-only edits preserve the current map identity;
-   * source, glyph, or structure changes clear it before asynchronous refresh.
-   *
-   * @returns Read-only reactive match state for the current editing source set.
-   */
-  public get editingLayerMatchesCell(): Signal<ReadonlyMap<LayerId, LayerMatch>> {
-    return this.#multiSourceEditing.matchesCell;
-  }
-
-  /**
-   * Resolves once the layer matches for the current editing sources are
-   * derived, which happens in the background after the sources or a layer's
-   * structure change.
-   */
-  public editingLayersMatched(): Promise<void> {
-    return this.#multiSourceEditing.matched();
-  }
-
   /** Current external user-space coordinate used for displayed font data. */
   public get externalLocation(): ExternalAxisLocation {
     return this.#externalLocation.peek();
@@ -994,7 +969,8 @@ export class Editor {
    * Resolves direct components into reference and matched-layer transform targets.
    *
    * @remarks
-   * Every selected source must have a complete precomputed component match.
+   * Every selected source's layer must match the active one completely, as
+   * the window's engine matches them when this is called.
    * Bounds are captured in each source's glyph-local coordinates so scale and
    * rotation can use corresponding pivots without workspace reads during drag.
    *
@@ -1043,13 +1019,13 @@ export class Editor {
    * Resolves selected objects into reference and matched-layer position targets.
    *
    * @remarks
-   * Segment and contour IDs expand to their constituent points. Multi-source
-   * results require complete precomputed matches for every selected source; this
-   * method performs no matching or workspace I/O.
+   * Segment and contour IDs expand to their constituent points. Each other
+   * selected source's targets are its layer's counterparts, which the window's
+   * engine matches synchronously; no workspace I/O.
    *
    * @param ids - Selected object identities to normalize as one interaction.
    * @returns Resolved layer targets, or `null` for unsupported, mixed, inactive,
-   * pending, or incompletely matched selections.
+   * or incompletely matched selections.
    */
   public positionSelection(ids: readonly SelectableId[]): PositionSelection | null {
     const objects = this.objects(ids);
@@ -2520,7 +2496,6 @@ export class Editor {
   public destroy() {
     this.#events.emit("destroying");
     this.#cursorEffect.dispose();
-    this.#multiSourceEditing.dispose();
     this.nodeDefinition("glyph").outlines.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();

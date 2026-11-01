@@ -236,7 +236,7 @@ export class EditorDriver implements EditorReads, EditorActions {
     await this.#hooks.actions.setLocation(location);
   }
 
-  /** Edits the sources `names` together and waits until their layers are matched. */
+  /** Edits the sources `names` together. */
   async editSources(names: readonly string[]): Promise<void> {
     await this.#hooks.actions.editSources(names);
   }
@@ -615,13 +615,15 @@ export class EditorDriver implements EditorReads, EditorActions {
     if (!glyph) throw new Error("Expected an open glyph");
     const shown = { glyph: { glyphId: glyph.glyphId }, source: { sourceId: glyph.sourceId } };
     const other = { glyph: { glyphId: glyph.glyphId }, source };
-    const match = await this.#reads.font.matchLayers(shown, other);
-    if (!match.complete) return null;
-
-    const counterpart = match.points.find(({ referenceId }) => referenceId === id);
+    const counterparts = await this.#reads.font.counterparts(shown, other, {
+      points: [id],
+      anchors: [],
+      components: [],
+    });
+    const counterpart = counterparts?.points[0];
     if (!counterpart) return null;
     const layer = await this.#reads.font.getLayer(other);
-    return this.#pointIn(layer.contours, counterpart.targetId);
+    return this.#pointIn(layer.contours, counterpart);
   }
 
   #pointIn(outline: Outline, id: PointId): AuthoredPoint | null {
@@ -727,7 +729,7 @@ export class EditorDriver implements EditorReads, EditorActions {
   /**
    * Clicks the row of the source named `name` in the Variations panel, opening the panel first.
    * With `toggle` it Cmd-clicks (Ctrl-clicks off macOS) the row, adding the source to the ones
-   * being edited, and waits until their layers are matched to the active one.
+   * being edited.
    */
   async clickSource(name: string, mode?: SourceSelectionMode): Promise<void> {
     const source = await this.source({ name });
@@ -736,7 +738,6 @@ export class EditorDriver implements EditorReads, EditorActions {
     const row = sourceRow(await openVariationControls(this.page), name);
     if (mode === "toggle") {
       await row.click({ modifiers: [process.platform === "darwin" ? "Meta" : "Control"] });
-      await this.#hooks.session.editingLayersMatched();
       return;
     }
     await row.click();

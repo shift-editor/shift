@@ -6,7 +6,7 @@ use fontdrasil::coords::{
 use fontdrasil::types::{Axes, Tag};
 use fontir::error::Error;
 use shift_font::{Axis, AxisList, NamedInstance, Source};
-use shift_shaper_font::{AxisConversionError, axis_tag};
+use shift_text::shaper_font::{AxisConversionError, axis_tag};
 
 /// Lowers authored product presets without exposing fontir types to Shift's IR.
 ///

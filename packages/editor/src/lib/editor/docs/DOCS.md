@@ -38,7 +38,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 
 **Architecture Invariant:** `FrameHandler` deduplicates `requestAnimationFrame` calls per canvas layer. Multiple signal changes within a single frame coalesce into one render. Canvas lifecycle changes, such as replacing a layer context after resize, are represented as renderer surface signals so redraw causes remain inspectable.
 
-**Architecture Invariant:** `Editor.positionSelection(ids)` is the canonical boundary from generic selected object IDs to one active reference `GlyphLayer` plus normalized point/anchor targets for every selected source. It expands segment and contour IDs, rejects unsupported or mixed-layer input, and requires a complete precomputed `LayerMatch` for each additional source. It performs no matching or workspace I/O and carries no scene-node placement; pointer deltas and tool surfaces own coordinate context.
+**Architecture Invariant:** `Editor.positionSelection(ids)` is the canonical boundary from generic selected object IDs to one active reference `GlyphLayer` plus normalized point/anchor targets for every selected source. It expands segment and contour IDs, rejects unsupported or mixed-layer input, and asks the window's engine, synchronously, for each additional source's counterparts (`Font.counterparts`, `EngineReads.counterparts`), which requires that source's layer to match the reference completely. It performs no workspace I/O and carries no scene-node placement; pointer deltas and tool surfaces own coordinate context.
 
 **Architecture Invariant:** Lifecycle events (`EventEmitter`) are for one-shot imperative actions; `LifecycleEventMap` contains `destroying` and the one-shot `previewMutationAttempted` notice. Continuous state changes use signals. Do not mix the two patterns.
 
@@ -65,7 +65,7 @@ Central orchestrator for the canvas-based glyph editing surface, wiring viewport
 ```
 editor/
   Editor.ts              -- Facade, wires all subsystems
-  MultiSourceEditing.ts  -- Reactive cross-layer matching and target resolution
+  MultiSourceEditing.ts  -- Maps the active source's targets onto every other editing source
   Scene.ts               -- The document's scene as the editor reads it: the page tree and active-page queries, written as engine intents
   sceneNodes.ts          -- SceneNodes: translates shift-engine's scene nodes to ShiftNodes and run records, keeping unchanged objects
   SessionScene.ts        -- The scene of a session without an engine, held in @shift/wasm
@@ -159,13 +159,13 @@ Background, scene, and overlays start in scene space (`Canvas.withSceneSpace()` 
 
 ### Position selection boundary
 
-`Editor.positionSelection(ids)` resolves points and anchors directly, expands selected segments and contours to points, and verifies that every reference target belongs to the active authored layer. For each additional editing source it maps those identities through the current complete `LayerMatch`; pending or incomplete matches make the selection unavailable rather than producing a partial edit. Select-tool behaviors freeze the result with `PositionEdits.fromSelection(...)`; preview frames then perform local numeric mutations only, while scene-space gesture calculations remain in the tool layer.
+`Editor.positionSelection(ids)` resolves points and anchors directly, expands selected segments and contours to points, and verifies that every reference target belongs to the active authored layer. For each additional editing source it asks the engine for those identities' counterparts in that source's layer; an incomplete match makes the selection unavailable rather than producing a partial edit. Select-tool behaviors freeze the result with `PositionEdits.fromSelection(...)`; preview frames then perform local numeric mutations only, while scene-space gesture calculations remain in the tool layer.
 
 ### Source editing selection
 
 A plain source-row click activates that source and collapses the editing set. Shift-click replaces the set with the authored-order range from the active reference to the clicked source; Cmd/Ctrl-click toggles a non-reference source. Cmd/Ctrl+E selects every source without changing the reference. Escape reaches source selection only after the active tool declines it, so gestures and geometry selection cancel first; it then collapses the set to the reference. `GlyphOutlines` outlines non-reference selected sources automatically; hiding one from its row lasts until it leaves the editing set. Source eye controls independently add preview-only outlines, so a source can remain outside the editing set while still being visible for comparison.
 
-`MultiSourceEditing` resolves `LayerMatch` values asynchronously before interactions. Its dependency snapshot includes the active glyph, reference and target layer IDs, and each layer's `structureCell`; coarse scene updates are ignored when those inputs are unchanged. `LatestRequest` prevents stale results from publishing after the editing source set changes. Move, nudge, scale, and rotate freeze the resolved targets, preview every layer without IPC, and finish all layer edits inside one workspace transaction and undo entry. Scale and rotate preserve reference-driven feedback while mapping the selection pivot proportionally into each target layer's bounds.
+`MultiSourceEditing` keeps no matches: each resolve reads the counterparts from the window's engine (shift-font's `GlyphLayer::match_with`), unsaved edits included, loading the glyph into the engine first if it has not been, so a structure change in any source is seen by the next interaction with nothing to invalidate. Move, nudge, scale, and rotate freeze the resolved targets, preview every layer without IPC, and finish all layer edits inside one workspace transaction and undo entry. Scale and rotate preserve reference-driven feedback while mapping the selection pivot proportionally into each target layer's bounds.
 
 ### Unified action history
 
