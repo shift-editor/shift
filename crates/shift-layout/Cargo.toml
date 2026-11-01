@@ -1,0 +1,39 @@
+[package]
+name = "shift-layout"
+version = "0.1.0"
+edition = "2024"
+description = "Lays out pages of frames and text runs: Shift's auto layout vocabulary over Taffy's flexbox"
+license.workspace = true
+publish = false
+
+# Every part is on by default, so `cargo test -p shift-layout` tests all of
+# it; the workspace dependency turns defaults off, and each consumer names
+# the parts it compiles, as for shift-text.
+[features]
+default = ["layout"]
+# Laying a page out with Taffy: `LayoutTree::layout`. Without it the crate
+# holds only the vocabulary, which the scene stores.
+layout = ["dep:taffy"]
+# A number packing for the vocabulary the editor's WebAssembly calls carry.
+pack = ["dep:pack"]
+# Storing the vocabulary, as the engine's scene does.
+serde = ["dep:serde"]
+
+[dependencies]
+kurbo = "0.13.0"
+thiserror = "2.0.18"
+
+pack = { workspace = true, optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true }
+# Only the flexbox algorithm and its caching; Shift's own tree drives it, so
+# no `taffy_tree`, grid, block, or float layout is compiled in.
+taffy = { version = "0.15.0", default-features = false, features = ["std", "flexbox"], optional = true }
+
+[dev-dependencies]
+# Text runs in the tests are measured as the engine measures them: laid out
+# by shift-text, here over a font known by its advances.
+shift-font = { workspace = true }
+shift-text = { workspace = true, features = ["layout"] }
+
+[lints]
+workspace = true

@@ -6,6 +6,7 @@ use pack::Pack;
 use serde::{Deserialize, Serialize};
 use shift_font::index_key::{self, IndexKeyError};
 use shift_font::{GlyphId, NodeId, RunId, SourceId, TextItemId};
+use shift_layout::{Align, BoxSizing, FrameLayout, Insets, Justify, LayoutDirection, Placement};
 use shift_text::layout::{
     FeatureSetting, LayoutRequest, LayoutUnit, LineHeight, TextAlign, TextOptions,
 };
@@ -14,8 +15,13 @@ use shift_text::layout::{
 ///
 /// A node's frame is placed at `x`, `y` within its parent's frame, or within
 /// the page for a node at a page's top level; Y runs down, in scene units.
-/// Siblings sort by `index`, a fractional index compared as plain bytes, and
-/// then by id.
+/// Under a row or column frame, a node placed [`Placement::Auto`] is placed
+/// by the frame's layout instead, and `x`, `y` are kept for when it is
+/// placed absolutely again. Siblings sort by `index`, a fractional index
+/// compared as plain bytes, and then by id.
+///
+/// A node stored before frames existed reads its sizing as hugging on both
+/// axes and its placement as absolute, so it stays where it was.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Pack)]
 pub struct SceneNode {
     pub id: NodeId,
@@ -25,7 +31,21 @@ pub struct SceneNode {
     pub index: String,
     pub x: f64,
     pub y: f64,
+    /// How wide and tall the node lays out. A page always hugs its children
+    /// and a text run's height its lines.
+    #[serde(default)]
+    pub sizing: BoxSizing,
+    /// Whether the node follows its parent row or column's layout or keeps
+    /// `x`, `y`; a node elsewhere always keeps them.
+    #[serde(default = "absolute")]
+    pub placement: Placement,
     pub content: NodeContent,
+}
+
+/// A node keeps its position unless it says otherwise, as every node did
+/// before frames.
+fn absolute() -> Placement {
+    Placement::Absolute
 }
 
 /// What a node is, and the fields only that kind has.
@@ -49,6 +69,22 @@ pub enum NodeContent {
         /// reads it at its default.
         #[serde(default)]
         settings: RunSettings,
+    },
+    /// A container that places its children: in a row or column, with gap,
+    /// padding and alignment, or leaving them free at their positions.
+    Frame {
+        direction: LayoutDirection,
+        /// Space between neighbouring children, and between lines when
+        /// wrapping, in scene units.
+        gap: f64,
+        /// Space inside the frame's edges, in scene units.
+        padding: Insets,
+        /// Where children sit across the main axis.
+        align: Align,
+        /// How children share the main axis.
+        justify: Justify,
+        /// Whether children start a new line when they run out of room.
+        wrap: bool,
     },
     /// An authored glyph source placed for editing.
     Glyph {
@@ -265,6 +301,8 @@ impl SceneNode {
             index: index_key::between(None, None)?,
             x: 0.0,
             y: 0.0,
+            sizing: BoxSizing::default(),
+            placement: Placement::Absolute,
             content: NodeContent::Page {
                 name: name.to_owned(),
                 role: None,
@@ -319,8 +357,32 @@ impl SceneNode {
         match self.content {
             NodeContent::Page { .. } => NodeKind::Page,
             NodeContent::TextRun { .. } => NodeKind::TextRun,
+            NodeContent::Frame { .. } => NodeKind::Frame,
             NodeContent::Glyph { .. } => NodeKind::Glyph,
         }
+    }
+
+    /// How the node places its children, when it is a frame.
+    pub fn frame_layout(&self) -> Option<FrameLayout> {
+        let NodeContent::Frame {
+            direction,
+            gap,
+            padding,
+            align,
+            justify,
+            wrap,
+        } = self.content
+        else {
+            return None;
+        };
+        Some(FrameLayout {
+            direction,
+            gap,
+            padding,
+            align,
+            justify,
+            wrap,
+        })
     }
 }
 
@@ -329,6 +391,7 @@ impl SceneNode {
 pub enum NodeKind {
     Page,
     TextRun,
+    Frame,
     Glyph,
 }
 
@@ -338,6 +401,7 @@ impl NodeKind {
         match self {
             Self::Page => "page",
             Self::TextRun => "textRun",
+            Self::Frame => "frame",
             Self::Glyph => "glyph",
         }
     }

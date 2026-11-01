@@ -2703,7 +2703,7 @@ fn a_move_sent_compacted_persists_against_an_unloaded_layer() {
 
 /// A glyph page holding one run with one glyph, as opening a glyph tab places it.
 fn glyph_page(glyph_id: GlyphId, source_id: SourceId) -> Vec<SceneIntent> {
-    use shift_engine::scene::{NodeContent, PageRole, SceneNode};
+    use shift_engine::scene::{BoxSizing, NodeContent, PageRole, Placement, SceneNode};
     use shift_font::{NodeId, RunId, index_key};
 
     let key = index_key::between(None, None).unwrap();
@@ -2715,6 +2715,8 @@ fn glyph_page(glyph_id: GlyphId, source_id: SourceId) -> Vec<SceneIntent> {
         index: key.clone(),
         x: 0.0,
         y: 0.0,
+        sizing: BoxSizing::default(),
+        placement: Placement::Absolute,
         content,
     };
     vec![

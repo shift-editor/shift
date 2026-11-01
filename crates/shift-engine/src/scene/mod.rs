@@ -31,6 +31,7 @@ pub use node::{
     DEFAULT_PAGE_NAME, NodeContent, NodeKind, PageRole, RunSettings, RunSettingsError, SceneNode,
     TextItem, TextRun,
 };
+pub use shift_layout::{Align, BoxSizing, Insets, Justify, LayoutDirection, Placement, Sizing};
 
 /// Why a scene edit was refused. The scene is unchanged.
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
@@ -46,6 +47,17 @@ pub enum SceneError {
 
     #[error("page {0} cannot have a parent")]
     PageWithParent(NodeId),
+
+    /// A frame placed in a node that holds no frames: only a page or
+    /// another frame lays a frame out.
+    #[error(
+        "frame {node} cannot be placed in {parent}, a {kind}: only a page or a frame holds frames"
+    )]
+    FrameInLeaf {
+        node: NodeId,
+        parent: NodeId,
+        kind: NodeKind,
+    },
 
     #[error("scene node {0} cannot be placed inside itself")]
     Cycle(NodeId),
@@ -190,6 +202,13 @@ impl FromIterator<SceneNode> for Scene {
 impl Scene {
     pub fn node(&self, id: &NodeId) -> Option<&SceneNode> {
         self.nodes.get(id).map(|entry| entry.node.as_ref())
+    }
+
+    /// When a text run's items or settings last changed, as
+    /// [`RevisedNode::items_revision`] says; `None` for a node the scene
+    /// does not have.
+    pub fn items_revision(&self, id: &NodeId) -> Option<usize> {
+        self.nodes.get(id).map(|entry| entry.items_revision)
     }
 
     /// Every node, in the order of [`Self::nodes`], with when it last changed.
@@ -503,7 +522,8 @@ impl Scene {
     }
 
     /// Checks that `node` may sit where it says: a page at the top, any other
-    /// node under one that exists, and never under itself.
+    /// node under one that exists, a frame only under a page or a frame, and
+    /// never under itself.
     fn check_placement(&self, node: &SceneNode) -> Result<(), SceneError> {
         if node.index.is_empty() {
             return Err(SceneError::EmptyIndex(node.id.clone()));
@@ -514,10 +534,19 @@ impl Scene {
         if node.is_page() {
             return Err(SceneError::PageWithParent(node.id.clone()));
         }
-        if self.node(parent_id).is_none() {
+        let Some(parent) = self.node(parent_id) else {
             return Err(SceneError::ParentNotFound {
                 node: node.id.clone(),
                 parent: parent_id.clone(),
+            });
+        };
+        if node.kind() == NodeKind::Frame
+            && !matches!(parent.kind(), NodeKind::Page | NodeKind::Frame)
+        {
+            return Err(SceneError::FrameInLeaf {
+                node: node.id.clone(),
+                parent: parent_id.clone(),
+                kind: parent.kind(),
             });
         }
         let mut ancestor = Some(parent_id);

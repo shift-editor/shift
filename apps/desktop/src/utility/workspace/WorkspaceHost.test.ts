@@ -233,6 +233,8 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       index,
       x: 0,
       y: 0,
+      sizing: { width: { kind: "hug" }, height: { kind: "hug" } },
+      placement: "absolute",
       content: { kind: "page", name },
     };
   }

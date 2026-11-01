@@ -11,6 +11,9 @@ pack = { workspace = true }
 shift-font = { workspace = true, features = ["pack"] }
 # The text options a run keeps (alignment, feature settings): their types only.
 shift-text = { workspace = true, features = ["pack", "serde"] }
+# The auto layout a frame and each node keep (direction, gap, sizing,
+# placement): their types only, without Taffy.
+shift-layout = { workspace = true, features = ["pack", "serde"] }
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2"
 

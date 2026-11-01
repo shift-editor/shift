@@ -265,9 +265,50 @@ impl TextLayout {
     /// Returns [`LayoutError::TooLong`] when the text has more units, or
     /// lays out into more glyphs or lines, than a `u32` index can name.
     pub fn new(font: &LayoutFont<'_>, request: &LayoutRequest) -> Result<Self, LayoutError> {
+        TextMeasure::new(font, request)?.layout(font, request.options.width)
+    }
+}
+
+/// Text shaped once, to break into lines at any width: what page layout
+/// measures a run with, asking its size at each width it tries and laying
+/// it out once at the width it chose, without shaping it again.
+///
+/// Its lines break where [`TextLayout::new`]'s do at the same width, by the
+/// same rule; only the width differs from the request's.
+#[cfg(feature = "layout")]
+pub struct TextMeasure {
+    paragraphs: Vec<paragraph::Paragraph>,
+    shaped: Vec<paragraph::ShapedText>,
+    options: TextOptions,
+    units: usize,
+    /// Why some text was laid out as typed instead of shaped, when it was.
+    unshaped: Option<String>,
+}
+
+/// How big text is at one width, in font units.
+#[cfg(feature = "layout")]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TextSize {
+    /// The widest line's advance.
+    pub width: f64,
+    /// How many lines; none for text with no units.
+    pub lines: u32,
+    /// How far apart baselines are.
+    pub line_height: f64,
+}
+
+#[cfg(feature = "layout")]
+impl TextMeasure {
+    /// Shapes `request` over `font`, each paragraph once.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LayoutError::TooLong`] when the text has more units than a
+    /// `u32` index can name.
+    pub fn new(font: &LayoutFont<'_>, request: &LayoutRequest) -> Result<Self, LayoutError> {
         let mut unshaped = None;
         let paragraphs = paragraph::Paragraph::split(&request.units)?;
-        let shaped: Vec<paragraph::ShapedText> = paragraphs
+        let shaped = paragraphs
             .iter()
             .map(|paragraph| {
                 let (shaped, reason) = paragraph.shape(font, &request.options);
@@ -277,13 +318,50 @@ impl TextLayout {
                 shaped
             })
             .collect();
+        Ok(Self {
+            paragraphs,
+            shaped,
+            options: request.options.clone(),
+            units: request.units.len(),
+            unshaped,
+        })
+    }
+
+    /// The text's size with lines broken at `width` (`None` keeps each
+    /// paragraph on one line), as [`Self::layout`] would lay it out, without
+    /// placing glyphs or carets.
+    pub fn size(&self, font: &LayoutFont<'_>, width: Option<f64>) -> TextSize {
+        let options = self.options_at(width);
+        lines::Placement::new(font, &options).size(&self.paragraphs, &self.shaped)
+    }
+
+    /// The text laid out with lines broken at `width`, as
+    /// [`TextLayout::new`] lays out the request with that width.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LayoutError::TooLong`] when it lays out into more glyphs or
+    /// lines than a `u32` index can name.
+    pub fn layout(
+        &self,
+        font: &LayoutFont<'_>,
+        width: Option<f64>,
+    ) -> Result<TextLayout, LayoutError> {
+        let options = self.options_at(width);
         let mut layout =
-            lines::Placement::new(font, &request.options).place(&paragraphs, &shaped)?;
-        layout.unit_glyphs = layout.glyphs_by_unit(request.units.len());
-        layout.carets = carets::Carets::new(font, &layout).stops(&paragraphs);
-        layout.words = layout.words_of(&paragraphs);
-        layout.unshaped = unshaped;
+            lines::Placement::new(font, &options).place(&self.paragraphs, &self.shaped)?;
+        layout.unit_glyphs = layout.glyphs_by_unit(self.units);
+        layout.carets = carets::Carets::new(font, &layout).stops(&self.paragraphs);
+        layout.words = layout.words_of(&self.paragraphs);
+        layout.unshaped.clone_from(&self.unshaped);
         Ok(layout)
+    }
+
+    fn options_at(&self, width: Option<f64>) -> TextOptions {
+        TextOptions {
+            width,
+            ..self.options.clone()
+        }
     }
 }
 

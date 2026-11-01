@@ -577,3 +577,43 @@ fn words_skip_spaces_and_punctuation_and_name_their_screen_edges() {
         [(0, 2, Direction::Ltr, 0, 2), (4, 6, Direction::Rtl, 6, 4)]
     );
 }
+
+#[test]
+fn a_measure_breaks_lines_where_a_layout_at_the_same_width_does() {
+    let (font, _) = two_letters_and_a_mark();
+    let font = LayoutFont::typed(&font);
+    let request = LayoutRequest {
+        units: units("ab ab ab\nbbb"),
+        options: shaped(),
+    };
+    let measure = TextMeasure::new(&font, &request).unwrap();
+
+    for width in [None, Some(1.0), Some(1200.0), Some(2300.0), Some(10_000.0)] {
+        let size = measure.size(&font, width);
+        let layout = TextLayout::new(
+            &font,
+            &LayoutRequest {
+                options: TextOptions { width, ..shaped() },
+                ..request.clone()
+            },
+        )
+        .unwrap();
+
+        let widest = layout
+            .lines
+            .iter()
+            .map(|line| line.advance)
+            .fold(0.0, f64::max);
+        assert_eq!(size.width, widest, "at {width:?}");
+        assert_eq!(size.lines as usize, layout.lines.len(), "at {width:?}");
+        assert_eq!(size.line_height, layout.line_height);
+        assert_eq!(
+            measure.layout(&font, width).unwrap(),
+            layout,
+            "at {width:?}"
+        );
+    }
+    assert_eq!(measure.size(&font, None).lines, 2);
+    // Three lines of "ab", and "bbb", with nowhere to break, cut to fit.
+    assert_eq!(measure.size(&font, Some(1200.0)).lines, 5);
+}
