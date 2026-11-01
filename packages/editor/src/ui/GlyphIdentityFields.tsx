@@ -4,7 +4,7 @@ import type { Font } from "../lib/model/Font";
 import type { Glyph } from "../lib/model/Glyph";
 import { useSignalState } from "../lib/signals";
 import { codepointToHex, formatCodepointAsUPlus } from "../lib/utils/unicode";
-import type { GlyphIdentityChange, GlyphIdentityConflict } from "../types/glyph";
+import type { GlyphIdentityConflict, GlyphIdentityEdit } from "../types/glyph";
 
 export interface GlyphIdentityFieldsProps {
   font: Font;
@@ -46,7 +46,7 @@ function GlyphIdentityFieldsFor({
   const entry = useSignalState(glyph.entryCell);
   const unicode = entry.unicodes[0] ?? null;
   const [conflict, setConflict] = useState<GlyphIdentityConflict | null>(null);
-  const report = (change: GlyphIdentityChange) =>
+  const report = (change: GlyphIdentityEdit) =>
     setConflict(change.kind === "refused" ? change.conflict : null);
 
   return (
@@ -83,6 +83,8 @@ function conflictMessage(conflict: GlyphIdentityConflict): string {
   switch (conflict.kind) {
     case "blankName":
       return "A glyph needs a name.";
+    case "invalidName":
+      return `${conflict.name} is not a valid glyph name.`;
     case "nameTaken":
       return `Another glyph is named ${conflict.name}.`;
     case "invalidCodepoint":
