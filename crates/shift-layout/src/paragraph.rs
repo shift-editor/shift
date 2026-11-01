@@ -1,8 +1,11 @@
 //! Splits text into paragraphs and shapes each one into positioned runs.
 
 use shift_font::{GlyphId, OpenTypeCategory};
-use shift_shape::{Tag, TextDirection, Unit};
+use std::collections::BTreeSet;
+
+use shift_shape::{ShapedGlyph, Tag, TextDirection, Unit};
 use shift_shaper_font::{ParagraphRequest, ShapedParagraph};
+use unicode_segmentation::UnicodeSegmentation;
 
 use shift_font::positioning::{
     RunDirection, RunGlyph as PositionedRunGlyph, RunPosition, RunPositioning,
@@ -24,6 +27,54 @@ pub(crate) const NONSPACING_MARK_EDITOR_ADVANCE: f64 = 600.0;
 /// the pen position.
 const TYPED_MARK_ANCHOR_X: f64 = 300.0;
 
+/// What a glyph inserted by name reads as when finding graphemes: an inline
+/// object, a grapheme of its own.
+const OBJECT_REPLACEMENT: char = '\u{FFFC}';
+
+/// A paragraph's units as text, for Unicode segmentation, with the unit
+/// each byte starts.
+pub(crate) struct ParagraphText {
+    pub text: String,
+    /// The paragraph's first unit, in the text.
+    start: u32,
+    /// For each byte offset in `text` that starts a char, and its end, the
+    /// unit there, counted in the paragraph.
+    unit_at_byte: Vec<u32>,
+}
+
+impl ParagraphText {
+    /// `paragraph` as text: each unit one char, a glyph inserted by name the
+    /// object replacement character.
+    pub(crate) fn of(paragraph: &Paragraph) -> Self {
+        let text: String = paragraph
+            .units
+            .iter()
+            .map(|unit| match unit {
+                Unit::Character(character) => *character,
+                Unit::Glyph(_) => OBJECT_REPLACEMENT,
+            })
+            .collect();
+        let mut unit_at_byte = vec![0u32; text.len() + 1];
+        let mut count = 0u32;
+        for (unit, (byte, _)) in (0u32..).zip(text.char_indices()) {
+            unit_at_byte[byte] = unit;
+            count = unit + 1;
+        }
+        unit_at_byte[text.len()] = count;
+        Self {
+            text,
+            start: paragraph.start,
+            unit_at_byte,
+        }
+    }
+
+    /// The unit, in the text, that starts at `byte`, or one past the last
+    /// at the text's end.
+    pub(crate) fn unit_at(&self, byte: usize) -> u32 {
+        self.start + self.unit_at_byte.get(byte).copied().unwrap_or_default()
+    }
+}
+
 /// The units between two line breaks.
 pub(crate) struct Paragraph {
     /// The first unit's index in the text.
@@ -33,6 +84,9 @@ pub(crate) struct Paragraph {
     pub units: Vec<Unit<GlyphId>>,
     /// Whether a line break ends it, the unit after its last.
     pub ends_in_break: bool,
+    /// Its grapheme boundaries as unit indices in the text, its start and
+    /// end included: where carets stop.
+    pub graphemes: BTreeSet<u32>,
 }
 
 impl Paragraph {
@@ -47,12 +101,7 @@ impl Paragraph {
             return Ok(Vec::new());
         }
         let mut paragraphs = Vec::new();
-        let mut current = Self {
-            start: 0,
-            end: count,
-            units: Vec::new(),
-            ends_in_break: false,
-        };
+        let mut current = Self::starting_at(0, count);
         for (index, unit) in (0u32..).zip(units) {
             match unit {
                 LayoutUnit::Character { codepoint } => current.units.push(Unit::Character(
@@ -62,18 +111,45 @@ impl Paragraph {
                 LayoutUnit::LineBreak => {
                     current.ends_in_break = true;
                     current.end = index;
-                    let next = Self {
-                        start: index + 1,
-                        end: count,
-                        units: Vec::new(),
-                        ends_in_break: false,
-                    };
-                    paragraphs.push(std::mem::replace(&mut current, next));
+                    let next = Self::starting_at(index + 1, count);
+                    paragraphs.push(std::mem::replace(&mut current, next).finished());
                 }
             }
         }
-        paragraphs.push(current);
+        paragraphs.push(current.finished());
         Ok(paragraphs)
+    }
+
+    /// An empty paragraph from `start`, running to `end` until a line
+    /// break ends it sooner.
+    fn starting_at(start: u32, end: u32) -> Self {
+        Self {
+            start,
+            end,
+            units: Vec::new(),
+            ends_in_break: false,
+            graphemes: BTreeSet::new(),
+        }
+    }
+
+    /// The paragraph with its units all read: its grapheme boundaries found.
+    fn finished(mut self) -> Self {
+        self.graphemes = self.grapheme_boundaries();
+        self
+    }
+
+    /// The paragraph's grapheme boundaries as unit indices in the text, its
+    /// start and end included.
+    fn grapheme_boundaries(&self) -> BTreeSet<u32> {
+        let text = ParagraphText::of(self);
+        let mut boundaries: BTreeSet<u32> = text
+            .text
+            .grapheme_indices(true)
+            .map(|(byte, _)| text.unit_at(byte))
+            .collect();
+        boundaries.insert(self.start);
+        boundaries.insert(self.end);
+        boundaries
     }
 
     /// Shapes and positions the paragraph, or lays it out as typed when the
@@ -129,34 +205,13 @@ impl Paragraph {
             .runs
             .into_iter()
             .map(|run| {
-                let mut clusters: Vec<u32> = run.glyphs.iter().map(|glyph| glyph.cluster).collect();
-                clusters.sort_unstable();
-                clusters.dedup();
+                let clusters = RunClusters::of(&run);
                 let glyphs: Vec<RunGlyph> = run
                     .glyphs
                     .iter()
                     .map(|glyph| {
-                        // A glyph covers the units up to the run's next cluster.
-                        let next = clusters.partition_point(|cluster| *cluster <= glyph.cluster);
-                        let end = clusters.get(next).copied().unwrap_or(run.units.end);
-                        let mut placed = RunGlyph {
-                            glyph_id: glyph.glyph_id,
-                            start: self.start + glyph.cluster,
-                            end: self.start + end,
-                            x_advance: f64::from(glyph.x_advance),
-                            kern: 0.0,
-                            x_offset: f64::from(glyph.x_offset),
-                            y_offset: f64::from(glyph.y_offset),
-                            is_mark: glyph.is_mark,
-                            bounds: glyph.glyph_id.and_then(|glyph| font.bounds(glyph)),
-                        };
-                        if let Some(glyph_id) = glyph.glyph_id
-                            && glyph.is_mark
-                            && !positions.attached(glyph.cluster, glyph_id)
-                        {
-                            placed.x_advance = shown_advance(font.advance(glyph_id));
-                        }
-                        placed
+                        RunGlyph::from_shaped(glyph, self.start, clusters.end_of(glyph), font)
+                            .shown_unattached(glyph.cluster, positions, font)
                     })
                     .collect();
                 let mut shaped = ShapedRun {
@@ -223,6 +278,75 @@ impl Paragraph {
                 glyphs,
             }],
         }
+    }
+}
+
+/// The clusters of one shaped run, in order, each once.
+struct RunClusters {
+    clusters: Vec<u32>,
+    /// One past the run's last unit, in the paragraph.
+    end: u32,
+}
+
+impl RunClusters {
+    fn of(run: &shift_shape::ShapedRun<GlyphId>) -> Self {
+        let mut clusters: Vec<u32> = run.glyphs.iter().map(|glyph| glyph.cluster).collect();
+        clusters.sort_unstable();
+        clusters.dedup();
+        Self {
+            clusters,
+            end: run.units.end,
+        }
+    }
+
+    /// One past the last unit `glyph` shows, in the paragraph: a glyph
+    /// covers the units up to the run's next cluster, so a ligature covers
+    /// every unit it joins.
+    fn end_of(&self, glyph: &ShapedGlyph<GlyphId>) -> u32 {
+        let next = self
+            .clusters
+            .partition_point(|cluster| *cluster <= glyph.cluster);
+        self.clusters.get(next).copied().unwrap_or(self.end)
+    }
+}
+
+impl RunGlyph {
+    /// A shaped glyph as layout reads it, its units counted in the text
+    /// (`paragraph_start` on), covering units up to `end`.
+    fn from_shaped(
+        glyph: &ShapedGlyph<GlyphId>,
+        paragraph_start: u32,
+        end: u32,
+        font: &LayoutFont<'_>,
+    ) -> Self {
+        Self {
+            glyph_id: glyph.glyph_id,
+            start: paragraph_start + glyph.cluster,
+            end: paragraph_start + end,
+            x_advance: f64::from(glyph.x_advance),
+            kern: 0.0,
+            x_offset: f64::from(glyph.x_offset),
+            y_offset: f64::from(glyph.y_offset),
+            is_mark: glyph.is_mark,
+            bounds: glyph.glyph_id.and_then(|glyph| font.bounds(glyph)),
+        }
+    }
+
+    /// The glyph, or, when it is a mark nothing attached, shown at its own
+    /// advance ([`shown_advance`]) so it does not sit on the glyph before.
+    fn shown_unattached(
+        mut self,
+        cluster: u32,
+        positions: &GeneratedPositions<'_, '_>,
+        font: &LayoutFont<'_>,
+    ) -> Self {
+        if let Some(glyph_id) = self.glyph_id
+            && self.is_mark
+            && !positions.attached(cluster, glyph_id)
+        {
+            self.x_advance = shown_advance(font.advance(glyph_id));
+        }
+        self
     }
 }
 
