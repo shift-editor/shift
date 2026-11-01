@@ -2,7 +2,7 @@
 /** @jsxRuntime classic */
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { createMemoryFontSession, scenePoint, type MemoryFontSession } from "@shift-editor/sdk";
+import { createMemoryFontSession, localPoint, type MemoryFontSession } from "@shift-editor/sdk";
 import { ShiftEditorChrome } from "@shift-editor/sdk/ui";
 import "@shift-editor/sdk/style.css";
 import "@shift-editor/sdk/fonts.css";
@@ -39,7 +39,7 @@ try {
   secondDisposeThrew = true;
 }
 
-async function placeGlyph(session: MemoryFontSession): Promise<void> {
+async function placeGlyph(session: MemoryFontSession) {
   const glyph = await session.font.loadGlyph(glyphRecord.id);
   session.editor.selectSource(regular.id);
   const node = session.editor.scene.createNode({
@@ -49,16 +49,17 @@ async function placeGlyph(session: MemoryFontSession): Promise<void> {
     position: { x: 0, y: 0 },
   });
   session.editor.editing.enter(node.id);
+  return node;
 }
 
 function regularLayer() {
   return first.editor.glyphForId(glyphRecord.id)?.layerForSource(regular.id) ?? null;
 }
 
-let glyphPlaced = false;
+let placedNode: Awaited<ReturnType<typeof placeGlyph>> | null = null;
 
 window.shiftSdkHarness = {
-  glyphPlaced: () => glyphPlaced,
+  glyphPlaced: () => placedNode !== null,
   onCurvePointId() {
     const contour = regularLayer()?.contours[0];
     return contour?.points.find((point) => point.pointType === "onCurve")?.id ?? null;
@@ -69,7 +70,12 @@ window.shiftSdkHarness = {
   },
   pointScreenPosition(pointId: string) {
     const point = regularLayer()?.point(pointId as never);
-    return point ? first.editor.sceneToScreen(scenePoint(point.x, point.y)) : null;
+    if (!point || !placedNode) return null;
+
+    // Layer points are in the glyph's units, y up; the camera projects scene points.
+    return first.editor.sceneToScreen(
+      first.editor.toScene(placedNode, localPoint(point.x, point.y)),
+    );
   },
   zoom: () => first.editor.zoom,
   pan: () => ({ ...first.editor.pan }),
@@ -89,8 +95,8 @@ window.shiftSdkHarness = {
 
 const root = createRoot(document.getElementById("root")!);
 root.render(<ShiftEditorChrome session={first} />);
-void placeGlyph(first).then(() => {
-  glyphPlaced = true;
+void placeGlyph(first).then((node) => {
+  placedNode = node;
 });
 
 window.addEventListener("beforeunload", () => {

@@ -27,6 +27,7 @@ try {
     "package/dist/ui.js",
     "package/dist/ui.d.ts",
     "package/dist/style.css",
+    "package/dist/generated-engine/shift_wasm_bg.wasm",
     "package/LICENSE-MIT",
     "package/LICENSE-APACHE",
     "package/THIRD_PARTY_NOTICES.md",
@@ -177,7 +178,8 @@ async function checkViteConsumer(url, server) {
   await dragOnCanvas(
     page,
     canvas,
-    { x: bounds.width / 2, y: bounds.height - 40 },
+    // Left of centre: the tool bar floats over the bottom of the canvas.
+    { x: bounds.width / 4, y: bounds.height / 2 },
     { x: -60, y: -25 },
   );
   const panAfter = await page.evaluate(() => window.shiftSdkHarness.pan());
