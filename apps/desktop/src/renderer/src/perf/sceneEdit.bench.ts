@@ -1,6 +1,7 @@
 import { bench, describe } from "vitest";
 import { mintRunId } from "@shift/types";
 import type { TextRunNode } from "@shift/editor/types";
+import { SceneNodes } from "@shift/editor";
 import { TestEditor } from "@/testing/TestEditor";
 import { proofText } from "@/testing/proofText";
 
@@ -58,28 +59,14 @@ describe(`a scene of ${RUNS.toLocaleString("en-US")} text runs`, () => {
   bench(
     "move a run, one staged frame",
     async () => {
-      const { editor, run, items } = await open();
+      const { editor, run } = await open();
       const edit = editor.font.editCoordinator.openEdit();
       frame += 1;
-      const settings = {
-        shaping: true,
-        features: [],
-        language: null,
-        script: null,
-        lineHeight: null,
-        align: null,
-      };
-      const content = {
-        kind: "textRun" as const,
-        runId: run.runId,
-        size: run.size,
-        items,
-        settings,
-      };
-      const { id, parentId, index } = run;
-      edit.stageScene([
-        { kind: "updateNode", updateNode: { id, parentId, index, x: frame, y: 0, content } },
-      ]);
+      // The run's node at a new place, as the editor writes an update: its
+      // own items and settings, which the scene keeps.
+      const moved = { ...run, position: { x: frame, y: 0 } };
+      const updateNode = SceneNodes.toDocument(moved, editor.scene.run(run.runId));
+      edit.stageScene([{ kind: "updateNode", updateNode }]);
       if (editor.scene.nodes().length === 0) throw new Error("the page shows nothing");
       edit.cancel();
     },
