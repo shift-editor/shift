@@ -12,8 +12,11 @@ import {
   mintContourId,
   mintGlyphId,
   mintLayerId,
+  mintNodeId,
   ascending,
   mintPointId,
+  mintRunId,
+  mintTextItemId,
   type FontIntent,
   type GlyphId,
   type GlyphName,
@@ -43,7 +46,9 @@ import type {
 import { client } from "../../shared/workspace/remote";
 import { Axis, loadEngine, type EngineEdit, type EngineSession } from "@shift/editor/model";
 import { engineStoreRequest } from "../../renderer/src/lib/engine/engineStoreRequest";
+import { indexKeys } from "@shift/wasm";
 import { storeReader } from "@shift/wasm/store-reader";
+import type { SceneIntent, SceneNode } from "@shift/wasm/protocol";
 import { WorkspaceHost } from "./WorkspaceHost";
 
 /** The shell lane as main holds it: the interface, plus its channel for events and `connect`. */
@@ -55,6 +60,29 @@ type ShellChannel = WorkspaceShell & {
 type SyncChannel = WorkspaceSync & {
   readonly channel: Channel<SyncStreamCallMap, SyncEventMap>;
 };
+
+/** The scene two pages with runs leave: the new document's page, then Proofs and Specimen. */
+const TWO_PAGES = { "Page 1": "", Proofs: "A", Specimen: "B" };
+
+/** Each page's name with the characters of the runs on it, in order. */
+function describeScene(nodes: readonly SceneNode[]): Record<string, string> {
+  const pages = new Map<string, string>();
+  const names = new Map<string, string>();
+  for (const node of nodes) {
+    if (node.content.kind === "page") {
+      names.set(node.id, node.content.name);
+      pages.set(node.content.name, "");
+      continue;
+    }
+    const page = node.parentId ? names.get(node.parentId) : undefined;
+    if (node.content.kind !== "textRun" || page === undefined) continue;
+    const text = node.content.items
+      .map((item) => (item.kind === "character" ? String.fromCodePoint(item.codepoint) : ""))
+      .join("");
+    pages.set(page, (pages.get(page) ?? "") + text);
+  }
+  return Object.fromEntries(pages);
+}
 
 function shellChannel(transport: Transport): ShellChannel {
   const channel = new Channel<ShellPortCallMap, ShellEventMap>(transport);
@@ -180,6 +208,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const session = EngineSession.open(
       directory,
       engineStoreRequest(layerReaders, () => reader),
+      storedSceneNodes(reader),
     );
     engines.set(sync, { session, reader, location });
     return session;
@@ -197,6 +226,88 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
    * them: from an editing engine opened fresh over the store. The store's
    * snapshot has no glyph records.
    */
+  /** A page named `name` at the top of the scene, at `index`. */
+  function scenePage(name: string, index: string): SceneNode {
+    return {
+      id: mintNodeId(),
+      index,
+      x: 0,
+      y: 0,
+      content: { kind: "page", name },
+    };
+  }
+
+  /** Places a text run on `page`, holding one typed character, its settings the engine's defaults. */
+  function sceneRun(page: SceneNode, character: string): SceneIntent {
+    return {
+      kind: "createRun",
+      createRun: {
+        id: mintNodeId(),
+        parentId: page.id,
+        index: indexKeys.between(null, null),
+        x: 10,
+        y: 20,
+        runId: mintRunId(),
+        size: 1000,
+        items: [{ kind: "character", id: mintTextItemId(), codepoint: character.codePointAt(0)! }],
+      },
+    };
+  }
+
+  /** The scene `reader`'s store holds, as a window's engine opens with it. */
+  function storedSceneNodes(reader: number): Uint8Array {
+    return storeReader((method, numbers, blobs) =>
+      layerReaders.request(reader, method, numbers, blobs),
+    ).sceneNodes();
+  }
+
+  /** Persists `intents` as one scene edit, as a window does after applying them in its engine. */
+  async function editScene(sync: SyncChannel, intents: SceneIntent[]): Promise<void> {
+    const engine = await engineFor(sync);
+    engine.beginEdit(null);
+    try {
+      engine.applyScene(intents);
+    } catch (error) {
+      engine.cancelEdit();
+      throw error;
+    }
+    const changeSet = engine.endEdit();
+    if (changeSet) await sync.persist(changeSet, "unsaved");
+  }
+
+  /** Two pages, Proofs and Specimen, each with a text run, added to the document's scene. */
+  async function addTwoPagesWithRuns(sync: SyncChannel): Promise<void> {
+    // After the document's own first page.
+    const proofsIndex = indexKeys.between(indexKeys.between(null, null), null);
+    const proofs = scenePage("Proofs", proofsIndex);
+    const specimen = scenePage("Specimen", indexKeys.between(proofsIndex, null));
+    await editScene(sync, [
+      { kind: "createNode", createNode: proofs },
+      { kind: "createNode", createNode: specimen },
+      sceneRun(proofs, "A"),
+      sceneRun(specimen, "B"),
+    ]);
+  }
+
+  /** The stored scene, each page's name with the characters of the runs on it, as a fresh window reads it. */
+  async function storedScene(sync: SyncChannel): Promise<Record<string, string>> {
+    const location = await sync.storeLocation();
+    const directory = await sync.directory();
+    if (!location || !directory) throw new Error("the workspace has no store to read");
+    const reader = layerReaders.open(location);
+    const { EngineSession } = await loadEngine();
+    const session = EngineSession.open(
+      directory,
+      engineStoreRequest(layerReaders, () => reader),
+      storedSceneNodes(reader),
+    );
+    try {
+      return describeScene(session.sceneNodes().map((revised) => revised.node));
+    } finally {
+      disposeEngine({ session, reader, location });
+    }
+  }
+
   async function storedGlyphRecords(sync: SyncChannel): Promise<readonly GlyphRecord[]> {
     const location = await sync.storeLocation();
     const directory = await sync.directory();
@@ -239,7 +350,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   /** The change set `intents` make in `engine`, as one edit. */
   function changeSetOf(engine: EngineSession, intents: FontIntent[]): Uint8Array | undefined {
-    engine.beginEdit();
+    engine.beginEdit(null);
     try {
       engine.apply(intents);
     } catch (error) {
@@ -276,45 +387,40 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const chunks: Uint8Array[] = [];
     let receivedLength = 0;
     const complete = new Promise<number>((resolve, reject) => {
-      lane.port2.onmessage = (event: MessageEvent<ByteStreamMessage>) => {
-        switch (event.data.kind) {
+      lane.port2.on("message", (message: ByteStreamMessage) => {
+        switch (message.kind) {
           case "chunk":
-            if (event.data.offset !== receivedLength) {
-              reject(
-                new Error(`Slug chunk started at ${event.data.offset}, not ${receivedLength}`),
-              );
+            if (message.offset !== receivedLength) {
+              reject(new Error(`Slug chunk started at ${message.offset}, not ${receivedLength}`));
               lane.port2.close();
               return;
             }
-            if (event.data.bytes.byteLength > maximumLength) {
+            if (message.bytes.byteLength > maximumLength) {
               reject(new Error(`Slug chunk exceeded ${maximumLength} bytes`));
               lane.port2.close();
               return;
             }
-            chunks.push(event.data.bytes);
-            receivedLength += event.data.bytes.byteLength;
+            chunks.push(message.bytes);
+            receivedLength += message.bytes.byteLength;
             lane.port2.postMessage({
               kind: "ack",
               nextOffset: receivedLength,
             } satisfies ByteStreamControl);
             return;
           case "complete":
-            if (event.data.totalLength !== receivedLength) {
+            if (message.totalLength !== receivedLength) {
               reject(
-                new Error(
-                  `Slug stream completed at ${event.data.totalLength}, not ${receivedLength}`,
-                ),
+                new Error(`Slug stream completed at ${message.totalLength}, not ${receivedLength}`),
               );
               return;
             }
-            resolve(event.data.totalLength);
+            resolve(message.totalLength);
             return;
           case "error":
-            reject(new Error(event.data.message));
+            reject(new Error(message.message));
         }
-      };
+      });
     });
-    lane.port2.start();
     if (pageOrigin === "source") {
       await sync.channel.call("streamSourceAtlasPage", { generation, maximumLength }, [lane.port1]);
     } else if (pageOrigin) {
@@ -826,11 +932,10 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     });
     const atlas = await sync.prepareSlugAtlas(256);
     const lane = new MessageChannel();
-    lane.port2.onmessage = (event: MessageEvent<ByteStreamMessage>) => {
-      if (event.data.kind !== "chunk") return;
+    lane.port2.on("message", (message: ByteStreamMessage) => {
+      if (message.kind !== "chunk") return;
       lane.port2.postMessage({ kind: "cancel", message: "GPU upload rejected" });
-    };
-    lane.port2.start();
+    });
 
     await expect(
       sync.channel.call("streamSlugAtlas", { generation: atlas.generation, maximumLength: 64 }, [
@@ -969,6 +1074,50 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       needsSaveAs: false,
     });
     expect(glyphs.map((glyph) => glyph.name)).toEqual(["A"]);
+  });
+
+  it("recovers an unsaved scene, two pages with their runs, on the next document open", async () => {
+    const source = await connectSyncLane();
+    const saved = await saveDocumentWithGlyphA(source, "Scene.shift");
+    await addTwoPagesWithRuns(source);
+
+    // The first host is never closed, as when the app is killed.
+    const restarted = await startAdditionalHost();
+    await openWorkspace(restarted.sync, restarted.shell, saved.path);
+
+    await expect(storedScene(restarted.sync)).resolves.toEqual(TWO_PAGES);
+    await expect(restarted.shell.documentState()).resolves.toMatchObject({ dirty: true });
+  });
+
+  it("discards an unsaved scene with the rest of the unsaved edits", async () => {
+    const source = await connectSyncLane();
+    const saved = await saveDocumentWithGlyphA(source, "SceneDiscard.shift");
+    await addTwoPagesWithRuns(source);
+    const restarted = await startAdditionalHost();
+    await openWorkspace(restarted.sync, restarted.shell, saved.path);
+
+    await restarted.shell.close(true);
+    const reopened = await startAdditionalHost();
+    await openWorkspace(reopened.sync, reopened.shell, saved.path);
+
+    await expect(storedScene(reopened.sync)).resolves.toEqual({ "Page 1": "" });
+    await expect(reopened.shell.documentState()).resolves.toMatchObject({ dirty: false });
+  });
+
+  it("Save As writes the unsaved scene to the new document and leaves the old one as saved", async () => {
+    const source = await connectSyncLane();
+    const saved = await saveDocumentWithGlyphA(source, "SceneSource.shift");
+    await addTwoPagesWithRuns(source);
+    const destinationPath = path.join(tmpRoot, "SceneDestination.shift");
+
+    await source.saveAs(destinationPath);
+
+    const copy = await startAdditionalHost();
+    await openWorkspace(copy.sync, copy.shell, destinationPath);
+    await expect(storedScene(copy.sync)).resolves.toEqual(TWO_PAGES);
+    const original = await startAdditionalHost();
+    await openWorkspace(original.sync, original.shell, saved.path);
+    await expect(storedScene(original.sync)).resolves.toEqual({ "Page 1": "" });
   });
 
   it("recovers unsaved edits on the next document open", async () => {

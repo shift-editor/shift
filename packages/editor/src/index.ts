@@ -64,3 +64,4 @@ export type {
   GlyphReader,
 } from "./types/glyph";
 export type { DesignAxisLocation, ExternalAxisLocation } from "./types/variation";
+export { SceneNodes } from "./lib/editor/sceneNodes";

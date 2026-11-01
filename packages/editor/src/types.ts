@@ -5,7 +5,14 @@ export type {
 } from "./types/componentTransform";
 export type { Coordinates } from "./types/coordinates";
 export type { PendingEditId } from "./types/editing";
-export type { EngineVariation, FontEngine, KerningPlace, OpenEdit } from "./types/font";
+export type {
+  EngineVariation,
+  FontEngine,
+  KerningPlace,
+  OpenEdit,
+  ReplayedChange,
+} from "./types/font";
+export type { SceneDocument, SceneIntent, SceneNode, SceneRecording } from "./types/sceneDocument";
 export type {
   MemoryFontSession,
   MemoryFontSessionOptions,
@@ -25,6 +32,7 @@ export type {
 export type { GlyphOutlineControls, GlyphOutlineTarget } from "./types/glyphOutline";
 export type { RenderGlyph } from "./types/glyphRender";
 export type { CanvasRef } from "./types/graphics";
+export type { PageCamera } from "./types/page";
 export type { CubicHandle } from "./types/handle";
 export type {
   GlyphNode,

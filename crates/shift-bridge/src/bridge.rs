@@ -2133,21 +2133,20 @@ mod tests {
         },
       )))
       .unwrap();
-    // Sent compacted, as the window's engine sends it.
-    let bytes = rmp_serde::to_vec_named(&moved.changes.compact()).unwrap();
+    // Sent compacted with the scene's changes (none), as the window's engine sends it.
+    let sent = || {
+      let change_set = shift_engine::DocumentChangeSet {
+        font: moved.changes.clone(),
+        scene: shift_engine::scene::SceneChangeSet::default(),
+      };
+      Bytes(rmp_serde::to_vec_named(&change_set.compact()).unwrap())
+    };
 
-    let echo = bridge.persist(Bytes(bytes), SaveState::Unsaved).unwrap();
+    let echo = bridge.persist(sent(), SaveState::Unsaved).unwrap();
     assert_eq!(&echo.layers[0].values[1..3], &[30.0, 40.0]);
     assert_eq!(&glyph_state(&mut bridge, "A").values[1..3], &[30.0, 40.0]);
     // A second persist of the same change set no longer matches the font.
-    assert!(
-      bridge
-        .persist(
-          Bytes(rmp_serde::to_vec_named(&moved.changes.compact()).unwrap()),
-          SaveState::Unsaved,
-        )
-        .is_err()
-    );
+    assert!(bridge.persist(sent(), SaveState::Unsaved).is_err());
   }
 
   #[test]

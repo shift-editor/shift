@@ -335,6 +335,7 @@ export class Editor {
     readonly pages: Pages;
     // (undocumented)
     get pan(): Point2D;
+    get panCell(): Signal<Point2D>;
     paste(): Promise<boolean>;
     // (undocumented)
     get pointerCoords(): Signal<Coordinates | null>;

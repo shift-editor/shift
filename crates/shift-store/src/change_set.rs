@@ -4,14 +4,16 @@ use std::collections::{HashMap, HashSet};
 
 use rayon::prelude::*;
 use rusqlite::{OptionalExtension, Transaction, params};
+use shift_engine::scene::SceneChangeSet;
 use shift_font as font;
 
 use crate::{
     ShiftStore, StoreError,
     columns::{AxisRoleColumn, KerningPositionColumn, KerningSideColumns, MetricKindColumn},
     layer::{StoredLayerPayload, encode_layer, store_stored_layer_in_tx, write_layer_in_tx},
+    scene::write_scene_changes_in_tx,
     source::SourceKind,
-    workspace_state::{SaveState, mark_workspace_changed_in_tx},
+    workspace_state::{Revision, SaveState, mark_workspace_changed_in_tx},
     write_mode::WriteMode,
 };
 
@@ -25,7 +27,12 @@ impl ShiftStore {
     /// document opened without one; and [`StoreError::Sqlite`] or a layer-encoding error when the
     /// write fails. Nothing is written on failure.
     pub fn apply_change_set(&mut self, change_set: &font::FontChangeSet) -> Result<(), StoreError> {
-        self.apply_change_set_inner(change_set, None, SaveState::Unsaved)
+        self.apply_change_set_inner(
+            change_set,
+            None,
+            &SceneChangeSet::default(),
+            SaveState::Unsaved,
+        )
     }
 
     /// Applies relational changes and takes touched layer payloads from the
@@ -48,13 +55,41 @@ impl ShiftStore {
         post_font: &font::Font,
         save_state: SaveState,
     ) -> Result<(), StoreError> {
-        self.apply_change_set_inner(change_set, Some(post_font), save_state)
+        self.apply_change_set_inner(
+            change_set,
+            Some(post_font),
+            &SceneChangeSet::default(),
+            save_state,
+        )
+    }
+
+    /// Persists one document edit, its font changes and its scene changes,
+    /// in one transaction, as [`Self::apply_change_set_with_font`] persists a
+    /// font change set.
+    ///
+    /// An edit that changes only the scene marks the document unsaved
+    /// without advancing the revision that addresses font-derived caches, so
+    /// those stay valid.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::apply_change_set_with_font`], and
+    /// [`StoreError::SceneNodeEncoding`] when a node cannot be encoded.
+    pub fn apply_document_change_set(
+        &mut self,
+        change_set: &font::FontChangeSet,
+        post_font: &font::Font,
+        scene: &SceneChangeSet,
+        save_state: SaveState,
+    ) -> Result<(), StoreError> {
+        self.apply_change_set_inner(change_set, Some(post_font), scene, save_state)
     }
 
     fn apply_change_set_inner(
         &mut self,
         change_set: &font::FontChangeSet,
         post_font: Option<&font::Font>,
+        scene: &SceneChangeSet,
         save_state: SaveState,
     ) -> Result<(), StoreError> {
         let changes_font_info = change_set.changes.iter().any(|change| {
@@ -74,7 +109,12 @@ impl ShiftStore {
 
         if let Some(recovery) = self.recovery.as_mut() {
             let post_font = post_font.ok_or(StoreError::RecoveryRequiresPostFont)?;
-            recovery.apply_change_set(change_set, post_font, preserved_font_info.as_ref())?;
+            recovery.apply_change_set(
+                change_set,
+                post_font,
+                scene,
+                preserved_font_info.as_ref(),
+            )?;
             // A claim to match the saved document is checked, never trusted:
             // discarding on a wrong claim would lose every unsaved edit.
             if save_state == SaveState::MatchesSaved && self.recovery_matches_saved()? {
@@ -105,8 +145,9 @@ impl ShiftStore {
                 }
             }
         }
+        write_scene_changes_in_tx(&tx, scene, "main", |_, _| Ok(()), |_, _| Ok(()))?;
         if tracks_workspace {
-            mark_workspace_changed_in_tx(&tx, save_state)?;
+            mark_workspace_changed_in_tx(&tx, save_state, Revision::of(change_set))?;
         }
 
         tx.commit()?;

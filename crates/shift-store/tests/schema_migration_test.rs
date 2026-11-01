@@ -14,6 +14,7 @@ fn downgrade_to_version_2(path: &Path) {
     conn.execute_batch(
         "ALTER TABLE glyphs DROP COLUMN category;
          ALTER TABLE glyphs DROP COLUMN sub_category;
+         DROP TABLE scene_nodes;
          PRAGMA user_version = 2;",
     )
     .unwrap();

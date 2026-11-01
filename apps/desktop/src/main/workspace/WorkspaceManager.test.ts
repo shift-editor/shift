@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { answeringNativeDialogs } from "../dialogs/answeringNativeDialogs";
 import { FontSessionHost } from "./FontSessionHost";
 import { WorkspaceManager } from "./WorkspaceManager";
 import { WorkspaceProcess } from "./WorkspaceProcess";
@@ -17,6 +18,7 @@ describe("WorkspaceManager session ownership", () => {
     const manager = new WorkspaceManager({
       documentsRoot: () => "/tmp",
       applicationName: () => "Shift",
+      nativeDialogs: answeringNativeDialogs(),
     });
     const first = previewSession("workspace_a");
     const second = previewSession("workspace_a");

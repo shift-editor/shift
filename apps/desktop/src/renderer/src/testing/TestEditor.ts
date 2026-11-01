@@ -318,6 +318,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
     const record = this.font.recordForName(glyph.handle.name);
     if (!record) throw new Error("created glyph did not appear in the font directory");
     this.#placeGlyph(record.id);
+    // Placing the glyph is a document edit, persisted like any other.
+    await this.settle();
     return this;
   }
 
@@ -330,6 +332,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
     if (!record) throw new Error(`Opened package has no ${glyphName} glyph`);
     await this.font.loadGlyph(record.id);
     this.#placeGlyph(record.id);
+    // Placing the glyph is a document edit, persisted like any other.
+    await this.settle();
     return this;
   }
 
@@ -374,14 +378,6 @@ export class TestEditor extends Editor implements EditorTestSurface {
     const directory = mkdtempSync(join(tmpdir(), "shift-saved-"));
     this.#temporaryDirectories.push(directory);
     return this.saveAs(join(directory, "Saved.shift"));
-  }
-
-  /** Closes the clean workspace and permanently disposes this test stack. */
-  async closeSession(): Promise<void> {
-    await this.settle();
-    await this.#stack.closeWorkspace();
-    this.destroy();
-    this.#stack.dispose();
   }
 
   /** Adds another glyph to the workspace font and loads its local model. */
@@ -718,6 +714,12 @@ export class TestEditor extends Editor implements EditorTestSurface {
     await this.clickLocal(position.x, position.y, modifiers);
   }
 
+  async clickTextAt(position: Point2D, modifiers?: Modifiers): Promise<void> {
+    const run = this.#requireTextRun();
+    const screen = this.sceneToScreen(this.toScene(run, localPoint(position.x, position.y)));
+    await this.click(screen.x, screen.y, modifiers);
+  }
+
   async clickAtScreen(position: ScreenPoint, modifiers?: Modifiers): Promise<void> {
     await this.click(position.x, position.y, modifiers);
   }
@@ -926,6 +928,13 @@ export class TestEditor extends Editor implements EditorTestSurface {
   moveText(to: Point2D): void {
     const run = this.#requireTextRun();
     this.scene.updateNode({ id: run.id, position: to });
+  }
+
+  setTextShaping(shaping: boolean): void {
+    const run = this.#requireTextRun();
+    this.history.capture(shaping ? "Turn shaping on" : "Turn shaping off", () =>
+      this.text.setShaping(run.runId, shaping),
+    );
   }
 
   #requireTextRun(): TextRunNode {

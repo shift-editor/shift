@@ -81,8 +81,10 @@ test("reopens a saved document on the glyph it was editing after forced terminat
   const reopened = await recoveryApp.crashAndRecoverWindow(glyph.glyphId);
 
   await waitForEditorReady(reopened, glyph.glyphId);
+  // Opening the glyph placed it on a glyph page, a scene edit kept as unsaved
+  // work like any other, so the recovered document is unsaved.
   expect(await new EditorDriver(reopened, recoveryApp.app).documentState()).toMatchObject({
-    dirty: false,
+    dirty: true,
   });
 });
 

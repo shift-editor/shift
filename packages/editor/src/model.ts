@@ -25,6 +25,7 @@ export { Glyph, GlyphLayer, GlyphRenderModel } from "./lib/model/Glyph";
 export { anchorKind, type AnchorKind } from "./lib/wasm/anchors";
 export {
   loadEngine,
+  type EditRecording,
   type EditablePair,
   type EngineEdit,
   type EngineKerningPair,

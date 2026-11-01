@@ -1,6 +1,7 @@
 import type { Editor } from "@shift/editor";
 import { computed, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
 import type { GlyphNode, PageNode } from "@shift/editor/types";
+import type { EditLocation } from "@shift/wasm/protocol";
 import type { GlyphId, NodeId } from "@shift/types";
 import { CANVAS_PATH, glyphIdFromPath } from "@/lib/editorRoute";
 import type { StoredTab } from "@/lib/workspace/documentViews";
@@ -45,7 +46,10 @@ export interface WindowTabsView {
 export interface OpenedGlyph {
   /** The edited glyph node, or null when the glyph could not be shown. */
   readonly node: GlyphNode | null;
-  /** True when the glyph was newly placed, so the view should fit it; false for a tab already open. */
+  /**
+   * True when the view should fit the glyph: the first time this window
+   * shows its page, newly placed or kept from an earlier session.
+   */
   readonly placed: boolean;
 }
 
@@ -78,6 +82,8 @@ export class WindowTabs {
   readonly #tabsCell: Signal<readonly WindowTab[]>;
   readonly #selectedGlyphCell: WritableSignal<GlyphId | null>;
   readonly #selectionPageIdCell: WritableSignal<NodeId | null>;
+  // non-reactive: the glyph pages this window has fitted the view to, read only when a glyph opens
+  readonly #framed = new Set<NodeId>();
   #nextId = 1;
 
   constructor(editor: Editor) {
@@ -145,6 +151,46 @@ export class WindowTabs {
   /** Returns the tab showing glyph `glyphId`, or null when it has none. */
   glyphTab(glyphId: GlyphId): MovableTab | null {
     return this.#movable().find((tab) => tab.kind === "glyph" && tab.glyphId === glyphId) ?? null;
+  }
+
+  /**
+   * Returns the tab that holds `pageId`: the overview for its selection
+   * page, or the page or glyph tab open on it; null when none does.
+   */
+  tabHolding(pageId: NodeId): WindowTab | null {
+    if (pageId === this.#selectionPageIdCell.peek()) return GLYPHS_TAB;
+
+    return this.#movable().find((tab) => tab.pageId === pageId) ?? null;
+  }
+
+  /**
+   * Opens the tab for where an undo or redo was made when it is closed, and
+   * returns it: the tab holding its page, else a new page tab, or a glyph tab
+   * for a glyph page; when closing a glyph tab took the page with it, the
+   * glyph's tab again. Null when neither page nor glyph is left.
+   */
+  reopenTabFor(location: EditLocation): WindowTab | null {
+    const page = this.#editor.scene.nodeOfKind(location.pageId ?? null, "page");
+    if (page) return this.tabHolding(page.id) ?? this.#reopenPageTab(page);
+
+    const [glyphId] = location.glyphIds;
+    if (!glyphId) return null;
+
+    this.openGlyph(glyphId);
+    return this.glyphTab(glyphId);
+  }
+
+  /**
+   * Has `show` show the tab for each undo or redo's page, as the window's
+   * navigation shows any tab.
+   *
+   * @returns a function that stops following.
+   */
+  followReveals(show: (tab: WindowTab) => void): () => void {
+    return this.#editor.pages.onReveal((location) => {
+      const tab = this.reopenTabFor(location);
+      if (tab) show(tab);
+    });
   }
 
   /** Returns the page's tab, opening one after the last tab when it has none. */
@@ -323,14 +369,84 @@ export class WindowTabs {
       this.#editor.pages.activate(open.pageId);
       const node = this.#editor.scene.first("glyph");
       if (node) this.#editor.enterNode(node.id);
-      return { node, placed: false };
+      // A tab restored from view memory shows a page this window has not
+      // framed yet, so the view fits it as if newly placed.
+      return { node, placed: this.#frame(open.pageId) };
+    }
+
+    // The document may keep a glyph page for this glyph from an earlier
+    // session, whose tabs this window does not have: show it as it was left.
+    const kept = this.#keptGlyphPage(glyphId);
+    if (kept) {
+      this.#openedCell.set([
+        ...this.#movable(),
+        { kind: "glyph", id: this.#mintId(), pageId: kept.page.id, glyphId },
+      ]);
+      this.#editor.pages.activate(kept.page.id);
+      this.#editor.enterNode(kept.node.id);
+      return { node: kept.node, placed: this.#frame(kept.page.id) };
     }
 
     const page = this.#editor.pages.createGlyphPage();
     const node = this.#editor.openGlyphInText(glyphId, page);
     const tab: MovableTab = { kind: "glyph", id: this.#mintId(), pageId: page.id, glyphId };
     this.#openedCell.set([...this.#movable(), tab]);
-    return { node, placed: true };
+    return { node, placed: this.#frame(page.id) };
+  }
+
+  /**
+   * A glyph page in the document that shows `glyphId` and no tab holds, nor
+   * the overview, with its glyph node.
+   */
+  #keptGlyphPage(glyphId: GlyphId): { readonly page: PageNode; readonly node: GlyphNode } | null {
+    const scene = this.#editor.scene;
+    const held = new Set(this.#movable().map((tab) => tab.pageId));
+    const overview = this.#selectionPageIdCell.peek();
+    if (overview) held.add(overview);
+    for (const page of scene.pages()) {
+      if (page.role !== "glyph" || held.has(page.id)) continue;
+
+      const node = this.#glyphOn(page.id);
+      if (node?.glyphId === glyphId) return { page, node };
+    }
+    return null;
+  }
+
+  /** A new tab for `page`: its page tab, or a glyph tab for a glyph page. */
+  #reopenPageTab(page: PageNode): WindowTab | null {
+    if (page.role !== "glyph") return this.openPage(page.id);
+
+    const glyph = this.#glyphOn(page.id);
+    if (!glyph) return null;
+
+    const tab: MovableTab = {
+      kind: "glyph",
+      id: this.#mintId(),
+      pageId: page.id,
+      glyphId: glyph.glyphId,
+    };
+    this.#openedCell.set([...this.#movable(), tab]);
+    return tab;
+  }
+
+  /** The glyph node a glyph page shows, in its one text run. */
+  #glyphOn(pageId: NodeId): GlyphNode | null {
+    const run = this.#editor.scene.children(pageId).find((node) => node.kind === "textRun");
+    if (run?.kind !== "textRun") return null;
+
+    return this.#editor.nodeDefinition("textRun").childGlyph(run);
+  }
+
+  /**
+   * Whether the view should fit `pageId` now: the first time this window
+   * shows it, unless the page has a camera to show it with, such as one the
+   * window kept from an earlier session.
+   */
+  #frame(pageId: NodeId): boolean {
+    if (this.#framed.has(pageId)) return false;
+
+    this.#framed.add(pageId);
+    return !this.#editor.pages.remembersCamera(pageId);
   }
 
   /** The page and glyph tabs, as {@link tabsCell} resolves them now. */

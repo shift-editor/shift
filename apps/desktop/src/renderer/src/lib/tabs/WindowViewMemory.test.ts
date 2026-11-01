@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { asNodeId, type GlyphId } from "@shift/types";
 import { signal } from "@shift/editor/signals";
+import { screenVector } from "@shift/editor/spaces";
 import { useTestEditor } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
 import { DocumentViews } from "@/lib/workspace/documentViews";
@@ -56,6 +57,66 @@ describe("window tabs reopen with the window", () => {
 
     expect(tabsOf(reopened.tabs)).toEqual(before);
     expect(editor.shownPageId()).toBe(page.id);
+  });
+
+  it("reopens each page's camera, a glyph page's too, without refitting the glyph", async () => {
+    const views = new DocumentViews(memoryStorage());
+    const first = rememberedWindow(editor, views);
+    await editor.addGlyph("B", 66);
+    const page = editor.addPage("Proofs");
+    first.tabs.openPage(asNodeId(page.id));
+    editor.showPage(page.id);
+    editor.setZoom(2);
+    editor.panBy(screenVector(40, 60));
+    const pageCamera = { zoom: editor.zoomLevel(), offset: editor.canvasOffset() };
+    first.tabs.openGlyph(editor.glyphNamed("B")!.id);
+    editor.setZoom(3);
+    editor.panBy(screenVector(-20, 10));
+    const glyphCamera = { zoom: editor.zoomLevel(), offset: editor.canvasOffset() };
+    first.memory.flush();
+
+    // A window reloaded over the same document, its view reset.
+    editor.showPage(editor.pageList()[0]!.id);
+    editor.setZoom(1);
+    const reopened = rememberedWindow(editor, views);
+
+    expect(editor.shownPageId()).toBe(first.tabs.glyphTab(editor.glyphNamed("B")!.id)!.pageId);
+    expect({ zoom: editor.zoomLevel(), offset: editor.canvasOffset() }).toEqual(glyphCamera);
+    expect(reopened.tabs.openGlyph(editor.glyphNamed("B")!.id).placed).toBe(false);
+    editor.showPage(page.id);
+    expect({ zoom: editor.zoomLevel(), offset: editor.canvasOffset() }).toEqual(pageCamera);
+  });
+
+  it("saves a camera change on its own, after the quiet period", async () => {
+    const views = new DocumentViews(memoryStorage());
+    const tabs = new WindowTabs(editor.asEditor());
+    const memory = new WindowViewMemory(editor.asEditor(), tabs, {
+      keyCell: signal<string | null>(DOCUMENT),
+      views,
+      delayMs: 10,
+    });
+    memory.restore();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const shown = asNodeId(editor.shownPageId()!);
+
+    editor.setZoom(2.5);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    expect(views.read(DOCUMENT)?.cameras?.[shown]?.zoom).toBe(2.5);
+    memory.dispose();
+  });
+
+  it("drops the camera of a page that no longer exists", () => {
+    const views = new DocumentViews(memoryStorage());
+    const page = asNodeId(editor.addPage().id);
+    const gone = asNodeId("node_gone");
+    const camera = { pan: { x: 10, y: 20 }, zoom: 2 };
+    views.write(DOCUMENT, { cameras: { [page]: camera, [gone]: camera } });
+
+    rememberedWindow(editor, views).memory.flush();
+
+    expect(Object.keys(views.read(DOCUMENT)?.cameras ?? {})).not.toContain(gone);
+    expect(views.read(DOCUMENT)?.cameras?.[page]).toEqual(camera);
   });
 
   it("does not mark the document unsaved when tabs or pages switch", async () => {

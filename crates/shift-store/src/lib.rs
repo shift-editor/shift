@@ -15,6 +15,7 @@ mod layer;
 mod numeric;
 mod reader;
 mod recovery;
+mod scene;
 mod schema;
 mod source;
 mod sql_text;

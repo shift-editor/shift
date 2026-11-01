@@ -63,7 +63,7 @@ export class RunText {
         track(editor.font.glyphEntriesCell);
         // A glyph the text shows finished loading into the engine.
         track(owner.glyphsLoadedCell);
-        const request = layoutRequest(record.items);
+        const request = layoutRequest(record);
         try {
           const placed =
             editor.font.layoutText(request, location, sourceId) ??
@@ -242,15 +242,15 @@ export class RunText {
   }
 }
 
-/** The layout request for a run's items, shaped with the font's default features. */
-function layoutRequest(items: readonly TextItem[]): LayoutRequest {
+/** The layout request for a run, shaped with the font's default features unless shaping is off. */
+function layoutRequest(record: TextRunRecord): LayoutRequest {
   return {
-    units: items.map(layoutUnit),
+    units: record.items.map(layoutUnit),
     options: {
       language: null,
       script: null,
       features: [],
-      shaping: true,
+      shaping: record.shaping,
       align: null,
       lineHeight: { kind: "auto" },
       width: null,
