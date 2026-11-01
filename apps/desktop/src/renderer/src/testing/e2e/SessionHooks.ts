@@ -40,9 +40,7 @@ export class SessionHooks {
   async fontRecordsOf(directory: string): Promise<EngineStorelessRecords> {
     const { EngineSession } = await loadEngine();
     const bytes = Uint8Array.from(atob(directory), (character) => character.charCodeAt(0));
-    const session = EngineSession.open(bytes, () => {
-      throw new Error("a font-record read loads no layers");
-    });
+    const session = EngineSession.openStoreless(bytes);
     try {
       return session.storelessRecords();
     } finally {

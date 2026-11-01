@@ -28,6 +28,7 @@ import {
   type FontChangeFlag,
   type ParagraphRequest,
   type SceneIntent,
+  type SceneNode,
   type ShapedParagraph,
 } from "@shift/wasm/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
@@ -130,15 +131,18 @@ export class WindowEngine implements FontEngine {
 
     const reader = this.#layers.open(location);
     try {
-      // The session reads layers only while an edit runs, after this open, so
-      // its source can follow the current reader.
+      // Opening reads the scene through the new reader; after that the
+      // session reads only while an edit runs, so its source can follow the
+      // current reader.
+      let opened = false;
       const session = EngineSession.open(
         directory,
-        engineStoreRequest(this.#layers, () => this.#reader()),
+        engineStoreRequest(this.#layers, () => (opened ? this.#reader() : reader)),
       );
       batch(() => {
         this.#close();
         this.#opened = { session, reader, location };
+        opened = true;
         this.#variation.set(session);
         this.#changed(EVERY_CHANGE);
       });
@@ -223,6 +227,11 @@ export class WindowEngine implements FontEngine {
     } finally {
       performance.measure("engine.stageScene", "engine.stageScene.start");
     }
+  }
+
+  /** Every node of the document's scene, unsaved edits included; empty before the engine opens. */
+  sceneNodes(): readonly SceneNode[] {
+    return this.#opened?.session.sceneNodes() ?? [];
   }
 
   /**

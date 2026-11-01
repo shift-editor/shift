@@ -1,14 +1,12 @@
-import { engineOpen, engineReads, engineRelease } from "@shift/wasm/engine";
+import { engineOpenStoreless, engineReads, engineRelease } from "@shift/wasm/engine";
 
 /**
  * The open workspace's font records as the window's engine reads them: the
  * native workspace no longer serves its axes, sources or kerning. Only reads
- * run, so the engine never asks the store for a layer.
+ * run, so the engine needs no store.
  */
 export function engineFontRecords(bridge) {
-  const handle = engineOpen(bridge.workspace.encodedDirectory(), () => {
-    throw new Error("a font-record read loads no layers");
-  });
+  const handle = engineOpenStoreless(bridge.workspace.encodedDirectory());
   try {
     const reads = engineReads(handle);
     return { axes: reads.axes(), sources: reads.sources(), kerning: reads.kerning() };

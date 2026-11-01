@@ -24,6 +24,7 @@ import {
   engineNewAnchorName,
   engineNextGlyphName,
   engineOpen,
+  engineOpenStoreless,
   enginePreload,
   enginePreview,
   engineRedo,
@@ -50,6 +51,7 @@ import type {
   FontChangeFlag,
   ParagraphRequest,
   SceneIntent,
+  SceneNode,
   ShapedParagraph,
   SourceSetWeights,
 } from "@shift/wasm/protocol";
@@ -124,6 +126,17 @@ export class EngineSession {
   }
 
   /**
+   * Opens a session over a font directory with no store behind it: an empty
+   * scene, and every store read refused. For reading a directory's records,
+   * which load nothing.
+   *
+   * @throws When `directory` does not decode to a font.
+   */
+  static openStoreless(directory: Uint8Array): EngineSession {
+    return new EngineSession(engineOpenStoreless(directory));
+  }
+
+  /**
    * Applies `intents` within the open edit and returns every layer they
    * touched and the font-level records they changed.
    *
@@ -187,6 +200,11 @@ export class EngineSession {
   stageScene(intents: readonly SceneIntent[]): EngineStage {
     this.#intents.holdScene(intents);
     return engineStage(this.#handle);
+  }
+
+  /** Every node of the document's scene, each parent before its children, siblings in order. */
+  sceneNodes(): readonly SceneNode[] {
+    return this.#reads.sceneNodes();
   }
 
   /**

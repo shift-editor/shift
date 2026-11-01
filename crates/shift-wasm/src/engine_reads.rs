@@ -25,8 +25,10 @@
 
 use pack::Pack;
 use shift_engine::StoreReadError;
+use shift_engine::scene::SceneNode;
 use shift_font::{
-    Axis, FontChangeFlag, GlyphRecords, MetricValue, MissingKerningOrigin, ResolvedKerning, Source,
+    Axis, FontChangeFlag, GlyphRecords, MetricValue, MissingKerningOrigin, NodeId, ResolvedKerning,
+    Source,
 };
 use shift_wire::KerningSnapshot;
 
@@ -109,6 +111,17 @@ pub trait EngineReads {
     /// never interned, or its sources are missing from the font or form no
     /// model.
     fn atlas_weights(&self, sets: Vec<usize>, external: Vec<f64>) -> Option<Vec<f64>>;
+    /// The document's pages, in list order.
+    fn scene_pages(&self) -> Vec<SceneNode>;
+    /// Every node of the document's scene, each root (pages first among
+    /// them by index) then the nodes under it, each parent before its
+    /// children, siblings in order.
+    fn scene_nodes(&self) -> Vec<SceneNode>;
+    /// The nodes on `page`, each parent before its children, siblings in
+    /// order; not the page itself. Empty for a page the scene lacks.
+    fn page_nodes(&self, page: NodeId) -> Vec<SceneNode>;
+    /// The node with `id`, on any page; null when the scene has none.
+    fn scene_node(&self, id: NodeId) -> Option<SceneNode>;
     /// An external location's design location, through the font's axis
     /// mappings, exactly once: `map_location_with_bases`.
     fn design_location(&self, external: Vec<f64>) -> Vec<f64>;
@@ -177,7 +190,8 @@ mod exports {
 
     use super::{
         Axis, EditablePair, EngineReads, FontChangeFlag, InterpolatedMetrics, KerningSnapshot,
-        ParagraphRequest, ShapedParagraph, Source, SourceSetWeights, engine_reads_request,
+        NodeId, ParagraphRequest, SceneNode, ShapedParagraph, Source, SourceSetWeights,
+        engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::shaping::TextShaping;
@@ -557,6 +571,27 @@ mod exports {
         fn external_location(&self, design: Vec<f64>) -> Vec<f64> {
             let font = self.session.font();
             external_values(font.axes(), &self.variation().mappings, &design)
+        }
+
+        fn scene_pages(&self) -> Vec<SceneNode> {
+            self.session.scene().pages().cloned().collect()
+        }
+
+        fn scene_nodes(&self) -> Vec<SceneNode> {
+            self.session.scene().nodes().into_iter().cloned().collect()
+        }
+
+        fn page_nodes(&self, page: NodeId) -> Vec<SceneNode> {
+            self.session
+                .scene()
+                .descendants(&page)
+                .into_iter()
+                .cloned()
+                .collect()
+        }
+
+        fn scene_node(&self, id: NodeId) -> Option<SceneNode> {
+            self.session.scene().node(&id).cloned()
         }
     }
 

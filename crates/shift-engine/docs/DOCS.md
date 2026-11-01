@@ -2,7 +2,7 @@
 
 <!-- reviewed: 2026-10-31 review-every: 90d -->
 
-The editing session over a partly loaded font. The native workspace runs it against its SQLite store; the renderer will run the same code through WebAssembly against a native reader in its preload. It depends only on `shift-font` and `pack`.
+The editing session over a partly loaded font and the scene it is shown on, and its one undo history. The native workspace runs it against its SQLite store; the renderer runs the same code through WebAssembly against a native reader in its preload. It depends only on `shift-font`, `pack` and `serde`.
 
 ## Architecture Invariants
 
@@ -12,6 +12,8 @@ The editing session over a partly loaded font. The native workspace runs it agai
 - **Architecture Invariant:** A `LayerSource` answers with persisted state. The session combines it with its own loaded layers, which can hold edits not yet persisted, and loading more than an edit needs is always safe.
 - **Architecture Invariant:** Staging and committing are separate. A caller that persists commits only once the write succeeded, so a failed write leaves the session unchanged.
 - **Architecture Invariant:** An edit that would change a placeholder fails with `EngineError::UnloadedLayerMutation`; placeholders are never persisted as authored content.
+- **Architecture Invariant:** The scene (`scene::Scene`: pages, text runs and placed glyphs as typed `SceneNode`s) sits in the session beside the font, never inside it, so export and compilation, which read a `Font`, never see it. Scene edits are `SceneIntent`s (create, update, move and delete a node, set a run's items) and leave a `SceneChangeSet`, each node's value before and after; a refused intent leaves the scene unchanged. Pages are the roots; every other node has a parent that exists and is never its own ancestor; siblings sort by their fractional `index` (`shift_font::index_key`) and then by id. A scene copies in O(1) (`PersistentMap`), like a font. **WHY:** server-side and agent-built pages need scene semantics in Rust, and a typed scene in the one ledger gives undo, unsaved state and persistence for free.
+- **Architecture Invariant:** `EditHistory` is the document's one undo history: each step is a `DocumentChangeSet` (its font and scene changes together) with an `EditLocation`, the page shown when the edit was made (`begin(page)`; for an edit made with no page shown, the page of the first node it changed) and the glyphs and nodes it changed, which undo and redo hand back (`Replayed::location`) so the editor can show that page first. `Recording::Unrecorded` keeps an edit without an undo step (placing a run); the history then matches no saved position. A scene change counts as unsaved like a font change: there is no second unsaved record.
 
 ## Codemap
 
@@ -22,6 +24,9 @@ crates/shift-engine/src/
   residency.rs  -- `LayerResidency`: which directory layers are placeholders
   source.rs     -- `LayerSource`: where unloaded layers are read from
   records.rs    -- `RecordSource`, `RecordCache`; glyph records and the shaper font's source, from loaded layers and the store
+  history.rs    -- `EditHistory`: the one undo history of document edits, `Recording`, `HistoryEntry`, `Replayed`
+  document.rs   -- `DocumentChangeSet` (font and scene changes of one edit), `CompactDocumentChangeSet`, `EditLocation`
+  scene/        -- `Scene`, `SceneNode` and its kinds, `SceneIntent`, `SceneChangeSet`, `SceneError`
   store_reader.rs -- `StoreReader`: the `LayerSource` questions as a request protocol, and `StoreReadError`
 crates/shift-engine/tests/
   session_test.rs -- property test: a partly loaded session edits exactly as a fully loaded font
@@ -34,7 +39,9 @@ crates/shift-engine/tests/
 - `LayerSource` -- a synchronous reader of persisted state: layer content, the glyphs given glyphs' components use (`bases_of`, transitively, without the glyphs themselves), and the glyphs built directly from given glyphs (`composites_of`).
 - `RecordSource` -- what glyph records and the shaper font's source read from the store for layers the session has not loaded: persisted component bases, the layers that carry an anchor marks attach to (`attaching_anchor_layers`), and glyph data's categories. `EngineSession::glyph_records` and `EngineSession::shaper_font_source` answer from loaded layers first, so unsaved edits count, and load nothing.
 - `RecordCache` -- the store's answers a session keeps: glyph data's category by name and codepoints (a pure function of both), and whether each layer the session has not loaded carries an attaching anchor (the store's copy cannot change until an edit loads it). `reading(source)` answers from it and asks `source` only for the rest. **WHY:** asking glyph data for all 10,000 glyphs took about 5 ms and the attaching-anchor read about 13 ms on every shaper source build; a session that evicts layers calls `forget_layers`
-- `StoreReader`, `StoreReaderClient`, `StoreReadError` -- the same questions across a process or module boundary: layers cross as one MessagePack blob (`pack::Bytes`), ids by the names each message carries.
+- `StoreReader`, `StoreReaderClient`, `StoreReadError` -- the same questions across a process or module boundary: layers and the scene's nodes (`scene_nodes`, read once when an engine opens) cross as one MessagePack blob each (`pack::Bytes`), ids by the names each message carries.
+- `Scene`, `SceneNode`, `SceneIntent`, `SceneChangeSet` -- the document's canvas, its nodes, the edits a caller asks for, and what an edit changed.
+- `DocumentChangeSet`, `EditLocation`, `EditHistory` -- one edit's font and scene changes, where it was made, and the history of them.
 - `LayerResidency` -- which directory layers are placeholders.
 - `EngineError`, `LoadError`, `ApplyError` -- a failed stage (the session is unchanged), a failed load (layers loaded before the failure stay loaded), and either from `apply`.
 
@@ -65,4 +72,5 @@ When a new intent reads glyphs other than the layers it names, extend `load_read
 - `shift-font` -- the font model and the intents a session applies.
 - `shift-workspace` -- runs `FontWorkspace` on an `EngineSession`, with its store as the `LayerSource`.
 - `shift-store` -- the SQLite store the native workspace reads layers from.
-- `shift-wasm` -- the WebAssembly build the renderer will run this session through.
+- `shift-wasm` -- the WebAssembly build the renderer runs this session through.
+- `shift-store` -- stores the scene one row per node (`scene_nodes`).

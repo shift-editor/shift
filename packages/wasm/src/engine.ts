@@ -85,6 +85,7 @@ export {
   engineNewAnchorName,
   engineNextGlyphName,
   engineOpen,
+  engineOpenStoreless,
   enginePreload,
   enginePreview,
   engineRedo,

@@ -14,7 +14,7 @@ use std::rc::Rc;
 use js_sys::{Array, Float64Array, Function, Object, Reflect, Uint8Array};
 use pack::{CarryingNames, Packed};
 use serde::Serialize;
-use shift_engine::scene::{SceneChangeSet, SceneIntent};
+use shift_engine::scene::{Scene, SceneChangeSet, SceneIntent, SceneNode};
 use shift_engine::{
     ApplyError, EditHistory, EditLocation, EngineSession, LayerSource, RecordCache, RecordSource,
     Recording, Replayed, StoreReadError, StoreReaderClient,
@@ -461,19 +461,47 @@ pub(crate) fn with_engine<T>(
 }
 
 /// Opens a session over a font directory, as named MessagePack from the
-/// store's reader, with every layer a placeholder; it loads layers through
-/// `source`, a `StoreRequest`. Returns its handle.
+/// store's reader, with every layer a placeholder and the document's scene,
+/// which it reads through `source` first; it loads layers through `source`,
+/// a `StoreRequest`, too. Returns its handle.
 ///
 /// # Errors
 ///
-/// Fails when `directory` does not decode to a font.
+/// Fails when `directory` does not decode to a font, or the scene cannot be
+/// read or decoded.
 #[wasm_bindgen(js_name = engineOpen)]
 pub fn engine_open(
     directory: &[u8],
     #[wasm_bindgen(unchecked_param_type = "StoreRequest")] source: Function,
 ) -> Result<u32, JsError> {
     let font: Font = rmp_serde::from_slice(directory)?;
-    let session = EngineSession::open_directory(font);
+    let nodes = HostLayers(&source)
+        .client()
+        .scene_nodes()
+        .map_err(js_error)?
+        .map_err(js_error)?;
+    let nodes: Vec<SceneNode> = rmp_serde::from_slice(&nodes.0)?;
+    let session =
+        EngineSession::open_directory(font).with_scene(nodes.into_iter().collect::<Scene>());
+    open(session, source)
+}
+
+/// Opens a session over a font directory, as [`engine_open`] does, with no
+/// store behind it: an empty scene, and every store read refused. For reading
+/// a directory's records, which load nothing. Returns its handle.
+///
+/// # Errors
+///
+/// Fails when `directory` does not decode to a font.
+#[wasm_bindgen(js_name = engineOpenStoreless)]
+pub fn engine_open_storeless(directory: &[u8]) -> Result<u32, JsError> {
+    let font: Font = rmp_serde::from_slice(directory)?;
+    let source = Function::new_no_args("throw new Error('this engine has no store to read');");
+    open(EngineSession::open_directory(font), source)
+}
+
+/// Keeps `session`, reading through `source`, and returns its handle.
+fn open(session: EngineSession, source: Function) -> Result<u32, JsError> {
     ENGINES.with_borrow_mut(|engines| {
         let handle = u32::try_from(engines.len())?;
         engines.push(Some(Engine {
