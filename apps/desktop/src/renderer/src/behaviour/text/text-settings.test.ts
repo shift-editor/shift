@@ -44,9 +44,11 @@ describe("features turned on or off in the text", () => {
   });
 
   it("says why the font's features cannot be listed, rather than listing none", () => {
-    editor.failFeatureLists("the shaper font could not be read");
+    editor.failFeatureLists("the feature code has errors");
 
-    expect(() => editor.textFeatures()).toThrow("the shaper font could not be read");
+    expect(editor.featureListFailure()).toBe(
+      "This font has no shaper yet, so its features can't be listed.",
+    );
   });
 });
 

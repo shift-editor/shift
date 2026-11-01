@@ -24,3 +24,4 @@ export type {
   TextRunSettings,
 } from "./types/text";
 export type { FeatureSubstitution, FontFeature } from "@shift/wasm/protocol";
+export { featureReadMessage } from "./lib/text/featureErrors";

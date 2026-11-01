@@ -24,6 +24,7 @@ import {
   type ScreenVector,
 } from "@shift/editor/spaces";
 import { Editor } from "@shift/editor";
+import { featureReadMessage } from "@shift/editor/text";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import { effect } from "@shift/editor/signals";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
@@ -324,8 +325,13 @@ export class TestEditor extends Editor implements EditorTestSurface {
     this.#stack.engine.failNextPreload(new Error(message));
   }
 
-  failFeatureLists(message: string): void {
-    this.#stack.engine.failFeatureLists(new Error(message));
+  failFeatureLists(reason: string): void {
+    this.#stack.engine.failFeatureLists(reason);
+  }
+
+  featureListFailure(): string | null {
+    const listing = this.text.featuresCell.peek();
+    return listing.kind === "failed" ? featureReadMessage(listing.error) : null;
   }
 
   textLayoutFailure(): TextLayoutFailureRead | null {
