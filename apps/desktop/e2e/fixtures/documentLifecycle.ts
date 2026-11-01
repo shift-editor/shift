@@ -111,21 +111,26 @@ export async function glyphIdForName(page: Page, name: string): Promise<GlyphId>
  * Focuses `page`'s window and waits until the OS reports it focused, for native menu items,
  * which act on the focused window. Focus is the menu's contract, so these helpers cannot avoid
  * it. macOS does not hand focus to the test app while another app is in front, so on a Mac the
- * app first takes the front (`app.focus({ steal: true })`).
+ * app first takes the front once (`app.focus({ steal: true })`); the poll then only focuses the
+ * window, so a slow focus change does not keep pulling the app in front of the user.
  */
 export async function focusWindow(page: Page, electronApp: ElectronApplication): Promise<void> {
   const browserWindow = await electronApp.browserWindow(page);
   const windowId = await browserWindow.evaluate((window) => window.id);
   await browserWindow.dispose();
 
+  // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- drives Electron main (app focus), not the renderer
+  await electronApp.evaluate(({ app }) => {
+    if (process.platform === "darwin") app.focus({ steal: true });
+  });
+
   await expect
     .poll(
       () =>
         // oxlint-disable-next-line shift/no-page-evaluate-in-specs -- reads or drives Electron main (window focus), not the renderer
-        electronApp.evaluate(({ app, BrowserWindow }, id) => {
+        electronApp.evaluate(({ BrowserWindow }, id) => {
           const window = BrowserWindow.fromId(id);
           if (!window) throw new Error(`Shift window ${id} is not open`);
-          if (process.platform === "darwin") app.focus({ steal: true });
           window.focus();
           return window.isFocused();
         }, windowId),
