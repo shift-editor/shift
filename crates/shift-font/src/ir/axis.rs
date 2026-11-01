@@ -723,6 +723,14 @@ impl Location {
         self.values.get(&axis_id).copied()
     }
 
+    /// The location's value on each of `axes`, in their order, NaN for an
+    /// axis it holds no value on: a location as the editor's calls carry it.
+    pub fn values_in(&self, axes: &[Axis]) -> Vec<f64> {
+        axes.iter()
+            .map(|axis| self.get(axis.id()).unwrap_or(f64::NAN))
+            .collect()
+    }
+
     /// Returns this location's value on `axis`, or the axis default when the
     /// location has none.
     pub fn value_on(&self, axis: &Axis) -> f64 {
