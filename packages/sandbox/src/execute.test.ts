@@ -220,6 +220,9 @@ const capabilities: ShiftCapabilities = {
     async setCaret({ runId }) {
       return observation(textRunView(runId));
     },
+    async setOptions({ runId }) {
+      return observation(textRunView(runId));
+    },
     async delete({ runId }) {
       textRunView(runId);
       return observation(null);
@@ -227,8 +230,23 @@ const capabilities: ShiftCapabilities = {
   },
 };
 
+const TEXT_RUN_OPTIONS = {
+  shaping: true,
+  features: {},
+  language: null,
+  script: null,
+  lineHeight: null,
+  align: null,
+};
+
 function textRunSummary(pageId = asNodeId("node-page")) {
-  return { id: asNodeId("run-a"), pageId, text: "Hamburg", at: { x: 0, y: 0 } };
+  return {
+    id: asNodeId("run-a"),
+    pageId,
+    text: "Hamburg",
+    at: { x: 0, y: 0 },
+    options: TEXT_RUN_OPTIONS,
+  };
 }
 
 function textRunView(runId: ReturnType<typeof asNodeId>) {
@@ -237,6 +255,7 @@ function textRunView(runId: ReturnType<typeof asNodeId>) {
     id: runId,
     pageId: asNodeId("node-page"),
     at: { x: 0, y: 0 },
+    options: TEXT_RUN_OPTIONS,
     items: [{ id: "item-h", text: "H" }],
     glyphs: [],
     advance: 0,
@@ -507,13 +526,14 @@ describe("Shift sandbox executes bounded code over live capabilities", () => {
         create: record(capabilities.text.create),
         setText: record(capabilities.text.setText),
         setCaret: record(capabilities.text.setCaret),
+        setOptions: record(capabilities.text.setOptions),
         delete: record(capabilities.text.delete),
       },
     };
 
     const result = await executeShiftCode(
       host,
-      "async () => { const created = await shift.text.create({ windowId: 7, text: 'Hi/A', at: { x: 10, y: 20 } }); const runId = created.value.id; await shift.text.setText({ windowId: 7, runId, text: 'Hamburg' }); await shift.text.setCaret({ windowId: 7, runId, position: 2, selection: { start: 0, end: 2 } }); await shift.text.delete({ windowId: 7, runId }); try { await shift.text.get({ windowId: 7, runId: 'gone' }); } catch (error) { return error.name; } }",
+      "async () => { const created = await shift.text.create({ windowId: 7, text: 'Hi/A', at: { x: 10, y: 20 } }); const runId = created.value.id; await shift.text.setText({ windowId: 7, runId, text: 'Hamburg' }); await shift.text.setCaret({ windowId: 7, runId, position: 2, selection: { start: 0, end: 2 } }); await shift.text.setOptions({ windowId: 7, runId, options: { features: { liga: false, ss01: null }, lineHeight: 1.5 } }); await shift.text.delete({ windowId: 7, runId }); try { await shift.text.get({ windowId: 7, runId: 'gone' }); } catch (error) { return error.name; } }",
     );
 
     expect(result).toBe("TextRunNotFoundError");
@@ -521,6 +541,11 @@ describe("Shift sandbox executes bounded code over live capabilities", () => {
       { windowId: 7, text: "Hi/A", at: { x: 10, y: 20 } },
       { windowId: 7, runId: "run-a", text: "Hamburg" },
       { windowId: 7, runId: "run-a", position: 2, selection: { start: 0, end: 2 } },
+      {
+        windowId: 7,
+        runId: "run-a",
+        options: { features: { liga: false, ss01: null }, lineHeight: 1.5 },
+      },
       { windowId: 7, runId: "run-a" },
     ]);
   });

@@ -2,6 +2,7 @@ import {
   PageNotFoundError,
   ProofTextError,
   TextCaretError,
+  TextRunOptionsError,
   TextRunNotFoundError,
   UnknownGlyphNameError,
   type PagePoint,
@@ -10,6 +11,7 @@ import {
   type TextRunDeleteInput,
   type TextRunGetInput,
   type TextRunSetCaretInput,
+  type TextRunSetOptionsInput,
   type TextRunSetTextInput,
   type TextRunsInput,
   type TextRunSummary,
@@ -125,9 +127,40 @@ export class ShiftTextRuns {
     return null;
   }
 
+  /**
+   * Changes some of a run's options in one undo step, as the Text section
+   * does: `Text.setSettings`, which Rust checks.
+   *
+   * @throws {TextRunNotFoundError} for an unknown run.
+   * @throws {TextRunOptionsError} for an option Rust refuses; the run is unchanged.
+   */
+  async setOptions({
+    runId,
+    options,
+  }: ShiftReadInput<TextRunSetOptionsInput>): Promise<TextRunView> {
+    const node = this.#run(runId);
+    this.#editor.history.capture("Set text options", () => {
+      try {
+        this.#editor.text.setSettings(node.runId, options);
+      } catch (error) {
+        // The run exists, so the engine refused the settings themselves.
+        throw new TextRunOptionsError(error instanceof Error ? error.message : String(error));
+      }
+    });
+    return this.get({ runId });
+  }
+
   #summary(node: TextRunNode, page: PageNode): TextRunSummary {
-    const text = this.#editor.text.formatItems(this.#editor.text.items(node));
-    return { id: node.id, pageId: page.id, text, at: { x: node.position.x, y: node.position.y } };
+    const run = this.#editor.text.run(node.runId);
+    if (!run) throw new TextRunNotFoundError(node.id);
+
+    return {
+      id: node.id,
+      pageId: page.id,
+      text: this.#editor.text.formatItems(run.items),
+      at: { x: node.position.x, y: node.position.y },
+      options: this.#reader.textRunOptions(run),
+    };
   }
 
   #view(runId: NodeId): TextRunView {

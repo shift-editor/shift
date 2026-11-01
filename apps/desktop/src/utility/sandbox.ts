@@ -61,6 +61,7 @@ const capabilities: ShiftCapabilities = {
     create: (input) => host.call("shift.text.create", input),
     setText: (input) => host.call("shift.text.setText", input),
     setCaret: (input) => host.call("shift.text.setCaret", input),
+    setOptions: (input) => host.call("shift.text.setOptions", input),
     delete: (input) => host.call("shift.text.delete", input),
   },
 };

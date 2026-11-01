@@ -22,6 +22,7 @@ export type {
   TextLayoutFailure,
   TextRunRecord,
   TextRunSettings,
+  TextRunSettingsChange,
 } from "./types/text";
 export type { FeatureSubstitution, FontFeature } from "@shift/wasm/protocol";
 export { featureReadMessage } from "./lib/text/featureErrors";

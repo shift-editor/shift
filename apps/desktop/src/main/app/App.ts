@@ -1200,6 +1200,8 @@ export class App {
           this.#windowForAgentRequest(windowId).agent.text("text.setText", input),
         setCaret: ({ windowId, ...input }) =>
           this.#windowForAgentRequest(windowId).agent.text("text.setCaret", input),
+        setOptions: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.text("text.setOptions", input),
         delete: ({ windowId, ...input }) =>
           this.#windowForAgentRequest(windowId).agent.text("text.delete", input),
       },

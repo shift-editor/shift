@@ -170,6 +170,19 @@ export const shiftInputSchemas = {
     position: textPosition,
     selection: z.strictObject({ start: textPosition, end: textPosition }).optional(),
   }),
+  "text.setOptions": z.strictObject({
+    windowId,
+    ifFontRevision,
+    runId: nodeId,
+    options: z.strictObject({
+      shaping: z.boolean().optional(),
+      features: z.record(z.string().max(64), z.boolean().nullable()).optional(),
+      language: z.string().max(64).nullable().optional(),
+      script: z.string().max(64).nullable().optional(),
+      lineHeight: z.number().finite().nullable().optional(),
+      align: z.enum(["start", "end", "left", "center", "right"]).nullable().optional(),
+    }),
+  }),
   "text.delete": z.strictObject({ windowId, ifFontRevision, runId: nodeId }),
   "layers.get": z.union([
     z.strictObject({ windowId, ifFontRevision, ...layerSelector.byId }),

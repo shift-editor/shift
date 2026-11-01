@@ -43,6 +43,7 @@ import type {
   TextRunDeleteInput,
   TextRunGetInput,
   TextRunSetCaretInput,
+  TextRunSetOptionsInput,
   TextRunSetTextInput,
   TextRunsInput,
   TextRunSummary,
@@ -176,6 +177,10 @@ export type SandboxHostCallMap = {
   };
   "shift.text.setCaret": {
     request: TextRunSetCaretInput;
+    response: ShiftObservation<TextRunView>;
+  };
+  "shift.text.setOptions": {
+    request: TextRunSetOptionsInput;
     response: ShiftObservation<TextRunView>;
   };
   "shift.text.delete": {

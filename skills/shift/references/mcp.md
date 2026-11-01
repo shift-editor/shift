@@ -128,7 +128,8 @@ async () => {
 - `create`, `setText`, and `delete` are one undo step each and mark the document unsaved, as typing does; tell the user they can undo them. `setCaret` is neither.
 - Pass `ifFontRevision` to write only if the font is still the one you read: otherwise the call fails with `FontChangedError` and changes nothing. Other failures are typed: `TextRunNotFoundError`, `PageNotFoundError`, `ProofTextError`, `TextCaretError`.
 - Inside `shift.read`, `read.text.runs()` and `read.text.get()` read at the bound revision; writes are not part of a read scope.
-- Run options (OpenType features, language, script, line height, alignment) cannot be written yet.
+- `text.setOptions({ runId, options })` changes a run's options as the Text section does, in one undo step: `shaping`, `features` (`{ liga: false, ss01: true }`; `null` returns a tag to the font's default), `language` (BCP 47, such as `tr`), `script` (ISO 15924, such as `Arab`), `lineHeight` (ems; `null` for the font's spacing) and `align` (`start`, `end`, `left`, `center`, `right`, or `null`). Fields left out keep their values. Options the engine cannot read fail with `TextRunOptionsError` and change nothing. Every run read returns its current `options`; read `glyphs` and `baselines` again to see the effect.
+- On a glyph tab's own page, runs are navigation: writing them never marks the document unsaved. On the user's pages, it does.
 
 ## Interpret what you read
 

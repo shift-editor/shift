@@ -118,6 +118,9 @@ const capabilities: ShiftCapabilities = {
     async setCaret() {
       throw new Error("No open Shift window");
     },
+    async setOptions() {
+      throw new Error("No open Shift window");
+    },
     async delete() {
       throw new Error("No open Shift window");
     },

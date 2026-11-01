@@ -22,6 +22,7 @@ import type {
   TextLayoutFailure,
   TextRunRecord,
   TextRunSettings,
+  TextRunSettingsChange,
 } from "../../types/text";
 import {
   characterTextItem,
@@ -389,6 +390,41 @@ export class Text {
    */
   setAlign(id: RunId, align: TextAlign | null): void {
     this.#setSetting(id, "align", align);
+  }
+
+  /**
+   * Changes several of a run's settings in one scene edit: each field given,
+   * and for `features`, each tag given, `null` returning it to the font's
+   * default. The line height is clamped as {@link setLineHeight} clamps it.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture. Rust checks
+   * the settings (`RunSettings::check`) and refuses the edit for a feature
+   * tag, language or script it cannot read.
+   *
+   * @throws When the engine refuses the settings; the run is unchanged.
+   */
+  setSettings(id: RunId, changes: TextRunSettingsChange): void {
+    const run = this.run(id);
+    if (!run) return;
+
+    const features = { ...run.features };
+    for (const [tag, on] of Object.entries(changes.features ?? {})) {
+      if (on === null) delete features[tag];
+      else features[tag] = on;
+    }
+    const lineHeight = changes.lineHeight === undefined ? run.lineHeight : changes.lineHeight;
+    this.#editor.scene.setRunSettings(
+      id,
+      runSettingsOf({
+        shaping: changes.shaping ?? run.shaping,
+        features,
+        language: changes.language === undefined ? run.language : changes.language,
+        script: changes.script === undefined ? run.script : changes.script,
+        lineHeight: lineHeight === null ? null : Math.max(MIN_LINE_HEIGHT, lineHeight),
+        align: changes.align === undefined ? run.align : changes.align,
+      }),
+    );
   }
 
   #setSetting<K extends keyof TextRunSettings>(id: RunId, key: K, value: TextRunSettings[K]): void {

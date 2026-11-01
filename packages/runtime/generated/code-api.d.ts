@@ -931,6 +931,41 @@ export interface TextRunSetCaretInput extends ShiftTarget {
     end: number;
   };
 }
+/** How a run's lines line up: to where their direction starts or ends, or to a side. */
+export type TextRunAlign = "start" | "end" | "left" | "center" | "right";
+/** How a canvas text run is shaped and set, as the Text section shows it. */
+export interface TextRunOptions {
+  /** Whether the font's feature code shapes the text; off sets each item as typed. */
+  shaping: boolean;
+  /** Features forced on (`true`) or off (`false`) by tag; a tag left out keeps the font's default. */
+  features: Record<string, boolean>;
+  /** The BCP 47 language it is shaped as, such as `tr`; null for the font's default. */
+  language: string | null;
+  /** The ISO 15924 script the whole run is shaped in, such as `Arab`; null for each stretch's own. */
+  script: string | null;
+  /** The distance between baselines, in ems; null for the font's own line spacing. */
+  lineHeight: number | null;
+  /** How lines line up; null follows each line's direction. */
+  align: TextRunAlign | null;
+}
+/**
+ * Changes some of a run's options in one undo step: a field left out keeps
+ * its value. In `features`, a tag left out keeps its setting, and `null`
+ * returns it to the font's default. A feature tag, language or script that
+ * shaping cannot read, or a line height that is not positive, fails with
+ * `TextRunOptionsError` and nothing changes.
+ */
+export interface TextRunSetOptionsInput extends ShiftTarget {
+  runId: NodeId;
+  options: {
+    shaping?: boolean;
+    features?: Record<string, boolean | null>;
+    language?: string | null;
+    script?: string | null;
+    lineHeight?: number | null;
+    align?: TextRunAlign | null;
+  };
+}
 /** Removes a canvas text run. */
 export interface TextRunDeleteInput extends ShiftTarget {
   runId: NodeId;
@@ -947,6 +982,7 @@ export interface TextRunSummary {
   text: string;
   /** Its origin in the page's space, y down. */
   at: PagePoint;
+  options: TextRunOptions;
 }
 /** Live application capabilities shared by protocol and plugin hosts. */
 export interface ShiftCapabilities {
@@ -1028,6 +1064,8 @@ export interface ShiftCapabilities {
     setText(input: TextRunSetTextInput): Promise<ShiftObservation<TextRunView>>;
     /** Shows the caret in Text mode, switching to the run's page and to the Text tool when needed. */
     setCaret(input: TextRunSetCaretInput): Promise<ShiftObservation<TextRunView>>;
+    /** Changes some of a run's options, as the Text section does, in one undo step. */
+    setOptions(input: TextRunSetOptionsInput): Promise<ShiftObservation<TextRunView>>;
     delete(input: TextRunDeleteInput): Promise<ShiftObservation<null>>;
   };
 }
@@ -1143,6 +1181,7 @@ export interface TextRunView {
   pageId: NodeId;
   /** Its origin in the page's space, y down. */
   at: PagePoint;
+  options: TextRunOptions;
   items: TextRunItem[];
   glyphs: TextRunGlyph[];
   /** The run's total advance, in its units. */
