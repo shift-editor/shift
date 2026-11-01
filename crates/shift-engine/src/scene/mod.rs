@@ -31,6 +31,7 @@ pub use node::{
     DEFAULT_PAGE_NAME, NodeContent, NodeKind, PageRole, RunSettings, RunSettingsError, SceneNode,
     TextItem, TextRun,
 };
+pub use shift_layout::{Align, BoxSizing, Insets, Justify, LayoutDirection, Placement, Sizing};
 
 /// Why a scene edit was refused. The scene is unchanged.
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]

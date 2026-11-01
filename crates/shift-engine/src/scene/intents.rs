@@ -2,6 +2,7 @@
 
 use pack::Pack;
 use shift_font::{NodeId, RunId};
+use shift_layout::{BoxSizing, Placement};
 
 use super::{NodeContent, RunSettings, SceneNode, TextItem};
 
@@ -13,8 +14,9 @@ pub enum SceneIntent {
     /// one, must exist. A page has no parent.
     CreateNode(SceneNode),
     /// Places a new text run node, its settings at their defaults
-    /// ([`RunSettings::default`]): what [`SceneIntent::CreateNode`] does for
-    /// a run, without the caller choosing settings.
+    /// ([`RunSettings::default`]), hugging its text and placed at `x`, `y`:
+    /// what [`SceneIntent::CreateNode`] does for a run, without the caller
+    /// choosing settings.
     CreateRun(CreateRun),
     /// Replaces a node with a new value of the same kind, under the same id:
     /// its fields, placement or place among its siblings. A text run keeps its
@@ -55,6 +57,8 @@ impl CreateRun {
             index: self.index.clone(),
             x: self.x,
             y: self.y,
+            sizing: BoxSizing::default(),
+            placement: Placement::Absolute,
             content: NodeContent::TextRun {
                 run_id: self.run_id.clone(),
                 size: self.size,

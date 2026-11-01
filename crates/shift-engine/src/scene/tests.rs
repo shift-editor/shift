@@ -20,6 +20,8 @@ fn page(id: &str, position: usize) -> SceneNode {
         index: key(position),
         x: 0.0,
         y: 0.0,
+        sizing: BoxSizing::default(),
+        placement: Placement::Absolute,
         content: NodeContent::Page {
             name: id.into(),
             role: None,
@@ -34,6 +36,8 @@ fn run(id: &str, parent: &str, position: usize) -> SceneNode {
         index: key(position),
         x: 10.0,
         y: 20.0,
+        sizing: BoxSizing::default(),
+        placement: Placement::Absolute,
         content: NodeContent::TextRun {
             run_id: RunId::from_raw(id),
             size: 1000.0,
@@ -50,6 +54,8 @@ fn glyph(id: &str, parent: &str, position: usize) -> SceneNode {
         index: key(position),
         x: 0.0,
         y: 0.0,
+        sizing: BoxSizing::default(),
+        placement: Placement::Absolute,
         content: NodeContent::Glyph {
             glyph_id: GlyphId::from_raw("a"),
             source_id: SourceId::from_raw("regular"),
@@ -347,6 +353,98 @@ fn a_run_stored_without_settings_reads_them_at_their_defaults() {
     };
     assert_eq!(settings, RunSettings::default());
     assert!(settings.shaping);
+}
+
+#[test]
+fn a_node_stored_before_frames_hugs_and_keeps_its_position() {
+    /// A page node as stored before nodes had sizing and placement.
+    #[derive(serde::Serialize)]
+    enum OldContent {
+        Page {
+            name: String,
+            role: Option<PageRole>,
+        },
+    }
+    #[derive(serde::Serialize)]
+    struct OldNode {
+        id: NodeId,
+        parent_id: Option<NodeId>,
+        index: String,
+        x: f64,
+        y: f64,
+        content: OldContent,
+    }
+    let old = OldNode {
+        id: NodeId::from_raw("page"),
+        parent_id: None,
+        index: "a0".to_string(),
+        x: 30.0,
+        y: 40.0,
+        content: OldContent::Page {
+            name: "Page".to_string(),
+            role: None,
+        },
+    };
+
+    let stored = rmp_serde::to_vec_named(&old).unwrap();
+    let node: SceneNode = rmp_serde::from_slice(&stored).unwrap();
+
+    assert_eq!(node.sizing, BoxSizing::new(Sizing::Hug, Sizing::Hug));
+    assert_eq!(node.placement, Placement::Absolute);
+    assert_eq!((node.x, node.y), (30.0, 40.0));
+}
+
+#[test]
+fn a_frame_keeps_its_layout_through_storage_and_an_update() {
+    let frame = SceneNode {
+        id: NodeId::from_raw("frame"),
+        parent_id: Some(NodeId::from_raw("page")),
+        sizing: BoxSizing::new(Sizing::Fixed(300.0), Sizing::Fill),
+        placement: Placement::Auto,
+        content: NodeContent::Frame {
+            direction: LayoutDirection::Column,
+            gap: 8.0,
+            padding: Insets::uniform(16.0),
+            align: Align::End,
+            justify: Justify::Center,
+            wrap: false,
+        },
+        ..page("frame", 0)
+    };
+    let stored = rmp_serde::to_vec_named(&frame).unwrap();
+    assert_eq!(rmp_serde::from_slice::<SceneNode>(&stored).unwrap(), frame);
+    assert_eq!(frame.kind(), NodeKind::Frame);
+    assert_eq!(
+        frame
+            .frame_layout()
+            .map(|layout| (layout.direction, layout.gap)),
+        Some((LayoutDirection::Column, 8.0))
+    );
+
+    let mut scene = Scene::default();
+    scene
+        .apply_intents(&[
+            SceneIntent::CreateNode(page("page", 0)),
+            SceneIntent::CreateNode(frame.clone()),
+        ])
+        .unwrap();
+    let rowed = SceneNode {
+        content: NodeContent::Frame {
+            direction: LayoutDirection::Row,
+            gap: 4.0,
+            padding: Insets::ZERO,
+            align: Align::Start,
+            justify: Justify::Start,
+            wrap: true,
+        },
+        sizing: BoxSizing::default(),
+        ..frame
+    };
+    scene
+        .apply_intents(&[SceneIntent::UpdateNode(rowed.clone())])
+        .unwrap();
+
+    assert_eq!(scene.node(&rowed.id), Some(&rowed));
 }
 
 #[test]

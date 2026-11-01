@@ -1,6 +1,13 @@
 import type { NodeId, RunId, SourceId } from "@shift/types";
 import type { ShiftNode } from "../../types/node";
-import type { RevisedNode, RunSettings, SceneIntent, SceneNode } from "../../types/sceneDocument";
+import type {
+  BoxSizing,
+  Placement,
+  RevisedNode,
+  RunSettings,
+  SceneIntent,
+  SceneNode,
+} from "../../types/sceneDocument";
 import type { TextRunRecord, TextRunSettings } from "../../types/text";
 import type { TextItem } from "../text/layout/types";
 
@@ -12,6 +19,16 @@ interface ReadNode {
   readonly node: ShiftNode;
   readonly run: TextRunRecord | null;
 }
+
+/**
+ * The layout every node the editor writes keeps: hugging, at its own
+ * position. The editor neither reads nor draws frames yet, so nothing it
+ * places follows a frame's layout.
+ */
+const UNLAID_OUT: { readonly sizing: BoxSizing; readonly placement: Placement } = {
+  sizing: { width: { kind: "hug" }, height: { kind: "hug" } },
+  placement: "absolute",
+};
 
 /** The document's nodes as the editor reads them. */
 export interface ReadScene {
@@ -55,6 +72,7 @@ export class SceneNodes {
       const unchanged =
         previous?.revised.revision === entry.revision && previous.shownSource === shownSource;
       const read = unchanged ? previous : readNode(entry, previous, shownSource);
+      if (!read) continue;
       next.set(id, read);
       nodes.push(read.node);
       if (read.run) {
@@ -108,6 +126,7 @@ export class SceneNodes {
       index: node.index,
       x: node.position.x,
       y: node.position.y,
+      ...UNLAID_OUT,
     };
     switch (node.kind) {
       case "page":
@@ -164,12 +183,15 @@ function runSettingsFrom(settings: RunSettings): TextRunSettings {
   };
 }
 
-/** The editor's node for `revised`, keeping the previous run record while its items are unchanged. */
+/**
+ * The editor's node for `revised`, keeping the previous run record while its
+ * items are unchanged; null for a frame, which the editor does not show yet.
+ */
 function readNode(
   revised: RevisedNode,
   previous: ReadNode | undefined,
   shownSource: SourceId | undefined,
-): ReadNode {
+): ReadNode | null {
   const stored = revised.node;
   const base = {
     id: stored.id,
@@ -216,5 +238,7 @@ function readNode(
         },
         run: null,
       };
+    case "frame":
+      return null;
   }
 }

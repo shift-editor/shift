@@ -4,7 +4,8 @@
 use std::path::Path;
 
 use shift_engine::scene::{
-    NodeContent, RunSettings, Scene, SceneChangeSet, SceneIntent, SceneNode,
+    Align, BoxSizing, Insets, Justify, LayoutDirection, NodeContent, Placement, RunSettings, Scene,
+    SceneChangeSet, SceneIntent, SceneNode, Sizing,
 };
 use shift_font::test_support::sample_font;
 use shift_font::{FontChangeSet, NodeId, RunId};
@@ -26,6 +27,8 @@ fn page(id: &str, position: usize) -> SceneNode {
         index: key(position),
         x: 0.0,
         y: 0.0,
+        sizing: BoxSizing::default(),
+        placement: Placement::Absolute,
         content: NodeContent::Page {
             name: id.into(),
             role: None,
@@ -40,6 +43,8 @@ fn run(id: &str, page: &str) -> SceneNode {
         index: key(0),
         x: 120.0,
         y: -40.0,
+        sizing: BoxSizing::default(),
+        placement: Placement::Absolute,
         content: NodeContent::TextRun {
             run_id: RunId::from_raw(id),
             size: 1000.0,
@@ -272,4 +277,68 @@ fn a_version_3_document_upgrades_to_one_page_and_keeps_its_scene_edits() {
     drop(store);
     let saved = ShiftStore::open_document(&path).unwrap();
     assert_eq!(node_ids(&saved.load_scene().unwrap()), STORED);
+}
+
+#[test]
+fn a_frame_and_its_children_s_layout_come_back_as_saved() {
+    let temp = tempfile::tempdir().unwrap();
+    let (document, recovery) = (
+        temp.path().join("Doc.shift"),
+        temp.path().join("Doc.recovery"),
+    );
+    drop(ShiftStore::create_document(&document, &sample_font()).unwrap());
+    let mut store = open(&document, &recovery);
+    let mut scene = store.load_scene().unwrap();
+    let frame = SceneNode {
+        id: NodeId::from_raw("frame"),
+        sizing: BoxSizing::new(Sizing::Fixed(400.0), Sizing::Hug),
+        content: NodeContent::Frame {
+            direction: LayoutDirection::Row,
+            gap: 12.0,
+            padding: Insets {
+                top: 1.0,
+                right: 2.0,
+                bottom: 3.0,
+                left: 4.0,
+            },
+            align: Align::Center,
+            justify: Justify::SpaceBetween,
+            wrap: true,
+        },
+        ..page("frame", 0)
+    };
+    let child = SceneNode {
+        parent_id: Some(NodeId::from_raw("frame")),
+        sizing: BoxSizing::new(Sizing::Fill, Sizing::Hug),
+        placement: Placement::Auto,
+        ..run("child", "frame")
+    };
+
+    edit(
+        &mut store,
+        &mut scene,
+        &[
+            SceneIntent::CreateNode(page("one", 1)),
+            SceneIntent::CreateNode(SceneNode {
+                parent_id: Some(NodeId::from_raw("one")),
+                ..frame.clone()
+            }),
+            SceneIntent::CreateNode(child.clone()),
+        ],
+        SaveState::Unsaved,
+    );
+    store.save_document().unwrap();
+    drop(store);
+
+    let reopened = ShiftStore::open_document(&document)
+        .unwrap()
+        .load_scene()
+        .unwrap();
+    assert_eq!(
+        reopened
+            .node(&frame.id)
+            .map(|node| (&node.sizing, &node.content)),
+        Some((&frame.sizing, &frame.content))
+    );
+    assert_eq!(reopened.node(&child.id), Some(&child));
 }
