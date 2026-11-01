@@ -1017,6 +1017,51 @@ fn scene_and_font_edits_share_one_history_and_undo_in_order() {
 }
 
 #[test]
+fn deleting_a_page_from_another_records_the_deleted_page() {
+    use shift_engine::scene::{DeleteNode, SceneIntent};
+    use shift_font::NodeId;
+
+    let font = composite_font();
+    let mut persisted = Persisted(font.clone());
+    let mut session = EngineSession::open_directory(placeholders(&font));
+    let mut history = EditHistory::default();
+    let kept = NodeId::from_raw("kept");
+    let deleted = NodeId::from_raw("deleted");
+    history.begin(None);
+    history.record_scene(
+        session
+            .apply_scene(&[
+                SceneIntent::CreateNode(scene_page("kept")),
+                SceneIntent::CreateNode(scene_page("deleted")),
+            ])
+            .unwrap(),
+    );
+    history
+        .end(session.font(), session.scene(), Recording::Undoable)
+        .unwrap();
+
+    // The editor shows the neighbour before it deletes the page.
+    history.begin(Some(kept));
+    history.record_scene(
+        session
+            .apply_scene(&[SceneIntent::DeleteNode(DeleteNode {
+                id: deleted.clone(),
+            })])
+            .unwrap(),
+    );
+    history
+        .end(session.font(), session.scene(), Recording::Undoable)
+        .unwrap();
+
+    let undone = history
+        .undo(&mut session, &mut persisted)
+        .unwrap()
+        .expect("the delete undoes");
+    assert_eq!(undone.location.page_id, Some(deleted.clone()));
+    assert!(session.scene().node(&deleted).is_some());
+}
+
+#[test]
 fn an_unrecorded_scene_edit_is_kept_but_never_reaches_the_saved_position() {
     use shift_engine::scene::SceneIntent;
 

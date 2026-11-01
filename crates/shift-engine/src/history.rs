@@ -150,9 +150,9 @@ impl EditHistory {
         }
         match recording {
             Recording::Undoable => {
-                let page_id = open
-                    .page_id
-                    .or_else(|| scene.first_changed_page(&change_set.scene));
+                // A scene edit is shown on the page it changed, which a
+                // deleted page's own entry needs: it was made from another.
+                let page_id = scene.first_changed_page(&change_set.scene).or(open.page_id);
                 self.discard_redo();
                 self.undo.push(HistoryEntry {
                     location: EditLocation::of(page_id, &change_set),
