@@ -68,7 +68,7 @@ async function drawn(font: Font, name: string, location: ExternalAxisLocation) {
   if (!entry) throw new Error(`the font has no ${name}`);
   const glyph = await font.loadGlyph(entry.id);
   return glyph.renderModelAt(signal(location)).contours.map((contour) => ({
-    id: contour.id,
+    id: contour.contour.id,
     closed: contour.closed,
     points: contour.points.map(({ id, x, y }) => ({ id, x, y })),
   }));
