@@ -448,6 +448,62 @@ fn a_frame_keeps_its_layout_through_storage_and_an_update() {
 }
 
 #[test]
+fn a_frame_is_placed_only_in_a_page_or_a_frame() {
+    let frame = |id: &str, parent: &str| SceneNode {
+        id: NodeId::from_raw(id),
+        parent_id: Some(NodeId::from_raw(parent)),
+        content: NodeContent::Frame {
+            direction: LayoutDirection::Row,
+            gap: 0.0,
+            padding: Insets::ZERO,
+            align: Align::Start,
+            justify: Justify::Start,
+            wrap: false,
+        },
+        ..page(id, 0)
+    };
+    let mut scene = Scene::default();
+    scene
+        .apply_intents(&[
+            SceneIntent::CreateNode(page("page", 0)),
+            SceneIntent::CreateNode(run("run", "page", 0)),
+            SceneIntent::CreateNode(frame("outer", "page")),
+            SceneIntent::CreateNode(frame("inner", "outer")),
+        ])
+        .unwrap();
+
+    let in_a_run = scene.apply_intents(&[SceneIntent::CreateNode(frame("stray", "run"))]);
+    let moved_into_a_run = scene.apply_intents(&[SceneIntent::MoveNode(MoveNode {
+        id: NodeId::from_raw("inner"),
+        parent_id: Some(NodeId::from_raw("run")),
+        index: key(0),
+    })]);
+
+    assert_eq!(
+        in_a_run,
+        Err(SceneError::FrameInLeaf {
+            node: NodeId::from_raw("stray"),
+            parent: NodeId::from_raw("run"),
+            kind: NodeKind::TextRun,
+        })
+    );
+    assert_eq!(
+        moved_into_a_run,
+        Err(SceneError::FrameInLeaf {
+            node: NodeId::from_raw("inner"),
+            parent: NodeId::from_raw("run"),
+            kind: NodeKind::TextRun,
+        })
+    );
+    assert_eq!(
+        scene
+            .node(&NodeId::from_raw("inner"))
+            .and_then(|node| node.parent_id.clone()),
+        Some(NodeId::from_raw("outer"))
+    );
+}
+
+#[test]
 fn setting_a_run_s_settings_keeps_its_items_and_an_update_keeps_both() {
     let mut scene = Scene::default();
     scene
