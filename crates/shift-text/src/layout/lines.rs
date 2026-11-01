@@ -8,7 +8,7 @@ use crate::shape::{line_breaks, visual_order};
 use crate::layout::font::LayoutFont;
 use crate::layout::paragraph::{Paragraph, RunGlyph, ShapedText};
 use crate::layout::request::{LayoutError, LineHeight, LineMetrics, TextAlign, TextOptions};
-use crate::layout::{Direction, LayoutLine, LineRun, PlacedGlyph, TextLayout};
+use crate::layout::{Direction, LayoutLine, LineRun, PlacedGlyph, TextLayout, TextSize};
 
 /// How lines are spaced and aligned.
 pub(crate) struct Placement<'o> {
@@ -59,6 +59,23 @@ impl<'o> Placement<'o> {
         }
         self.align(&mut layout);
         Ok(layout)
+    }
+
+    /// The size [`Self::place`] would give the text: its widest line and how
+    /// many lines, from the same breaks, without placing anything.
+    pub(crate) fn size(&self, paragraphs: &[Paragraph], shaped: &[ShapedText]) -> TextSize {
+        let mut size = TextSize {
+            width: 0.0,
+            lines: 0,
+            line_height: self.line_height(),
+        };
+        for (paragraph, text) in paragraphs.iter().zip(shaped) {
+            for units in self.break_lines(paragraph, text) {
+                size.width = size.width.max(text.advance_of(&units));
+                size.lines = size.lines.saturating_add(1);
+            }
+        }
+        size
     }
 
     /// The paragraph's lines, as unit ranges in the text: one when there is
@@ -249,6 +266,17 @@ impl LayoutLine {
 }
 
 impl ShapedText {
+    /// How far a line of `units` advances: the advance and kern of every
+    /// glyph that starts in it, as [`Placement::place`] places them.
+    fn advance_of(&self, units: &Range<u32>) -> f64 {
+        self.runs
+            .iter()
+            .flat_map(|run| &run.glyphs)
+            .filter(|glyph| units.contains(&glyph.start))
+            .map(|glyph| glyph.x_advance + glyph.kern)
+            .sum()
+    }
+
     /// The glyphs one line shows of a run, in display order: those of the
     /// shaped run that holds `segment` whose first unit falls in it. A run
     /// is shaped across the whole paragraph, so a line cut through it shows
