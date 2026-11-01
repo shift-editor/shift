@@ -4,6 +4,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use serde::{Serialize, Serializer};
+use shift_text::shape::{self, Language, Script, ShapeDirection};
 
 use crate::ProofError;
 
@@ -12,13 +13,7 @@ use crate::ProofError;
 #[derive(Clone, Debug, PartialEq)]
 pub struct FeatureSetting {
     text: String,
-    feature: harfrust::Feature,
-}
-
-impl FeatureSetting {
-    pub(crate) fn feature(&self) -> harfrust::Feature {
-        self.feature
-    }
+    setting: shape::FeatureSetting,
 }
 
 impl FromStr for FeatureSetting {
@@ -26,13 +21,14 @@ impl FromStr for FeatureSetting {
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         let text = text.trim();
-        let feature =
-            harfrust::Feature::from_str(text).map_err(|_| ProofError::InvalidFeature {
-                text: text.to_string(),
-            })?;
+        let setting =
+            text.parse::<shape::FeatureSetting>()
+                .map_err(|_| ProofError::InvalidFeature {
+                    text: text.to_string(),
+                })?;
         Ok(Self {
             text: text.to_string(),
-            feature,
+            setting,
         })
     }
 }
@@ -41,20 +37,14 @@ impl FromStr for FeatureSetting {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ScriptSetting {
     text: String,
-    script: harfrust::Script,
+    /// The script's tag as shaping names it, such as `Arab` for `arab`.
+    tag: String,
 }
 
 impl ScriptSetting {
-    pub(crate) fn script(&self) -> harfrust::Script {
-        self.script
-    }
-
-    pub(crate) fn from_harfrust(script: harfrust::Script) -> Self {
-        let tag = script.tag().to_be_bytes();
-        Self {
-            text: String::from_utf8_lossy(&tag).into_owned(),
-            script,
-        }
+    /// The script's ISO 15924 tag, as a shape request takes it.
+    pub(crate) fn tag(&self) -> &str {
+        &self.tag
     }
 }
 
@@ -63,12 +53,12 @@ impl FromStr for ScriptSetting {
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         let text = text.trim();
-        let script = harfrust::Script::from_str(text).map_err(|_| ProofError::InvalidScript {
+        let script = Script::from_str(text).map_err(|_| ProofError::InvalidScript {
             text: text.to_string(),
         })?;
         Ok(Self {
             text: text.to_string(),
-            script,
+            tag: String::from_utf8_lossy(&script.tag().to_be_bytes()).into_owned(),
         })
     }
 }
@@ -78,12 +68,12 @@ impl FromStr for ScriptSetting {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LanguageSetting {
     text: String,
-    language: harfrust::Language,
 }
 
 impl LanguageSetting {
-    pub(crate) fn language(&self) -> harfrust::Language {
-        self.language.clone()
+    /// The language tag, as a shape request takes it.
+    pub(crate) fn tag(&self) -> &str {
+        &self.text
     }
 }
 
@@ -92,13 +82,11 @@ impl FromStr for LanguageSetting {
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         let text = text.trim();
-        let language =
-            harfrust::Language::from_str(text).map_err(|_| ProofError::InvalidLanguage {
-                text: text.to_string(),
-            })?;
+        Language::from_str(text).map_err(|_| ProofError::InvalidLanguage {
+            text: text.to_string(),
+        })?;
         Ok(Self {
             text: text.to_string(),
-            language,
         })
     }
 }
@@ -145,23 +133,33 @@ impl TextDirection {
     pub fn is_backward(self) -> bool {
         matches!(self, Self::RightToLeft | Self::BottomToTop)
     }
+}
 
-    pub(crate) fn to_harfrust(self) -> harfrust::Direction {
-        match self {
-            Self::LeftToRight => harfrust::Direction::LeftToRight,
-            Self::RightToLeft => harfrust::Direction::RightToLeft,
-            Self::TopToBottom => harfrust::Direction::TopToBottom,
-            Self::BottomToTop => harfrust::Direction::BottomToTop,
+impl From<TextDirection> for ShapeDirection {
+    fn from(direction: TextDirection) -> Self {
+        match direction {
+            TextDirection::LeftToRight => Self::LeftToRight,
+            TextDirection::RightToLeft => Self::RightToLeft,
+            TextDirection::TopToBottom => Self::TopToBottom,
+            TextDirection::BottomToTop => Self::BottomToTop,
         }
     }
+}
 
-    pub(crate) fn from_harfrust(direction: harfrust::Direction) -> Self {
+impl From<ShapeDirection> for TextDirection {
+    fn from(direction: ShapeDirection) -> Self {
         match direction {
-            harfrust::Direction::RightToLeft => Self::RightToLeft,
-            harfrust::Direction::TopToBottom => Self::TopToBottom,
-            harfrust::Direction::BottomToTop => Self::BottomToTop,
-            _ => Self::LeftToRight,
+            ShapeDirection::LeftToRight => Self::LeftToRight,
+            ShapeDirection::RightToLeft => Self::RightToLeft,
+            ShapeDirection::TopToBottom => Self::TopToBottom,
+            ShapeDirection::BottomToTop => Self::BottomToTop,
         }
+    }
+}
+
+impl From<shape::TextDirection> for TextDirection {
+    fn from(direction: shape::TextDirection) -> Self {
+        ShapeDirection::from(direction).into()
     }
 }
 
@@ -205,7 +203,18 @@ pub struct ShapingOptions {
 }
 
 impl ShapingOptions {
-    pub(crate) fn harfrust_features(&self) -> Vec<harfrust::Feature> {
-        self.features.iter().map(FeatureSetting::feature).collect()
+    /// The feature settings, as a shape request takes them.
+    pub(crate) fn shape_features(&self) -> Vec<shape::FeatureSetting> {
+        self.features
+            .iter()
+            .map(|feature| feature.setting)
+            .collect()
+    }
+
+    /// The paragraph direction a horizontal line is ordered in; `None` for
+    /// its first strong character's, or for a vertical direction.
+    pub(crate) fn base_direction(&self) -> Option<shape::TextDirection> {
+        self.direction
+            .and_then(|direction| ShapeDirection::from(direction).horizontal())
     }
 }

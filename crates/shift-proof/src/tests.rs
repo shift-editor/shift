@@ -53,7 +53,7 @@ fn shaping_at_a_heavier_location_widens_the_advance() {
     let heavy = ProofFont::new(&data, &weight(900.0)).unwrap();
     let plain = ShapingOptions::default();
 
-    assert!(heavy.shape("H", &plain).advance > light.shape("H", &plain).advance);
+    assert!(heavy.shape("H", &plain).unwrap().advance > light.shape("H", &plain).unwrap().advance);
     let wght = heavy
         .location()
         .iter()
@@ -77,8 +77,8 @@ fn a_normalized_extreme_matches_the_user_maximum() {
     let plain = ShapingOptions::default();
 
     assert_eq!(
-        normalized.shape("H", &plain).advance,
-        user.shape("H", &plain).advance
+        normalized.shape("H", &plain).unwrap().advance,
+        user.shape("H", &plain).unwrap().advance
     );
     let wght = normalized
         .location()
@@ -93,10 +93,13 @@ fn kerning_applies_unless_the_feature_is_turned_off() {
     let data = inter();
     let font = ProofFont::new(&data, &Coordinates::default()).unwrap();
     let plain = ShapingOptions::default();
-    let apart = font.shape("A", &plain).advance + font.shape("V", &plain).advance;
+    let apart = font.shape("A", &plain).unwrap().advance + font.shape("V", &plain).unwrap().advance;
 
-    let kerned = font.shape("AV", &plain).advance;
-    let unkerned = font.shape("AV", &options(&["-kern"], None)).advance;
+    let kerned = font.shape("AV", &plain).unwrap().advance;
+    let unkerned = font
+        .shape("AV", &options(&["-kern"], None))
+        .unwrap()
+        .advance;
 
     assert!(
         kerned < apart,
@@ -110,8 +113,8 @@ fn turning_off_contextual_alternates_unsets_a_code_ligature() {
     let data = jetbrains_mono();
     let font = ProofFont::new(&data, &Coordinates::default()).unwrap();
 
-    let with = font.shape("->", &ShapingOptions::default());
-    let without = font.shape("->", &options(&["-calt"], None));
+    let with = font.shape("->", &ShapingOptions::default()).unwrap();
+    let without = font.shape("->", &options(&["-calt"], None)).unwrap();
 
     assert_eq!(names(&font, &without), ["hyphen", "greater"]);
     assert_ne!(names(&font, &with), names(&font, &without));
@@ -122,7 +125,7 @@ fn right_to_left_text_runs_in_reverse_visual_order() {
     let data = inter();
     let font = ProofFont::new(&data, &Coordinates::default()).unwrap();
 
-    let run = font.shape("Hi", &options(&[], Some("rtl")));
+    let run = font.shape("Hi", &options(&[], Some("rtl"))).unwrap();
 
     assert_eq!(run.direction, TextDirection::RightToLeft);
     assert_eq!(names(&font, &run), ["i", "H"]);
@@ -135,7 +138,7 @@ fn names_place_glyphs_directly_and_unknown_names_are_missing() {
     let font = ProofFont::new(&data, &Coordinates::default()).unwrap();
     let plain = ShapingOptions::default();
 
-    let run = font.set_line("H/a/nosuchglyph H", &plain);
+    let run = font.set_line("H/a/nosuchglyph H", &plain).unwrap();
 
     assert_eq!(names(&font, &run), ["H", "a", ".notdef", "H"]);
     let missing: Vec<bool> = run.glyphs.iter().map(|glyph| glyph.missing).collect();
@@ -155,7 +158,7 @@ fn names_are_placed_last_first_in_a_right_to_left_line() {
     let data = inter();
     let font = ProofFont::new(&data, &Coordinates::default()).unwrap();
 
-    let run = font.set_line("H/a", &options(&[], Some("rtl")));
+    let run = font.set_line("H/a", &options(&[], Some("rtl"))).unwrap();
 
     assert_eq!(names(&font, &run), ["a", "H"]);
 }
@@ -165,7 +168,9 @@ fn an_unmapped_character_is_flagged_and_still_drawn() {
     let data = inter();
     let font = ProofFont::new(&data, &Coordinates::default()).unwrap();
 
-    let run = font.shape("H\u{10FFFD}", &ShapingOptions::default());
+    let run = font
+        .shape("H\u{10FFFD}", &ShapingOptions::default())
+        .unwrap();
 
     assert_eq!(font.missing_characters("H\u{10FFFD}"), ['\u{10FFFD}']);
     let missing = &run.glyphs[1];

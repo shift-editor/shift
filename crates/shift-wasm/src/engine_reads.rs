@@ -31,8 +31,8 @@ use shift_font::{
     Axis, FontChangeFlag, GlyphId, GlyphRecords, MetricValue, MissingKerningOrigin, NodeId,
     ResolvedKerning, Source,
 };
-use shift_layout::{LayoutError, TextLayout};
-pub use shift_shape::{FeatureDefault, FeatureGroup, FontFeature};
+use shift_text::layout::{LayoutError, TextLayout};
+pub use shift_text::shape::{FeatureDefault, FeatureGroup, FontFeature};
 use shift_wire::KerningSnapshot;
 
 /// What the editor reads from one engine session's font. Glyphs and sources
@@ -86,7 +86,7 @@ pub trait EngineReads {
     /// Lays a run's text out over the session's font, unsaved edits
     /// included, with the options its settings give
     /// (`TextRun::layout_request`), as
-    /// `shift_layout::TextLayout::new` does: shaped with the session's
+    /// `shift_text::layout::TextLayout::new` does: shaped with the session's
     /// shaper (brought up to date as [`Self::shape_paragraphs`] does), with
     /// kerning, mark attachment and cursive joins at each generated feature's
     /// insert marker, then broken into lines, ordered, aligned, and given
@@ -113,7 +113,7 @@ pub trait EngineReads {
     fn layout_inputs(&self) -> Vec<FontChangeFlag>;
     /// The features the session's shaper font defines, once per tag in tag
     /// order, each with the name it is shown by, what it does when text does
-    /// not set it, and its group, as `shift_shape::Shaper::features` lists
+    /// not set it, and its group, as `shift_text::shape::Shaper::features` lists
     /// them. The shaper is brought up to date first, as for
     /// [`Self::layout_text`].
     ///
@@ -127,7 +127,7 @@ pub trait EngineReads {
     fn shaper_inputs(&self) -> Vec<FontChangeFlag>;
     /// Every substitution feature `tag` can make in the session's shaper
     /// font, ordered by output glyph then input, as
-    /// `shift_shape::Shaper::feature_substitutions` reads them from its
+    /// `shift_text::shape::Shaper::feature_substitutions` reads them from its
     /// `GSUB`: lookups that contextual rules call included, glyphs no
     /// character reaches included. Empty for a positioning feature or a tag
     /// the font does not define. Changes when a flag in
@@ -307,7 +307,7 @@ mod exports {
         GlyphRecords, InterpolationBasis, Kerning, KerningSide, LayerId, MissingKerningOrigin,
         ResolvedKerning, SourceId,
     };
-    use shift_layout::FeatureSetting;
+    use shift_text::layout::FeatureSetting;
     use shift_wire::values::{self, WireParse};
     use wasm_bindgen::prelude::*;
 

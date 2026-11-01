@@ -394,7 +394,7 @@ export class EngineSession {
    * Lays a run's text out over the session's font, unsaved edits included,
    * with the options Rust builds from the run's settings: shaping,
    * kerning, marks, cursive joins, lines, bidi order, carets and boxes, all
-   * in Rust (`shift_layout::TextLayout`), at a source or a design location.
+   * in Rust (`shift_text::layout::TextLayout`), at a source or a design location.
    */
   layoutText(run: TextRun, place: KerningPlace): PlacedText {
     const source =
@@ -412,7 +412,7 @@ export class EngineSession {
 
   /**
    * The features the session's shaper font defines, in tag order, as
-   * shift-shape lists them: name, default and group.
+   * shift-text lists them: name, default and group.
    *
    * @throws When the session has no shaper font, saying why, or it cannot be read.
    */
@@ -422,7 +422,7 @@ export class EngineSession {
 
   /**
    * Every substitution feature `tag` can make in the session's shaper font,
-   * as shift-shape reads them from its `GSUB`.
+   * as shift-text reads them from its `GSUB`.
    *
    * @throws When `tag` is no feature tag, the session has no shaper font, or
    * its `GSUB` cannot be read.
@@ -433,7 +433,7 @@ export class EngineSession {
 
   /**
    * Whether shaping applies feature `tag` when text sets it to `setting`
-   * (null when it leaves it), as shift-shape decides: the setting wins, else
+   * (null when it leaves it), as shift-text decides: the setting wins, else
    * the feature's default. False for a tag the shaper font does not define.
    *
    * @throws When the session has no shaper font, or it cannot be read.

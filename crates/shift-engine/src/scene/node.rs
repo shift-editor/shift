@@ -6,7 +6,9 @@ use pack::Pack;
 use serde::{Deserialize, Serialize};
 use shift_font::index_key::{self, IndexKeyError};
 use shift_font::{GlyphId, NodeId, RunId, SourceId, TextItemId};
-use shift_layout::{FeatureSetting, LayoutRequest, LayoutUnit, LineHeight, TextAlign, TextOptions};
+use shift_text::layout::{
+    FeatureSetting, LayoutRequest, LayoutUnit, LineHeight, TextAlign, TextOptions,
+};
 
 /// One placed object on the canvas.
 ///

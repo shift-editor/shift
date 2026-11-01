@@ -3,8 +3,8 @@
 use std::cell::OnceCell;
 use std::collections::{HashMap, HashSet};
 
-use harfrust::{ShaperData, ShaperInstance};
 use serde::Serialize;
+use shift_text::shape::{NormalizedCoord, Shaper};
 use skrifa::instance::{Location, Size};
 use skrifa::outline::OutlineGlyphCollection;
 use skrifa::raw::TableProvider;
@@ -29,13 +29,14 @@ pub struct ProofMetrics {
 /// A compiled font bound to one variation location, ready to shape and
 /// outline text.
 ///
-/// Holds borrowed font bytes plus the shaping tables HarfRust builds from
+/// Holds borrowed font bytes plus a shift-text [`Shaper`] over a copy of
 /// them, so one binding can shape many runs without re-reading the font.
 pub struct ProofFont<'a> {
     pub(crate) font: FontRef<'a>,
-    pub(crate) shaper_font: harfrust::FontRef<'a>,
-    pub(crate) shaper_data: ShaperData,
-    pub(crate) shaper_instance: Option<ShaperInstance>,
+    pub(crate) shaper: Shaper,
+    /// The bound location as the shaper takes it: normalized, in `fvar`
+    /// order.
+    pub(crate) coords: Vec<NormalizedCoord>,
     pub(crate) outlines: OutlineGlyphCollection<'a>,
     pub(crate) location: Location,
     axes: Vec<AxisValue>,
@@ -61,21 +62,21 @@ impl<'a> ProofFont<'a> {
     /// (`-1..=1` for normalized coordinates).
     pub fn new(data: &'a [u8], coordinates: &Coordinates) -> Result<Self, ProofError> {
         let font = FontRef::new(data).map_err(ProofError::UnreadableFont)?;
-        let shaper_font = harfrust::FontRef::new(data).map_err(|_| ProofError::UnshapeableFont)?;
+        let shaper = Shaper::new(data.to_vec()).map_err(|_| ProofError::UnshapeableFont)?;
         let resolved = resolve(&font, coordinates)?;
-        let shaper_instance = (!resolved.axes.is_empty()).then(|| {
-            let coords = resolved.location.coords().iter().map(|coord| {
-                // HarfRust and skrifa link different read-fonts versions.
-                harfrust::NormalizedCoord::from_bits(coord.to_bits())
-            });
-            ShaperInstance::from_coords(&shaper_font, coords)
-        });
+        let coords = resolved
+            .location
+            .coords()
+            .iter()
+            // shift-text (HarfRust) and skrifa link different read-fonts
+            // versions.
+            .map(|coord| NormalizedCoord::from_bits(coord.to_bits()))
+            .collect();
         Ok(Self {
-            shaper_data: ShaperData::new(&shaper_font),
             outlines: font.outline_glyphs(),
             font,
-            shaper_font,
-            shaper_instance,
+            shaper,
+            coords,
             location: resolved.location,
             axes: resolved.axes,
             names: OnceCell::new(),

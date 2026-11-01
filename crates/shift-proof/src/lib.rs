@@ -3,10 +3,11 @@
 //!
 //! The capability sits below every host: callers compile a font however
 //! they like and hand over TrueType or OpenType bytes. A [`ProofFont`] binds
-//! those bytes to one variation location; text is shaped there with
-//! HarfRust (so kerning and features apply as compiled, adjusted by
-//! [`ShapingOptions`]) and outlined with skrifa, unhinted, in font units
-//! with y up. Lines may name glyphs directly with `/name` tokens.
+//! those bytes to one variation location; text is itemized and shaped there
+//! by shift-text, the shaping every Shift host uses (HarfRust, so kerning
+//! and features apply as compiled, adjusted by [`ShapingOptions`]), and
+//! outlined with skrifa, unhinted, in font units with y up. Lines may name
+//! glyphs directly with `/name` tokens.
 //!
 //! On top of that primitive, [`layout_text`] sets a waterfall of sizes and
 //! locations and [`layout_grid`] sets named glyph cells, both into a pixel
@@ -18,7 +19,6 @@
 //! silently dropped: they are drawn as red placeholders and listed per line
 //! and overall in the report.
 
-mod bidi;
 mod error;
 mod font;
 mod grid;

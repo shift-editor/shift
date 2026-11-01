@@ -31,10 +31,10 @@ export interface RunTextOwner {
  *
  * @remarks
  * Layout runs synchronously in the window's engine (`Font.layoutText`,
- * shift-layout over the engine's font): shaping, kerning, marks, cursive
+ * shift-text's layout over the engine's font): shaping, kerning, marks, cursive
  * joins, lines, bidi order and caret stops, so the run lays out again as
  * soon as its text changes or an edit changes what layout reads. A window
- * without an engine, such as a preview's, has shift-layout lay the text out
+ * without an engine, such as a preview's, has shift-text lay the text out
  * as typed from its glyphs' advances, once the engine module has loaded.
  * Construct outside any reactive reader: the effect that reports layouts,
  * and loads what they lack, starts at once.
@@ -187,7 +187,7 @@ export class RunText {
   }
 
   /**
-   * The text laid out as typed by shift-layout, for a window without an engine:
+   * The text laid out as typed by shift-text, for a window without an engine:
    * null until the engine module, which holds the layout, has loaded.
    */
   #laidOutAsTyped(run: TextRun, place: TextPlace): PlacedText | null {

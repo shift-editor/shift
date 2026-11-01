@@ -1,17 +1,17 @@
 //! Text laid out as typed over a font the window has no engine for, such as
-//! a preview's, by the same shift-layout code the engine lays text out with
+//! a preview's, by the same shift-text layout code the engine lays text out with
 //! (`TextLayout::new` over `LayoutFont::typed`). Answered in the engine
-//! module only, which holds shift-layout; the call is stateless.
+//! module only, which holds shift-text's layout; the call is stateless.
 
 use shift_engine::scene::TextRun;
-use shift_layout::{LayoutError, TextLayout, TypedFont};
+use shift_text::layout::{LayoutError, TextLayout, TypedFont};
 
 /// Text laid out over what a window knows of a font without its engine.
 #[pack::interface]
 pub trait TypedText {
     /// `run`'s text laid out as typed over `font`, with the options its
     /// settings give (`TextRun::layout_request`), as
-    /// `shift_layout::TextLayout` lays out text it cannot shape: one glyph
+    /// `shift_text::layout::TextLayout` lays out text it cannot shape: one glyph
     /// per item at its advance, a mark of no advance at the editor's
     /// stand-in, lines at each line break, aligned, with caret stops, and
     /// the reason it was not shaped.
@@ -27,7 +27,7 @@ mod exports {
     use std::cell::RefCell;
 
     use shift_engine::scene::TextRun;
-    use shift_layout::{LayoutError, LayoutFont, PlacementKeys, TextLayout, TypedFont};
+    use shift_text::layout::{LayoutError, LayoutFont, PlacementKeys, TextLayout, TypedFont};
     use wasm_bindgen::prelude::wasm_bindgen;
 
     use super::{TypedText, typed_text_request};
