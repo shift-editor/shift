@@ -16,6 +16,17 @@ TypeScript makes `{ points?: … }`, `?.` and `?? []` free to write, so a vague 
 - **A collection field is never optional.** An empty collection means "none". `PositionTargets` carries `points` and `anchors` always, so readers write `targets.points`, not `targets.points ?? []`, and ask `targets.hasAnchors`. Keep an optional collection only where absence differs from empty (an option that falls back to a default, a wire field mirroring Rust's `Option<Vec<_>>`), and say why in the disable comment. Enforced by `shift/no-optional-collection-field`.
 - **Lookups return `T | null`, never `undefined`.** Hold id-keyed collections in `EntityMap` from `@shift/types`: `get` returns `null`, `require` throws a named `EntityNotFoundError` when absence is a bug for that caller, and `where(predicate)` filters in insertion order. Expose indexes as `ReadonlyEntityMap`. Enforced by `shift/no-map-get-to-null`; `no-mutable-collection-field` treats `EntityMap` fields like `Map` fields.
 - **Ask first: does Rust already compute this, or could another consumer need the same answer?** Rust means shift-font and its libraries (fontc, fea-rs, fontdrasil, harfrust, line breaking); the other consumers are the CLI, export, the window's engine, the utility process, the SDK and agents. If yes, it has one implementation, in Rust, and every consumer calls it: expose it from shift-font through the engine and make the TypeScript method a one-line call (`Kerning.between` → `engine.kerningRun`; shaping → harfrust through the shaping module; feature compiling → fea-rs; interpolation → fontdrasil). Never write it in TypeScript "for now": two copies drift. If no (a lookup by id or name, a count, stored order, reactivity, UI state), the TypeScript model owns it, beside its siblings: before writing `font.sources.find(({ name }) => name === n)` outside the owner, look for the query there (`Font.entryForName`, `recordForId`, `source(id)`, `layerIdFor`), and if none exists add it (`Font.sourceNamed(name)` next to `source(id)`) and point every caller at it. Unsure → Rust. `scan:ts --kind model-rule` lists model methods that compute without the engine; `--kind repeated-filter` lists predicates repeated across files.
+- **A fallback, preview or workaround is still a copy.** "Previews lay out as typed", "re-derive screen order by sorting x", "a feature applies when its override or default isn't off", "segment graphemes with `Intl.Segmenter`": each is a second rule beside Rust's that drifts the first time Rust changes (RTL, ligatures, required features). When Rust's answer lacks a field TypeScript needs, add the field in Rust.
+
+```ts
+// Before: TypeScript rebuilds screen order Rust already computed (visual_order).
+const onScreen = stops.toSorted((a, b) => a.x - b.x);
+const applies = (tag: string) => (run.features[tag] ?? defaultOf(tag)) !== "off";
+
+// After: Rust returns the order and the answer (fields to add there); TypeScript reads them.
+const onScreen = layout.stopsInScreenOrder;
+const applies = engine.featureApplies(run, tag);
+```
 - **Prove "at least one" in the type.** When a list is never empty, type it `readonly [T, ...T[]]` and read `list[0]` without a fallback.
 - **Use the built-ins before spreading.** Query an iterator directly (`map.values().filter(…).toArray()`; `.some`/`.every`/`.find` need no array), copy-sort with `toSorted`, merge sets with `union`/`intersection`/`difference`, group with `Map.groupBy`. Enforced by `shift/prefer-iterator-helpers`.
 - **A combined collection used in several places is a type.** `ThemeCatalog` builds the shipped-then-user theme list once; `KerningGroups.atPosition` sorts once per change. Spread to build a value once, not at every read.
@@ -69,6 +80,17 @@ entries = entries.touch(visit, (previous) => ({
 
 - **When a `?.` chain crosses two objects, the first object is missing a method.** `editor.glyphForId(id)?.layerForSource(sourceId) ?? null` is `editor.layerForGlyph(id, sourceId)`. Add the method to the owner, next to the data, and use it everywhere.
 - **When the same `filter`/`find` appears in two places, it becomes a method** on the type that owns the collection: `scene.only(kind)` for "the one node of this kind" (null with none or several), `scene.first(kind)` for "the first in scene order". Enforced by `shift/prefer-scene-only`.
+- **State has one owner the window or session holds.** A module-level `WeakMap<Editor, …>` reached through `windowTabs(editor)` is a hidden global: nothing says who creates it or when it goes. Construct it where its lifetime starts (the window, the session, the `Editor`) and pass it down.
+
+```ts
+// Before
+const windowTabsByEditor = new WeakMap<Editor, WindowTabs>();
+export function windowTabs(editor: Editor): WindowTabs { … }
+
+// After: the window creates its tabs and provides them.
+const tabs = new WindowTabs(editor); // in the window's setup, disposed with it
+```
+
 - **Prefer a method or a small class over a free function whose first parameter is the domain object.** A free function is right for pure numeric helpers with no owner (`wrapIndex` in `@shift/geo`, enforced for cyclic indexing by `shift/no-manual-index-wrap`).
 
 ## Extensible kinds
@@ -83,6 +105,20 @@ entries = entries.touch(visit, (previous) => ({
 - **Check tables with `satisfies`.** `const capabilities = { … } satisfies Record<string, CapabilityDefinition>` checks every entry and keeps literal key types, so dispatch needs no `as never`.
 - **Make switches exhaustive.** End a `switch` on a union with `default: assertNever(value)`, so a new member fails to compile at every switch that forgot it.
 - **Never re-declare a generated shape.** Import it from `@shift/types`; derive views in `packages/types/src/domain.ts`.
+- **A new field on a stored record gets its default at the boundary, or no migration at all.** If the record is ever read back from disk, IPC or `localStorage`, give the field a default in its schema, so an older record reads as complete and no caller writes `run.features?.[tag]`. If the data has never shipped, write no migration and no legacy branch (`ensurePage` re-parenting nodes "written before pages existed"); say in the PR that it is unpersisted.
+
+```ts
+// Before: older runs have no `features`; `run.features[tag]` throws on them.
+interface TextRunRecord { glyphs: GlyphId[]; features: Record<string, FeatureSetting> }
+
+// After: one schema, the default stated once.
+const textRunRecord = z.object({
+  glyphs: z.array(glyphIdSchema),
+  features: z.record(z.string(), featureSetting).default({}),
+});
+```
+
+- **Sameness belongs to the type.** A hand-rolled deep-equal, or a field-by-field `a.tag === b.tag && a.name === b.name && …` in a caller, silently goes stale when a field is added and costs a walk on every run. Compare an identity or revision Rust already gives (the result changed iff its input revision did), or put one `equals` on the type next to its fields.
 
 ## Review checklist
 
@@ -94,4 +130,8 @@ entries = entries.touch(visit, (previous) => ({
 - [ ] No inline comparator in `sort`/`toSorted`; no sort or named filter repeated at call sites where the owner could keep it.
 - [ ] No `as <Brand>`; no cast of untrusted data; no hand-written interface duplicating a zod schema or a generated type.
 - [ ] Every `switch` on a union is exhaustive.
+- [ ] No TypeScript fallback, preview path or `WORKAROUND` that decides what a Rust rule decides.
+- [ ] No module-level `WeakMap<Editor, …>` holding state.
+- [ ] Every new field on a stored record has a schema default, or the PR says the record is never persisted.
+- [ ] No hand-rolled deep or field-by-field equality outside the type it compares.
 - [ ] `pnpm lint:check`, `pnpm typecheck` and the affected tests pass.

@@ -1,10 +1,11 @@
+import { openFontInfo } from "./fixtures/appLocators";
 import type { Page } from "@playwright/test";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { workspaceTest as test, expect, FONTS } from "./fixtures/electronApp";
 
 /** Turns on agent connections in Settings → Agents and returns the MCP URL it shows. */
 async function enableAgentConnections(page: Page): Promise<string> {
-  await page.getByRole("button", { name: "Settings" }).click();
+  await openFontInfo(page);
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await dialog.getByRole("button", { name: "Agents", exact: true }).click();
   const agents = dialog.getByRole("region", { name: "Agents" });

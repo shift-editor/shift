@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { GlyphGeometry } from "@shift/glyph-state";
 import { asContourId, asPointId } from "@shift/types";
-import { createContourIconPath, createObjectTree, ObjectTreeCache } from "./createObjectTree";
+import { Mat } from "@shift/geo";
+import { createObjectTree, ObjectTreeCache } from "./createObjectTree";
+import { CONTOUR_ICON, GLYPH_ICON } from "./IconBox";
 
 const geometry = new GlyphGeometry(
   {
@@ -90,7 +92,7 @@ describe("object tree contour descriptions", () => {
     const contour = geometry.contours[0];
     if (!contour) throw new Error("Expected contour fixture");
 
-    const iconPath = createContourIconPath(contour);
+    const iconPath = CONTOUR_ICON.contourPath(contour);
 
     expect(iconPath).toBe("M 1 8 L 5 8 L 9 8 Q 11 4 13 8");
   });
@@ -163,5 +165,30 @@ describe("object tree cache", () => {
     );
 
     expect(createObjectTree(extended, cache)).toEqual(createObjectTree(extended));
+  });
+});
+
+describe("glyph previews", () => {
+  const frame = { ascender: 800, descender: -200, advance: 500 };
+  const square = (coordinates: readonly number[]) => squareGeometry(true, coordinates).contours[0]!;
+  const preview = (coordinates: readonly number[], transform = Mat.Identity()) =>
+    GLYPH_ICON.glyphPath([{ contour: square(coordinates), transform }], frame);
+  const xs = (path: string | undefined) =>
+    [...(path ?? "").matchAll(/[ML] (-?[\d.]+)/g)].map((match) => Number(match[1]));
+
+  it("draws a component's contour where the component places it", () => {
+    const placed = preview([0, 0, 100, 0, 100, 100, 0, 100], Mat.Translate(200, 300));
+    const direct = preview([200, 300, 300, 300, 300, 400, 200, 400]);
+
+    expect(placed).toBe(direct);
+  });
+
+  it("draws every glyph at the font's height, so a smaller glyph draws smaller", () => {
+    const width = (path: string | undefined) => Math.max(...xs(path)) - Math.min(...xs(path));
+
+    const full = width(preview([0, 0, 500, 0, 500, 500, 0, 500]));
+    const half = width(preview([0, 0, 250, 0, 250, 250, 0, 250]));
+
+    expect(half).toBeCloseTo(full / 2);
   });
 });

@@ -17,6 +17,8 @@ export const GlyphGrid = memo(function GlyphGrid() {
     glyphPreviews,
     canAuthor,
     openGlyph,
+    selectedGlyphId,
+    selectGlyph,
   } = useGlyphCatalog();
   const [catalogReady, setCatalogReady] = useState(false);
   const workspaceReadyRef = useRef(false);
@@ -64,6 +66,8 @@ export const GlyphGrid = memo(function GlyphGrid() {
         glyphPreviews={glyphPreviews}
         canAuthor={canAuthor}
         openGlyph={openGlyph}
+        selectedGlyphId={selectedGlyphId}
+        selectGlyph={selectGlyph}
         onFirstFrame={handleCatalogReady}
         onUnavailable={handleCatalogUnavailable}
       />

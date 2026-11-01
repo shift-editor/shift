@@ -2,6 +2,9 @@ import { asGlyphId, type GlyphId } from "@shift/types";
 
 const EDITOR_ROUTE_PREFIX = "/editor/";
 
+/** The route that shows the active page's canvas, with no glyph opened. */
+export const CANVAS_PATH = "/canvas";
+
 /** Returns the route that edits `glyphId`. */
 export function editorPath(glyphId: GlyphId): string {
   return `${EDITOR_ROUTE_PREFIX}${encodeURIComponent(glyphId)}`;

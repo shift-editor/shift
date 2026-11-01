@@ -96,3 +96,27 @@ describe("canvas-owned Glyph catalog layout", () => {
     }
   });
 });
+
+describe("revealing a glyph", () => {
+  // 1000 glyphs in a viewport a few rows tall.
+  const layout = new GlyphCatalogLayout(800, 400, 1000);
+  const rowOf = (index: number) => Math.floor(index / layout.columns);
+
+  it("leaves a fully visible cell where it is", () => {
+    expect(layout.scrollTopToReveal(0, 0)).toBeNull();
+  });
+
+  it("scrolls down just far enough to show a cell below the viewport", () => {
+    const index = layout.columns * 10;
+    const scrollTop = layout.scrollTopToReveal(index, 0)!;
+    const cellTop = layout.viewportPadding + rowOf(index) * layout.rowPitch;
+
+    expect(scrollTop).toBeGreaterThan(0);
+    expect(scrollTop).toBeLessThanOrEqual(cellTop);
+    expect(scrollTop + layout.viewportHeight).toBeGreaterThan(cellTop + layout.previewHeight);
+  });
+
+  it("scrolls up to a cell above the viewport", () => {
+    expect(layout.scrollTopToReveal(0, 5000)).toBe(0);
+  });
+});

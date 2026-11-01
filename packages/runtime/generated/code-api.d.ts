@@ -410,10 +410,23 @@ export interface EditorTool {
   id: string;
   state: string;
 }
+/**
+ * One of the document's pages, as the pages list shows it: the editor's
+ * `PageNode` identity and name. Pages that show a single glyph, such as a
+ * glyph tab's, are left out.
+ */
+export interface EditorPage {
+  id: NodeId;
+  name: string;
+}
 /** Renderer-owned facts for one live Shift window. */
 export interface EditorView {
   route: string;
   glyph: EditorGlyph | null;
+  /** The document's pages, in list order. */
+  pages: EditorPage[];
+  /** The page the canvas shows; null while the document has no page. */
+  shownPageId: NodeId | null;
   activeSourceId: SourceId | null;
   editingSourceIds: SourceId[];
   externalLocation: AxisCoordinate[];

@@ -65,6 +65,7 @@ import {
   type SourceId,
   type SourceMetrics,
   type Unicode,
+  asNodeId,
 } from "@shift/types";
 import { segmentIdFor, type Contour } from "@shift/glyph-state";
 import type { SystemClipboard } from "@shift/editor/clipboard";
@@ -115,6 +116,7 @@ import type {
 import { drawFixture } from "./drawFixture";
 import { createStubContext } from "./stubCanvas";
 import { SurfaceActions } from "./SurfaceActions";
+import { WindowTabs } from "@/lib/tabs/WindowTabs";
 import type {
   AnchorReadOptions,
   AxisSelection,
@@ -122,6 +124,7 @@ import type {
   InstanceSelection,
   Outline,
   PointReadOptions,
+  PageEntry,
   SourceSelection,
 } from "./reads";
 
@@ -230,6 +233,8 @@ export async function authoredAtlasPage(editor: EditorTestSurface): Promise<Glyp
 export class TestEditor extends Editor implements EditorTestSurface {
   readonly #clipboard: InMemorySystemClipboard;
   readonly #stack: WorkspaceStack;
+  /** The window's tabs, which open glyphs as the editor route does. */
+  readonly #tabs: WindowTabs;
   /** Temporary directories this editor's document was saved into, removed on {@link close}. */
   readonly #temporaryDirectories: string[] = [];
   /**
@@ -263,6 +268,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     const clipboard = new InMemorySystemClipboard();
     super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode });
     this.#stack = stack;
+    this.#tabs = new WindowTabs(this);
     this.#clipboard = clipboard;
     this.#reads = {
       font: new ShiftFontReader(stack.font, sessionMode),
@@ -386,7 +392,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.font.loadGlyph(record.id);
   }
 
-  /** The canvas's text run; the editor route creates it on the first open. */
+  /** The active page's text run; the editor route creates it on the first open. */
   get textRun(): TextRunNode | null {
     return this.scene.first("textRun");
   }
@@ -397,20 +403,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return run ? this.nodeDefinition("textRun").childGlyph(run) : null;
   }
 
-  /** Opens a glyph as the editor route does: the canvas run becomes that glyph, edited in place. */
+  /** Opens a glyph as the editor route does: in its window tab, on a glyph page of its own. */
   #placeGlyph(glyphId: GlyphId): void {
-    const item = this.text.glyphItem(glyphId);
-    if (!item || !this.glyphForId(glyphId)) throw new Error("placed glyph is not loaded");
-    const record = this.text.createRun([item]);
-    const run = this.scene.createNode<TextRunNode>({
-      kind: "textRun",
-      runId: record.id,
-      size: this.font.metricsCell.peek().unitsPerEm,
-      position: { x: 0, y: 0 },
-    });
-    const child = this.nodeDefinition("textRun").editItem(run, item.id);
-    if (!child) throw new Error("placed glyph is not loaded");
-    this.enterNode(child.id);
+    if (!this.glyphForId(glyphId)) throw new Error("placed glyph is not loaded");
+    if (!this.#tabs.openGlyph(glyphId).node) throw new Error("placed glyph is not loaded");
   }
 
   /**
@@ -655,21 +651,18 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   keyDown(key: string, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
-    const mods = { ...DEFAULT_MODIFIERS, ...options };
-    this.toolManager.handleKeyDown({
-      key,
-      code: key,
-      shiftKey: mods.shiftKey,
-      altKey: mods.altKey,
-      metaKey: mods.metaKey,
-      ctrlKey: false,
-      preventDefault: () => {},
-    } as KeyboardEvent);
+    this.toolManager.handleKeyDown(keyEvent(key, options));
     return this;
   }
 
   async pressKey(key: string, options?: Partial<typeof DEFAULT_MODIFIERS>): Promise<void> {
     this.keyDown(key, options);
+
+    await this.settle();
+  }
+
+  async releaseKey(key: string, options?: Partial<typeof DEFAULT_MODIFIERS>): Promise<void> {
+    this.toolManager.handleKeyUp(keyEvent(key, options));
 
     await this.settle();
   }
@@ -702,6 +695,15 @@ export class TestEditor extends Editor implements EditorTestSurface {
     const run = this.#requireTextRun();
     const screen = this.sceneToScreen(this.toScene(run, localPoint(position.x, position.y)));
     await this.click(screen.x, screen.y, modifiers);
+  }
+
+  async clickAtScreen(position: ScreenPoint, modifiers?: Modifiers): Promise<void> {
+    await this.click(position.x, position.y, modifiers);
+  }
+
+  panBy(by: ScreenVector): void {
+    const { x, y } = this.pan;
+    this.setPan({ x: x + by.x, y: y + by.y });
   }
 
   async dragPoint(id: PointId, by: Point2D, modifiers?: Modifiers): Promise<void> {
@@ -761,6 +763,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
       ...DEFAULT_MODIFIERS,
       ...modifiers,
     });
+  }
+
+  passFrame(): void {
+    this.toolManager.flushPointerMoves();
   }
 
   async releaseAt(position: Point2D, modifiers?: Modifiers): Promise<void> {
@@ -865,7 +871,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   async openGlyph(name: string): Promise<void> {
     const glyphId = this.#glyphNamed(name);
     await this.font.loadGlyph(glyphId);
-    if (!this.openGlyphInText(glyphId)) throw new Error(`openGlyph could not open ${name}`);
+    if (!this.#tabs.openGlyph(glyphId).node) throw new Error(`openGlyph could not open ${name}`);
     await this.settle();
   }
 
@@ -1614,6 +1620,39 @@ export class TestEditor extends Editor implements EditorTestSurface {
     }
   }
 
+  pageList(): readonly PageEntry[] {
+    return this.editorView().pages;
+  }
+
+  shownPageId(): string | null {
+    return this.editorView().shownPageId;
+  }
+
+  pageExists(id: string): boolean {
+    return this.scene.nodeOfKind(asNodeId(id), "page") !== null;
+  }
+
+  addPage(name?: string): PageEntry {
+    const { id, name: pageName } = this.pages.create(name);
+    return { id, name: pageName };
+  }
+
+  showPage(id: string): void {
+    this.pages.activate(asNodeId(id));
+  }
+
+  renamePage(id: string, name: string): void {
+    this.pages.rename(asNodeId(id), name);
+  }
+
+  movePage(id: string, index: number): void {
+    this.pages.move(asNodeId(id), index);
+  }
+
+  deletePage(id: string): boolean {
+    return this.pages.delete(asNodeId(id));
+  }
+
   asEditor(): Editor {
     return this;
   }
@@ -1627,4 +1666,16 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
 function plainBounds(bounds: Bounds | null): Bounds | null {
   return bounds && { min: { ...bounds.min }, max: { ...bounds.max } };
+}
+
+/** A key event as the tool manager reads it, with `options` overriding the default modifiers. */
+function keyEvent(key: string, options?: Partial<typeof DEFAULT_MODIFIERS>): KeyboardEvent {
+  const modifiers = { ...DEFAULT_MODIFIERS, ...options };
+  return {
+    key,
+    code: key,
+    ...modifiers,
+    ctrlKey: false,
+    preventDefault: () => {},
+  } as KeyboardEvent;
 }

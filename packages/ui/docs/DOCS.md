@@ -31,6 +31,7 @@ packages/ui/
       dialog/              -- Dialog, DialogBackdrop, DialogPortal, DialogPopup, DialogTitle, DialogClose
       field/               -- Field root, label, control, description, and error
       input/Input.tsx      -- Input with label/icon positioning and select-all shortcut
+      inline-rename/       -- useInlineRename: the props of a field editing a name in place (pages, tabs)
       menu/                -- Menu trigger, portal, positioner, popup, item, separator, and submenu
       menubar/             -- Horizontal row of menus with keyboard navigation between them
       number-field/        -- Numeric root, input, step controls, and scrub area
@@ -38,6 +39,7 @@ packages/ui/
       progress/            -- Progress root with styled track and indicator
       radio/               -- RadioGroup and selectable RadioCard preset control
       resizable/           -- ResizablePanelGroup, ResizablePanel, ResizableHandle over react-resizable-panels v4 (pixel sizes)
+      sortable-list/       -- SortableList, SortableItem, useSortableItem: drag and keyboard reordering over dnd-kit, with screen-reader announcements
       select/              -- Select trigger, popup, list, item, and indicator primitives
       separator/           -- Separator (horizontal/vertical)
       slider/              -- Slider with thumb-level accessible name

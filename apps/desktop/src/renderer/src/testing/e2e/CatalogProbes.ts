@@ -40,7 +40,7 @@ export class CatalogProbes {
     return new Promise<boolean>((resolve) => {
       const sample = (): void => {
         const currentName = font.recordForId(glyphId)?.name;
-        const input = document.querySelector<HTMLInputElement>('[aria-label="Glyph name"]');
+        const input = document.querySelector<HTMLInputElement>('[aria-label="Rename glyph"]');
         const renderer = [
           ...document.querySelectorAll<HTMLElement>("[data-glyph-catalog-renderer]"),
         ].find((element) => getComputedStyle(element).visibility === "visible");

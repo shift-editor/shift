@@ -36,7 +36,7 @@ export function ContextMenuPopup({ className, ...props }: ContextMenuPopupProps)
 }
 
 export interface ContextMenuItemProps extends React.ComponentProps<typeof BaseContextMenu.Item> {
-  variant?: "default" | "danger" | "outlined";
+  variant?: "default" | "outlined";
 }
 
 export function ContextMenuItem({
@@ -48,7 +48,6 @@ export function ContextMenuItem({
     <BaseContextMenu.Item
       className={cn(
         menuItemStyles,
-        variant === "danger" && "text-destructive data-[highlighted]:bg-destructive-hover",
         variant === "outlined" &&
           "h-8 justify-center gap-2 border border-line-subtle bg-surface-muted hover:bg-hover data-[highlighted]:bg-hover",
         className,

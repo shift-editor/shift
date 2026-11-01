@@ -13,6 +13,7 @@ import type {
   SourceId,
   ReadonlyEntityMap,
 } from "@shift/types";
+import type { GlyphIdentityConflict as EngineGlyphIdentityConflict } from "@shift/wasm/protocol";
 import type { Designspace } from "../lib/variation/Designspace";
 import type { Glyph, GlyphLayer } from "../lib/model/Glyph";
 import type { Signal } from "../lib/signals/signal";
@@ -75,3 +76,17 @@ export interface GlyphOptions {
   /** Reads a glyph's propagation category; reactive callers re-run when it changes. */
   readonly anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
 }
+
+/**
+ * Why a glyph's name or codepoint was not changed, so the field can say: shift-font's
+ * conflicts, and a codepoint field's text that is not a codepoint.
+ */
+export type GlyphIdentityConflict =
+  | EngineGlyphIdentityConflict
+  | { readonly kind: "invalidCodepoint"; readonly text: string };
+
+/** What a glyph identity edit did: changed it, left it as it was, or refused it. */
+export type GlyphIdentityEdit =
+  | { readonly kind: "changed" }
+  | { readonly kind: "unchanged" }
+  | { readonly kind: "refused"; readonly conflict: GlyphIdentityConflict };

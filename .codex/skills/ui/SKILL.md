@@ -82,6 +82,19 @@ If the reference is ambiguous or conflicts with an established interaction patte
 - Portal popups above application content and give their positioner the shared layering class.
 - Close, menu, popover, and dialog triggers are actions too; icon-only compound triggers follow the same label and tooltip rules.
 
+## Popovers, menus, and panels
+
+- A panel opened from a sidebar section's action (create axis, source, or instance; add languages; kerning groups) opens beside the sidebar, never over it: its edge on the sidebar's edge, its top on the section's top. Use `useSidebarPanelAnchor` (`side="right"` for the left sidebar, `"left"` for the right) and spread its `positioner` on the positioner; kerning's `KerningGroupsPanel` is the reference.
+- A row's ⋮ menu opens from its button with `align="start"`, extending outward over the canvas, not back across the sidebar.
+- A panel that holds content has a header row: its title and an icon close button (✕ with a "Close" tooltip) above a `border-line-subtle` rule, like Create Source. A menu with a header keeps arrow-key navigation through its items. The title's inset matches the items' text inset below it.
+- Delete and other destructive actions look like every other item: no red text or red hover. Label them with the verb alone ("Delete", not "Delete page"); the row or menu already names the target. Red is for errors, not actions.
+
+## Tabs, labels, and inline renaming
+
+- A label's state never changes its size: an active tab changes its background, not its weight, so tabs never shift as the active one changes.
+- Labels that can be long truncate with an ellipsis and show the full text as a `title`. Give closable items a minimum width so the close button is never cramped.
+- Renaming in place keeps the element's exact size, position, and icon; only the text becomes editable, and the focus ring surrounds the whole element.
+
 ## Coverage audits
 
 For broad UI work such as "add all missing tooltips," do not patch only the first reported control.

@@ -67,6 +67,8 @@ const capabilities: ShiftCapabilities = {
           nodeId: asNodeId("node-a"),
           sourceId: asSourceId("source-a"),
         },
+        pages: [{ id: asNodeId("node-page"), name: "Page 1" }],
+        shownPageId: asNodeId("node-page"),
         activeSourceId: asSourceId("source-a"),
         editingSourceIds: [asSourceId("source-a")],
         externalLocation: [],
