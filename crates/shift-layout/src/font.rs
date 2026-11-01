@@ -1,7 +1,7 @@
 //! The live font at the location text is laid out at.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use shift_font::anchor_propagation::PropagatedAnchors;
@@ -191,8 +191,27 @@ impl LiveAdvances for LayoutFont<'_> {
 }
 
 /// Positions the generated features with the live font, as shaping reaches
-/// each one's place among the font's lookups.
-pub(crate) struct GeneratedPositions<'f, 'a>(pub(crate) &'f LayoutFont<'a>);
+/// each one's place among the font's lookups, and remembers the marks it
+/// attached.
+pub(crate) struct GeneratedPositions<'f, 'a> {
+    font: &'f LayoutFont<'a>,
+    /// Each attached mark, by its cluster and glyph.
+    attached: HashSet<(u32, GlyphId)>,
+}
+
+impl<'f, 'a> GeneratedPositions<'f, 'a> {
+    pub(crate) fn new(font: &'f LayoutFont<'a>) -> Self {
+        Self {
+            font,
+            attached: HashSet::new(),
+        }
+    }
+
+    /// Whether the mark `glyph` at `cluster` attached to a glyph before it.
+    pub(crate) fn attached(&self, cluster: u32, glyph: GlyphId) -> bool {
+        self.attached.contains(&(cluster, glyph))
+    }
+}
 
 impl GeneratedPositioning for GeneratedPositions<'_, '_> {
     fn position(
@@ -209,8 +228,9 @@ impl GeneratedPositioning for GeneratedPositions<'_, '_> {
                 let glyph_id = glyphs.glyph(index);
                 RunGlyph {
                     glyph_id,
-                    is_mark: glyph_id
-                        .is_some_and(|glyph| self.0.class(glyph) == Some(OpenTypeCategory::Mark)),
+                    is_mark: glyph_id.is_some_and(|glyph| {
+                        self.font.class(glyph) == Some(OpenTypeCategory::Mark)
+                    }),
                 }
             })
             .collect();
@@ -227,8 +247,14 @@ impl GeneratedPositioning for GeneratedPositions<'_, '_> {
             TextDirection::LeftToRight => RunDirection::LeftToRight,
             TextDirection::RightToLeft => RunDirection::RightToLeft,
         };
-        let mut reads = FontReads(self.0);
-        RunPositioning::new(&run, &mut run_positions, direction, &mut reads).apply(feature);
+        let mut reads = FontReads(self.font);
+        let attached =
+            RunPositioning::new(&run, &mut run_positions, direction, &mut reads).apply(feature);
+        for index in attached {
+            if let (Some(cluster), Some(glyph)) = (glyphs.cluster(index), glyphs.glyph(index)) {
+                self.attached.insert((cluster, glyph));
+            }
+        }
         for (position, positioned) in positions.iter_mut().zip(&run_positions) {
             position.x_advance = font_units(positioned.x_advance);
             position.y_advance = font_units(positioned.y_advance);
@@ -239,7 +265,7 @@ impl GeneratedPositioning for GeneratedPositions<'_, '_> {
 }
 
 /// The live font as shift-font's positioning reads it.
-struct FontReads<'f, 'a>(&'f LayoutFont<'a>);
+pub(crate) struct FontReads<'f, 'a>(pub(crate) &'f LayoutFont<'a>);
 
 impl PositioningFont for FontReads<'_, '_> {
     fn anchors(&mut self, glyph_id: GlyphId) -> Option<Arc<PropagatedAnchors>> {

@@ -7,6 +7,7 @@ use shift_shape::{
     character_glyphs,
 };
 
+use shift_shape::Tag;
 pub use shift_shape::{FeatureSetting, ShapeError, TextDirection};
 
 use super::positioning::{GeneratedPositioning, LiveAdvances, MarkerHook};
@@ -168,6 +169,18 @@ impl LiveShaper {
             .shape_paragraph(&glyphs, &request.at(coords.as_slice()), Some(&mut hook))
     }
 
+    /// Whether shaping with `features` runs the generated `feature`: the
+    /// font leaves it to the editor (it has an insert marker, not the
+    /// feature source's own lookups) and `features` leaves it on.
+    pub fn runs_generated(&self, feature: Tag, features: &[FeatureSetting]) -> bool {
+        self.glyphs
+            .font
+            .insert_markers()
+            .iter()
+            .any(|marker| marker.tag == feature)
+            && feature_enabled(features, feature)
+    }
+
     /// A hook running `positioning` at the font's insert markers, for each
     /// generated feature `features` leaves on.
     fn marker_hook<'a>(
@@ -175,13 +188,7 @@ impl LiveShaper {
         features: &[FeatureSetting],
         positioning: &'a mut dyn GeneratedPositioning,
     ) -> MarkerHook<'a> {
-        let enabled = |tag| {
-            features
-                .iter()
-                .rev()
-                .find(|setting| setting.tag == tag)
-                .is_none_or(|setting| setting.value != 0)
-        };
+        let enabled = |tag| feature_enabled(features, tag);
         MarkerHook::new(
             self.glyphs.font.insert_markers(),
             enabled,
@@ -281,4 +288,13 @@ impl GlyphSource for AdvancedGlyphs<'_> {
         let glyph = self.glyphs.order.glyph(shaper_glyph)?;
         Some(self.advances.advance(glyph).unwrap_or(0))
     }
+}
+
+/// Whether `features` leaves `tag` on: its last setting for it is not 0.
+fn feature_enabled(features: &[FeatureSetting], tag: Tag) -> bool {
+    features
+        .iter()
+        .rev()
+        .find(|setting| setting.tag == tag)
+        .is_none_or(|setting| setting.value != 0)
 }

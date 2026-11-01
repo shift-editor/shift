@@ -75,7 +75,15 @@ export class GlyphLayerState {
   });
   #reapplyEdit: (() => void) | null = null;
 
-  constructor(state: GlyphState) {
+  readonly #endPreview: () => void;
+
+  /**
+   * @param endPreview - Called when a gesture's preview stops showing, as when
+   * it is cancelled or shows its base again, so what else shows the preview
+   * (the window engine's text layout) stops too.
+   */
+  constructor(state: GlyphState, endPreview: () => void = () => {}) {
+    this.#endPreview = endPreview;
     this.#layerId = state.layerId;
     this.#buffers = signal(LayerBuffers.fromState(state), {
       name: "glyphLayer.buffers",
@@ -252,6 +260,7 @@ export class GlyphLayerState {
   cancelEdit(): void {
     const baseState = this.#editBaseState.peek();
     if (!baseState) return;
+    this.#endPreview();
 
     this.#reapplyEdit = null;
     batch(() => {
@@ -265,6 +274,7 @@ export class GlyphLayerState {
    * the gesture began from; null shows that base again.
    */
   showPreview(state: LayerUpdate | null): void {
+    if (!state) this.#endPreview();
     const shown = state ?? this.#editBaseState.peek();
     if (!shown) throw new Error("glyph layer has no active edit to preview");
     this.#show(shown);

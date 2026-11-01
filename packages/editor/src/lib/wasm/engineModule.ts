@@ -24,7 +24,9 @@ import {
   engineNextGlyphName,
   engineOpen,
   enginePreload,
+  engineEndPreview,
   enginePreview,
+  engineShowPreview,
   engineRedo,
   engineRelease,
   engineReads,
@@ -47,10 +49,8 @@ import type {
   MissingKerningOrigin,
   FontChangeFlag,
   LayoutRequest,
-  ParagraphRequest,
-  ShapedParagraph,
   SourceSetWeights,
-  TextLayout as LaidOutText,
+  PlacedText,
 } from "@shift/wasm/protocol";
 
 export { svgPaths } from "@shift/wasm/engine";
@@ -146,6 +146,17 @@ export class EngineSession {
   preview(intents: readonly FontIntent[]): EngineLayer[] {
     this.#intents.hold(intents);
     return enginePreview(this.#handle);
+  }
+
+  /** Lays text out from what `intents` would leave, returning nothing. */
+  showPreview(intents: readonly FontIntent[]): void {
+    this.#intents.hold(intents);
+    engineShowPreview(this.#handle);
+  }
+
+  /** Stops laying text out from the last preview's font. */
+  endPreview(): void {
+    engineEndPreview(this.#handle);
   }
 
   /**
@@ -321,30 +332,11 @@ export class EngineSession {
   }
 
   /**
-   * Shapes paragraphs with the font's feature code, through the shaper font
-   * the session compiles from its own font, unsaved edits included. Compiles
-   * when text is first shaped and after an edit that may change what the
-   * compile reads; loads no layers.
-   *
-   * @returns Each paragraph's runs in logical order, in request order, or
-   * why it could not be shaped: the store's reader could not answer, the
-   * font cannot make a shaper font, or the paragraph cannot be shaped.
-   */
-  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): readonly ShapedParagraph[] {
-    return this.#reads.shapeParagraphs(paragraphs);
-  }
-
-  /** The change flags whose change may change what {@link shapeParagraphs} returns. */
-  shapingInputs(): readonly FontChangeFlag[] {
-    return this.#reads.shapingInputs();
-  }
-
-  /**
    * Lays text out over the session's font, unsaved edits included: shaping,
    * kerning, marks, cursive joins, lines, bidi order, carets and boxes, all
    * in Rust (`shift_layout::TextLayout`), at a source or a design location.
    */
-  layoutText(text: LayoutRequest, place: KerningPlace): LaidOutText {
+  layoutText(text: LayoutRequest, place: KerningPlace): PlacedText {
     const source =
       place.kind === "source"
         ? this.#numbers([place.sourceId], this.#sourceNumbers, engineSourceNumbers)[0]

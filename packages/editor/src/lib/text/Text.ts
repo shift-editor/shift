@@ -14,7 +14,8 @@ import {
   type TextItem,
   type TextLayout,
 } from "./layout";
-import { RunText, type ShapedText } from "./RunText";
+import type { TextLayout as LaidOutText } from "@shift/wasm/protocol";
+import { RunText } from "./RunText";
 import { GlyphNameParser, type TextParseContext, type TextParser } from "./parsing";
 
 /** Owns proof text records and one reactive layout per run identity. */
@@ -46,7 +47,7 @@ export class Text {
           new RunText(this.#editor, runIdCell, {
             run: (id) => this.run(id),
             glyphsLoadedCell: this.#glyphsLoadedCell,
-            onShaped: (shaped) => this.#acquireShapedGlyphs(shaped),
+            onLaidOut: (laidOut) => this.#acquireLaidOutGlyphs(laidOut),
           }),
       ),
   });
@@ -224,18 +225,12 @@ export class Text {
   }
 
   /** Loads glyphs the shaper substituted in, which no item names directly. */
-  #acquireShapedGlyphs(shaped: ShapedText): void {
-    for (const paragraph of shaped.paragraphs) {
-      if (paragraph.kind === "unshapable") {
-        this.#reportUnshapable(paragraph.reason);
-        continue;
-      }
-      for (const run of paragraph.runs) {
-        for (const glyph of run.glyphs) {
-          if (glyph.glyphId && !this.#editor.glyphForId(glyph.glyphId)) {
-            void this.#loadGlyph(glyph.glyphId);
-          }
-        }
+  /** Loads the glyphs a layout shows that are not loaded yet, such as ones shaping substituted in. */
+  #acquireLaidOutGlyphs(laidOut: LaidOutText): void {
+    if (laidOut.unshaped) this.#reportUnshapable(laidOut.unshaped);
+    for (const glyph of laidOut.glyphs) {
+      if (glyph.glyphId && !this.#editor.glyphForId(glyph.glyphId)) {
+        void this.#loadGlyph(glyph.glyphId);
       }
     }
   }

@@ -26,12 +26,11 @@
 use pack::Pack;
 use shift_engine::StoreReadError;
 use shift_font::{
-    Axis, FontChangeFlag, GlyphRecords, MetricValue, MissingKerningOrigin, ResolvedKerning, Source,
+    Axis, FontChangeFlag, GlyphId, GlyphRecords, MetricValue, MissingKerningOrigin,
+    ResolvedKerning, Source,
 };
 use shift_layout::{LayoutRequest, TextLayout};
 use shift_wire::KerningSnapshot;
-
-use crate::shaping::{ParagraphRequest, ShapedParagraph};
 
 /// What the editor reads from one engine session's font. Glyphs and sources
 /// are named by the numbers the session interned for them; `glyphs` lists
@@ -81,32 +80,25 @@ pub trait EngineReads {
     ///
     /// Returns [`StoreReadError`] when the store's reader cannot answer.
     fn glyph_records(&self) -> Result<GlyphRecords, StoreReadError>;
-    /// Shapes paragraphs with the font's feature code, through a shaper font
-    /// the session compiles from its own font: each paragraph's runs in
-    /// logical order, or why it could not be shaped.
-    ///
-    /// The session compiles when text is first shaped, and again before the
-    /// next shape after an edit that may change the glyph directory or the
-    /// axes and their mappings, only when something the compile reads
-    /// changed; feature code with errors keeps the last font. What the
-    /// compile reads of layers the session has not loaded (whether they
-    /// carry an anchor marks attach to) and glyph data's categories come from
-    /// the store's reader; nothing is loaded to answer. When the reader
-    /// cannot answer, or the font cannot make a shaper font, every paragraph
-    /// is unshapable with that reason.
-    fn shape_paragraphs(&self, paragraphs: Vec<ParagraphRequest>) -> Vec<ShapedParagraph>;
-    /// The flags whose change may change what [`Self::shape_paragraphs`]
-    /// returns.
-    fn shaping_inputs(&self) -> Vec<FontChangeFlag>;
     /// Lays text out over the session's font, unsaved edits included, as
     /// `shift_layout::TextLayout::new` does: shaped with the session's
     /// shaper (brought up to date as [`Self::shape_paragraphs`] does), with
     /// kerning, mark attachment and cursive joins at each generated feature's
     /// insert marker, then broken into lines, ordered, aligned, and given
     /// caret stops. Text that cannot be shaped is laid out as typed, with
-    /// the reason. A glyph whose layers the session has not loaded lays out
-    /// empty until they are.
-    fn layout_text(&self, request: TextLayoutRequest) -> TextLayout;
+    /// the reason.
+    ///
+    /// The session compiles its shaper font when text is first laid out, and
+    /// again before the next layout after an edit that may change the glyph
+    /// directory or the axes and their mappings, only when something the
+    /// compile reads changed; feature code with errors keeps the last font.
+    /// What the compile reads of layers the session has not loaded and glyph
+    /// data's categories come from the store's reader.
+    ///
+    /// Glyphs whose layers the session has not loaded lay out from their
+    /// placeholders; `unloaded` lists them, for the editor to load and lay
+    /// out again.
+    fn layout_text(&self, request: TextLayoutRequest) -> PlacedText;
     /// The flags whose change may change what [`Self::layout_text`]
     /// returns.
     fn layout_inputs(&self) -> Vec<FontChangeFlag>;
@@ -140,6 +132,15 @@ pub struct TextLayoutRequest {
     /// A source, by the number the session interned, to lay out at instead,
     /// as its own layers draw.
     pub source: Option<usize>,
+}
+
+/// Text as [`EngineReads::layout_text`] laid it out.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct PlacedText {
+    pub layout: TextLayout,
+    /// The glyphs it shows whose layers the session has not loaded, which
+    /// laid out from their placeholders.
+    pub unloaded: Vec<GlyphId>,
 }
 
 /// The authored pair an edit to the kerning between two glyphs at a source changes.
@@ -186,7 +187,7 @@ pub(crate) use exports::{FontVariation, InternedIds};
 #[cfg(feature = "engine")]
 mod exports {
     use std::cell::RefCell;
-    use std::collections::HashMap;
+    use std::collections::{BTreeSet, HashMap};
     use std::hash::Hash;
     use std::rc::Rc;
 
@@ -202,8 +203,7 @@ mod exports {
 
     use super::{
         Axis, EditablePair, EngineReads, FontChangeFlag, InterpolatedMetrics, KerningSnapshot,
-        ParagraphRequest, ShapedParagraph, Source, SourceSetWeights, TextLayout, TextLayoutRequest,
-        engine_reads_request,
+        PlacedText, Source, SourceSetWeights, TextLayoutRequest, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::shaping::{TextPlace, TextShaping};
@@ -535,23 +535,31 @@ mod exports {
             Self::glyph_records(self)
         }
 
-        fn shape_paragraphs(&self, paragraphs: Vec<ParagraphRequest>) -> Vec<ShapedParagraph> {
-            self.shaping.shape_paragraphs(
-                self.session.font(),
-                || self.shaper_font_source(),
-                &paragraphs,
-            )
-        }
-
-        fn shaping_inputs(&self) -> Vec<FontChangeFlag> {
-            FontChangeFlag::of(TextShaping::INPUTS).collect()
-        }
-
-        fn layout_text(&self, request: TextLayoutRequest) -> TextLayout {
-            let font = self.session.font();
+        fn layout_text(&self, request: TextLayoutRequest) -> PlacedText {
+            // A gesture's preview shows in text while it is under way.
+            let font = self
+                .previewed
+                .as_ref()
+                .unwrap_or_else(|| self.session.font());
             let place = self.text_place(&request);
-            self.shaping
-                .layout_text(font, || self.shaper_font_source(), &request.text, place)
+            let layout =
+                self.shaping
+                    .layout_text(font, || self.shaper_font_source(), &request.text, place);
+            let shown: BTreeSet<GlyphId> = layout
+                .glyphs
+                .iter()
+                .filter_map(|glyph| glyph.glyph_id)
+                .collect();
+            let residency = self.session.residency();
+            let unloaded = shown
+                .into_iter()
+                .filter(|glyph| {
+                    font.layer_ids_of_glyphs([glyph])
+                        .into_iter()
+                        .any(|layer| residency.is_unloaded(layer))
+                })
+                .collect();
+            PlacedText { layout, unloaded }
         }
 
         fn layout_inputs(&self) -> Vec<FontChangeFlag> {

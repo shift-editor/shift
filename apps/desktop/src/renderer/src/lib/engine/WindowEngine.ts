@@ -25,8 +25,6 @@ import {
   FontChangeFlagSchema,
   type FontChangeFlag,
   type LayoutRequest,
-  type ParagraphRequest,
-  type ShapedParagraph,
   type TextLayout as LaidOutText,
 } from "@shift/wasm/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
@@ -38,6 +36,8 @@ const CHANGE_FLAGS: readonly FontChangeFlag[] = FontChangeFlagSchema.names;
 
 /** An impact that sets every flag, as opening a session does. */
 const EVERY_CHANGE = (1 << CHANGE_FLAGS.length) - 1;
+/** The impact of a change to glyph layers alone, as a preview makes. */
+const LAYERS_CHANGE = 1 << CHANGE_FLAGS.indexOf("layers");
 
 /**
  * The open session and the reader it loads layers through, which moves with
@@ -98,11 +98,6 @@ export class WindowEngine implements FontEngine {
     const revision = this.#revisions.get(flag);
     if (!revision) throw new Error(`no revision for the change flag ${flag}`);
     return revision;
-  }
-
-  shapingInputs(): readonly FontChangeFlag[] {
-    // Before a session opens, any flag: opening changes them all.
-    return this.#opened?.session.shapingInputs() ?? CHANGE_FLAGS;
   }
 
   layoutInputs(): readonly FontChangeFlag[] {
@@ -252,10 +247,35 @@ export class WindowEngine implements FontEngine {
     const session = this.#require();
     performance.mark("engine.preview.start");
     try {
-      return session.preview(intents);
+      const layers = session.preview(intents);
+      // Text lays out from the previewed font while the gesture shows it.
+      this.#changed(LAYERS_CHANGE);
+      return layers;
     } finally {
       performance.measure("engine.preview", "engine.preview.start");
     }
+  }
+
+  /**
+   * Lays text out from what `intents` would leave, without keeping them or
+   * returning layers: one call per drag frame the editor draws itself.
+   */
+  showPreview(intents: readonly FontIntent[]): void {
+    const session = this.#require();
+    performance.mark("engine.showPreview.start");
+    try {
+      session.showPreview(intents);
+      this.#changed(LAYERS_CHANGE);
+    } finally {
+      performance.measure("engine.showPreview", "engine.showPreview.start");
+    }
+  }
+
+  endPreview(): void {
+    const session = this.#opened?.session;
+    if (!session) return;
+    session.endPreview();
+    this.#changed(LAYERS_CHANGE);
   }
 
   /**
@@ -327,12 +347,20 @@ export class WindowEngine implements FontEngine {
     return this.#require().nextGlyphName(name);
   }
 
-  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): readonly ShapedParagraph[] | null {
-    return this.#opened?.session.shapeParagraphs(paragraphs) ?? null;
-  }
-
   layoutText(text: LayoutRequest, place: KerningPlace): LaidOutText | null {
-    return this.#opened?.session.layoutText(text, place) ?? null;
+    const session = this.#opened?.session;
+    if (!session) return null;
+    const placed = session.layoutText(text, place);
+    if (placed.unloaded.length === 0) return placed.layout;
+    // Glyphs the text shows that the engine has not loaded laid out from
+    // placeholders: load them, as an edit would, and lay out again.
+    try {
+      session.preload(placed.unloaded);
+    } catch (error) {
+      console.warn("loading the glyphs text shows failed", error);
+      return placed.layout;
+    }
+    return session.layoutText(text, place).layout;
   }
 
   newAnchorName(layerIds: readonly LayerId[]): string {

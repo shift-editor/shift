@@ -126,29 +126,29 @@ impl<'a, F: PositioningFont + ?Sized> RunPositioning<'a, F> {
     }
 
     /// Applies what `feature`'s generated lookups would.
-    pub fn apply(&mut self, feature: GeneratedFeature) {
+    ///
+    /// Returns the indices of the marks it attached, for `mark` and `mkmk`.
+    pub fn apply(&mut self, feature: GeneratedFeature) -> Vec<usize> {
         match feature {
-            GeneratedFeature::Cursive => self.join_cursive(),
-            GeneratedFeature::Kern => self.kern(),
+            GeneratedFeature::Cursive => {
+                self.join_cursive();
+                Vec::new()
+            }
+            GeneratedFeature::Kern => {
+                self.kern();
+                Vec::new()
+            }
             GeneratedFeature::Mark => self.attach_marks(),
             GeneratedFeature::MarkToMark => self.attach_marks_to_marks(),
         }
     }
 
-    /// Kerns each pair of neighbours, as export's `kern` lookups do: pairs
-    /// of non-marks with the marks between them passed over, and a mark next
-    /// to any glyph, as the lookup that kerns marks reads them. In a
-    /// right-to-left run the value moves the first glyph too, as fontc
-    /// writes right-to-left pairs.
+    /// Kerns each pair of neighbouring non-marks, the marks between them
+    /// passed over, as export's `kern` lookups do. In a right-to-left run the
+    /// value moves the first glyph too, as fontc writes right-to-left pairs.
     fn kern(&mut self) {
-        let pairs = self.kerning_pairs();
-        if pairs.is_empty() {
-            return;
-        }
-        let glyph_pairs: Vec<(GlyphId, GlyphId)> = pairs.iter().map(|pair| pair.glyphs).collect();
-        let values = self.font.kerning(&glyph_pairs);
-        for (pair, value) in pairs.iter().zip(values) {
-            let position = &mut self.positions[pair.first];
+        let kerns = self.kerns();
+        for (position, value) in self.positions.iter_mut().zip(kerns) {
             position.x_advance += value;
             if self.direction == RunDirection::RightToLeft {
                 position.x_offset += value;
@@ -156,72 +156,66 @@ impl<'a, F: PositioningFont + ?Sized> RunPositioning<'a, F> {
         }
     }
 
-    /// The pairs export's `kern` lookups read, by the first glyph's index.
-    fn kerning_pairs(&self) -> Vec<KerningPair> {
+    /// The kerning each glyph's pair adds after it, in font units: for the
+    /// first glyph of each pair of neighbouring non-marks, the marks between
+    /// them passed over; 0 for every other glyph.
+    ///
+    /// Pairs that name a mark directly are not kerned, though fontc writes
+    /// them into a lookup of their own.
+    pub fn kerns(&mut self) -> Vec<f64> {
+        let mut firsts = Vec::new();
         let mut pairs = Vec::new();
-        let mut previous_base: Option<(usize, GlyphId)> = None;
-        let mut previous: Option<(usize, RunGlyph)> = None;
+        let mut previous: Option<(usize, GlyphId)> = None;
         for (index, glyph) in self.glyphs.iter().enumerate() {
+            if glyph.is_mark {
+                continue;
+            }
             let Some(glyph_id) = glyph.glyph_id else {
-                previous_base = None;
                 previous = None;
                 continue;
             };
-            if glyph.is_mark {
-                if let Some((first, before)) = previous
-                    && let Some(before_id) = before.glyph_id
-                {
-                    pairs.push(KerningPair {
-                        first,
-                        glyphs: (before_id, glyph_id),
-                    });
-                }
-            } else {
-                if let Some((first, before_id)) = previous_base {
-                    pairs.push(KerningPair {
-                        first,
-                        glyphs: (before_id, glyph_id),
-                    });
-                }
-                if let Some((first, before)) = previous
-                    && before.is_mark
-                    && let Some(before_id) = before.glyph_id
-                {
-                    pairs.push(KerningPair {
-                        first,
-                        glyphs: (before_id, glyph_id),
-                    });
-                }
+            if let Some((first, before)) = previous {
+                firsts.push(first);
+                pairs.push((before, glyph_id));
             }
-            if !glyph.is_mark {
-                previous_base = Some((index, glyph_id));
-            }
-            previous = Some((index, *glyph));
+            previous = Some((index, glyph_id));
         }
-        pairs
+        let mut kerns = vec![0.0; self.glyphs.len()];
+        if pairs.is_empty() {
+            return kerns;
+        }
+        for (first, value) in firsts.into_iter().zip(self.font.kerning(&pairs)) {
+            kerns[first] = value;
+        }
+        kerns
     }
 
     /// Attaches each mark to the base before it, as export's `mark`
     /// lookups do: the mark's `_name` anchor on the base's `name`, or on a
     /// ligature's last `name_N`, since a mark typed after a ligature follows
     /// its last component.
-    fn attach_marks(&mut self) {
+    fn attach_marks(&mut self) -> Vec<usize> {
+        let mut attached = Vec::new();
         let mut base: Option<usize> = None;
         for index in 0..self.glyphs.len() {
             if !self.glyphs[index].is_mark {
                 base = Some(index);
                 continue;
             }
-            if let Some(base) = base {
-                self.attach(index, base, AnchorTarget::BaseOrLigature);
+            if let Some(base) = base
+                && self.attach(index, base, AnchorTarget::BaseOrLigature)
+            {
+                attached.push(index);
             }
         }
+        attached
     }
 
     /// Attaches each mark to the mark before it, as export's `mkmk` lookups
     /// do: to the nearest earlier mark of the same base with the anchor
     /// the mark attaches by.
-    fn attach_marks_to_marks(&mut self) {
+    fn attach_marks_to_marks(&mut self) -> Vec<usize> {
+        let mut attached = Vec::new();
         for index in 0..self.glyphs.len() {
             if !self.glyphs[index].is_mark {
                 continue;
@@ -231,10 +225,12 @@ impl<'a, F: PositioningFont + ?Sized> RunPositioning<'a, F> {
                     break;
                 }
                 if self.attach(index, target, AnchorTarget::Base) {
+                    attached.push(index);
                     break;
                 }
             }
         }
+        attached
     }
 
     /// Puts the mark at `mark` on the glyph at `target` where their anchors
@@ -359,12 +355,6 @@ impl<'a, F: PositioningFont + ?Sized> RunPositioning<'a, F> {
             }
         }
     }
-}
-
-/// A pair of neighbours to kern, and the index of the first.
-struct KerningPair {
-    first: usize,
-    glyphs: (GlyphId, GlyphId),
 }
 
 /// Which anchors of the glyph a mark attaches to it by.

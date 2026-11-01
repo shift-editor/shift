@@ -113,7 +113,8 @@ fn laid_out(font: &Font, text: &str) -> Vec<Placed> {
         .map(|glyph| Placed {
             x: glyph.left + glyph.x_offset,
             y: glyph.y_offset,
-            advance: glyph.advance,
+            // Export's advance carries the kerning after it.
+            advance: glyph.advance + glyph.kern,
         })
         .collect()
 }
@@ -167,14 +168,27 @@ fn a_joined_arabic_word_steps_as_exported() {
 fn marks_in_arabic_sit_as_exported() {
     let font = fixture("ShapingTest.ufo");
 
-    for text in [
-        "\u{628}\u{64E}\u{628}",
-        "\u{628}\u{651}\u{64E}",
-        "\u{628}\u{670}\u{628}",
-        "\u{646}",
-    ] {
+    for text in ["\u{628}\u{64E}\u{628}", "\u{628}\u{651}\u{64E}", "\u{646}"] {
         assert_matches_export(&font, text);
     }
+}
+
+#[test]
+fn a_mark_nothing_attaches_inside_a_joined_word_neither_joins_nor_breaks_it() {
+    let font = fixture("ShapingTest.ufo");
+    let text = "\u{628}\u{670}\u{628}";
+
+    // The anchorless superscript alef attaches to nothing, so the editor
+    // shows it at its own advance where export sets it at none; the join
+    // around it steps as exported.
+    let heights =
+        |placed: Vec<Placed>| -> Vec<f64> { placed.iter().map(|glyph| glyph.y).collect() };
+    assert_eq!(
+        heights(laid_out(&font, text)),
+        heights(exported(&font, text))
+    );
+    let alef = &laid_out(&font, text)[1];
+    assert_eq!(alef.advance, 300.0);
 }
 
 #[test]

@@ -21,6 +21,8 @@ export const FONT_FILES = {
   mutatorSansLightCondensed: "mutatorsans/MutatorSansLightCondensed.ufo",
   /** Composites that take anchors from their components. */
   anchorPropagation: "AnchorPropagation.glyphs",
+  /** `a` with a `top` anchor, combining and spacing dieresis marks, and many points. */
+  anchorDragBench: "AnchorDragBench.glyphs",
   /** A weight axis whose user values map to other design values. */
   mappedWeight: "MappedWeight.glyphs",
   /** Components scaled differently in each master. */

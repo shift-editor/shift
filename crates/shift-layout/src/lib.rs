@@ -125,7 +125,11 @@ pub struct PlacedGlyph {
     /// origin is (`left + x_offset`, `baseline + y_offset`).
     pub x_offset: f64,
     pub y_offset: f64,
+    /// Its advance, without kerning.
     pub advance: f64,
+    /// The kerning after it on screen, before the next glyph: the pen moves
+    /// by `advance + kern`.
+    pub kern: f64,
     /// The direction of the run it is in.
     pub direction: Direction,
     /// Whether the font's `GDEF` classes it a mark.

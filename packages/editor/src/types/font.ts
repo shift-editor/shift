@@ -34,8 +34,6 @@ import type {
 import type {
   FontChangeFlag,
   LayoutRequest,
-  ParagraphRequest,
-  ShapedParagraph,
   TextLayout as LaidOutText,
 } from "@shift/wasm/protocol";
 import type { PendingEditId } from "./editing";
@@ -106,10 +104,13 @@ export interface FontEngine {
    * source metrics, the glyph directory, …) tracks it to read again.
    */
   revision(flag: FontChangeFlag): Signal<number>;
-  /** The flags whose change may change what {@link shapeParagraphs} returns. */
-  shapingInputs(): readonly FontChangeFlag[];
   /** The flags whose change may change what {@link layoutText} returns. */
   layoutInputs(): readonly FontChangeFlag[];
+  /**
+   * Stops showing a gesture's preview in text: {@link layoutText} reads the
+   * font as it stands again.
+   */
+  endPreview(): void;
 
   /**
    * Reads the kerning between glyph pairs at one place, in one call.
@@ -193,18 +194,6 @@ export interface FontEngine {
   newAnchorName(layerIds: readonly LayerId[]): string;
 
   /**
-   * Shapes paragraphs with the font's feature code, through a shaper font
-   * the engine compiles from its own font: the glyph order with each glyph's
-   * GDEF class, feature code, units per em and axes, unsaved edits included.
-   *
-   * @returns Each paragraph's runs in logical order, in request order, or
-   * why it could not be shaped (as when the store's reader cannot answer or
-   * the font cannot make a shaper font); null only while the engine is not
-   * open.
-   */
-  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): readonly ShapedParagraph[] | null;
-
-  /**
    * Lays text out over the engine's font, unsaved edits included: shaped
    * with its shaper, positioned with live kerning, marks and cursive joins,
    * broken into lines and given caret stops, at a source or a design
@@ -270,6 +259,13 @@ export interface WorkspaceEditCoordinator {
    * the edit; a layer whose structure they keep comes with values only.
    */
   preview(intents: readonly FontIntent[]): readonly LayerUpdate[];
+  /**
+   * Lays text out as `intents` would leave the font, without keeping them
+   * or returning the layers: a drag frame the editor already draws.
+   *
+   * @throws When the engine rejects the intents.
+   */
+  showPreview(intents: readonly FontIntent[]): void;
   transaction<TResult>(label: string, body: () => TResult): TResult;
   /**
    * Opens an edit that stays open across frames until committed or cancelled.

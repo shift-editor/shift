@@ -65,12 +65,7 @@ import type {
   WorkspaceEditCoordinator,
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
-import type {
-  LayoutRequest,
-  ParagraphRequest,
-  ShapedParagraph,
-  TextLayout as LaidOutText,
-} from "@shift/wasm/protocol";
+import type { LayoutRequest, TextLayout as LaidOutText } from "@shift/wasm/protocol";
 import { EngineVariationReader, StatelessVariationReader, locationValues } from "../wasm/variation";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
@@ -1449,22 +1444,6 @@ export class Font {
 
   nearestSource(location: ExternalAxisLocation): Source | null {
     return this.#peekDesignspace((designspace) => designspace.nearestSource(location));
-  }
-
-  /**
-   * Shapes paragraphs with the font's feature code, as the window's engine
-   * holds the font: unsaved edits included. Tracks the revision of each
-   * change flag shaping reads, so a computed that shapes reshapes after any
-   * edit that may change the result.
-   *
-   * @returns Each paragraph's runs in logical order, or why it could not be
-   * shaped; null without an open engine.
-   */
-  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): readonly ShapedParagraph[] | null {
-    const engine = this.#store.engine;
-    if (!engine) return null;
-    for (const flag of engine.shapingInputs()) track(engine.revision(flag));
-    return engine.shapeParagraphs(paragraphs);
   }
 
   /**

@@ -611,7 +611,7 @@ These are allowed to jump around when energy is high, but they should not silent
 
 - [ ] Define named anchors (top, bottom, ogonek)
 - [ ] Visual anchor editor
-- [ ] Mark-to-base positioning
+- [x] Mark-to-base positioning
 
 ---
 

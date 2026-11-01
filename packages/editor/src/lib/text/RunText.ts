@@ -1,33 +1,17 @@
-import { asAxisId, type AxisId, type RunId } from "@shift/types";
+import type { RunId } from "@shift/types";
 import type {
-  AxisCoordinate,
-  ParagraphRequest,
-  ShapedParagraph,
-  ShapedRun,
-  ShapeUnit,
+  LayoutLine,
+  LayoutRequest,
+  LayoutUnit,
+  PlacedGlyph,
+  TextLayout as LaidOutText,
 } from "@shift/wasm/protocol";
 import { computed, effect, track } from "../signals";
 import type { ComputedSignal, Effect, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
 import type { TextRunRecord } from "../../types/text";
-import { locationFromExternalAxisLocation } from "../variation/location";
-import { splitParagraphs, TextLayout, type ParagraphItem, type TextItem } from "./layout";
-
-/** A run's paragraphs as last shaped, with the content they were shaped from. */
-export interface ShapedText {
-  /** The shaped content, as {@link shapingKey} gives it. */
-  readonly key: string;
-  /**
-   * Each paragraph's runs in logical order, indexed like `splitParagraphs`,
-   * or why it could not be shaped, when it lays out literally.
-   */
-  readonly paragraphs: readonly ShapedParagraph[];
-}
-
-interface ShapingRequest {
-  readonly key: string;
-  readonly paragraphs: readonly ParagraphRequest[];
-}
+import { displayAdvance } from "../utils/displayAdvance";
+import { glyphIdForItem, TextLayout, type TextItem } from "./layout";
 
 /** What a run's text reads from the {@link Text} that owns it. */
 export interface RunTextOwner {
@@ -35,98 +19,79 @@ export interface RunTextOwner {
   run(id: RunId): TextRunRecord | null;
   /** Bumped when a glyph the text shows finishes loading. */
   readonly glyphsLoadedCell: Signal<number>;
-  /** Called with each shaping result, such as to load the glyphs it substituted in. */
-  onShaped(shaped: ShapedText): void;
+  /** Called with each layout Rust returns, such as to load the glyphs shaping substituted in. */
+  onLaidOut(laidOut: LaidOutText): void;
 }
 
 /**
- * Keeps one run's text shaped and laid out.
+ * Keeps one run's text laid out.
  *
  * @remarks
- * Shaping runs synchronously in the window's engine (`Font.shapeParagraphs`),
- * so the layout is shaped as soon as the text changes, and again after an
- * edit that may change how it shapes. Without an engine the text lays out
- * literally. Construct outside any reactive reader: the effect that reports
- * shaping results starts at once.
+ * Layout runs synchronously in the window's engine (`Font.layoutText`,
+ * shift-layout over the engine's font): shaping, kerning, marks, cursive
+ * joins, lines, bidi order and caret stops, so the run lays out again as
+ * soon as its text changes or an edit changes what layout reads. A preview,
+ * which has no engine, lays its text out as typed. Construct outside any
+ * reactive reader: the effect that reports layouts starts at once.
  */
 export class RunText {
-  readonly #keyCell: ComputedSignal<string | null>;
-  readonly #requestCell: ComputedSignal<ShapingRequest | null>;
-  readonly #shapedCell: ComputedSignal<ShapedText | null>;
+  readonly #laidOutCell: ComputedSignal<LaidOutText | null>;
   readonly #reports: Effect;
   readonly #layoutCell: ComputedSignal<TextLayout | null>;
 
   constructor(editor: Editor, runIdCell: Signal<RunId>, owner: RunTextOwner) {
-    this.#keyCell = computed(
+    this.#laidOutCell = computed(
       () => {
         const record = owner.run(runIdCell.value);
-        return record ? shapingKey(record.items) : null;
-      },
-      { name: "text.shapingKey" },
-    );
-
-    this.#requestCell = computed(
-      () => {
-        const record = owner.run(runIdCell.value);
-        const key = this.#keyCell.value;
-        // A preview reads its source without a workspace, which is what shapes.
-        if (!record || key === null || editor.sessionMode === "preview") return null;
-        // A glyph's new Unicode value can change what the text shapes to.
+        if (!record) return null;
+        const location = editor.externalLocationCell.value;
+        const sourceId = editor.activeSourceIdCell.value;
+        // A glyph's new Unicode value can change what the text lays out as.
         track(editor.font.glyphEntriesCell);
-        const location = coordinates(
-          locationFromExternalAxisLocation(editor.externalLocationCell.value).values,
-        );
-        const paragraphs = splitParagraphs(record.items).map((paragraph) => ({
-          units: paragraph.items.map(shapeUnit),
-          location,
-          features: [],
-        }));
-        return paragraphs.length > 0 ? { key, paragraphs } : null;
+        // A glyph the text shows finished loading into the engine.
+        track(owner.glyphsLoadedCell);
+        const request = layoutRequest(record.items);
+        return editor.font.layoutText(request, location, sourceId) ?? typed(editor, record.items);
       },
-      { name: "text.shapingRequest" },
-    );
-
-    this.#shapedCell = computed(
-      () => {
-        const request = this.#requestCell.value;
-        if (!request) return null;
-        const paragraphs = editor.font.shapeParagraphs(request.paragraphs);
-        if (!paragraphs) return null;
-        return { key: request.key, paragraphs };
-      },
-      { name: "text.shaped" },
+      // An edit that leaves the text where it was, such as dragging an anchor
+      // no mark uses, keeps the layout and everything drawn from it.
+      { name: "text.laidOut", equals: samePlacement },
     );
 
     this.#reports = effect(
       () => {
-        const shaped = this.#shapedCell.value;
-        if (shaped) owner.onShaped(shaped);
+        const laidOut = this.#laidOutCell.value;
+        if (laidOut) owner.onLaidOut(laidOut);
       },
-      { name: "text.reportShaped" },
+      { name: "text.reportLaidOut" },
     );
 
     this.#layoutCell = computed(
       () => {
         const record = owner.run(runIdCell.value);
-        track(editor.externalLocationCell);
-        track(editor.activeSourceIdCell);
-        // Items resolve to glyphs by Unicode value and id, so remapping or deleting a glyph re-lays out.
+        const laidOut = this.#laidOutCell.value;
+        if (!record || !laidOut) return null;
+        const activeSourceId = editor.activeSourceIdCell.value;
+        // Glyphs are listed by name, which a rename changes without moving them.
         track(editor.font.glyphEntriesCell);
-        track(owner.glyphsLoadedCell);
-        if (!record) return null;
+        // Metrics between sources follow the engine.
+        if (!activeSourceId) track(editor.font.sourceMetricsRevisionCell);
+        const metrics = activeSourceId
+          ? editor.font.metricsForSource(activeSourceId)
+          : editor.font.metricsAtLocation(editor.externalLocationCell.value);
         return new TextLayout({
           items: record.items,
           origin: { x: 0, y: 0 },
-          editor,
-          externalLocation: editor.externalLocationCell,
-          shaped: this.#shapedCell.value?.paragraphs.map(shapedRuns) ?? null,
+          font: editor.font,
+          metrics,
+          laidOut,
         });
       },
       { name: "text.layoutForRun" },
     );
   }
 
-  /** The run's layout; invalidates on content, location, source, glyph loads, and shaping results. */
+  /** The run's layout; invalidates on content, location, source, glyph loads, and edits layout reads. */
   get layoutCell(): ComputedSignal<TextLayout | null> {
     return this.#layoutCell;
   }
@@ -134,39 +99,135 @@ export class RunText {
   dispose(): void {
     this.#reports.dispose();
     this.#layoutCell.dispose();
-    this.#shapedCell.dispose();
-    this.#requestCell.dispose();
-    this.#keyCell.dispose();
+    this.#laidOutCell.dispose();
+  }
+}
+
+/** The layout request for a run's items, shaped with the font's default features. */
+function layoutRequest(items: readonly TextItem[]): LayoutRequest {
+  return {
+    units: items.map(layoutUnit),
+    options: {
+      language: null,
+      script: null,
+      features: [],
+      shaping: true,
+      align: null,
+      lineHeight: { kind: "auto" },
+      width: null,
+    },
+  };
+}
+
+function layoutUnit(item: TextItem): LayoutUnit {
+  switch (item.kind) {
+    case "character":
+      return { kind: "character", codepoint: item.codepoint };
+    case "glyph":
+      return { kind: "glyph", glyphId: item.glyphId };
+    case "linebreak":
+      return { kind: "lineBreak" };
   }
 }
 
 /**
- * Returns a key for the text a run shapes: its characters and picked glyphs,
- * by paragraph.
- *
- * @remarks
- * Item ids are left out, so retyping the same text reuses its shaping.
+ * A preview's text as typed, without the engine that lays text out: one
+ * glyph per item at its drawn advance, one line per paragraph.
  */
-function shapingKey(items: readonly TextItem[]): string {
-  return items
-    .map((item) => {
-      if (item.kind === "linebreak") return "\n";
-      return item.kind === "character" ? `c${item.codepoint}` : `g${item.glyphId}`;
-    })
-    .join(" ");
+function typed(editor: Editor, items: readonly TextItem[]): LaidOutText {
+  // Called from the layout computed, which tracks the location.
+  const metrics = editor.font.metricsAtLocation(editor.externalLocationCell.peek());
+  const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
+  const glyphs: PlacedGlyph[] = [];
+  const lines: LayoutLine[] = [];
+  let start = 0;
+  let pen = 0;
+  const endLine = (end: number, withBreak: boolean) => {
+    const first = glyphs.findIndex((glyph) => glyph.line === lines.length);
+    lines.push({
+      paragraph: lines.length,
+      start,
+      end: end + (withBreak ? 1 : 0),
+      baseline: -lineHeight * lines.length,
+      ascent: metrics.ascender,
+      descent: metrics.descender,
+      left: 0,
+      advance: pen,
+      direction: "ltr",
+      runs: [
+        {
+          start,
+          end,
+          level: 0,
+          direction: "ltr",
+          script: null,
+          glyphStart: first < 0 ? glyphs.length : first,
+          glyphEnd: glyphs.length,
+        },
+      ],
+    });
+  };
+  for (const [index, item] of items.entries()) {
+    if (item.kind === "linebreak") {
+      endLine(index, true);
+      start = index + 1;
+      pen = 0;
+      continue;
+    }
+    const glyphId = glyphIdForItem(item, editor.font);
+    const glyph = glyphId ? editor.glyphForId(glyphId) : null;
+    const model = glyph?.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
+    if (model) track(model.xAdvanceCell);
+    const name = glyphId ? editor.font.glyphName(glyphId) : null;
+    const advance = displayAdvance(
+      model?.xAdvance ?? 0,
+      name !== null && editor.font.isNonspacingMark(name),
+    );
+    glyphs.push({
+      glyphId: glyphId ?? null,
+      start: index,
+      end: index + 1,
+      line: lines.length,
+      left: pen,
+      baseline: -lineHeight * lines.length,
+      xOffset: 0,
+      yOffset: 0,
+      advance,
+      kern: 0,
+      direction: "ltr",
+      isMark: false,
+      bounds: null,
+    });
+    pen += advance;
+  }
+  if (items.length > 0) endLine(items.length, false);
+  return { lines, glyphs, unitGlyphs: [], carets: [], width: 0, unshaped: null };
 }
 
-/** A paragraph's runs, or null for one that lays out literally. */
-function shapedRuns(paragraph: ShapedParagraph): readonly ShapedRun[] | null {
-  return paragraph.kind === "runs" ? paragraph.runs : null;
+/**
+ * Whether two layouts place every glyph, line and caret alike. Glyph bounds,
+ * which the editor's {@link TextLayout} does not keep, are left out, so an
+ * outline edit that moves nothing keeps the layout.
+ */
+function samePlacement(previous: LaidOutText | null, next: LaidOutText | null): boolean {
+  return equalValues(previous, next);
 }
 
-function shapeUnit(item: ParagraphItem): ShapeUnit {
-  if (item.kind === "character") return { kind: "character", codepoint: item.codepoint };
-  return { kind: "glyph", glyphId: item.glyphId };
-}
-
-/** A location's coordinates, one per axis it sets. */
-function coordinates(values: Readonly<Record<AxisId, number>>): AxisCoordinate[] {
-  return Object.entries(values).map(([axisId, value]) => ({ axisId: asAxisId(axisId), value }));
+function equalValues(previous: unknown, next: unknown): boolean {
+  if (Object.is(previous, next)) return true;
+  if (typeof previous !== "object" || typeof next !== "object" || !previous || !next) return false;
+  if (Array.isArray(previous)) {
+    return (
+      Array.isArray(next) &&
+      previous.length === next.length &&
+      previous.every((value, index) => equalValues(value, next[index]))
+    );
+  }
+  const before = previous as Record<string, unknown>;
+  const after = next as Record<string, unknown>;
+  const keys = Object.keys(before).filter((key) => key !== "bounds");
+  return (
+    keys.length === Object.keys(after).filter((key) => key !== "bounds").length &&
+    keys.every((key) => equalValues(before[key], after[key]))
+  );
 }

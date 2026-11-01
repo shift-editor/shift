@@ -63,7 +63,7 @@ impl<'o> Placement<'o> {
                 .ok()
                 .and_then(|index| advances.get_mut(index))
             {
-                *advance += glyph.x_advance;
+                *advance += glyph.x_advance + glyph.kern;
             }
         }
         let breaks = line_breaks(&paragraph.units);
@@ -166,11 +166,12 @@ impl<'o> Placement<'o> {
                     x_offset: glyph.x_offset,
                     y_offset: glyph.y_offset,
                     advance: glyph.x_advance,
+                    kern: glyph.kern,
                     direction: segment.direction,
                     is_mark: glyph.is_mark,
                     bounds: glyph.bounds,
                 });
-                pen += glyph.x_advance;
+                pen += glyph.x_advance + glyph.kern;
             }
             segment.glyph_end = u32::try_from(layout.glyphs.len()).unwrap_or(u32::MAX);
             runs.push(segment);
