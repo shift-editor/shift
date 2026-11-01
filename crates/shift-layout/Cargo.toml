@@ -20,6 +20,7 @@ pack = { workspace = true, optional = true }
 shift-font = { workspace = true }
 shift-shape = { workspace = true, optional = true }
 shift-shaper-font = { workspace = true, optional = true }
+thiserror = "2"
 unicode-segmentation = { version = "1.12", optional = true }
 
 [dev-dependencies]

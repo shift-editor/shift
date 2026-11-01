@@ -7,7 +7,7 @@ use shift_shape::{line_breaks, visual_order};
 
 use crate::font::LayoutFont;
 use crate::paragraph::{Paragraph, ShapedText};
-use crate::request::{LineHeight, LineMetrics, TextAlign, TextOptions};
+use crate::request::{LayoutError, LineHeight, LineMetrics, TextAlign, TextOptions};
 use crate::{Direction, LayoutLine, LineRun, PlacedGlyph, TextLayout};
 
 /// How lines are spaced and aligned.
@@ -35,34 +35,40 @@ impl<'o> Placement<'o> {
     }
 
     /// Lays out each paragraph's lines in turn, then aligns them.
-    pub(crate) fn place(&self, paragraphs: &[Paragraph], shaped: &[ShapedText]) -> TextLayout {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LayoutError::TooLong`] for more glyphs or lines than a
+    /// `u32` names.
+    pub(crate) fn place(
+        &self,
+        paragraphs: &[Paragraph],
+        shaped: &[ShapedText],
+    ) -> Result<TextLayout, LayoutError> {
         let mut layout = TextLayout::default();
         for (number, (paragraph, text)) in (0u32..).zip(paragraphs.iter().zip(shaped)) {
             let ranges = self.break_lines(paragraph, text);
             let last = ranges.len().saturating_sub(1);
             for (index, units) in ranges.into_iter().enumerate() {
                 let covers_break = index == last && paragraph.ends_in_break;
-                self.place_line(&mut layout, number, units, covers_break, text);
+                self.place_line(&mut layout, number, units, covers_break, text)?;
             }
         }
         self.align(&mut layout);
-        layout
+        Ok(layout)
     }
 
     /// The paragraph's lines, as unit ranges in the text: one when there is
     /// no width, otherwise as many as fit, broken where UAX #14 allows.
     fn break_lines(&self, paragraph: &Paragraph, text: &ShapedText) -> Vec<Range<u32>> {
         let start = paragraph.start;
-        let end = paragraph.end();
+        let end = paragraph.end;
         let Some(width) = self.options.width.filter(|width| *width > 0.0) else {
             return std::iter::once(start..end).collect();
         };
         let mut advances = vec![0.0; paragraph.units.len()];
         for glyph in text.runs.iter().flat_map(|run| &run.glyphs) {
-            if let Some(advance) = usize::try_from(glyph.start - start)
-                .ok()
-                .and_then(|index| advances.get_mut(index))
-            {
+            if let Some(advance) = advances.get_mut(crate::slice_index(glyph.start - start)) {
                 *advance += glyph.x_advance + glyph.kern;
             }
         }
@@ -90,7 +96,7 @@ impl<'o> Placement<'o> {
             }
             filled += advance;
             let is_space = matches!(
-                paragraph.units.get(usize::try_from(unit).unwrap_or(usize::MAX)),
+                paragraph.units.get(crate::slice_index(unit)),
                 Some(shift_shape::Unit::Character(character)) if character.is_whitespace()
             );
             if filled <= width || is_space {
@@ -119,8 +125,8 @@ impl<'o> Placement<'o> {
         units: Range<u32>,
         covers_break: bool,
         text: &ShapedText,
-    ) {
-        let line_number = u32::try_from(layout.lines.len()).unwrap_or(u32::MAX);
+    ) -> Result<(), LayoutError> {
+        let line_number = crate::index_count(layout.lines.len())?;
         let baseline = -self.line_height() * f64::from(line_number);
         let segments: Vec<LineRun> = text
             .runs
@@ -131,7 +137,7 @@ impl<'o> Placement<'o> {
                 (start < end).then(|| LineRun {
                     start,
                     end,
-                    level: run.level,
+                    level: u32::from(run.level),
                     direction: run.direction,
                     script: run.script.clone(),
                     glyph_start: 0,
@@ -139,16 +145,18 @@ impl<'o> Placement<'o> {
                 })
             })
             .collect();
-        let levels: Vec<u8> = segments
+        let levels: Vec<u8> = text
+            .runs
             .iter()
-            .map(|segment| u8::try_from(segment.level).unwrap_or(u8::MAX))
+            .filter(|run| run.start.max(units.start) < run.end.min(units.end))
+            .map(|run| run.level)
             .collect();
 
         let mut pen = 0.0;
         let mut runs = Vec::with_capacity(segments.len());
         for index in visual_order(&levels) {
             let mut segment = segments[index].clone();
-            segment.glyph_start = u32::try_from(layout.glyphs.len()).unwrap_or(u32::MAX);
+            segment.glyph_start = crate::index_count(layout.glyphs.len())?;
             let glyphs = text
                 .runs
                 .iter()
@@ -173,7 +181,7 @@ impl<'o> Placement<'o> {
                 });
                 pen += glyph.x_advance + glyph.kern;
             }
-            segment.glyph_end = u32::try_from(layout.glyphs.len()).unwrap_or(u32::MAX);
+            segment.glyph_end = crate::index_count(layout.glyphs.len())?;
             runs.push(segment);
         }
 
@@ -189,6 +197,7 @@ impl<'o> Placement<'o> {
             direction: text.direction,
             runs,
         });
+        Ok(())
     }
 
     /// Sets the width lines align in, and moves each line and its glyphs

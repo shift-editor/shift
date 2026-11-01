@@ -10,6 +10,7 @@ import type {
   FeatureHighlight,
   StoredTextRunRecord,
   TextHighlight,
+  TextLayoutFailure,
   TextRunRecord,
   TextRunSettings,
 } from "../../types/text";
@@ -407,6 +408,15 @@ export class Text {
   /** Returns a stable computed whose layout invalidates on content, location, source, or glyph acquisition. */
   layoutCell(id: RunId): ComputedSignal<TextLayout | null> {
     return this.#runs.get(id).layoutCell;
+  }
+
+  /**
+   * Why a run has no layout, or what its layout needed that did not load
+   * (glyphs into the engine, or a preview's layout module); null while it
+   * lays out and loads what it shows.
+   */
+  layoutFailureCell(id: RunId): Signal<TextLayoutFailure | null> {
+    return this.#runs.get(id).failureCell;
   }
 
   /**

@@ -2539,6 +2539,7 @@ dependencies = [
  "shift-font",
  "shift-shape",
  "shift-shaper-font",
+ "thiserror",
  "unicode-segmentation",
 ]
 

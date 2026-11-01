@@ -28,7 +28,7 @@ mod exports {
 
     use shift_font::interpolation::KerningBlend;
     use shift_font::{DesignLocation, ExternalLocation, Font, FontChangeImpact, ShaperFontSource};
-    use shift_layout::{LayoutFont, LayoutRequest, LineMetrics, TextLayout};
+    use shift_layout::{LayoutError, LayoutFont, LayoutRequest, LineMetrics, TextLayout};
     use shift_shape::ShapeError;
     use shift_shaper_font::{LiveShaper, ShaperFontError, ShaperFontRequest, ShaperFontState};
 
@@ -130,13 +130,17 @@ mod exports {
         /// cannot make a shaper font), text lays out as typed for that reason
         /// until the next edit that may change it. Once a shaper has been
         /// made, a failure to update it keeps it, and it shapes as before.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`LayoutError::TooLong`] for text too long to index.
         pub(crate) fn layout_text<E: std::fmt::Display>(
             &self,
             font: &Font,
             source: impl FnOnce() -> Result<ShaperFontSource, E>,
             request: &LayoutRequest,
             place: TextPlace,
-        ) -> TextLayout {
+        ) -> Result<TextLayout, LayoutError> {
             let state = self.current(font, source);
             let class = |glyph| state.compilation.class(glyph);
             let layout_font = LayoutFont::new(
@@ -400,7 +404,9 @@ mod exports {
                 external: ExternalLocation::new(),
                 kerning: KerningBlend::default(),
             };
-            shaping.layout_text(font, || Ok::<_, Infallible>(source(font)), &request, place)
+            shaping
+                .layout_text(font, || Ok::<_, Infallible>(source(font)), &request, place)
+                .unwrap()
         }
 
         #[test]

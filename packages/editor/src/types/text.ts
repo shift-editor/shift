@@ -1,7 +1,23 @@
 import type { GlyphId, NodeId, RunId, SourceId, TextItemId } from "@shift/types";
-import type { TextAlign } from "@shift/wasm/protocol";
+import type { PlacedText, TextAlign } from "@shift/wasm/protocol";
 import type { CaretEdge, Direction, TextItem } from "../lib/text/layout/types";
 import type { ExternalAxisLocation } from "./variation";
+
+/**
+ * Why a run's text has no layout, or why what its layout needed did not
+ * load: `layout` when laying it out failed, `preload` when the engine could
+ * not load glyphs the layout showed from placeholders, `module` when the
+ * module that lays out a preview's text did not load.
+ */
+export interface TextLayoutFailure {
+  readonly stage: "layout" | "preload" | "module";
+  readonly error: unknown;
+}
+
+/** A run's text as Rust laid it out, or why laying it out failed. */
+export type RunLaidOut =
+  | { readonly kind: "placed"; readonly placed: PlacedText }
+  | { readonly kind: "failed"; readonly failure: TextLayoutFailure };
 
 /** Where text is laid out: the location shown, and the source edited, which takes precedence. */
 export interface TextPlace {

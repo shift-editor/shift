@@ -57,6 +57,7 @@ impl Fixture {
                 options,
             },
         )
+        .unwrap()
     }
 
     fn name(&self, glyph: &PlacedGlyph) -> String {
@@ -305,6 +306,7 @@ fn lay_out_typed(font: &TypedFont, text: &str) -> TextLayout {
             options: shaped(),
         },
     )
+    .unwrap()
 }
 
 #[test]
@@ -456,10 +458,45 @@ fn layout_timing() {
                     &class,
                     LineMetrics::at(&font, &design),
                 );
-                std::hint::black_box(TextLayout::new(&layout_font, &request));
+                std::hint::black_box(TextLayout::new(&layout_font, &request).unwrap());
             }
             let per = started.elapsed().as_secs_f64() * 1000.0 / f64::from(runs);
             println!("{length} characters, {name}: {per:.2} ms per layout");
         }
     }
+}
+
+#[test]
+fn the_placement_key_is_shared_by_layouts_that_place_alike_and_only_by_them() {
+    let fixture = Fixture::open("ShapingTest.ufo");
+
+    let first = fixture.lay_out("fi", shaped());
+    let again = fixture.lay_out("fi", shaped());
+    let unshaped = fixture.lay_out("fi", TextOptions::default());
+
+    assert_eq!(first.placement, again.placement);
+    assert_ne!(first.placement, unshaped.placement);
+    // Glyph bounds are not placement.
+    let mut unbounded = first.clone();
+    for glyph in &mut unbounded.glyphs {
+        glyph.bounds = None;
+    }
+    assert_eq!(unbounded.placement_key(), first.placement);
+}
+
+#[test]
+fn words_skip_spaces_and_punctuation_and_name_their_screen_edges() {
+    let fixture = Fixture::open("ShapingTest.ufo");
+
+    let layout = fixture.lay_out("fi, \u{628}\u{628}", shaped());
+
+    let words: Vec<(u32, u32, Direction, u32, u32)> = layout
+        .words
+        .iter()
+        .map(|word| (word.start, word.end, word.direction, word.left, word.right))
+        .collect();
+    assert_eq!(
+        words,
+        [(0, 2, Direction::Ltr, 0, 2), (4, 6, Direction::Rtl, 6, 4)]
+    );
 }
