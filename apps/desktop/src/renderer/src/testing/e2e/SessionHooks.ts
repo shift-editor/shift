@@ -1,5 +1,4 @@
 import type { ShiftHost } from "@shared/host/ShiftHost";
-import type { CommandId } from "@shared/commands";
 import type { AppConfigState } from "@shared/config/config";
 import type { EngineStorelessRecords, GlyphId, GlyphName } from "@shift/types";
 import { loadEngine } from "@shift/editor/model";
@@ -49,11 +48,6 @@ export class SessionHooks {
     } finally {
       session.dispose();
     }
-  }
-
-  /** Runs `command` in this window as its menu item does. */
-  runCommand(command: CommandId): Promise<void> {
-    return this.#host.commands.run(command);
   }
 
   /** Whether the authored workspace has published its loaded font; false without a workspace. */
