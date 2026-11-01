@@ -82,18 +82,25 @@ pub struct FontWorkspace {
 }
 
 impl FontWorkspace {
+    /// A workspace over `store`, its session holding the store's scene. A
+    /// working store whose scene has no page gets one first.
     fn from_store(
         session: EngineSession,
         source: WorkspaceSource,
-        store: ShiftStore,
+        mut store: ShiftStore,
         save_state: SaveState,
-    ) -> Self {
-        Self {
-            session,
+    ) -> Result<Self, WorkspaceError> {
+        // A working store is the workspace's own; a document gets its page
+        // when it is created or upgraded, and opening never writes it.
+        if !matches!(source, WorkspaceSource::Document { .. }) {
+            store.ensure_scene_page()?;
+        }
+        Ok(Self {
+            session: session.with_scene(store.load_scene()?),
             source,
             store,
             ledger: Ledger::new(save_state),
-        }
+        })
     }
 
     /// Creates a workspace for a new, untitled font in a store at `store_path`.
@@ -113,12 +120,12 @@ impl FontWorkspace {
         store.replace_font_state(&font)?;
         store.set_workspace_state(&WorkspaceState::untitled(None))?;
 
-        Ok(Self::from_store(
+        Self::from_store(
             EngineSession::open_loaded(font),
             WorkspaceSource::Untitled,
             store,
             SaveState::MatchesSaved,
-        ))
+        )
     }
 
     /// Imports the font at `source_path` into a working store at `store_path`.
@@ -166,14 +173,14 @@ impl FontWorkspace {
         };
         let session = EngineSession::open_directory(store.load_font_directory()?);
 
-        Ok(Self::from_store(
+        Self::from_store(
             session,
             WorkspaceSource::Document {
                 path: document_path.to_path_buf(),
             },
             store,
             save_state,
-        ))
+        )
     }
 
     /// Reads the identity of the document at `document_path` without opening it.
@@ -238,7 +245,8 @@ impl FontWorkspace {
     /// font cannot be loaded.
     pub fn discard_recovery(&mut self) -> Result<(), WorkspaceError> {
         self.store.discard_recovery()?;
-        self.session = EngineSession::open_directory(self.store.load_font_directory()?);
+        self.session = EngineSession::open_directory(self.store.load_font_directory()?)
+            .with_scene(self.store.load_scene()?);
         self.ledger = Ledger::default();
         Ok(())
     }
@@ -270,7 +278,7 @@ impl FontWorkspace {
         let session = EngineSession::open_directory(store.load_font_directory()?);
         let source = source_from_workspace_state(&state)?;
 
-        Ok(Self::from_store(
+        Self::from_store(
             session,
             source,
             store,
@@ -279,7 +287,7 @@ impl FontWorkspace {
             } else {
                 SaveState::MatchesSaved
             },
-        ))
+        )
     }
 
     /// Loads every layer and exports the font as `request` describes.
@@ -326,7 +334,7 @@ impl FontWorkspace {
 
     /// Persists a document change set another process sent compacted: its
     /// font changes, loading the layers it sent as values and rebuilding them
-    /// from this font first, and its scene changes, which the session holds.
+    /// from this font first, and its scene changes, in one write.
     ///
     /// # Errors
     ///
@@ -352,8 +360,12 @@ impl FontWorkspace {
         let staged = self.session.stage_change_set(font_changes)?;
         let mut scene = self.session.scene().clone();
         scene.apply_change_set(&change_set.scene)?;
-        self.store
-            .apply_change_set_with_font(staged.changes(), staged.font(), save_state)?;
+        self.store.apply_document_change_set(
+            staged.changes(),
+            staged.font(),
+            &change_set.scene,
+            save_state,
+        )?;
         self.session.replace_scene(scene);
         Ok(self.session.commit(staged))
     }
@@ -510,14 +522,14 @@ impl FontWorkspace {
                 install_import_store(staged_path, store_path)?;
                 let store = ShiftStore::open(store_path)?;
 
-                return Ok(Self::from_store(
+                return Self::from_store(
                     session,
                     WorkspaceSource::Imported {
                         original_path: import_path.to_path_buf(),
                     },
                     store,
                     SaveState::MatchesSaved,
-                ));
+                );
             }
             Err(shift_backends::BackendError::StreamingUnsupported { .. }) => {}
             Err(error) => return Err(error.into()),
@@ -529,14 +541,14 @@ impl FontWorkspace {
         store.replace_font_state(&font)?;
         store.set_workspace_state(&WorkspaceState::imported(import_path, None))?;
 
-        Ok(Self::from_store(
+        Self::from_store(
             EngineSession::open_loaded(font),
             WorkspaceSource::Imported {
                 original_path: import_path.to_path_buf(),
             },
             store,
             SaveState::MatchesSaved,
-        ))
+        )
     }
 
     /// Explicitly acquires requested glyph payloads. Component closure expands

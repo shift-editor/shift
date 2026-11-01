@@ -16,6 +16,7 @@ Callers use typed APIs from this crate rather than preparing SQL or opening a se
 - `DocumentMetadata` contains the stable `DocumentId` and current `saved_commit_id`. A raw copy preserves both; Save As mints a new document identity and saved commit.
 - `StoreReader` opens a document with its recovery overlay, or a working store, read-only beside the process that writes it. It installs the same merged views, then sets `query_only`; it never creates, migrates, or reconciles anything. The renderer's preload reads layers through it.
 - Canonical documents never contain app-local `workspace_state` or recovery rows. Working databases retain WAL + NORMAL and their revision/source-binding row.
+- `scene_nodes` holds the document's scene, the canvas its font is shown on: one row per node (shift-engine's `SceneNode` as named MessagePack, with its parent, sibling index and kind beside it). It is document content, so Save, Save As, recovery and Discard carry it like font rows (the recovery catalog files it as overlay rows with `scene_node` tombstones), and exports never read it. `ShiftStore::apply_document_change_set` writes an edit's font and scene changes in one transaction; a change that touches only the scene marks the document unsaved without advancing the recovery or workspace revision that addresses font-derived caches. `ShiftStore::load_scene` and `StoreReader::scene_nodes` read it, unsaved edits included. A new document (`create_document`) and a document upgraded from schema 3 get one page, "Page 1"; a working store gets it when the workspace opens it (`ensure_scene_page`), so opening a document never writes it.
 
 ## Recovery boundary
 
@@ -100,5 +101,6 @@ src/
     tests.rs        # integrated SQLite layer behavior
   write_mode.rs     # shared insert/upsert policy for canonical write paths
   change_set.rs     # transactional reversible replacements and touched-layer writes
+  scene.rs          # scene rows: one per node, written with the edit that changed them
   workspace_state.rs
 ```

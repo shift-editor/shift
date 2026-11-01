@@ -94,6 +94,16 @@ impl StoreReader {
         self.read(|conn| component_bases_from_conn(conn, glyph_ids))
     }
 
+    /// Every node of the store's scene, unsaved edits included, in id order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreError::Sqlite`] when the rows cannot be read and
+    /// [`StoreError::SceneNodeDecoding`] when one does not decode.
+    pub fn scene_nodes(&self) -> Result<Vec<shift_engine::scene::SceneNode>, StoreError> {
+        crate::scene::scene_nodes_from_conn(&self.conn)
+    }
+
     /// Those of `layer_ids` that carry an anchor marks attach to
     /// ([`font::Anchor::attaches_marks`]), in id order; a layer the store
     /// lacks is left out. Anchors are inside each layer's payload, so every

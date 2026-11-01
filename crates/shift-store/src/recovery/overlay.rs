@@ -5,7 +5,7 @@ use rusqlite::{Connection, OpenFlags, params};
 use crate::{CommitId, DocumentId, StoreError, connection::configure_common, schema};
 
 const RECOVERY_APPLICATION_ID: i64 = 0x5348_4652;
-const RECOVERY_SCHEMA_VERSION: i64 = 3;
+const RECOVERY_SCHEMA_VERSION: i64 = 4;
 
 const RECOVERY_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS recovery_metadata (
@@ -132,7 +132,12 @@ impl RecoveryOverlay {
         let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)?;
         configure_recovery_connection(&conn)?;
         let version = validate_recovery_header(&conn)?;
-        schema::migrate(&conn, version, RECOVERY_SCHEMA_VERSION)?;
+        schema::migrate(
+            &conn,
+            version,
+            RECOVERY_SCHEMA_VERSION,
+            schema::SceneUpgrade::TableOnly,
+        )?;
         let overlay = Self {
             conn,
             path: path.to_path_buf(),

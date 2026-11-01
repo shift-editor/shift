@@ -253,6 +253,14 @@ CREATE TABLE IF NOT EXISTS document_metadata (
     document_id TEXT NOT NULL,
     saved_commit_id TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS scene_nodes (
+    id TEXT PRIMARY KEY,
+    parent_id TEXT,
+    sort_index TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    node BLOB NOT NULL
+);
 "#;
 
 const WORKSPACE_SCHEMA_V1: &str = r#"
@@ -269,7 +277,7 @@ CREATE TABLE IF NOT EXISTS workspace_state (
 "#;
 
 pub const SHIFT_APPLICATION_ID: i64 = 0x5348_4654;
-pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 3;
+pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 4;
 
 /// The oldest schema version [`migrate`] can upgrade.
 pub(crate) const OLDEST_MIGRATABLE_SCHEMA_VERSION: i64 = 1;
@@ -395,9 +403,40 @@ ALTER TABLE glyphs ADD COLUMN category TEXT;
 ALTER TABLE glyphs ADD COLUMN sub_category TEXT;
 "#;
 
+/// Version 3 to 4: documents gain their scene, the canvas the font is shown
+/// on, one row per node. Each row holds the node as named MessagePack, with
+/// its parent, sibling index and kind beside it for queries. A document from
+/// before has no scene, and opens with an empty one. This SQL is frozen.
+const MIGRATE_V3_TO_V4: &str = r#"
+CREATE TABLE scene_nodes (
+    id TEXT PRIMARY KEY,
+    parent_id TEXT,
+    sort_index TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    node BLOB NOT NULL
+);
+"#;
+
+/// The version that added the scene.
+const SCENE_SCHEMA_VERSION: i64 = 4;
+
+/// What a migration to [`SCENE_SCHEMA_VERSION`] gives a store's scene.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SceneUpgrade {
+    /// A document or working store: its scene gets its first page, as a
+    /// new document's does.
+    AddFirstPage,
+    /// A recovery overlay: the table only, since its document holds the page.
+    TableOnly,
+}
+
 /// Steps that bring authored tables from one schema version to the next, as
 /// `(version reached, SQL)`, in ascending order.
-const MIGRATIONS: [(i64, &str); 2] = [(2, MIGRATE_V1_TO_V2), (3, MIGRATE_V2_TO_V3)];
+const MIGRATIONS: [(i64, &str); 3] = [
+    (2, MIGRATE_V1_TO_V2),
+    (3, MIGRATE_V2_TO_V3),
+    (4, MIGRATE_V3_TO_V4),
+];
 
 /// Upgrades the authored tables of a store at `version` to
 /// [`SHIFT_DOCUMENT_SCHEMA_VERSION`] in one transaction, stamping
@@ -416,6 +455,7 @@ pub(crate) fn migrate(
     conn: &rusqlite::Connection,
     version: i64,
     upgraded_version: i64,
+    scene: SceneUpgrade,
 ) -> Result<(), StoreError> {
     if version >= SHIFT_DOCUMENT_SCHEMA_VERSION {
         return Ok(());
@@ -432,6 +472,9 @@ pub(crate) fn migrate(
         if reached > version {
             tx.execute_batch(sql)?;
         }
+    }
+    if version < SCENE_SCHEMA_VERSION && scene == SceneUpgrade::AddFirstPage {
+        crate::scene::insert_first_page_in_tx(&tx)?;
     }
     tx.pragma_update(None, "user_version", upgraded_version)?;
     tx.commit()?;
@@ -482,7 +525,12 @@ pub(crate) fn ensure_current(conn: &rusqlite::Connection) -> Result<(), StoreErr
         tx.pragma_update(None, "user_version", SHIFT_DOCUMENT_SCHEMA_VERSION)?;
         tx.commit()?;
     } else {
-        migrate(conn, version, SHIFT_DOCUMENT_SCHEMA_VERSION)?;
+        migrate(
+            conn,
+            version,
+            SHIFT_DOCUMENT_SCHEMA_VERSION,
+            SceneUpgrade::AddFirstPage,
+        )?;
     }
 
     Ok(())
