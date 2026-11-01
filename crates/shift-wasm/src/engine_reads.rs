@@ -166,6 +166,7 @@ pub enum FeatureListError {
     Unreadable { detail: String },
 }
 
+#[cfg(feature = "engine")]
 impl FeatureListError {
     /// The shaper font could not be read, for `error`.
     pub(crate) fn unreadable(error: impl std::fmt::Display) -> Self {
