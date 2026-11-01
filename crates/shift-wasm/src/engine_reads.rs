@@ -30,9 +30,8 @@ use shift_font::{
     Axis, FontChangeFlag, GlyphId, GlyphRecords, MetricValue, MissingKerningOrigin,
     ResolvedKerning, Source,
 };
+use shift_layout::{LayoutError, LayoutRequest, TextLayout};
 use shift_wire::KerningSnapshot;
-
-use crate::shaping::{ParagraphRequest, ShapedParagraph};
 
 /// What the editor reads from one engine session's font. Glyphs and sources
 /// are named by the numbers the session interned for them; `glyphs` lists
@@ -82,23 +81,32 @@ pub trait EngineReads {
     ///
     /// Returns [`StoreReadError`] when the store's reader cannot answer.
     fn glyph_records(&self) -> Result<GlyphRecords, StoreReadError>;
-    /// Shapes paragraphs with the font's feature code, through a shaper font
-    /// the session compiles from its own font: each paragraph's runs in
-    /// logical order, or why it could not be shaped.
+    /// Lays text out over the session's font, unsaved edits included, as
+    /// `shift_layout::TextLayout::new` does: shaped with the session's
+    /// shaper (brought up to date as [`Self::shape_paragraphs`] does), with
+    /// kerning, mark attachment and cursive joins at each generated feature's
+    /// insert marker, then broken into lines, ordered, aligned, and given
+    /// caret stops. Text that cannot be shaped is laid out as typed, with
+    /// the reason.
     ///
-    /// The session compiles when text is first shaped, and again before the
-    /// next shape after an edit that may change the glyph directory or the
-    /// axes and their mappings, only when something the compile reads
-    /// changed; feature code with errors keeps the last font. What the
-    /// compile reads of layers the session has not loaded (whether they
-    /// carry an anchor marks attach to) and glyph data's categories come from
-    /// the store's reader; nothing is loaded to answer. When the reader
-    /// cannot answer, or the font cannot make a shaper font, every paragraph
-    /// is unshapable with that reason.
-    fn shape_paragraphs(&self, paragraphs: Vec<ParagraphRequest>) -> Vec<ShapedParagraph>;
-    /// The flags whose change may change what [`Self::shape_paragraphs`]
+    /// The session compiles its shaper font when text is first laid out, and
+    /// again before the next layout after an edit that may change the glyph
+    /// directory or the axes and their mappings, only when something the
+    /// compile reads changed; feature code with errors keeps the last font.
+    /// What the compile reads of layers the session has not loaded and glyph
+    /// data's categories come from the store's reader.
+    ///
+    /// Glyphs whose layers the session has not loaded lay out from their
+    /// placeholders; `unloaded` lists them, for the editor to load and lay
+    /// out again.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LayoutError::TooLong`] for text too long to index.
+    fn layout_text(&self, request: TextLayoutRequest) -> Result<PlacedText, LayoutError>;
+    /// The flags whose change may change what [`Self::layout_text`]
     /// returns.
-    fn shaping_inputs(&self) -> Vec<FontChangeFlag>;
+    fn layout_inputs(&self) -> Vec<FontChangeFlag>;
     /// What renaming `glyph` to `name` does: `Font::glyph_rename`. Null for a
     /// glyph the session's font lacks.
     fn glyph_rename(&self, glyph: GlyphId, name: String) -> Option<GlyphIdentityChange>;
@@ -128,6 +136,27 @@ pub trait EngineReads {
     /// The external location a design location's mapping came from, NaN on
     /// internal axes: `unmap_location_with_bases`.
     fn external_location(&self, design: Vec<f64>) -> Vec<f64>;
+}
+
+/// Text to lay out, and where.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct TextLayoutRequest {
+    pub text: LayoutRequest,
+    /// The design location to lay out at, in the font's axis order with NaN
+    /// for an axis default, as [`EngineReads::kerning_run`] takes it.
+    pub location: Vec<f64>,
+    /// A source, by the number the session interned, to lay out at instead,
+    /// as its own layers draw.
+    pub source: Option<usize>,
+}
+
+/// Text as [`EngineReads::layout_text`] laid it out.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct PlacedText {
+    pub layout: TextLayout,
+    /// The glyphs it shows whose layers the session has not loaded, which
+    /// laid out from their placeholders.
+    pub unloaded: Vec<GlyphId>,
 }
 
 /// The authored pair an edit to the kerning between two glyphs at a source changes.
@@ -181,20 +210,20 @@ mod exports {
     use shift_engine::StoreReadError;
     use shift_font::naming::new_anchor_name;
     use shift_font::{
-        AxisMapping, AxisMappingBasis, DesignLocation, Font, FontCopyId, GlyphId, GlyphRecords,
-        InterpolationBasis, Kerning, KerningSide, LayerId, MissingKerningOrigin, ResolvedKerning,
-        SourceId,
+        AxisMapping, AxisMappingBasis, DesignLocation, ExternalLocation, Font, FontCopyId, GlyphId,
+        GlyphRecords, InterpolationBasis, Kerning, KerningSide, LayerId, MissingKerningOrigin,
+        ResolvedKerning, SourceId,
     };
     use shift_wire::values::{self, WireParse};
     use wasm_bindgen::prelude::*;
 
     use super::{
         Axis, EditablePair, EngineReads, FontChangeFlag, GlyphIdentityChange, InterpolatedMetrics,
-        KerningSnapshot, ParagraphRequest, ShapedParagraph, Source, SourceSetWeights,
+        KerningSnapshot, LayoutError, PlacedText, Source, SourceSetWeights, TextLayoutRequest,
         engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
-    use crate::shaping::TextShaping;
+    use crate::shaping::{TextPlace, TextShaping};
     use crate::variation::{design_values, external_values, to_location, weights_at};
 
     /// The ids a session's reads name by number, each interned once.
@@ -203,6 +232,15 @@ mod exports {
         glyphs: IdTable<GlyphId>,
         sources: IdTable<SourceId>,
         source_sets: IdTable<Vec<SourceId>>,
+    }
+
+    impl InternedIds {
+        /// The source `font` has for the source the session interned as
+        /// `number`; none for a number never interned or a source the font
+        /// no longer has.
+        fn source<'f>(&self, number: usize, font: &'f Font) -> Option<&'f Source> {
+            font.source(*self.sources.get(number)?)
+        }
     }
 
     /// What the variation reads evaluate, derived from the session's font:
@@ -513,22 +551,42 @@ mod exports {
         }
 
         fn missing_kerning_origin(&self, source: usize) -> MissingKerningOrigin {
-            match self.ids.sources.get(source) {
-                Some(source_id) => self.session.font().missing_kerning_origin(*source_id),
-                None => MissingKerningOrigin::Unkerned,
-            }
+            self.ids
+                .sources
+                .get(source)
+                .map_or(MissingKerningOrigin::Unkerned, |source_id| {
+                    self.session.font().missing_kerning_origin(*source_id)
+                })
         }
 
         fn glyph_records(&self) -> Result<GlyphRecords, StoreReadError> {
             Self::glyph_records(self)
         }
 
-        fn shape_paragraphs(&self, paragraphs: Vec<ParagraphRequest>) -> Vec<ShapedParagraph> {
-            self.shaping.shape_paragraphs(
-                self.session.font(),
+        fn layout_text(&self, request: TextLayoutRequest) -> Result<PlacedText, LayoutError> {
+            // A gesture's preview shows in text while it is under way.
+            let font = self
+                .previewed
+                .as_ref()
+                .unwrap_or_else(|| self.session.font());
+            let place = self.text_place(&request);
+            let layout = self.shaping.layout_text(
+                font,
                 || self.shaper_font_source(),
-                &paragraphs,
-            )
+                &request.text,
+                place,
+            )?;
+            let residency = self.session.residency();
+            let unloaded = layout
+                .glyph_ids()
+                .into_iter()
+                .filter(|glyph| {
+                    font.layer_ids_of_glyphs([glyph])
+                        .into_iter()
+                        .any(|layer| residency.is_unloaded(layer))
+                })
+                .collect();
+            Ok(PlacedText { layout, unloaded })
         }
 
         fn glyph_rename(&self, glyph: GlyphId, name: String) -> Option<GlyphIdentityChange> {
@@ -546,8 +604,8 @@ mod exports {
                 .ok()
         }
 
-        fn shaping_inputs(&self) -> Vec<FontChangeFlag> {
-            FontChangeFlag::of(TextShaping::INPUTS).collect()
+        fn layout_inputs(&self) -> Vec<FontChangeFlag> {
+            FontChangeFlag::of(TextShaping::LAYOUT_INPUTS).collect()
         }
 
         fn source_set_weights(&self, location: Vec<f64>) -> SourceSetWeights {
@@ -586,6 +644,39 @@ mod exports {
         fn external_location(&self, design: Vec<f64>) -> Vec<f64> {
             let font = self.session.font();
             external_values(font.axes(), &self.variation().mappings, &design)
+        }
+    }
+
+    impl Engine {
+        /// Where `request` lays out: at its source, when it names one the
+        /// font has, otherwise at its location mapped through the font's axis
+        /// mappings; with the kerning there, none when it cannot be blended.
+        fn text_place(&self, request: &TextLayoutRequest) -> TextPlace {
+            let font = self.session.font();
+            let source = request
+                .source
+                .and_then(|number| self.ids.source(number, font));
+            let external_of = |design: &[f64]| {
+                let values = external_values(font.axes(), &self.variation().mappings, design);
+                ExternalLocation::from_untyped(to_location(font.axes(), &values))
+            };
+            let Some(source) = source else {
+                return TextPlace {
+                    design: design_location(font, &request.location),
+                    external: external_of(&request.location),
+                    kerning: font
+                        .kerning_blend_at(&design_location(font, &request.location))
+                        .unwrap_or_default(),
+                };
+            };
+            let design = source.location().as_untyped().values_in(font.axes());
+            TextPlace {
+                design: source.location().clone(),
+                external: external_of(&design),
+                kerning: font
+                    .kerning_blend_at_source(source.id())
+                    .unwrap_or_default(),
+            }
         }
     }
 

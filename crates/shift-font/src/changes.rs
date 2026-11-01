@@ -36,11 +36,14 @@ pub enum FontChangeFlag {
     /// Kerning values or the sources, axes, and mappings its interpolation
     /// basis is built from.
     Kerning,
+    /// A glyph layer's outline, advance, components or anchors: what text
+    /// lays out from.
+    Layers,
 }
 
 impl FontChangeFlag {
     /// Every flag, in bit order.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Metadata,
         Self::Languages,
         Self::Glyphs,
@@ -52,6 +55,7 @@ impl FontChangeFlag {
         Self::NamedInstances,
         Self::Sources,
         Self::Kerning,
+        Self::Layers,
     ];
 
     /// The flag's bit in a [`FontChangeImpact`].
@@ -85,6 +89,8 @@ bitflags! {
         /// Kerning values or the sources, axes, and mappings its
         /// interpolation basis is built from.
         const KERNING = FontChangeFlag::Kerning.bit();
+        /// A glyph layer's outline, advance, components or anchors.
+        const LAYERS = FontChangeFlag::Layers.bit();
     }
 }
 
@@ -384,9 +390,12 @@ impl FontChange {
                     | FontChangeImpact::KERNING
             }
             Self::Glyph(_) => FontChangeImpact::GLYPHS,
-            Self::Layer { layer, .. } if layer.changes_glyph_record() => FontChangeImpact::GLYPHS,
+            Self::Layer { layer, .. } if layer.changes_glyph_record() => {
+                FontChangeImpact::GLYPHS | FontChangeImpact::LAYERS
+            }
+            Self::Layer { .. } => FontChangeImpact::LAYERS,
             Self::KerningGroup { .. } | Self::KerningValue { .. } => FontChangeImpact::KERNING,
-            Self::LibValue { .. } | Self::Layer { .. } => FontChangeImpact::empty(),
+            Self::LibValue { .. } => FontChangeImpact::empty(),
         }
     }
 

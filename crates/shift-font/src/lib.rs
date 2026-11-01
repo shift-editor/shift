@@ -34,6 +34,7 @@
 #![warn(clippy::unwrap_used, clippy::print_stdout)]
 
 pub mod anchor_attachment;
+pub mod anchor_name;
 pub mod anchor_propagation;
 pub mod changes;
 pub mod check;
@@ -53,6 +54,7 @@ pub mod layer_edit;
 pub mod naming;
 pub mod placed_blend;
 pub mod point_arrange;
+pub mod positioning;
 pub mod projection;
 pub mod shaper_font_source;
 mod string_enum;

@@ -96,6 +96,27 @@ describe("memory font editing", () => {
     session.dispose();
   });
 
+  it("lays proof text out as typed, by shift-layout, without an engine", async () => {
+    const session = createMemoryFontSession({
+      source: memorySource(fixture()),
+      clipboard: new MemoryClipboard(),
+    });
+    const { editor } = session;
+    editor.selectSource(regularSourceId);
+    const run = editor.text.createRun(editor.text.itemsFromText("SS"));
+
+    // S advances 500 at Regular; the caret stops come from the layout.
+    await expect
+      .poll(() => {
+        const layout = editor.text.layout(run.id);
+        return {
+          lefts: layout?.placedGlyphs.map((placed) => placed.left),
+          carets: [0, 1, 2].map((cluster) => layout?.pointAt(cluster)?.x),
+        };
+      })
+      .toEqual({ lefts: [0, 500], carets: [0, 500, 1000] });
+  });
+
   it("keeps axis state isolated between independent editor sessions", () => {
     const source = memorySource(fixture());
     const first = createMemoryFontSession({

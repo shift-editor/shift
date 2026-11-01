@@ -1,8 +1,12 @@
 //! Runs the editor's own positioning for the features export generates, at
 //! the place among the shaper font's lookups where export would put them.
 
+use std::ops::Range;
+
 use shift_font::GlyphId;
-use shift_shape::{GlyphInfo, GlyphPosition, ShapeEvent, ShapeHook, ShapeTable, Tag};
+use shift_shape::{
+    GlyphInfo, GlyphPosition, ParagraphHook, ShapeEvent, ShapeHook, ShapeTable, Tag, TextDirection,
+};
 
 use super::{InsertMarker, ShaperGlyphOrder};
 
@@ -32,6 +36,14 @@ pub trait GeneratedPositioning {
 pub struct PositioningGlyphs<'a> {
     infos: &'a [GlyphInfo],
     order: &'a ShaperGlyphOrder,
+    run: RunPlace,
+}
+
+/// Where the run being shaped sits in its paragraph, and how it reads.
+#[derive(Clone, Copy, Debug)]
+struct RunPlace {
+    start: u32,
+    direction: TextDirection,
 }
 
 impl PositioningGlyphs<'_> {
@@ -51,11 +63,23 @@ impl PositioningGlyphs<'_> {
         self.order.glyph(self.infos.get(index)?.glyph_id)
     }
 
-    /// Returns the cluster of the glyph at `index`, an index into the run's
-    /// units; `None` past the run's end.
+    /// Returns the cluster of the glyph at `index`, an index into the
+    /// paragraph's units; `None` past the run's end.
     pub fn cluster(&self, index: usize) -> Option<u32> {
-        Some(self.infos.get(index)?.cluster)
+        Some(self.infos.get(index)?.cluster + self.run.start)
     }
+
+    /// Returns the direction the run reads in.
+    pub fn direction(&self) -> TextDirection {
+        self.run.direction
+    }
+}
+
+/// A glyph's own advance at the location text is shaped at, which shaping
+/// starts from before the font's positioning.
+pub trait LiveAdvances {
+    /// Returns `glyph`'s advance in font units; `None` shapes it with none.
+    fn advance(&self, glyph: GlyphId) -> Option<i32>;
 }
 
 /// A [`ShapeHook`] that runs each generated feature at its insert marker.
@@ -66,6 +90,7 @@ pub(crate) struct MarkerHook<'a> {
     ran: Vec<bool>,
     order: &'a ShaperGlyphOrder,
     positioning: &'a mut dyn GeneratedPositioning,
+    run: RunPlace,
 }
 
 impl<'a> MarkerHook<'a> {
@@ -87,6 +112,10 @@ impl<'a> MarkerHook<'a> {
             markers,
             order,
             positioning,
+            run: RunPlace {
+                start: 0,
+                direction: TextDirection::LeftToRight,
+            },
         }
     }
 
@@ -101,6 +130,7 @@ impl<'a> MarkerHook<'a> {
         let glyphs = PositioningGlyphs {
             infos,
             order: self.order,
+            run: self.run,
         };
         for (marker, ran) in self.markers.iter().zip(&mut self.ran) {
             if *ran || !marker.is_due(lookup) {
@@ -135,5 +165,14 @@ impl ShapeHook for MarkerHook<'_> {
             ShapeEvent::EndTable(ShapeTable::Gpos) => self.run_through(None, infos, positions),
             _ => {}
         }
+    }
+}
+
+impl ParagraphHook for MarkerHook<'_> {
+    fn start_run(&mut self, units: Range<u32>, direction: TextDirection) {
+        self.run = RunPlace {
+            start: units.start,
+            direction,
+        };
     }
 }

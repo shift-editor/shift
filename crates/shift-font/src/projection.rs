@@ -3,6 +3,7 @@
 use crate::Require;
 use std::collections::{HashMap, HashSet};
 
+mod anchors;
 mod decomposed;
 
 pub use decomposed::{Decomposition, OutlineParts};
@@ -202,6 +203,8 @@ pub struct FontProjection<'a> {
     layers: HashMap<GlyphId, GlyphLayer>,
     interpolation_bases: HashMap<Vec<SourceId>, Arc<InterpolationBasis>>,
     decompositions: HashMap<GlyphId, Option<Arc<InterpolationBasis>>>,
+    /// Each glyph's compiled anchors, once asked for.
+    anchors: HashMap<GlyphId, Arc<crate::anchor_propagation::PropagatedAnchors>>,
 }
 
 /// Fully resolved glyph geometry at one internal authoring location.
@@ -498,6 +501,7 @@ impl Font {
             layers: HashMap::new(),
             interpolation_bases: HashMap::new(),
             decompositions: HashMap::new(),
+            anchors: HashMap::new(),
         }
     }
 }

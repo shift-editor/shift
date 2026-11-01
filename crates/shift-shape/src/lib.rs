@@ -2,9 +2,11 @@
 //!
 //! One implementation of text shaping for every Shift host: the editor's
 //! workspace (through NAPI), the editor itself (through WebAssembly), and the
-//! command line. A paragraph is split into runs of one script, each run is
-//! shaped with HarfRust, and runs come back in logical order. [`line_breaks`]
-//! gives the places a line may break
+//! command line. A paragraph is split into runs of one bidi level and script
+//! ([UAX #9](https://www.unicode.org/reports/tr9/)), each run is shaped with
+//! HarfRust in its level's direction, and runs come back in logical order;
+//! [`visual_order`] orders a line's runs for display. [`line_breaks`] gives
+//! the places a line may break
 //! ([UAX #14](https://www.unicode.org/reports/tr14/)).
 //!
 //! What differs between hosts is how glyphs are identified, where characters
@@ -28,9 +30,10 @@ pub use breaks::{LineBreak, line_breaks};
 pub use harfrust::{
     GlyphInfo, GlyphPosition, NormalizedCoord, ShapeEvent, ShapeHook, ShapeTable, Tag,
 };
+pub use itemize::visual_order;
 pub use shape::{
-    FeatureSetting, ParagraphRequest, ShapeError, ShapeRequest, ShapedGlyph, ShapedRun, Shaper,
-    TextDirection,
+    FeatureSetting, ParagraphHook, ParagraphRequest, ShapeError, ShapeRequest, ShapedGlyph,
+    ShapedParagraph, ShapedRun, Shaper, TextDirection,
 };
 pub use source::{FontGlyphs, GlyphSource, NOTDEF, character_glyphs};
 

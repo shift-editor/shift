@@ -30,7 +30,7 @@ import type { ContourId, GlyphName, GlyphRecord, PointId, SourceId, Unicode } fr
 import { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 import { getGlyphInfo } from "@/workspace/glyphInfo";
-import { WindowEngine } from "@/lib/engine/WindowEngine";
+import { FailingWindowEngine } from "./FailingWindowEngine";
 import { layerReaderHost } from "../../../preload/layerReaders";
 
 export type WorkspaceStack = {
@@ -47,6 +47,8 @@ export type WorkspaceStack = {
    * refuses would, without applying it.
    */
   failNextPersist(): void;
+  /** The window's engine, which can be made to fail its next text layout or glyph preload. */
+  engine: FailingWindowEngine;
   dispose(): void;
 };
 
@@ -80,13 +82,14 @@ export function createWorkspaceStack(): WorkspaceStack {
     },
   });
   // The window's engine reads the same store through the preload's reader, as in production.
-  const engine = new WindowEngine(layerReaderHost(), client);
+  const engine = new FailingWindowEngine(layerReaderHost(), client);
   const store = new FontStore({ engine });
   const editCoordinator = new WorkspaceEditCoordinator(client, store, engine);
   const font = new Font({ store, glyphInfo: getGlyphInfo(), editCoordinator });
 
   return {
     client,
+    engine,
     store,
     editCoordinator,
     font,
