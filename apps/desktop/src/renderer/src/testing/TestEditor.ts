@@ -1248,7 +1248,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   async editSources(names: readonly string[]): Promise<void> {
-    await this.#actions.editSources(names);
+    this.#actions.editSources(names);
     await this.settle();
   }
 
@@ -1328,12 +1328,14 @@ export class TestEditor extends Editor implements EditorTestSurface {
     if (!glyph) throw new Error("Expected an open glyph");
     const shown = { glyph: { glyphId: glyph.glyphId }, source: { sourceId: glyph.sourceId } };
     const other = { glyph: { glyphId: glyph.glyphId }, source };
-    const match = await this.#reads.font.matchLayers(shown, other);
-    if (!match.complete) return null;
-
-    const counterpart = match.points.find(({ referenceId }) => referenceId === id);
+    const counterparts = this.#reads.font.counterparts(shown, other, {
+      points: [id],
+      anchors: [],
+      components: [],
+    });
+    const counterpart = counterparts?.points[0];
     if (!counterpart) return null;
-    return this.#pointIn((await this.#reads.font.getLayer(other)).contours, counterpart.targetId);
+    return this.#pointIn((await this.#reads.font.getLayer(other)).contours, counterpart);
   }
 
   #pointIn(outline: Outline, id: PointId): AuthoredPoint | null {

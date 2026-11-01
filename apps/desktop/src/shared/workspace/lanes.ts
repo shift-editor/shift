@@ -9,7 +9,6 @@ import type {
   GlyphProjection,
   GlyphSnapshot,
   LayerId,
-  LayerMatch,
   LayerRead,
   Location,
   SaveState,
@@ -440,15 +439,6 @@ export interface WorkspaceSync {
   resolveLayers(layerIds: LayerId[]): Promise<LayerRead[]>;
 
   /**
-   * Derives cross-layer entity matches between two layers.
-   *
-   * @param referenceLayerId - Layer whose entities are matched from.
-   * @param targetLayerId - Layer whose entities are matched to.
-   * @returns The match of each reference entity in the target.
-   */
-  layerMatch(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch>;
-
-  /**
    * Reads compact glyph projection models and their component dependencies.
    *
    * @param glyphIds - Stable root glyph identities.
@@ -527,7 +517,6 @@ export const workspaceSyncMethods: LaneMethods<WorkspaceSync> = {
   glyphSnapshots: true,
   readLayers: true,
   resolveLayers: true,
-  layerMatch: true,
   glyphProjections: true,
   glyphPreviews: true,
   prepareSlugAtlas: true,

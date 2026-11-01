@@ -119,6 +119,45 @@ impl LayerMatch {
     pub fn into_differences(self) -> Vec<LayerDifference> {
         self.differences
     }
+
+    /// The target layer's ids for `points`, `anchors` and `components` of
+    /// the reference layer, each list in the order given.
+    ///
+    /// Returns `None` when the match is incomplete, so no edit reaches only
+    /// part of the target, or when the reference layer lacks one of the ids.
+    pub fn counterparts(
+        &self,
+        points: &[PointId],
+        anchors: &[AnchorId],
+        components: &[ComponentId],
+    ) -> Option<Counterparts> {
+        if !self.is_complete() {
+            return None;
+        }
+        Some(Counterparts {
+            points: counterparts_in(&self.points, points)?,
+            anchors: counterparts_in(&self.anchors, anchors)?,
+            components: counterparts_in(&self.components, components)?,
+        })
+    }
+}
+
+/// One layer's points, anchors and components that correspond to another
+/// layer's, as [`LayerMatch::counterparts`] pairs them.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct Counterparts {
+    pub points: Vec<PointId>,
+    pub anchors: Vec<AnchorId>,
+    pub components: Vec<ComponentId>,
+}
+
+/// The target id `matches` pairs with each of `ids`; none when one has no pair.
+fn counterparts_in<Id: Clone + Eq + std::hash::Hash>(
+    matches: &HashMap<Id, Id>,
+    ids: &[Id],
+) -> Option<Vec<Id>> {
+    ids.iter().map(|id| matches.get(id).cloned()).collect()
 }
 
 impl GlyphLayer {
@@ -509,6 +548,65 @@ mod tests {
                     source: Vec::new(),
                 },
             ]
+        );
+    }
+
+    /// The ids of `layer`'s first contour's points, in order.
+    fn point_ids(layer: &GlyphLayer) -> Vec<PointId> {
+        layer
+            .contours_iter()
+            .next()
+            .unwrap()
+            .points()
+            .iter()
+            .map(Point::id)
+            .collect()
+    }
+
+    #[test]
+    fn counterparts_name_the_target_entities_in_the_order_asked() {
+        let reference = layer();
+        let target = reference.clone_with_fresh_ids(
+            LayerId::from_raw("target-layer"),
+            SourceId::from_raw("other-source"),
+        );
+        let [first, _, last] = point_ids(&reference).try_into().unwrap();
+        let [target_first, _, target_last] = point_ids(&target).try_into().unwrap();
+        let components: Vec<ComponentId> = reference.components_iter().map(Component::id).collect();
+
+        let counterparts = reference.match_with(&target).counterparts(
+            &[last, first],
+            &[reference.anchors()[0].id()],
+            &[components[1].clone()],
+        );
+
+        assert_eq!(
+            counterparts,
+            Some(Counterparts {
+                points: vec![target_last, target_first],
+                anchors: vec![target.anchors()[0].id()],
+                components: vec![target.components_iter().nth(1).unwrap().id()],
+            })
+        );
+    }
+
+    #[test]
+    fn counterparts_are_none_for_an_incomplete_match_or_an_id_the_reference_lacks() {
+        let reference = layer();
+        let mut fewer_anchors = reference.clone();
+        fewer_anchors.add_anchor(Anchor::new(Some("bottom".to_string()), 50.0, 0.0));
+
+        assert_eq!(
+            reference
+                .match_with(&fewer_anchors)
+                .counterparts(&[], &[], &[]),
+            None
+        );
+        assert_eq!(
+            reference
+                .match_with(&reference.clone())
+                .counterparts(&[PointId::new()], &[], &[]),
+            None
         );
     }
 }

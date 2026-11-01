@@ -468,7 +468,7 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   /**
    * Selects sources for editing, as clicking and Command-clicking rows in the
    * Sources panel does: the first becomes the active source, and edits apply
-   * to all of them once their layers match.
+   * to every one whose layer matches its layer.
    */
   editSources(names: readonly string[]): Promise<void>;
   /** Edits every source at once, or back to the active one, as the sources panel's edit-all does. */

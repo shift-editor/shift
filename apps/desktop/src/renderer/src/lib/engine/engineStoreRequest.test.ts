@@ -11,6 +11,7 @@ import {
   mintLayerId,
   mintPointId,
   type FontIntent,
+  type GlyphId,
   type LayerId,
   type PointId,
 } from "@shift/types";
@@ -30,6 +31,7 @@ describe("the window's engine edits from the store", () => {
   let bridge: ShiftBridge;
   let engine: EngineSession;
   let openEngine: () => Promise<EngineSession>;
+  let glyphId: GlyphId;
   let layerId: LayerId;
   let pointIds: PointId[];
 
@@ -50,7 +52,7 @@ describe("the window's engine edits from the store", () => {
     const blank = await openEngine();
     const sourceId = blank.fontRecords().sources[0]!.id;
     blank.dispose();
-    const glyphId = mintGlyphId();
+    glyphId = mintGlyphId();
     layerId = mintLayerId();
     const contourId = mintContourId();
     pointIds = [mintPointId(), mintPointId(), mintPointId()];
@@ -178,6 +180,49 @@ describe("the window's engine edits from the store", () => {
       { id: expect.any(String), kept: true },
       { id: contourId, points: [], closed: false },
     ]);
+  });
+
+  it("names a layer's counterparts once the glyph is loaded, and none across glyphs", async () => {
+    // A second glyph whose layer has the same structure, so only its owner differs.
+    const sourceId = engine.fontRecords().sources[0]!.id;
+    const otherGlyphId = mintGlyphId();
+    const otherLayerId = mintLayerId();
+    const otherContourId = mintContourId();
+    bridge.workspace.apply([
+      { kind: "createGlyph", createGlyph: { glyphId: otherGlyphId, name: "B", unicodes: [66] } },
+      {
+        kind: "createGlyphLayer",
+        createGlyphLayer: { layerId: otherLayerId, glyphId: otherGlyphId, sourceId },
+      },
+      {
+        kind: "addContour",
+        addContour: { layerId: otherLayerId, contourId: otherContourId, closed: true },
+      },
+      {
+        kind: "addPoints",
+        addPoints: {
+          layerId: otherLayerId,
+          contourId: otherContourId,
+          points: pointIds.map((_, index) => ({
+            id: mintPointId(),
+            x: index,
+            y: index,
+            pointType: "onCurve" as const,
+            smooth: false,
+          })),
+        },
+      },
+    ]);
+    engine.dispose();
+    engine = await openEngine();
+    const ids = { points: [pointIds[2]!, pointIds[0]!], anchors: [], components: [] };
+
+    expect(engine.counterparts(layerId, layerId, ids)).toBeNull();
+
+    engine.preload([glyphId, otherGlyphId]);
+
+    expect(engine.counterparts(layerId, layerId, ids)).toEqual(ids);
+    expect(engine.counterparts(layerId, otherLayerId, ids)).toBeNull();
   });
 
   it("moves the composites attached to a moved anchor", async () => {

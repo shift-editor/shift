@@ -43,6 +43,7 @@ import {
   type EngineStage,
 } from "@shift/wasm/engine";
 import type {
+  Counterparts,
   EditLocation,
   EditablePair,
   EngineEdits,
@@ -280,6 +281,15 @@ export class EngineSession {
       second: sideId(pair.second),
       amount: value,
     }));
+  }
+
+  /**
+   * The `target` layer's ids for `ids` in `reference`, as shift-font's
+   * `LayerMatch::counterparts` pairs them; null when the layers don't match
+   * completely, `reference` lacks one of `ids`, or either layer is not loaded.
+   */
+  counterparts(reference: LayerId, target: LayerId, ids: Counterparts): Counterparts | null {
+    return this.#reads.counterparts(reference, target, ids.points, ids.anchors, ids.components);
   }
 
   /** What renaming a glyph to `name` does, as shift-font's `Font::glyph_rename` decides. */

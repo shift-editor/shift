@@ -1,5 +1,5 @@
 use crate::errors::{self, BridgeError, BridgeResult};
-use crate::input::{parse, parse_id_list};
+use crate::input::parse_id_list;
 use crate::reply::{PackedReply, answer};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
@@ -25,12 +25,11 @@ use shift_wire::{
   AnchorData, ComponentData, ComponentGlyph, ComponentTransformKind, ContourData, FontMetadata,
   FontMetrics, FontSnapshot, GlyphComponents, GlyphEntry, GlyphLayerShape, GlyphLayerSnapshot,
   GlyphProjection, GlyphSnapshot, GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape,
-  GlyphState, GlyphStructure, GlyphVariation, InterpolationSupport, LayerMatch as WireLayerMatch,
-  Location as WireLocation, MetricDefinition, NamedInstance, PointData, PointType, VariationBasis,
-  VariationDelta,
+  GlyphState, GlyphStructure, GlyphVariation, InterpolationSupport, Location as WireLocation,
+  MetricDefinition, NamedInstance, PointData, PointType, VariationBasis, VariationDelta,
   bridges::napi::{
     NapiGlyphPreview, NapiGlyphProjection, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
-    NapiLayerMatch, NapiLayerRead,
+    NapiLayerRead,
   },
 };
 use shift_workspace::{AcquireScope, FontWorkspace, WorkspaceError};
@@ -1128,42 +1127,6 @@ impl Bridge {
         })
       })
       .collect()
-  }
-
-  /// Derives entity mappings and structural diagnostics between two layers.
-  ///
-  /// Both layers must belong to the same glyph. The read acquires that glyph's
-  /// authored layers before matching, so sparse workspace residency cannot
-  /// produce an incomplete result. Missing layers and cross-glyph requests are
-  /// rejected rather than represented as compatibility differences.
-  #[napi(ts_args_type = "referenceLayerId: LayerId, targetLayerId: LayerId")]
-  pub fn get_layer_match(
-    &mut self,
-    reference_layer_id: String,
-    target_layer_id: String,
-  ) -> errors::Result<NapiLayerMatch> {
-    let reference_layer_id = parse::<LayerId>(&reference_layer_id)?;
-    let target_layer_id = parse::<LayerId>(&target_layer_id)?;
-    let (reference_glyph_id, target_glyph_id) = {
-      let font = self.font()?;
-      let reference_glyph_id = font.require_layer_owner(reference_layer_id)?;
-      let target_glyph_id = font.require_layer_owner(target_layer_id)?;
-      (reference_glyph_id, target_glyph_id)
-    };
-    if reference_glyph_id != target_glyph_id {
-      return Err(BridgeError::InvalidInput {
-        kind: "layer match",
-        value: format!(
-          "layers {reference_layer_id} and {target_layer_id} belong to different glyphs"
-        ),
-      });
-    }
-
-    let font = self.acquire_and_font(&[reference_glyph_id], AcquireScope::Glyphs)?;
-    let reference = font.require_layer(reference_layer_id)?;
-    let target = font.require_layer(target_layer_id)?;
-
-    Ok(WireLayerMatch::from_layers(reference, target).into())
   }
 
   /// Returns compact glyph projections without resolving a location.
@@ -3175,75 +3138,6 @@ mod tests {
       .unwrap();
 
     assert!(snapshots.is_empty());
-  }
-
-  #[test]
-  fn get_layer_match_returns_cross_layer_entity_ids() {
-    let mut bridge = bridge_with_workspace();
-    let (reference_layer_id, contour_id) = pen_setup(&mut bridge);
-    let reference_point_ids = [PointId::new().to_string(), PointId::new().to_string()];
-    bridge
-      .apply(
-        vec![add_points_intent(
-          &reference_layer_id,
-          &contour_id,
-          None,
-          vec![
-            seed(&reference_point_ids[0], 0.0, 0.0),
-            seed(&reference_point_ids[1], 100.0, 0.0),
-          ],
-        )],
-        None,
-      )
-      .unwrap();
-    bridge.apply(vec![weight_axis_intent()], None).unwrap();
-    bridge
-      .apply(
-        vec![create_source_intent(
-          "source_bold",
-          "Bold",
-          &[("axis_weight", 700.0)],
-        )],
-        None,
-      )
-      .unwrap();
-    let glyph_id = bridge.get_glyphs().unwrap()[0].id.to_string();
-    let target_layer_id = LayerId::new().to_string();
-    bridge
-      .apply(
-        vec![clone_glyph_layer_intent(
-          &target_layer_id,
-          &glyph_id,
-          "source_bold",
-          &reference_layer_id,
-        )],
-        None,
-      )
-      .unwrap();
-
-    let layer_match = bridge
-      .get_layer_match(reference_layer_id.clone(), target_layer_id.clone())
-      .unwrap();
-
-    assert!(layer_match.complete);
-    assert_eq!(layer_match.reference_layer_id, reference_layer_id);
-    assert_eq!(layer_match.target_layer_id, target_layer_id);
-    assert_eq!(layer_match.contours.len(), 1);
-    assert_eq!(layer_match.points.len(), 2);
-    assert_ne!(
-      layer_match.points[0].reference_id,
-      layer_match.points[0].target_id
-    );
-    assert!(layer_match.differences.is_empty());
-  }
-
-  #[test]
-  fn get_layer_match_rejects_layers_from_different_glyphs() {
-    let mut bridge = bridge_with_workspace();
-    let first = create_default_glyph_layer(&mut bridge, "A", Some(65));
-    let second = create_default_glyph_layer(&mut bridge, "B", Some(66));
-
-    assert!(bridge.get_layer_match(first, second).is_err());
   }
 
   #[test]

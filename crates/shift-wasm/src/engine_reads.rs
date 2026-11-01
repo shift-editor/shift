@@ -28,8 +28,8 @@ use shift_engine::StoreReadError;
 use shift_engine::scene::{RevisedNode, SceneNode, TextRun};
 use shift_font::glyph_identity::GlyphIdentityChange;
 use shift_font::{
-    Axis, FontChangeFlag, GlyphId, GlyphRecords, MetricValue, MissingKerningOrigin, NodeId,
-    ResolvedKerning, Source,
+    AnchorId, Axis, ComponentId, Counterparts, FontChangeFlag, GlyphId, GlyphRecords, LayerId,
+    MetricValue, MissingKerningOrigin, NodeId, PointId, ResolvedKerning, Source,
 };
 use shift_layout::{LayoutError, TextLayout};
 pub use shift_shape::{FeatureDefault, FeatureGroup, FontFeature};
@@ -193,6 +193,20 @@ pub trait EngineReads {
     /// The external location a design location's mapping came from, NaN on
     /// internal axes: `unmap_location_with_bases`.
     fn external_location(&self, design: Vec<f64>) -> Vec<f64>;
+    /// The `target` layer's ids for `points`, `anchors` and `components` in
+    /// `reference`, each in the order given, as `GlyphLayer::match_with`
+    /// pairs them (`LayerMatch::counterparts`), unsaved edits included.
+    /// Null when the layers don't match completely, `reference` lacks one of
+    /// the ids, the layers belong to different glyphs, or either is missing
+    /// or not yet loaded.
+    fn counterparts(
+        &self,
+        reference: LayerId,
+        target: LayerId,
+        points: Vec<PointId>,
+        anchors: Vec<AnchorId>,
+        components: Vec<ComponentId>,
+    ) -> Option<Counterparts>;
 }
 
 /// A text run to lay out, and where.
@@ -304,7 +318,7 @@ mod exports {
     use shift_font::naming::new_anchor_name;
     use shift_font::{
         AxisMapping, AxisMappingBasis, DesignLocation, ExternalLocation, Font, FontCopyId, GlyphId,
-        GlyphRecords, InterpolationBasis, Kerning, KerningSide, LayerId, MissingKerningOrigin,
+        GlyphRecords, InterpolationBasis, Kerning, KerningSide, MissingKerningOrigin,
         ResolvedKerning, SourceId,
     };
     use shift_layout::FeatureSetting;
@@ -312,10 +326,10 @@ mod exports {
     use wasm_bindgen::prelude::*;
 
     use super::{
-        Axis, EditablePair, EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag,
-        FontFeature, GlyphIdentityChange, InterpolatedMetrics, KerningSnapshot, LayoutError,
-        NodeId, PlacedText, RevisedNode, SceneNode, Source, SourceSetWeights, TextLayoutRequest,
-        engine_reads_request,
+        AnchorId, Axis, ComponentId, Counterparts, EditablePair, EngineReads, FeatureListError,
+        FeatureSubstitution, FontChangeFlag, FontFeature, GlyphIdentityChange, InterpolatedMetrics,
+        KerningSnapshot, LayerId, LayoutError, NodeId, PlacedText, PointId, RevisedNode, SceneNode,
+        Source, SourceSetWeights, TextLayoutRequest, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::shaping::{TextPlace, TextShaping};
@@ -789,6 +803,27 @@ mod exports {
 
         fn scene_node(&self, id: NodeId) -> Option<SceneNode> {
             self.session.scene().node(&id).cloned()
+        }
+
+        fn counterparts(
+            &self,
+            reference: LayerId,
+            target: LayerId,
+            points: Vec<PointId>,
+            anchors: Vec<AnchorId>,
+            components: Vec<ComponentId>,
+        ) -> Option<Counterparts> {
+            let font = self.session.font();
+            let residency = self.session.residency();
+            if font.glyph_id_by_layer(reference)? != font.glyph_id_by_layer(target)?
+                || residency.is_unloaded(reference)
+                || residency.is_unloaded(target)
+            {
+                return None;
+            }
+            font.layer(reference)?
+                .match_with(font.layer(target)?)
+                .counterparts(&points, &anchors, &components)
         }
     }
 

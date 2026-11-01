@@ -25,6 +25,7 @@ import {
 } from "@shift/editor/model";
 import {
   FontChangeFlagSchema,
+  type Counterparts,
   type FeatureSubstitution,
   type FontChangeFlag,
   type FontFeature,
@@ -439,6 +440,20 @@ export class WindowEngine implements FontEngine {
     if (!session || glyphIds.length === 0) return;
     session.preload(glyphIds);
     this.#changed(LAYERS_CHANGE);
+  }
+
+  counterparts(
+    glyphId: GlyphId,
+    reference: LayerId,
+    target: LayerId,
+    ids: Counterparts,
+  ): Counterparts | null {
+    const session = this.#opened?.session;
+    if (!session) return null;
+
+    // Loading a glyph changes nothing a reader holds, so no revision changes.
+    session.preload([glyphId]);
+    return session.counterparts(reference, target, ids);
   }
 
   newAnchorName(layerIds: readonly LayerId[]): string {

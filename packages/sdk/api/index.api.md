@@ -263,8 +263,6 @@ export class Editor {
     editableLayer(node: GlyphNode): GlyphLayer | null;
     // (undocumented)
     readonly editing: Editing;
-    get editingLayerMatchesCell(): Signal<ReadonlyMap<LayerId, LayerMatch>>;
-    editingLayersMatched(): Promise<void>;
     // (undocumented)
     get editingSourceIds(): ReadonlySet<SourceId>;
     // (undocumented)
@@ -556,6 +554,7 @@ export class Font {
     componentBaseNamesForName(name: GlyphName): readonly GlyphName[];
     contourIdForPoint(pointId: PointId): ContourId | null;
     contourIdForSegment(segmentId: SegmentId): ContourId | null;
+    counterparts(reference: LayerId, target: LayerId, ids: Counterparts): Counterparts | null;
     createAxis(axis: AxisDefinition): AxisId;
     createGlyph(name: GlyphName): GlyphRecord;
     createGlyphForUnicode(unicode: Unicode): GlyphRecord;
@@ -626,7 +625,6 @@ export class Font {
     loadGlyph(glyphId: GlyphId): Promise<Glyph>;
     loadGlyphs(glyphIds: readonly GlyphId[]): Promise<readonly Glyph[]>;
     mapLocation(location: Location_2): Promise<Location_2>;
-    matchLayers(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch>;
     materializeGlyphLayer(glyphId: GlyphId, sourceId: SourceId, fromLayerId: LayerId, values: Float64Array): LayerId;
     // (undocumented)
     get metadata(): FontMetadata;
