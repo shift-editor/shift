@@ -39,6 +39,7 @@
     "node": ">= 10"
   },
   "scripts": {
+    "typecheck": "tsgo --noEmit",
     "artifacts": "napi artifacts",
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",

@@ -32,7 +32,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "prepack": "node ../../scripts/generate-third-party-licenses.mjs sdk THIRD_PARTY_LICENSES.txt",
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsgo --noEmit && tsgo --noEmit -p tsconfig.dts.json && tsgo --noEmit -p tsconfig.config.json && tsgo --noEmit -p e2e/fixtures/tsconfig.json",
     "generate:inter-a-fixture": "node scripts/generate-inter-a-fixture.mjs",
     "test:packed": "pnpm build && node scripts/test-packed-consumers.mjs",
     "api:update": "node scripts/build.mjs --update-api",
