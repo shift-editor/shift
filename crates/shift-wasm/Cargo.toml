@@ -21,18 +21,22 @@ engine = [
     "dep:shift-shape",
     "dep:shift-shaper-font",
     "engine-protocol",
+    "shift-layout/layout",
 ]
 # The engine's interfaces and the records they carry, without the session
 # that answers them: what the editor's generated side is written from. Kept
 # out of the default build, which would otherwise link shift-wire, and with
 # it napi's symbols wherever another crate turns napi on.
-engine-protocol = ["dep:shift-wire"]
+engine-protocol = ["dep:shift-layout", "dep:shift-wire"]
 
 [dependencies]
 fontir = "1.0.0"
 serde = { version = "1.0", features = ["derive"] }
 pack = { workspace = true }
 shift-font = { workspace = true, features = ["pack"] }
+# Text layout (the `layout` feature, with the engine); its request and
+# result types alone for the protocol.
+shift-layout = { workspace = true, default-features = false, features = ["pack"], optional = true }
 shift-shape = { workspace = true, optional = true }
 shift-shaper-font = { workspace = true, optional = true }
 # Typed arrays and the blob lists a request carries (`blobs`).

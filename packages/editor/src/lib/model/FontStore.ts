@@ -577,7 +577,7 @@ export class FontStore {
       return existing;
     }
 
-    const created = new GlyphLayerState(state);
+    const created = new GlyphLayerState(state, () => this.engine?.endPreview());
     cell.set(created);
     return created;
   }

@@ -43,10 +43,11 @@ crates/shift-font/src/
   svg_path.rs      -- contours from SVG path data, for authoring payloads and pasted SVG
   naming.rs        -- names for new glyphs and anchors: the name, or the name numbered `.1`, `.2`, ...
   interpolation.rs -- source compatibility, reusable bases, source values
-  projection.rs    -- location-independent glyph payloads and resolved views
+  projection.rs    -- location-independent glyph payloads and resolved views; compiled anchors at a location
   composite.rs     -- component occurrences, anchor-aligned placement, and flattening
   anchor_attachment.rs  -- which components follow their anchors after an edit, and where to
   anchor_propagation.rs -- fontc's anchor propagation into composites, over plain data
+  positioning.rs   -- the generated features (kern, mark, mkmk, curs) applied to shaped runs over the live font
   drag_rules.rs    -- point-neighbourhood drag rules (handles follow anchors, smooth points stay smooth): pattern table, matching once per drag, positions per frame
   check.rs         -- read-only font checks: findings, codes, severities, options
   check/           -- designspace, outline (interpolation), health, kerning, coverage rules
@@ -54,6 +55,9 @@ crates/shift-font/src/
 ```
 
 ## Key Types
+
+- `RunPositioning` (`positioning.rs`) -- applies one generated feature (`GeneratedFeature`: `curs`, `kern`, `mark`, `mkmk`) to a shaped run in logical order, the way a shaper applies the lookups export writes: kerning passes over `GDEF` marks (and kerns marks only next to their neighbour) and moves the first glyph's offset too in right-to-left runs; a mark sits on the base before it (`_top` on `top`, or a ligature's last `top_N`) and `mkmk` stacks it on the nearest earlier mark of its base; cursive joins hang from a word's last glyph right to left and its first left to right. It reads anchors and kerning through `PositioningFont`. Attached glyphs get final offsets directly, since there is no shaper attachment chain; a later authored lookup that moves a base does not carry its marks. **WHY:** the editor applies these over the live font so kerning and anchor edits show without recompiling the shaper font; the export check (`shift-backends/tests/text_layout_export.rs`) holds them to export
+- `FontProjection::compiled_anchors` -- a glyph's anchors as export compiles them at the projection's location, components propagated in by `compiled_anchors`, memoized per projection; a glyph's `GDEF` class decides mark and ligature propagation
 
 - `Font` owns glyphs, sources, axes, axis mappings, named instances, metadata, and font-level data.
 - `EntityList` owns stable-ID lookup and authoring order for glyphs, contours, components, and future ordered entity collections.

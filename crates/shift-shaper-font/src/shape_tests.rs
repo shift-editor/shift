@@ -288,6 +288,7 @@ fn paragraph<'a>(units: &'a [ShapeUnit], location: &'a ExternalLocation) -> Para
     ParagraphRequest {
         units,
         location,
+        script: None,
         language: None,
         features: &[],
     }
@@ -299,10 +300,12 @@ fn an_arabic_paragraph_joins_and_reads_right_to_left() {
     let location = ExternalLocation::new();
     let units = characters("\u{0628}\u{0628}\u{0628}");
 
-    let runs = shaper(&font)
+    let paragraph = shaper(&font)
         .shape_paragraph(&paragraph(&units, &location))
         .unwrap();
+    let runs = &paragraph.runs;
 
+    assert_eq!(paragraph.direction, TextDirection::RightToLeft);
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].script.as_deref(), Some("Arab"));
     assert_eq!(runs[0].direction, TextDirection::RightToLeft);
@@ -324,7 +327,8 @@ fn a_mixed_paragraph_splits_into_runs_with_paragraph_clusters() {
 
     let runs = shaper(&font)
         .shape_paragraph(&paragraph(&units, &location))
-        .unwrap();
+        .unwrap()
+        .runs;
 
     let summary: Vec<_> = runs
         .iter()
@@ -469,4 +473,49 @@ fn a_removed_glyph_no_longer_shapes() {
 
     assert_eq!(state.compiles(), 1);
     assert_eq!(shaped_names(&font, &shaper, "x"), vec![(None, 0)]);
+}
+
+#[test]
+fn glyphs_the_font_classes_as_marks_are_flagged() {
+    let mut font = font_with(&[("f", Some('f')), ("acute", Some('\u{301}'))], "");
+    let acute = font.glyph_by_name("acute").unwrap().id();
+    font.set_glyph_category(
+        acute,
+        Some(shift_font::GlyphCategory::Mark),
+        Some(shift_font::GlyphSubcategory::Nonspacing),
+    )
+    .unwrap();
+    let location = ExternalLocation::new();
+    let units = characters("f\u{301}");
+
+    let shaped = shaper(&font).shape(&request(&units, &location)).unwrap();
+
+    let marks: Vec<bool> = shaped.iter().map(|glyph| glyph.is_mark).collect();
+    assert_eq!(marks, [false, true]);
+}
+
+#[test]
+fn an_english_word_in_arabic_is_its_own_left_to_right_run() {
+    let font = font_with(
+        &[
+            ("a", Some('a')),
+            ("beh-ar", Some('\u{0628}')),
+            ("space", Some(' ')),
+        ],
+        "",
+    );
+    let location = ExternalLocation::new();
+    let units = characters("\u{0628} a \u{0628}");
+
+    let paragraph = shaper(&font)
+        .shape_paragraph(&paragraph(&units, &location))
+        .unwrap();
+
+    let runs: Vec<_> = paragraph
+        .runs
+        .iter()
+        .map(|run| (run.units.clone(), run.level))
+        .collect();
+    assert_eq!(paragraph.direction, TextDirection::RightToLeft);
+    assert_eq!(runs, [(0..2, 1), (2..3, 2), (3..5, 1)]);
 }

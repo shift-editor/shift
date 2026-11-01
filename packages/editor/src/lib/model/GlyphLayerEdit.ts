@@ -95,6 +95,12 @@ export class GlyphLayerEdit {
       this.#positions.set(`${position.kind}:${position.id}`, position);
     }
     this.#state.patchPositions(positions);
+    // The layer draws the moved positions itself; text lays out from them
+    // in the window's engine.
+    this.#glyphLayer.previewInText(() => {
+      this.#structuralSteps();
+      this.#glyphLayer.applyPositionPatch([...this.#positions.values()]);
+    });
   }
 
   finish(label: string): void {

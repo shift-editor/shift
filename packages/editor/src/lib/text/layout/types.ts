@@ -7,7 +7,6 @@ import {
   type TextItemId,
   type Unicode,
 } from "@shift/types";
-import type { ShapedGlyph } from "@shift/wasm/protocol";
 import type { Font } from "../../model/Font";
 
 export type { TextItemId };
@@ -105,17 +104,6 @@ export interface PositionedGlyph {
 
 export type Direction = "ltr" | "rtl";
 
-export interface SegmentedRun {
-  items: readonly ParagraphItem[];
-  /** Glyphs in visual order, clusters indexing `items`: the shaper's, or one per item for literal layout. */
-  shaped: readonly ShapedGlyph[];
-  direction: Direction;
-  script?: string | null;
-  language?: string;
-  features?: Record<string, boolean | "auto">;
-  clusterStart: number;
-}
-
 export interface PositionedRun {
   glyphs: PositionedGlyph[];
   direction: Direction;
@@ -159,12 +147,6 @@ export interface CaretPosition {
   x: number;
   y: number;
   lineHeight: number;
-}
-
-/** The items between two line breaks; `clusterStart` is the first item's index in the run. */
-export interface Paragraph {
-  readonly items: readonly ParagraphItem[];
-  readonly clusterStart: number;
 }
 
 export type { Point2D, SourceMetrics };

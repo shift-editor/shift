@@ -44,6 +44,8 @@ every master with what export compiles.
 performance measurements. It has `a`–`z` (two rings and a stem each, with `top`/`bottom`
 anchors), five combining marks with `_top` and `top` anchors, and the composites `ǖ ǘ ǚ ü ú ù ū`
 built on `u` with their marks placed on anchors (`ǖ ǘ ǚ` stack a second mark on the first).
+The spacing `¨` is a composite of `dieresiscomb`, so it inherits its anchors without being a
+mark.
 Regenerate it with:
 
 ```bash
@@ -76,11 +78,13 @@ repeated-instance handling, and skipped export.
 ## ShapingTest
 
 `ShapingTest.ufo` is a hand-written UFO for live shaping tests: an `f_i`
-ligature (`liga`), Arabic beh with `init`/`medi`/`fina` forms, and fatha and
-shadda marks with `_top`/`top` anchors for mark-to-base and mark-to-mark
-attachment, and noon, which `ccmp` decomposes into a dotless body and a dot
-mark. Written for Shift's tests and released under the same terms as
-the repository.
+ligature (`liga`); Arabic beh with `init`/`medi`/`fina` forms, joined by
+`entry`/`exit` anchors for cursive attachment; fatha and shadda marks with
+`_top`/`top` anchors for mark-to-base and mark-to-mark attachment; an
+anchorless superscript alef classed as a mark; `tick`, an unencoded spacing
+glyph classed as a mark; and noon, which `ccmp` decomposes into a dotless
+body and a dot mark. Written for Shift's tests and released under the same
+terms as the repository.
 
 ## UndrawnLigature
 

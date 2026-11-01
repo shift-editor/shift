@@ -29,12 +29,13 @@ crates/shift-shape/src/
 - `Unit<G>` — a character, or a glyph inserted by name (as the host's glyph), which shapes as itself and reads as an inline object for line breaking.
 - `Shaper` — one font's parsed layout tables; `shape` shapes a run, `shape_paragraph` splits by script and shapes each run in its script's direction. Both take an optional HarfRust `ShapeHook` (re-exported with `ShapeEvent`, `ShapeTable`, `GlyphInfo` and `GlyphPosition`), told about each `GSUB` and `GPOS` table and lookup as shaping applies them, which may change positions during `GPOS`; it sees shaper glyph ids and run-relative clusters. HarfRust is the shift-editor fork pinned in the workspace `Cargo.toml`, 0.13.3 plus the hook.
 - `GlyphSource` — the host seam: glyph identity both ways, character mapping, and own advances.
-- `ShapedRun<G>` / `ShapedGlyph<G>` — runs in logical order; glyphs in visual order, as host glyphs, with clusters indexing the paragraph's units.
+- `ShapedParagraph<G>` / `ShapedRun<G>` / `ShapedGlyph<G>` — a paragraph's base direction and its runs in logical order, each with its bidi level; glyphs in visual order, as host glyphs, with clusters indexing the paragraph's units, each flagged `is_mark` when the font's `GDEF` classes it a mark.
+- `visual_order` — orders one line's runs for display by their bidi levels (UAX #9 rule L2).
 - `LineBreak` — a unit a line may (or must) start with.
 
 ## How it works
 
-`shape_paragraph` splits the units where their script changes (common characters, combining marks, and inserted glyphs join the run around them) and shapes each run with HarfRust, which picks the run's direction from its script. Each inserted glyph gets a stand-in character from Supplementary Private Use Area-B that `GlyphSource` lookups never see, so features can still substitute or position it while it forms no context. Runs come back in logical order.
+`shape_paragraph` resolves bidi levels (UAX #9, with the paragraph's base direction from its first strong character and inserted glyphs read as U+FFFC), splits the units where the level changes and then where the script changes (common characters, combining marks, and inserted glyphs join the run around them), and shapes each run with HarfRust in its level's direction, so digits inside Arabic come back as their own left-to-right run. Runs stay in logical order: a host breaks lines first and orders each line's runs with `visual_order`. Each inserted glyph gets a stand-in character from Supplementary Private Use Area-B that `GlyphSource` lookups never see, so features can still substitute or position it while it forms no context. Runs come back in logical order.
 
 `line_breaks` runs the Unicode line breaking algorithm over the same units. Choosing which allowed break to take is measurement against live advances and kerning, which the caller does.
 

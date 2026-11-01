@@ -11,7 +11,13 @@ import type { ComputedSignal, Effect, Signal } from "../signals";
 import type { Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
 import type { PageNode, TextRunNode } from "../../types/node";
-import type { ParsedText, RunContent, RunPlacement, TextRunRecord } from "../../types/text";
+import type {
+  ParsedText,
+  RunContent,
+  RunPlacement,
+  TextLayoutFailure,
+  TextRunRecord,
+} from "../../types/text";
 import {
   characterTextItem,
   glyphTextItem,
@@ -21,9 +27,9 @@ import {
   type TextItem,
   type TextLayout,
 } from "./layout";
-import { RunText, type ShapedText } from "./RunText";
+import type { TextLayout as LaidOutText, ProofTextItem } from "@shift/wasm/protocol";
 import { proofTexts } from "@shift/wasm";
-import type { ProofTextItem } from "@shift/wasm/protocol";
+import { RunText } from "./RunText";
 
 /**
  * Owns proof text: each run's items, kept in the scene's text run nodes, and
@@ -52,10 +58,26 @@ export class Text {
           new RunText(this.#editor, runIdCell, {
             run: (id) => this.run(id),
             glyphsLoadedCell: this.#glyphsLoadedCell,
-            onShaped: (shaped) => this.#acquireShapedGlyphs(shaped),
+            onLaidOut: (laidOut) => this.#acquireLaidOutGlyphs(laidOut),
           }),
       ),
   });
+
+  /**
+   * The first run whose text has no layout, or whose layout could not load
+   * what it shows, with why; null while every run lays out. The editor
+   * shows it, so a failed layout is never just an empty run.
+   */
+  readonly layoutFailureCell: ComputedSignal<TextLayoutFailure | null> = computed(
+    () => {
+      for (const runId of this.#editor.scene.runsCell.value.keys()) {
+        const failure = this.#runs.get(runId).failureCell.value;
+        if (failure) return failure;
+      }
+      return null;
+    },
+    { name: "text.layoutFailure" },
+  );
 
   constructor(editor: Editor) {
     this.#editor = editor;
@@ -231,6 +253,15 @@ export class Text {
   }
 
   /**
+   * Why a run has no layout, or what its layout needed that did not load
+   * (glyphs into the engine, or a preview's layout module); null while it
+   * lays out and loads what it shows.
+   */
+  runLayoutFailureCell(id: RunId): Signal<TextLayoutFailure | null> {
+    return this.#runs.get(id).failureCell;
+  }
+
+  /**
    * The run's layout now, without subscribing; reactive readers use {@link layoutCell}.
    *
    * @returns null when the run cannot lay out.
@@ -257,7 +288,9 @@ export class Text {
     } catch {
       return typedTextItems(text);
     }
-    return parsed.flatMap((item) => this.#textItems(item) ?? typedTextItems(`/${nameOf(item)}`));
+    return parsed.flatMap(
+      (item) => this.#textItems(item) ?? typedTextItems(proofTexts.format([item])),
+    );
   }
 
   /**
@@ -334,6 +367,7 @@ export class Text {
   }
 
   dispose(): void {
+    this.layoutFailureCell.dispose();
     this.#acquiring.dispose();
     this.#runsByItem.dispose();
     this.#runs.clear();
@@ -348,18 +382,12 @@ export class Text {
   }
 
   /** Loads glyphs the shaper substituted in, which no item names directly. */
-  #acquireShapedGlyphs(shaped: ShapedText): void {
-    for (const paragraph of shaped.paragraphs) {
-      if (paragraph.kind === "unshapable") {
-        this.#reportUnshapable(paragraph.reason);
-        continue;
-      }
-      for (const run of paragraph.runs) {
-        for (const glyph of run.glyphs) {
-          if (glyph.glyphId && !this.#editor.glyphForId(glyph.glyphId)) {
-            void this.#loadGlyph(glyph.glyphId);
-          }
-        }
+  /** Loads the glyphs a layout shows that are not loaded yet, such as ones shaping substituted in. */
+  #acquireLaidOutGlyphs(laidOut: LaidOutText): void {
+    if (laidOut.unshaped) this.#reportUnshapable(laidOut.unshaped);
+    for (const glyph of laidOut.glyphs) {
+      if (glyph.glyphId && !this.#editor.glyphForId(glyph.glyphId)) {
+        void this.#loadGlyph(glyph.glyphId);
       }
     }
   }
@@ -389,9 +417,4 @@ export class Text {
       this.#loading.delete(id);
     }
   }
-}
-
-/** The name a parsed glyph pick gives; empty for any other item. */
-function nameOf(item: ProofTextItem): string {
-  return item.kind === "glyph" ? item.name : "";
 }

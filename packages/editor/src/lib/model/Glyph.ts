@@ -245,6 +245,29 @@ class GlyphLayerWriter {
     state.showPreview(shown ?? null);
   }
 
+  /**
+   * Shows text laid out as `steps` would leave this layer, without keeping
+   * them or changing how the layer itself shows: for a drag frame the editor
+   * already draws, so the window's engine lays text out from it too.
+   * `steps` calls the layer methods the gesture's commit does. Does nothing
+   * without an engine.
+   */
+  previewInText(steps: () => void): void {
+    const editCoordinator = this.#editCoordinator;
+    if (!editCoordinator || this.#collecting) return;
+
+    const intents: FontIntent[] = [];
+    this.#collecting = intents;
+    this.#previewing = true;
+    try {
+      steps();
+    } finally {
+      this.#collecting = null;
+      this.#previewing = false;
+    }
+    if (intents.length > 0) editCoordinator.showPreview(intents);
+  }
+
   setXAdvance(width: number): void {
     this.#workspaceIntents.setXAdvance({ width });
   }
@@ -1239,6 +1262,11 @@ export class GlyphLayer {
    */
   preview(steps: () => void): void {
     this.#writer.preview(steps);
+  }
+
+  /** Lays text out as `steps` would leave this layer; see the writer's `previewInText`. */
+  previewInText(steps: () => void): void {
+    this.#writer.previewInText(steps);
   }
 
   /**

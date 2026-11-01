@@ -9,11 +9,10 @@ export {
 } from "./lib/text/layout/types";
 export type {
   CharacterTextItem,
-  Paragraph,
   ParagraphItem,
   GlyphTextItem,
-  SegmentedRun,
   TextItem,
 } from "./lib/text/layout/types";
 export { fallbackGlyphNameForUnicode, formatCodepointAsUPlus } from "./lib/utils/unicode";
 export { NONSPACING_MARK_EDITOR_ADVANCE } from "./lib/utils/displayAdvance";
+export type { TextLayoutFailure } from "./types/text";

@@ -316,6 +316,9 @@ pub(crate) struct Engine {
     /// from them is dropped when the session goes back to where it began
     /// ([`EditEvent`]).
     edit_impact: FontChangeImpact,
+    /// The font as the gesture under way previews it, until an edit or
+    /// [`engine_end_preview`]: what text lays out from while it is shown.
+    pub(crate) previewed: Option<Font>,
 }
 
 impl Engine {
@@ -363,6 +366,7 @@ impl Engine {
     /// going back to where the edit began drops what the edit's applies
     /// touched; closing the edit forgets them.
     fn on(&mut self, event: EditEvent) {
+        self.previewed = None;
         match event {
             EditEvent::Applied(impact) => {
                 self.shaping.forget_if_changed(impact);
@@ -508,6 +512,7 @@ fn open(session: EngineSession, source: Function) -> Result<u32, JsError> {
             shaping: TextShaping::default(),
             records: RefCell::new(RecordCache::default()),
             edit_impact: FontChangeImpact::empty(),
+            previewed: None,
         }));
         Ok(handle)
     })
@@ -756,12 +761,48 @@ pub fn engine_mark_saved(handle: u32) -> Result<(), JsError> {
 pub fn engine_preview(handle: u32) -> Result<Array, JsError> {
     with_engine(handle, |engine| {
         let set = engine.take_held();
-        let previewed = engine
+        let staged = engine
             .session
-            .preview(&mut HostLayers(&engine.source), &set)
+            .stage_loaded(&mut HostLayers(&engine.source), &set)
             .map_err(apply_error)?;
-        // A preview keeps nothing, so the session's font is what it started from.
-        engine_layers(engine.session.font(), &previewed.layers)
+        // A preview keeps nothing, so the session's font is what it started
+        // from; text lays out from the previewed font while it is shown.
+        let layers = engine_layers(engine.session.font(), staged.touched())?;
+        engine.previewed = Some(staged.font().clone());
+        Ok(layers)
+    })
+}
+
+/// Lays text out from what the held intents would leave, without keeping
+/// them or answering with layers: a drag frame the editor draws itself.
+///
+/// # Errors
+///
+/// As [`engine_apply`].
+#[wasm_bindgen(js_name = engineShowPreview)]
+pub fn engine_show_preview(handle: u32) -> Result<(), JsError> {
+    with_engine(handle, |engine| {
+        let set = engine.take_held();
+        let staged = engine
+            .session
+            .stage_loaded(&mut HostLayers(&engine.source), &set)
+            .map_err(apply_error)?;
+        engine.previewed = Some(staged.font().clone());
+        Ok(())
+    })
+}
+
+/// Stops showing the gesture's preview: text lays out from the session's
+/// font again.
+///
+/// # Errors
+///
+/// Fails on an unknown handle.
+#[wasm_bindgen(js_name = engineEndPreview)]
+pub fn engine_end_preview(handle: u32) -> Result<(), JsError> {
+    with_engine(handle, |engine| {
+        engine.previewed = None;
+        Ok(())
     })
 }
 
