@@ -168,7 +168,7 @@ fn features_list_each_tag_once_with_names_and_defaults() {
         .features()
         .unwrap()
         .into_iter()
-        .map(|feature| (feature.tag.to_string(), feature.name, feature.default))
+        .map(|feature| (feature.tag, feature.name, feature.default))
         .collect();
 
     assert_eq!(
@@ -567,4 +567,78 @@ fn an_english_word_in_arabic_is_its_own_left_to_right_run() {
         .collect();
     assert_eq!(paragraph.direction, TextDirection::RightToLeft);
     assert_eq!(runs, [(0..2, 1), (2..3, 2), (3..5, 1)]);
+}
+
+/// Whether shaping `text` in `script` with `tag` set to `setting` (left
+/// to the shaper's default when `None`) applies `tag`, in a font whose only
+/// rule is `tag` substituting each character's glyph with its `.alt`.
+fn harfrust_applies(tag: &str, script: &str, text: char, setting: Option<u32>) -> bool {
+    let name = format!("u{:04X}", u32::from(text));
+    let alternate = format!("{name}.alt");
+    let script_tag = match script {
+        "Arab" => "arab",
+        _ => "latn",
+    };
+    let font = font_with(
+        &[(name.as_str(), Some(text)), (alternate.as_str(), None)],
+        &format!(
+            "languagesystem DFLT dflt;
+             languagesystem {script_tag} dflt;
+             feature {tag} {{ sub {name} by {alternate}; }} {tag};"
+        ),
+    );
+    let location = ExternalLocation::new();
+    let units = [ShapeUnit::Character(text)];
+    let features: Vec<FeatureSetting> = setting
+        .map(|value| FeatureSetting::parse(tag, value).unwrap())
+        .into_iter()
+        .collect();
+    let shaped = shaper(&font)
+        .shape(&ShapeRequest {
+            script: Some(script),
+            features: &features,
+            ..request(&units, &location)
+        })
+        .unwrap();
+    names_and_clusters(&font, &shaped) == [named(&alternate, 0)]
+}
+
+/// Checks shift-shape's table of the features the shaper applies by default
+/// (`FeatureDefault::of`) against what HarfRust does, which lists them only
+/// privately: each substitution feature, shaped with nothing set, applies
+/// exactly when the table says `Required` or `On`, and text setting it
+/// wins either way, as `FeatureDefault::applies` says.
+#[test]
+fn the_default_feature_table_matches_what_harfrust_applies() {
+    // Substitution features, each in a script that reaches it with one character.
+    let cases: [(&str, &str, char); 17] = [
+        ("ccmp", "Latn", 'a'),
+        ("locl", "Latn", 'a'),
+        ("rlig", "Latn", 'a'),
+        ("rclt", "Latn", 'a'),
+        ("rvrn", "Latn", 'a'),
+        ("calt", "Latn", 'a'),
+        ("clig", "Latn", 'a'),
+        ("liga", "Latn", 'a'),
+        ("isol", "Arab", '\u{628}'),
+        ("dlig", "Latn", 'a'),
+        ("ss01", "Latn", 'a'),
+        ("smcp", "Latn", 'a'),
+        ("salt", "Latn", 'a'),
+        ("onum", "Latn", 'a'),
+        ("swsh", "Latn", 'a'),
+        ("hist", "Latn", 'a'),
+        ("case", "Latn", 'a'),
+    ];
+
+    for (tag, script, text) in cases {
+        let default = FeatureDefault::of(Tag::new_checked(tag.as_bytes()).unwrap());
+        for setting in [None, Some(0), Some(1)] {
+            assert_eq!(
+                harfrust_applies(tag, script, text, setting),
+                default.applies(setting),
+                "{tag} ({default:?}) set to {setting:?}"
+            );
+        }
+    }
 }

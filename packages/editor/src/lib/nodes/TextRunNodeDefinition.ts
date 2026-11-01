@@ -1,7 +1,7 @@
 import { NodeDefinition, type ChildPlacement } from "./NodeDefinition";
 import { OutlineRenderer } from "../editor/rendering/Outline";
 import type { PathBatch } from "../editor/rendering/Canvas";
-import { Caret, type PlacedGlyph, type TextLayout } from "../text/layout";
+import type { PlacedGlyph, TextLayout } from "../text/layout";
 import { TextBuffer } from "../text/TextBuffer";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import { localBounds } from "../editor/spaces";
@@ -546,10 +546,10 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const run = this.editor.text.run(node.runId);
     if (editing?.nodeId !== node.id || !run) return;
 
-    const caret = Caret.atCluster(
-      layout,
+    const caret = layout.caretPosition(
       new TextBuffer(run.items, editing.focus).focusCluster,
-    ).position();
+      editing.focusEdge,
+    );
     ctx.canvas.line(
       { x: caret.x, y: caret.y + layout.metrics.descender },
       { x: caret.x, y: caret.y + layout.metrics.ascender },

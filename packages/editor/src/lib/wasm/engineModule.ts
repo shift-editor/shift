@@ -374,9 +374,9 @@ export class EngineSession {
 
   /**
    * Whether shaping applies feature `tag` when text sets it to `setting`
-   * (null when it leaves it), as shift-shape decides from the feature's
-   * default: a required feature always does. False for a tag the shaper font
-   * does not define, or without a shaper.
+   * (null when it leaves it), as shift-shape decides: the setting wins, else
+   * the feature's default. False for a tag the shaper font does not define,
+   * or without a shaper.
    */
   featureApplies(tag: string, setting: number | null): boolean {
     return this.#reads.featureApplies(tag, setting);

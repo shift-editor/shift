@@ -30,6 +30,7 @@ use shift_font::{
     ResolvedKerning, Source,
 };
 use shift_layout::{LayoutRequest, TextLayout};
+pub use shift_shape::{FeatureDefault, FeatureGroup, FontFeature};
 use shift_wire::KerningSnapshot;
 
 /// What the editor reads from one engine session's font. Glyphs and sources
@@ -122,7 +123,7 @@ pub trait EngineReads {
     fn feature_substitutions(&self, tag: String) -> Option<Vec<FeatureSubstitution>>;
     /// Whether shaping text applies feature `tag` when the text sets it to
     /// `setting` (null when it leaves it): `FeatureDefault::applies` for the
-    /// session's shaper font's feature, so a required feature always does.
+    /// session's shaper font's feature: the setting wins, else its default.
     /// False for a tag the shaper font does not define, or no shaper.
     /// Changes when a flag in [`Self::shaper_inputs`] does.
     fn feature_applies(&self, tag: String, setting: Option<u32>) -> bool;
@@ -165,46 +166,6 @@ pub struct PlacedText {
     /// The glyphs it shows whose layers the session has not loaded, which
     /// laid out from their placeholders.
     pub unloaded: Vec<GlyphId>,
-}
-
-/// What a feature does when text does not set it.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Pack)]
-pub enum FeatureDefault {
-    /// The shaper always applies it: a script's shaping needs it, or export
-    /// generates it. Text never switches it.
-    Required,
-    /// Applied unless text turns it off, such as `liga`.
-    On,
-    /// Applied only when text turns it on, such as `ss01`.
-    #[default]
-    Off,
-}
-
-/// The kind of thing a feature changes, which a feature list groups by.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Pack)]
-pub enum FeatureGroup {
-    Ligatures,
-    LetterCase,
-    Figures,
-    FractionsAndPositions,
-    StylisticSets,
-    CharacterVariants,
-    Alternates,
-    #[default]
-    Other,
-}
-
-/// A feature the session's shaper font defines.
-#[derive(Clone, Debug, PartialEq, Eq, Pack)]
-pub struct FontFeature {
-    /// The feature tag, such as `liga` or `ss01`.
-    pub tag: String,
-    /// The name it is shown by: the font's own for a stylistic set or
-    /// character variant, otherwise the registered or numbered name; null
-    /// for a tag with none.
-    pub name: Option<String>,
-    pub default: FeatureDefault,
-    pub group: FeatureGroup,
 }
 
 /// One substitution a feature can make: `input` in the text becomes `output`.

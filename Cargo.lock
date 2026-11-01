@@ -2570,6 +2570,7 @@ name = "shift-shape"
 version = "0.1.0"
 dependencies = [
  "harfrust",
+ "pack",
  "read-fonts 0.43.3",
  "thiserror",
  "unicode-bidi",

@@ -12,7 +12,10 @@ import {
   Caret,
   characterTextItem,
   lineBreakTextItem,
+  type CaretEdge,
+  type CaretPlace,
   type CaretPosition,
+  type CaretTarget,
   type SelectionRect,
   type TextItem,
   type TextLayout,
@@ -68,6 +71,7 @@ export class TextEditing {
       nodeId,
       anchor,
       focus: caret,
+      focusEdge: "primary",
       active: true,
     });
     this.#goalX = null;
@@ -120,7 +124,8 @@ export class TextEditing {
     if (!buffer || !layout) return null;
 
     const cluster = buffer.focusCluster;
-    return { cluster, selection: buffer.selection, position: layout.caretAt(cluster).position() };
+    const position = layout.caretPosition(cluster, this.state.focusEdge);
+    return { cluster, selection: buffer.selection, position };
   }
 
   get selectedItems(): readonly TextItem[] {
@@ -185,25 +190,34 @@ export class TextEditing {
     const lineIndex = layout.lineIndexForCluster(cluster);
     // Reading order is screen order flipped in a right-to-left line.
     const logical = layout.lineDirection(lineIndex) === "rtl" ? (-direction as -1 | 1) : direction;
-    let target = cluster;
+    const edge = this.state?.focusEdge ?? "primary";
+    // Past the line's edge on screen, a move continues in reading order.
+    const reading = (unit: number): CaretTarget => ({ unit, edge: "primary" });
+    let target: CaretTarget;
     switch (granularity) {
       case "character":
-        target = layout.visualStep(cluster, direction) ?? layout.graphemeStep(cluster, logical);
+        // Stop to stop: a boundary's second place is only where a word move lands.
+        target =
+          layout.visualStep(cluster, edge, direction, (place) => place.edge === "primary") ??
+          reading(layout.graphemeStep(cluster, logical));
         break;
       case "word": {
         const edges = buffer.wordEdges(direction, (cluster) => layout.directionAt(cluster));
+        // A word's edge is the place on its own side of a direction boundary.
+        const isWordEdge = (place: CaretPlace) =>
+          edges.some(({ unit, direction }) => unit === place.unit && direction === place.direction);
         target =
-          layout.visualStep(cluster, direction, (stop) => edges.has(stop)) ??
-          buffer.wordStep(cluster, logical);
+          layout.visualStep(cluster, edge, direction, isWordEdge) ??
+          reading(buffer.wordStep(cluster, logical));
         break;
       }
       case "line":
-        target = layout.lineEdge(lineIndex, direction) ?? cluster;
+        target = layout.lineEdge(lineIndex, direction) ?? reading(cluster);
         break;
     }
 
     this.#goalX = null;
-    this.#place(target, extend, "Move text caret");
+    this.#place(target.unit, extend, "Move text caret", undefined, target.edge);
   }
 
   moveVertical(direction: -1 | 1, extend = false): void {
@@ -212,7 +226,7 @@ export class TextEditing {
     const layout = node && this.#editor.text.layout(node.runId);
     if (!buffer || !layout) return;
     const caret = Caret.atCluster(layout, buffer.focusCluster);
-    this.#goalX ??= caret.position().x;
+    this.#goalX ??= layout.caretPosition(caret.cluster, this.state?.focusEdge).x;
     this.#place(
       (direction === -1 ? caret.previousLine(this.#goalX) : caret.nextLine(this.#goalX)).cluster,
       extend,
@@ -232,7 +246,13 @@ export class TextEditing {
     this.#place(buffer.items.length, true, "Select text", null);
   }
 
-  #place(cluster: number, extend: boolean, label?: string, anchor?: TextCaret): void {
+  #place(
+    cluster: number,
+    extend: boolean,
+    label?: string,
+    anchor?: TextCaret,
+    focusEdge: CaretEdge = "primary",
+  ): void {
     const state = this.state;
     const buffer = this.#buffer();
     if (!state || !buffer) return;
@@ -243,6 +263,7 @@ export class TextEditing {
         ...state,
         anchor: anchor === undefined ? extendedAnchor : anchor,
         focus: caret,
+        focusEdge,
       });
     if (label) this.#editor.history.captureOrJoin(label, write);
     else write();
@@ -274,7 +295,12 @@ export class TextEditing {
     if (!result) return;
     const write = () => {
       this.#editor.text.setItems(run.id, result.items);
-      this.#store.put({ ...state, anchor: result.anchor, focus: result.focus });
+      this.#store.put({
+        ...state,
+        anchor: result.anchor,
+        focus: result.focus,
+        focusEdge: "primary",
+      });
     };
     this.#editor.history.captureOrJoin(label, write);
     this.#goalX = null;

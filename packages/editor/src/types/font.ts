@@ -237,8 +237,8 @@ export interface FontEngine {
 
   /**
    * Whether shaping applies a feature when text sets it to `setting` (null
-   * when it leaves it), as Rust decides from the feature's default: a
-   * required feature always does.
+   * when it leaves it), as Rust decides: the setting wins, else the
+   * feature's default.
    *
    * @returns false while the engine is not open, or for a tag its shaper font does not define.
    */

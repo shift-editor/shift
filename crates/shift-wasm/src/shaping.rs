@@ -33,7 +33,7 @@ mod exports {
     use shift_shaper_font::{LiveShaper, ShaperFontError, ShaperFontRequest, ShaperFontState};
 
     use super::ShapingFailure;
-    use crate::engine_reads::{FeatureDefault, FeatureGroup, FeatureSubstitution, FontFeature};
+    use crate::engine_reads::{FeatureSubstitution, FontFeature};
 
     /// A session's shaper: the shaper font compiled from the session's font,
     /// and a shaper over it that maps characters through the font's Unicode
@@ -163,12 +163,7 @@ mod exports {
             let Ok(shaper) = state.shaper() else {
                 return Vec::new();
             };
-            shaper
-                .features()
-                .unwrap_or_default()
-                .into_iter()
-                .map(FontFeature::from)
-                .collect()
+            shaper.features().unwrap_or_default()
         }
 
         /// Every substitution feature `tag` can make in the shaper font, with
@@ -212,9 +207,6 @@ mod exports {
             tag: &str,
             setting: Option<u32>,
         ) -> bool {
-            let Ok(tag) = shift_shape::Tag::new_checked(tag.as_bytes()) else {
-                return false;
-            };
             let state = self.current(font, source);
             let Ok(shaper) = state.shaper() else {
                 return false;
@@ -245,43 +237,6 @@ mod exports {
                 state.failure = updated.err().filter(|_| state.shaper.is_none());
             }
             state
-        }
-    }
-
-    impl From<shift_shaper_font::FontFeature> for FontFeature {
-        fn from(feature: shift_shaper_font::FontFeature) -> Self {
-            Self {
-                tag: feature.tag.to_string(),
-                name: feature.name,
-                default: feature.default.into(),
-                group: feature.group.into(),
-            }
-        }
-    }
-
-    impl From<shift_shaper_font::FeatureDefault> for FeatureDefault {
-        fn from(default: shift_shaper_font::FeatureDefault) -> Self {
-            match default {
-                shift_shaper_font::FeatureDefault::Required => Self::Required,
-                shift_shaper_font::FeatureDefault::On => Self::On,
-                shift_shaper_font::FeatureDefault::Off => Self::Off,
-            }
-        }
-    }
-
-    impl From<shift_shaper_font::FeatureGroup> for FeatureGroup {
-        fn from(group: shift_shaper_font::FeatureGroup) -> Self {
-            use shift_shaper_font::FeatureGroup as Group;
-            match group {
-                Group::Ligatures => Self::Ligatures,
-                Group::LetterCase => Self::LetterCase,
-                Group::Figures => Self::Figures,
-                Group::FractionsAndPositions => Self::FractionsAndPositions,
-                Group::StylisticSets => Self::StylisticSets,
-                Group::CharacterVariants => Self::CharacterVariants,
-                Group::Alternates => Self::Alternates,
-                Group::Other => Self::Other,
-            }
         }
     }
 

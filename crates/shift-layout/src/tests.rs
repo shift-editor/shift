@@ -234,6 +234,22 @@ fn a_direction_boundary_has_a_second_caret() {
     let secondary = boundary.secondary.unwrap();
     assert_eq!(secondary.direction, Direction::Ltr);
     assert_ne!(secondary.x, boundary.x);
+    // Every place, stops and second places alike, numbered left to right.
+    let mut places: Vec<(u32, f64)> = layout
+        .carets
+        .iter()
+        .flat_map(|stop| {
+            std::iter::once((stop.screen, stop.x))
+                .chain(stop.secondary.map(|second| (second.screen, second.x)))
+        })
+        .collect();
+    places.sort_by_key(|(screen, _)| *screen);
+    let screens: Vec<u32> = places.iter().map(|(screen, _)| *screen).collect();
+    assert_eq!(
+        screens,
+        (0..u32::try_from(places.len()).unwrap()).collect::<Vec<_>>()
+    );
+    assert!(places.windows(2).all(|pair| pair[0].1 <= pair[1].1));
 }
 
 #[test]
