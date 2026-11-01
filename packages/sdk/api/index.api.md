@@ -515,6 +515,8 @@ export class Font {
     entryForUnicode(unicode: Unicode): GlyphEntry | null;
     get externalAxesCell(): Signal<readonly Axis[]>;
     externalLocationForSource(sourceId: SourceId): ExternalAxisLocation | null;
+    featureApplies(tag: string, setting: number | null): boolean;
+    featureSubstitutions(tag: string): readonly FeatureSubstitution[];
     fontFeatures(): readonly FontFeature[];
     getAxes(): readonly Axis[];
     getAxisMappingBases(): readonly AxisMappingBasis[];
