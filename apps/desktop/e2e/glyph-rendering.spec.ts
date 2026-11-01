@@ -272,7 +272,6 @@ test.describe("Segment selection rendering", () => {
 });
 
 test.describe("Glyph rendering — multiple glyphs", () => {
-
   test("B glyph — mixed curves and straights", { tag: "@golden" }, async ({ editor }) => {
     await editor.openGlyphByUnicode(GLYPH_B);
     await expectCanvasSnapshot(editor, "canvas-B-composited.png");
