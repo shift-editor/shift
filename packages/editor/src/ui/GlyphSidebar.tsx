@@ -1,6 +1,6 @@
 import { Button, ScrollArea, Separator } from "@shift/ui";
-import { useMemo, type ReactNode } from "react";
-import { computed, useSignalState } from "../lib/signals";
+import type { ReactNode } from "react";
+import { useSignalState } from "../lib/signals";
 import { EditableSidebarInput } from "./EditableSidebarInput";
 import { GlyphIdentityFields } from "./GlyphIdentityFields";
 import { ShiftIcon } from "./ShiftIcon";
@@ -38,17 +38,7 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
   const leftSidebearing = sidebearings.lsb === null ? null : Math.round(sidebearings.lsb);
   const rightSidebearing = sidebearings.rsb === null ? null : Math.round(sidebearings.rsb);
   const sidebearingsEditable = editable && leftSidebearing !== null && rightSidebearing !== null;
-  // Reads the cells, so the header follows page switches and renames.
-  const pageNameCell = useMemo(
-    () =>
-      computed(() => {
-        const shownPageId = editor.scene.shownPageIdCell.value;
-        const page = editor.scene.pagesCell.value.find((candidate) => candidate.id === shownPageId);
-        return page?.name ?? null;
-      }),
-    [editor],
-  );
-  const pageName = useSignalState(pageNameCell);
+  const pageName = useSignalState(editor.scene.shownPageCell)?.name ?? null;
 
   return (
     <aside

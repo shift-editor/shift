@@ -3,6 +3,7 @@ import { computed, signal, type Signal, type WritableSignal } from "@shift/edito
 import type { GlyphNode, PageNode } from "@shift/editor/types";
 import type { GlyphId, NodeId } from "@shift/types";
 import { CANVAS_PATH, glyphIdFromPath } from "@/lib/editorRoute";
+import type { StoredTab } from "@/lib/workspace/documentViews";
 
 /** The pinned font overview tab's id. */
 export const GLYPHS_TAB_ID = "glyphs";
@@ -36,14 +37,9 @@ export type WindowLocation =
 
 /** A window's tabs as view memory keeps them: the page and glyph tabs in order, and the overview's page. */
 export interface WindowTabsView {
-  readonly tabs: readonly StoredWindowTab[];
+  readonly tabs: readonly StoredTab[];
   readonly selectionPageId: NodeId | null;
 }
-
-/** A page or glyph tab without its session-only id. */
-export type StoredWindowTab =
-  | { readonly kind: "page"; readonly pageId: NodeId }
-  | { readonly kind: "glyph"; readonly pageId: NodeId; readonly glyphId: GlyphId };
 
 /** The result of opening a glyph in a tab. */
 export interface OpenedGlyph {
@@ -277,7 +273,7 @@ export class WindowTabs {
 
   /** The tabs as view memory keeps them, in order; the pinned overview is implied. */
   view(): WindowTabsView {
-    const tabs = this.#movable().map((tab): StoredWindowTab => {
+    const tabs = this.#movable().map((tab): StoredTab => {
       switch (tab.kind) {
         case "page":
           return { kind: "page", pageId: tab.pageId };
@@ -297,11 +293,11 @@ export class WindowTabs {
    *
    * @returns the tabs dropped.
    */
-  restore(view: WindowTabsView): readonly StoredWindowTab[] {
+  restore(view: WindowTabsView): readonly StoredTab[] {
     const scene = this.#editor.scene;
     const font = this.#editor.font;
     const kept: MovableTab[] = [];
-    const dropped: StoredWindowTab[] = [];
+    const dropped: StoredTab[] = [];
     for (const stored of view.tabs) {
       const pageExists = scene.nodeOfKind(stored.pageId, "page") !== null;
       const glyphExists = stored.kind === "page" || font.recordForId(stored.glyphId) !== null;

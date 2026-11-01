@@ -50,6 +50,7 @@ export class Scene {
   readonly #pagesCell: Signal<readonly PageNode[]>;
   readonly #requestedPageIdCell: WritableSignal<NodeId | null>;
   readonly #shownPageIdCell: Signal<NodeId | null>;
+  readonly #shownPageCell: Signal<PageNode | null>;
   readonly #pageIdByNodeCell: Signal<ReadonlyMap<NodeId, NodeId>>;
   readonly #cell: Signal<SceneValue>;
   readonly #nodesById: Signal<ReadonlyEntityMap<NodeId, ShiftNode>>;
@@ -97,6 +98,13 @@ export class Scene {
         return page?.id ?? null;
       },
       { name: "editor.scene.shownPage" },
+    );
+    this.#shownPageCell = computed(
+      () => {
+        const shownPageId = this.#shownPageIdCell.value;
+        return this.#pagesCell.value.find((page) => page.id === shownPageId) ?? null;
+      },
+      { name: "editor.scene.shownPageRecord" },
     );
     this.#pageIdByNodeCell = computed(
       () => {
@@ -200,9 +208,14 @@ export class Scene {
     return this.#shownPageIdCell;
   }
 
+  /** The page the canvas shows, as a record: readers rerun on a page switch or a rename. */
+  get shownPageCell(): Signal<PageNode | null> {
+    return this.#shownPageCell;
+  }
+
   /** Returns the page the canvas shows, or null while the scene has no page. */
   shownPage(): PageNode | null {
-    return this.nodeOfKind(this.#shownPageIdCell.peek(), "page");
+    return this.#shownPageCell.peek();
   }
 
   /**
