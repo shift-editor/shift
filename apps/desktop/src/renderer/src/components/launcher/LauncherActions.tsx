@@ -36,7 +36,12 @@ export const LauncherActions = () => {
         </kbd>
       </Button>
       {!isMac && <MoreWaysToOpen />}
-      <Button variant="primary" size="action" onClick={() => runCommand("file.new")}>
+      <Button
+        variant="primary"
+        size="action"
+        className="font-normal"
+        onClick={() => runCommand("file.new")}
+      >
         New font
         <kbd aria-hidden="true" className={cn(SHORTCUT_CLASS, "text-on-accent/90")}>
           {commandShortcutLabel(commandShortcuts["file.new"], isMac)}

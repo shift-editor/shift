@@ -150,7 +150,7 @@ const RecentFileCollection = ({
             onClick={viewAll}
             className={cn(
               TILE_CLASS,
-              "w-full cursor-pointer text-label font-medium text-muted ring-1 ring-chrome ring-inset transition-colors",
+              "w-full cursor-pointer text-body font-medium text-muted ring-1 ring-chrome ring-inset transition-colors",
               "outline-none hover:bg-hover/50 focus-visible:ring-2 focus-visible:ring-accent",
             )}
           >

@@ -35,7 +35,7 @@
   --color-muted: #5f5f5f;
   --color-sidebar-icon: #585858;
 
-  --color-accent: #0c92f4;
+  --color-accent: #0874c8;
   --color-on-accent: #ffffff;
 
   /* Status and action colors */
@@ -64,6 +64,9 @@
   --text-heading: 0.9375rem /* 15px */;
   --text-heading--line-height: 1.125rem /* 18px */;
   --text-heading--letter-spacing: -0.01em;
+  /* Text set a step above labels, such as the launcher's View all tile. */
+  --text-body: 0.875rem /* 14px */;
+  --text-body--line-height: 1.125rem /* 18px */;
   /* Labels of a page's main actions, such as the launcher's Open… and New font. */
   --text-label: 0.8125rem /* 13px */;
   --text-label--line-height: 1rem /* 16px */;
