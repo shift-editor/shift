@@ -31,10 +31,16 @@ if (!nativeBridgeFile) {
   throw new Error(`Unsupported native bridge target: ${process.platform}-${buildArchitecture}`);
 }
 
-/** The release `shift-cli` from `pnpm build:cli`, bundled so agents and CI match the app. */
+/**
+ * The release `shift-cli` from `pnpm build:cli`, bundled so agents and CI match
+ * the app. A cross build (`SHIFT_RUST_TARGET`, such as x86_64-apple-darwin on
+ * Apple silicon) passes `--target`, so Cargo writes it under the triple.
+ */
 const executableSuffix = process.platform === "win32" ? ".exe" : "";
+const rustTarget = process.env.SHIFT_RUST_TARGET || undefined;
 const commandLineToolPath = path.join(
   process.env.CARGO_TARGET_DIR ?? path.resolve(__dirname, "../../target"),
+  ...(rustTarget ? [rustTarget] : []),
   "release",
   `shift-cli${executableSuffix}`,
 );
