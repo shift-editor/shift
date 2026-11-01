@@ -216,6 +216,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   cancelGesture(): void;
   /** Presses a key and waits for the edit it makes. */
   pressKey(key: string, modifiers?: Modifiers): Promise<void>;
+  /** Releases a key, with the modifiers still held after it, and waits for the editor to settle. */
+  releaseKey(key: string, modifiers?: Modifiers): Promise<void>;
   /** Switches to the Hand for as long as Space is held, as the Space key binding does. */
   holdSpaceForHand(): void;
   /** Lets go of Space, returning from the Hand to the tool before it. */

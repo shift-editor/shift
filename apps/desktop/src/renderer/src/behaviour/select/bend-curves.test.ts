@@ -132,6 +132,18 @@ describe("Cmd-clicking a line turns it into a curve", () => {
     expect(editor.toolCursor()).toBe("bend");
   });
 
+  it("drops the bend cursor when Cmd is released before a queued hover's frame", async () => {
+    await editor.draw({
+      contours: [line([100, 200], [190, 230])],
+    });
+
+    editor.queuePointerMove({ x: 145, y: 215 }, { metaKey: true });
+    await editor.releaseKey("Meta");
+    editor.passFrame();
+
+    expect(editor.toolCursor()).toBe("default");
+  });
+
   it("offers moving over a line inside the selection, and bending with Cmd", async () => {
     const { first, second } = await editor.draw(
       {
