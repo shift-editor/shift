@@ -4,6 +4,7 @@ import { shiftProductName } from "@/app/release";
 import { HelpMenu } from "@/components/launcher/HelpMenu";
 import { LauncherActions } from "@/components/launcher/LauncherActions";
 import { RecentFiles } from "@/components/launcher/RecentFiles";
+import { UpdateStrip } from "@/components/chrome/UpdateStrip";
 import { useRecentDocuments } from "@/components/launcher/useRecentDocuments";
 import { WindowControls } from "@/components/chrome/WindowControls";
 import { WindowMenuBar } from "@/components/chrome/WindowMenuBar";
@@ -54,6 +55,8 @@ export const Landing = () => {
           {recentDocuments && <RecentFiles documents={recentDocuments} />}
         </div>
       </div>
+      {/* Left of the Help button, centred on it. */}
+      <UpdateStrip className="right-12 bottom-2" />
       <HelpMenu className="absolute right-3.5 bottom-3.5" />
     </main>
   );

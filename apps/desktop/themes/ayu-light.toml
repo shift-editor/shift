@@ -21,9 +21,9 @@ base0D = "#399ee6"
 base0E = "#a37acc"
 base0F = "#e6ba7e"
 
-# Shift: darker handles or snapping, or readable text on the accent, so each
-# reaches 3:1 (4.5:1 for text) on this background.
+# Shift: darker handles or snapping, and an accent deep enough for white text,
+# so each reaches 3:1 (4.5:1 for text) on this background.
 [colors]
+accent = "#2b76ac"
 editor-handle-primary-stroke = "#4092cc"
 editor-snap-color = "#d26e6f"
-on-accent = "#000000"

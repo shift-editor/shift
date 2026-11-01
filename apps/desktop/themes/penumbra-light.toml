@@ -20,3 +20,7 @@ base0C = "#00a2af"
 base0D = "#5794d0"
 base0E = "#9481cc"
 base0F = "#bc73a4"
+
+# Shift: accent deepened so white labels on it reach 4.5:1.
+[colors]
+accent = "#4676a6"
