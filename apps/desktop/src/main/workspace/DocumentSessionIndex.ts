@@ -68,7 +68,7 @@ export class DocumentSessionIndex {
     if (documentId) {
       const existing = this.#workspaceIdByDocumentId.get(documentId);
       if (existing && existing !== workspaceId) {
-        throw new Error(`Document session already registered: ${state.documentId}`);
+        throw new Error(`Document session already registered: ${documentId}`);
       }
     }
 

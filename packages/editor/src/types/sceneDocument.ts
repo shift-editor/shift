@@ -1,5 +1,11 @@
 import type { NodeId } from "@shift/types";
-import type { RevisedNode, RunSettings, SceneIntent, SceneNode } from "@shift/wasm/protocol";
+import type {
+  EditLocation,
+  RevisedNode,
+  RunSettings,
+  SceneIntent,
+  SceneNode,
+} from "@shift/wasm/protocol";
 import type { Signal } from "../lib/signals";
 
 export type { RevisedNode, RunSettings, SceneIntent, SceneNode };
@@ -36,4 +42,9 @@ export interface SceneDocument {
   apply(intents: readonly SceneIntent[], recording: SceneRecording): void;
   /** Tells the document which page the editor shows, which each undo step records as where it was made. */
   followShownPage(shownPage: () => NodeId | null): void;
+  /**
+   * Tells the document how to show where an undo or redo was made, which it
+   * calls as it replays the step, before the change is drawn.
+   */
+  followReplays(show: (location: EditLocation) => void): void;
 }

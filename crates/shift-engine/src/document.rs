@@ -58,9 +58,10 @@ pub struct CompactDocumentChangeSet {
 /// changed and the scene nodes it changed.
 #[derive(Clone, Debug, Default, PartialEq, Pack)]
 pub struct EditLocation {
-    /// The page shown when the edit was made; for an edit made with no page
-    /// shown, the page of the first node it changed. `None` only when the
-    /// document had no page at all.
+    /// The page of the first scene node the edit changed (a deleted page's
+    /// own id); for an edit that changed no page's nodes, such as a font
+    /// edit, the page shown when it was made. `None` only when the document
+    /// had no page at all.
     pub page_id: Option<NodeId>,
     /// The glyphs whose record or layers the edit changed, in id order.
     pub glyph_ids: Vec<GlyphId>,

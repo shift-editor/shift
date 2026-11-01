@@ -1,3 +1,4 @@
+import type { EditLocation } from "@shift/wasm/protocol";
 import type {
   StoredWorkspaceSnapshot,
   AppliedChange,
@@ -96,6 +97,9 @@ export class WorkspaceEditCoordinator {
   /** The page the window shows, which each edit's undo step records as where it was made. */
   #shownPage: () => NodeId | null = () => null;
 
+  /** Shows where an undo or redo was made; the editor sets it. */
+  #showReplayed: (location: EditLocation) => void = () => {};
+
   /** The document's scene, which the window's engine holds beside the font. */
   readonly scene: SceneDocument;
 
@@ -114,6 +118,9 @@ export class WorkspaceEditCoordinator {
       apply: (intents, recording) => this.#applyScene(intents, recording),
       followShownPage: (shownPage) => {
         this.#shownPage = shownPage;
+      },
+      followReplays: (show) => {
+        this.#showReplayed = show;
       },
     };
   }
@@ -631,6 +638,8 @@ export class WorkspaceEditCoordinator {
         if (!replayed?.changeSet) return Promise.resolve(null);
         const relayered = this.#store.glyphsRelayeredBy(replayed);
         this.#store.applyEngineEdit(replayed);
+        // Inside the batch, so the page switch and the change draw together.
+        if (replayed.location) this.#showReplayed(replayed.location);
         // An undo or redo is not a new edit: persist it without announcing it.
         const id = this.#mintPendingEditId();
         const saveState = replayed.matchesSaved ? "matchesSaved" : "unsaved";
