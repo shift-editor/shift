@@ -298,3 +298,56 @@ fn a_paragraph_after_a_line_break_is_its_own_line() {
         .collect();
     assert_eq!(lines, [(0, 0, 2), (1, 2, 3)]);
 }
+
+/// How long a layout of a long text takes, at a master and between masters.
+/// Run with `cargo test --release -p shift-layout layout_timing -- --ignored
+/// --nocapture`.
+#[test]
+#[ignore = "a release timing, not a check"]
+fn layout_timing() {
+    let path = shift_font::test_support::fixtures::mutatorsans_designspace();
+    let font = FontLoader::new().read_font(path.to_str().unwrap()).unwrap();
+    let glyph_classes = GlyphCategories::new().classes(font.glyphs(), font.lib());
+    let classes: HashMap<GlyphId, OpenTypeCategory> = font
+        .glyphs()
+        .filter_map(|glyph| Some((glyph.id(), glyph_classes.class(glyph)?)))
+        .collect();
+    let source = font.shaper_font_source(&glyph_classes);
+    let compiled = ShaperFont::compile(&ShaperFontRequest::new(&source).unwrap()).unwrap();
+    let shaper = LiveShaper::new(Arc::new(compiled.font.unwrap()), font.character_map()).unwrap();
+    let class = |glyph: GlyphId| classes.get(&glyph).copied();
+    for length in [1_000, 10_000] {
+        let text: String = "HAVATAR LOVE TOTAL ".chars().cycle().take(length).collect();
+        let request = LayoutRequest {
+            units: units(&text),
+            options: shaped(),
+        };
+        for (name, design) in [
+            ("master", DesignLocation::new()),
+            (
+                "between",
+                font.axes()
+                    .iter()
+                    .map(|axis| (axis.id(), f64::midpoint(axis.minimum(), axis.maximum())))
+                    .collect(),
+            ),
+        ] {
+            let started = std::time::Instant::now();
+            let runs = 20;
+            for _ in 0..runs {
+                let layout_font = LayoutFont::new(
+                    &font,
+                    &design,
+                    ExternalLocation::new(),
+                    font.kerning_blend_at(&design).unwrap(),
+                    Ok(&shaper),
+                    &class,
+                    LineMetrics::at(&font, &design),
+                );
+                std::hint::black_box(TextLayout::new(&layout_font, &request));
+            }
+            let per = started.elapsed().as_secs_f64() * 1000.0 / f64::from(runs);
+            println!("{length} characters, {name}: {per:.2} ms per layout");
+        }
+    }
+}
