@@ -113,6 +113,7 @@ mod exports {
         runs: BTreeMap<NodeId, KeptRun>,
         /// How many times a run was shaped, for tests to tell a kept run from
         /// one shaped again.
+        #[cfg(test)]
         shapes: usize,
     }
 
@@ -187,12 +188,18 @@ mod exports {
                     kept.into_mut()
                 }
                 Entry::Occupied(mut stale) => {
-                    self.shapes += 1;
+                    #[cfg(test)]
+                    {
+                        self.shapes += 1;
+                    }
                     stale.insert(shaped());
                     stale.into_mut()
                 }
                 Entry::Vacant(absent) => {
-                    self.shapes += 1;
+                    #[cfg(test)]
+                    {
+                        self.shapes += 1;
+                    }
                     absent.insert(shaped())
                 }
             }
