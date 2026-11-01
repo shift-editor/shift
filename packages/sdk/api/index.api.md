@@ -546,7 +546,7 @@ export class Font {
     layerIdForPoint(pointId: PointId): LayerId | null;
     layerIdForSegment(segmentId: SegmentId): LayerId | null;
     layerState(layerId: LayerId): GlyphLayerState | null;
-    layoutText(text: LayoutRequest, location: ExternalAxisLocation, sourceId: SourceId | null): TextLayout$1 | null;
+    layoutText(text: LayoutRequest, location: ExternalAxisLocation, sourceId: SourceId | null): PlacedText | null;
     // (undocumented)
     get loaded(): boolean;
     get loadedCell(): Signal<boolean>;
@@ -577,6 +577,7 @@ export class Font {
     newAnchorName(layerIds: readonly LayerId[]): string;
     nextAvailableGlyphName(name: GlyphName): GlyphName;
     pointIdsForSegment(segmentId: SegmentId): readonly PointId[] | null;
+    preloadLaidOut(glyphIds: readonly GlyphId[]): void;
     primaryUnicodeForName(name: GlyphName): Unicode | null;
     readLayers(layerIds: readonly LayerId[]): Promise<readonly GlyphLayerSnapshot[]>;
     // (undocumented)
