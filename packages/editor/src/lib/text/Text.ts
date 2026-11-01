@@ -6,7 +6,7 @@ import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunNode } from "../../types/node";
-import type { TextRunRecord } from "../../types/text";
+import type { TextLayoutFailure, TextRunRecord } from "../../types/text";
 import {
   characterTextItem,
   glyphTextItem,
@@ -170,6 +170,15 @@ export class Text {
   /** Returns a stable computed whose layout invalidates on content, location, source, or glyph acquisition. */
   layoutCell(id: RunId): ComputedSignal<TextLayout | null> {
     return this.#runs.get(id).layoutCell;
+  }
+
+  /**
+   * Why a run has no layout, or what its layout needed that did not load
+   * (glyphs into the engine, or a preview's layout module); null while it
+   * lays out and loads what it shows.
+   */
+  layoutFailureCell(id: RunId): Signal<TextLayoutFailure | null> {
+    return this.#runs.get(id).failureCell;
   }
 
   /**

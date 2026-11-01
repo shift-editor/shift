@@ -8,10 +8,10 @@ import type {
   TypedFont,
   TypedGlyph,
 } from "@shift/wasm/protocol";
-import { computed, effect, track } from "../signals";
-import type { ComputedSignal, Effect, Signal } from "../signals";
+import { computed, effect, signal, track } from "../signals";
+import type { ComputedSignal, Effect, Signal, WritableSignal } from "../signals";
 import type { Editor } from "../editor/Editor";
-import type { TextPlace, TextRunRecord } from "../../types/text";
+import type { RunLaidOut, TextLayoutFailure, TextPlace, TextRunRecord } from "../../types/text";
 import { engineModuleCell, loadEngine } from "../wasm/engine";
 import { glyphIdForItem, TextLayout, type TextItem } from "./layout";
 
@@ -40,7 +40,12 @@ export interface RunTextOwner {
  */
 export class RunText {
   readonly #editor: Editor;
-  readonly #laidOutCell: ComputedSignal<PlacedText | null>;
+  readonly #laidOutCell: ComputedSignal<RunLaidOut | null>;
+  /** What the reporting effect could not load: glyphs into the engine, or the layout module. */
+  readonly #loadFailureCell: WritableSignal<TextLayoutFailure | null> = signal(null, {
+    name: "text.loadFailure",
+  });
+  readonly #failureCell: ComputedSignal<TextLayoutFailure | null>;
   readonly #reports: Effect;
   readonly #layoutCell: ComputedSignal<TextLayout | null>;
   // non-reactive: glyphs already asked of the engine, read only by the reporting effect
@@ -59,10 +64,14 @@ export class RunText {
         // A glyph the text shows finished loading into the engine.
         track(owner.glyphsLoadedCell);
         const request = layoutRequest(record.items);
-        return (
-          editor.font.layoutText(request, location, sourceId) ??
-          this.#laidOutAsTyped(record.items, request, { location, sourceId })
-        );
+        try {
+          const placed =
+            editor.font.layoutText(request, location, sourceId) ??
+            this.#laidOutAsTyped(record.items, request, { location, sourceId });
+          return placed && { kind: "placed", placed };
+        } catch (error) {
+          return { kind: "failed", failure: { stage: "layout", error } };
+        }
       },
       // An edit that leaves the text where it was, such as dragging an anchor
       // no mark uses, keeps the layout and everything drawn from it.
@@ -73,14 +82,15 @@ export class RunText {
     // layout reads, and the computed then lays the text out again.
     this.#reports = effect(
       () => {
-        const placed = this.#laidOutCell.value;
-        if (!placed) {
+        const laidOut = this.#laidOutCell.value;
+        if (!laidOut) {
           // No engine to lay out with: the module that lays out as typed.
-          if (owner.run(runIdCell.value)) void loadTypedLayout();
+          if (owner.run(runIdCell.value)) void this.#loadTypedLayout();
           return;
         }
-        owner.onLaidOut(placed.layout);
-        this.#preload(placed.unloaded);
+        if (laidOut.kind === "failed") return;
+        owner.onLaidOut(laidOut.placed.layout);
+        this.#preload(laidOut.placed.unloaded);
       },
       { name: "text.reportLaidOut" },
     );
@@ -88,8 +98,8 @@ export class RunText {
     this.#layoutCell = computed(
       () => {
         const record = owner.run(runIdCell.value);
-        const laidOut = this.#laidOutCell.value?.layout;
-        if (!record || !laidOut) return null;
+        const laidOut = this.#laidOutCell.value;
+        if (!record || laidOut?.kind !== "placed") return null;
         const activeSourceId = editor.activeSourceIdCell.value;
         // Glyphs are listed by name, which a rename changes without moving them.
         track(editor.font.glyphEntriesCell);
@@ -103,11 +113,28 @@ export class RunText {
           origin: { x: 0, y: 0 },
           font: editor.font,
           metrics,
-          laidOut,
+          laidOut: laidOut.placed.layout,
         });
       },
       { name: "text.layoutForRun" },
     );
+
+    this.#failureCell = computed(
+      () => {
+        const laidOut = this.#laidOutCell.value;
+        if (laidOut?.kind === "failed") return laidOut.failure;
+        return this.#loadFailureCell.value;
+      },
+      { name: "text.layoutFailure" },
+    );
+  }
+
+  /**
+   * Why the run has no layout, or what its layout needed that did not load;
+   * null while it lays out and loads what it shows.
+   */
+  get failureCell(): Signal<TextLayoutFailure | null> {
+    return this.#failureCell;
   }
 
   /** The run's layout; invalidates on content, location, source, glyph loads, and edits layout reads. */
@@ -124,6 +151,7 @@ export class RunText {
   #preload(unloaded: readonly GlyphId[]): void {
     if (unloaded.length === 0) {
       this.#preloaded.clear();
+      if (this.#loadFailureCell.peek()?.stage === "preload") this.#loadFailureCell.set(null);
       return;
     }
     const wanted = unloaded.filter((glyphId) => !this.#preloaded.has(glyphId));
@@ -132,7 +160,7 @@ export class RunText {
     try {
       this.#editor.font.preloadLaidOut(wanted);
     } catch (error) {
-      console.warn("loading the glyphs text shows failed", error);
+      this.#loadFailureCell.set({ stage: "preload", error });
     }
   }
 
@@ -197,8 +225,18 @@ export class RunText {
     };
   }
 
+  /** Loads the engine module, which lays a preview's text out as typed; a failure is the run's. */
+  async #loadTypedLayout(): Promise<void> {
+    try {
+      await loadEngine();
+    } catch (error) {
+      this.#loadFailureCell.set({ stage: "module", error });
+    }
+  }
+
   dispose(): void {
     this.#reports.dispose();
+    this.#failureCell.dispose();
     this.#layoutCell.dispose();
     this.#laidOutCell.dispose();
   }
@@ -231,39 +269,18 @@ function layoutUnit(item: TextItem): LayoutUnit {
   }
 }
 
-/** Loads the engine module, which lays text out as typed; a failure is logged. */
-async function loadTypedLayout(): Promise<void> {
-  try {
-    await loadEngine();
-  } catch (error) {
-    console.error("the module that lays text out did not load", error);
-  }
-}
-
 /**
- * Whether two layouts place every glyph, line and caret alike. Glyph bounds,
- * which the editor's {@link TextLayout} does not keep, are left out, so an
- * outline edit that moves nothing keeps the layout.
+ * Whether two layouts place every glyph, line and caret alike, by the key
+ * Rust gives each (`placement`), and show the same glyphs unloaded, so an
+ * edit that moves nothing in the text keeps the layout.
  */
-function samePlacement(previous: PlacedText | null, next: PlacedText | null): boolean {
-  return equalValues(previous, next);
-}
-
-function equalValues(previous: unknown, next: unknown): boolean {
-  if (Object.is(previous, next)) return true;
-  if (typeof previous !== "object" || typeof next !== "object" || !previous || !next) return false;
-  if (Array.isArray(previous)) {
-    return (
-      Array.isArray(next) &&
-      previous.length === next.length &&
-      previous.every((value, index) => equalValues(value, next[index]))
-    );
-  }
-  const before = previous as Record<string, unknown>;
-  const after = next as Record<string, unknown>;
-  const keys = Object.keys(before).filter((key) => key !== "bounds");
+function samePlacement(previous: RunLaidOut | null, next: RunLaidOut | null): boolean {
+  if (previous?.kind !== "placed" || next?.kind !== "placed") return previous === next;
+  const before = previous.placed;
+  const after = next.placed;
   return (
-    keys.length === Object.keys(after).filter((key) => key !== "bounds").length &&
-    keys.every((key) => equalValues(before[key], after[key]))
+    before.layout.placement === after.layout.placement &&
+    before.unloaded.length === after.unloaded.length &&
+    before.unloaded.every((glyphId, index) => glyphId === after.unloaded[index])
   );
 }

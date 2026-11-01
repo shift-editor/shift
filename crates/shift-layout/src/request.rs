@@ -123,3 +123,16 @@ pub struct TypedGlyph {
     /// Whether the font classes it a mark, as export resolves its category.
     pub is_mark: bool,
 }
+
+/// Why text could not be laid out.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub enum LayoutError {
+    /// The text has more units, or lays out into more glyphs or lines, than
+    /// a `u32` index can name.
+    #[error(
+        "the text is too long to lay out: more than {} units, glyphs or lines",
+        u32::MAX
+    )]
+    TooLong,
+}
