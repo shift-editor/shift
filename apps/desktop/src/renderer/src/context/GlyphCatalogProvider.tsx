@@ -6,7 +6,7 @@ import {
   type GlyphCategoryCatalog,
   type LanguageCatalog,
 } from "@shift/glyph-info";
-import type { GlyphName } from "@shift/types";
+import type { GlyphId, GlyphName } from "@shift/types";
 import { effect, signal, useSignalState } from "@shift/editor/signals";
 import { editorPath, glyphIdFromPath } from "@/lib/editorRoute";
 import { useFontSession } from "@/workspace/WorkspaceContext";
@@ -85,6 +85,9 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const [openedGlyph, setOpenedGlyph] = useState<GlyphCatalogSource["openedGlyph"]>(null);
   const openedGlyphKeyRef = useRef<GlyphCatalogItem["id"] | null>(null);
   const openRequestRef = useRef(new LatestRequest());
+  // The window's tabs keep the overview's selection; the catalog only shows it.
+  const selectedGlyphId = useSignalState(session.tabs.selectedGlyphCell);
+  const selectRequestRef = useRef(new LatestRequest());
   const observeAtlasInvalidation = useCallback<GlyphCatalogSource["observeAtlasInvalidation"]>(
     (listener) => {
       const subscription = effect(
@@ -138,6 +141,13 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
       ]),
     [categoryCatalog.categories, expandedCategories],
   );
+  const filterIndexOf = useMemo(() => {
+    const indexes = new Map(
+      visibleCategoryFilters.map((filter, index) => [filterKey(filter), index] as const),
+    );
+    return (category: GlyphCategory, subCategoryKey: string | null) =>
+      indexes.get(filterKey({ category, subCategoryKey })) ?? -1;
+  }, [visibleCategoryFilters]);
   const { selectItem: selectCategoryFilter } = useListSelection(
     visibleCategoryFilters,
     categoryFilters,
@@ -185,6 +195,28 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
       navigateRef.current(editorPath(glyph.id));
     },
     [catalog],
+  );
+
+  const selectGlyphById = useCallback(
+    async (glyphId: GlyphId) => {
+      session.tabs.selectGlyph(glyphId);
+      if (!workspace) return;
+
+      // Loaded as opening loads it, then shown on the overview's own page, never navigated to.
+      try {
+        const result = await selectRequestRef.current.run(() => catalog.openGlyph(glyphId));
+        if (result.status === "stale") return;
+
+        session.tabs.showSelection();
+      } catch (error) {
+        console.error("could not show the selected glyph", glyphId, error);
+      }
+    },
+    [catalog, session.tabs, workspace],
+  );
+  const selectGlyph = useCallback<GlyphCatalogSource["selectGlyph"]>(
+    (glyph) => selectGlyphById(glyph.id),
+    [selectGlyphById],
   );
 
   useEffect(() => {
@@ -237,8 +269,10 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     setQuery("");
     setCategoryFilters([]);
     setSelectedLanguageId(null);
+    // Selected now; the grid scrolls to it once it shows the new glyph.
+    void selectGlyphById(record.id);
     return record.name;
-  }, [workspace]);
+  }, [selectGlyphById, workspace]);
 
   const setTrackedLanguageIds = useCallback<GlyphCatalogSource["setTrackedLanguageIds"]>(
     (languageIds) => {
@@ -286,6 +320,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     categoryFilters,
     selectedLanguageId,
     visibleCategoryFilters,
+    filterIndexOf,
     expandedCategories,
     setCategoryExpanded: expanded.set,
     query,
@@ -300,6 +335,8 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     canAuthor,
     openedGlyph,
     openGlyph,
+    selectedGlyphId,
+    selectGlyph,
     createQuickGlyph,
     selectAll: () => {
       setCategoryFilters([]);
@@ -369,4 +406,9 @@ function glyphId(glyph: GlyphCatalogItem) {
 
 function sameCategoryFilter(left: GlyphCategoryFilter, right: GlyphCategoryFilter) {
   return left.category === right.category && left.subCategoryKey === right.subCategoryKey;
+}
+
+/** One key per category filter, for looking a filter up by its category and subcategory. */
+function filterKey(filter: GlyphCategoryFilter): string {
+  return `${filter.category}\u0000${filter.subCategoryKey ?? ""}`;
 }

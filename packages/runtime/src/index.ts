@@ -14,6 +14,7 @@ export type {
   DocumentSourceKind,
   DocumentState,
   EditorGlyph,
+  EditorPage,
   EditorInspection,
   EditorTool,
   EditorView,

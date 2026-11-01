@@ -16,6 +16,7 @@ import {
   decompositionRequest,
   dragRequest,
   geometryRequest,
+  indexKeysRequest,
   initSync,
   internName,
   nameOf,
@@ -25,7 +26,15 @@ import {
 } from "./generated/shift_wasm.js";
 import { moduleBase64 } from "./generated/module";
 import { embeddedModule } from "./embedded";
-import { Anchors, Axes, Decomposition, Drag, Geometry, Variation } from "./generated-protocol";
+import {
+  Anchors,
+  Axes,
+  Decomposition,
+  Drag,
+  Geometry,
+  IndexKeys,
+  Variation,
+} from "./generated-protocol";
 import { moduleNames } from "./names";
 
 /** The instantiated module's exports, including its memory. */
@@ -45,6 +54,8 @@ export const decomposition = new Decomposition(
 export const drag = new Drag(syncTransport(dragRequest, names, takeReplyBlobs));
 /** A contour's segments and bounds, and a component's placement, as shift-font computes them. */
 export const geometry = new Geometry(syncTransport(geometryRequest, names, takeReplyBlobs));
+/** The keys that order a scene node among its siblings, as shift-font makes and compares them. */
+export const indexKeys = new IndexKeys(syncTransport(indexKeysRequest, names, takeReplyBlobs));
 /**
  * Axis mapping, interpolation weights and compiled deltas for a font without
  * an editing engine, each call carrying the axes and bases it evaluates.

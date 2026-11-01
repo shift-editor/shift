@@ -9,6 +9,25 @@ export function glyphCatalogViewport(page: Page) {
   return page.getByLabel("Glyph catalog", { exact: true });
 }
 
+/** Opens the font's info in Settings, from the document menu on the font's name. */
+export async function openFontInfo(page: Page): Promise<void> {
+  await page.getByRole("button", { name: /document menu$/ }).click();
+  await page.getByRole("menuitem", { name: "Font Info", exact: true }).click();
+}
+
+/** The glyph search field, which the Glyphs header shows while a search is open. */
+export function glyphSearchField(page: Page): Locator {
+  return page.getByPlaceholder("Search glyphs...");
+}
+
+/** Opens the glyph search from the Glyphs header, which must not be searching yet, and returns its field. */
+export async function glyphSearch(page: Page): Promise<Locator> {
+  await page.getByRole("button", { name: "Search glyphs" }).click();
+  const field = glyphSearchField(page);
+  await expect(field).toBeVisible();
+  return field;
+}
+
 export function glyphCatalogSurface(page: Page) {
   return page.getByRole("region", { name: "Glyph catalog surface", exact: true });
 }
@@ -44,11 +63,11 @@ export function fontNavigation(page: Page) {
 }
 
 export function editorSidebar(page: Page) {
-  return page.getByRole("complementary", { name: "Glyph objects and variations" });
+  return page.getByRole("complementary", { name: "Layers and designspace" });
 }
 
 export function variationControls(page: Page) {
-  return editorSidebar(page).getByRole("tabpanel", { name: "Variations" });
+  return editorSidebar(page).getByRole("tabpanel", { name: "Designspace" });
 }
 
 /** The Variations panel's row for the source named `name`, as a screen reader finds it. */
@@ -67,7 +86,7 @@ export function instanceRow(controls: Locator, name: string): Locator {
 
 export async function openVariationControls(page: Page) {
   const sidebar = editorSidebar(page);
-  await sidebar.getByRole("tab", { name: "Variations", exact: true }).click();
+  await sidebar.getByRole("tab", { name: "Designspace", exact: true }).click();
   return variationControls(page);
 }
 
@@ -103,10 +122,13 @@ async function waitForCatalogCells(page: Page): Promise<void> {
   );
 }
 
-/** Keeps the catalog preview coordinate contract in one place. */
+/**
+ * Opens the first catalog glyph: a double-click, since a single click only selects it.
+ * Keeps the catalog preview coordinate contract in one place.
+ */
 export async function clickFirstCatalogGlyph(page: Page): Promise<void> {
   await waitForCatalogCells(page);
-  await glyphCatalogViewport(page).click({ position: FIRST_GLYPH_PREVIEW_POINT });
+  await glyphCatalogViewport(page).dblclick({ position: FIRST_GLYPH_PREVIEW_POINT });
 }
 
 /** Keeps the catalog name-cell coordinate contract in one place. */
@@ -170,14 +192,22 @@ export async function openSessionGlyphNamed(page: Page, name: string): Promise<G
   return glyphId;
 }
 
+/**
+ * Filters the catalog to one glyph and opens it.
+ *
+ * @param search - `open` when an earlier search is still open, as it is on
+ *   returning Home after one: the header then shows the field, not its button.
+ */
 export async function openCatalogGlyph(
   page: Page,
   glyphName: string,
   glyphId: string,
+  search: "closed" | "open" = "closed",
 ): Promise<void> {
   const surface = glyphCatalogSurface(page);
   await expect(surface).toBeVisible();
-  await page.getByPlaceholder("Search glyphs...").fill(glyphName);
+  const field = search === "open" ? glyphSearchField(page) : await glyphSearch(page);
+  await field.fill(glyphName);
   await expect(surface).toHaveAttribute("data-filtered-glyph-count", "1");
   await expect(surface).toHaveAttribute("data-first-glyph-id", glyphId);
   await expect(glyphCatalogRenderer(page)).toHaveAttribute("data-grid-readiness", "Complete", {

@@ -35,6 +35,7 @@ pub mod engine_edits;
 #[cfg(feature = "engine-protocol")]
 pub mod engine_reads;
 pub mod geometry;
+pub mod index_keys;
 pub mod names;
 mod numbers;
 pub mod shaping;

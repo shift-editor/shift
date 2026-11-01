@@ -59,6 +59,7 @@ import type {
   LocationSummary,
   Outline,
   OutlinePoint,
+  PageEntry,
   SourceKerning,
   SourceLayer,
   SourceSelection,
@@ -178,6 +179,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   selectAll(): void;
   /** Clicks at a glyph-local position and waits for the edit it makes. */
   clickAt(position: Point2D, modifiers?: Modifiers): Promise<void>;
+  /** Clicks at a point in the viewport, in screen pixels, whatever the page shows. */
+  clickAtScreen(position: ScreenPoint, modifiers?: Modifiers): Promise<void>;
   /** Clicks twice at a glyph-local position and waits for the edit it makes. */
   doubleClickAt(position: Point2D, modifiers?: Modifiers): Promise<void>;
   /** Presses the pointer at a glyph-local position, starting a gesture. */
@@ -294,6 +297,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   resizeCanvas(width: number, height: number): void;
   /** Sets the zoom level around the viewport centre, as the zoom controls do. */
   setZoom(zoom: number): void;
+  /** Pans the canvas by a distance in screen pixels, as dragging with the hand does. */
+  panBy(by: ScreenVector): void;
   /** Frames all content, as View › Zoom to Fit does. */
   zoomToFit(): void;
   /** Frames the selection, as View › Zoom to Selection does. */
@@ -575,6 +580,23 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   viewportCentre(): ScreenPoint;
   /** The document's save state behind every edit made so far, as agents read it; null without a document. */
   documentState(): Promise<DocumentSaveState | null>;
+
+  /** The document's pages in list order, as agents read them (`EditorView.pages`). */
+  pageList(): readonly PageEntry[];
+  /** The page the canvas shows, as agents read it (`EditorView.shownPageId`). */
+  shownPageId(): string | null;
+  /** Whether a page with id `id` exists, glyph pages included. Test-only: not agent data. */
+  pageExists(id: string): boolean;
+  /** Adds a page after the last one, as the pages list's add button does, without showing it. */
+  addPage(name?: string): PageEntry;
+  /** Shows a page on the canvas, as choosing it in the pages list does. */
+  showPage(id: string): void;
+  /** Renames a page, as editing its name in the pages list does. */
+  renamePage(id: string, name: string): void;
+  /** Moves a page to `index` in the pages list, as dragging it there does. */
+  movePage(id: string, index: number): void;
+  /** Deletes a page and everything on it; false when it is the last page. */
+  deletePage(id: string): boolean;
 
   /** Adds a glyph to the font and loads it. */
   addGlyph(name: string, unicode: number | null): Promise<void>;

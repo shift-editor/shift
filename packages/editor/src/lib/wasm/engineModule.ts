@@ -43,6 +43,7 @@ import type {
   EditablePair,
   EngineEdits,
   EngineReads,
+  GlyphIdentityChange,
   InterpolatedMetrics,
   MissingKerningOrigin,
   FontChangeFlag,
@@ -218,6 +219,16 @@ export class EngineSession {
       second: sideId(pair.second),
       amount: value,
     }));
+  }
+
+  /** What renaming a glyph to `name` does, as shift-font's `Font::glyph_rename` decides. */
+  glyphRename(glyphId: GlyphId, name: string): GlyphIdentityChange | null {
+    return this.#reads.glyphRename(glyphId, name);
+  }
+
+  /** What making `codepoint` a glyph's primary codepoint does: `Font::glyph_primary_codepoint`. */
+  glyphPrimaryCodepoint(glyphId: GlyphId, codepoint: number | null): GlyphIdentityChange | null {
+    return this.#reads.glyphPrimaryCodepoint(glyphId, codepoint);
   }
 
   /** Where a pair's value comes from at `sourceId` when that source authors no pair for it. */

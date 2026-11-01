@@ -16,6 +16,7 @@ import {
 } from "@shift/ui";
 import type { Axis, Source, SourceId } from "@shift/types";
 import PlusIcon from "@/assets/general/plus.svg";
+import { useSidebarPanelAnchor } from "@/hooks/useSidebarPanelAnchor";
 import WarningIcon from "@/assets/general/warning.svg";
 import { SidebarActionButton } from "@/components/sidebar";
 import { useAxes } from "@/hooks/useAxes";
@@ -84,6 +85,8 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
     handleOpenChange(false);
   };
 
+  const panelAnchor = useSidebarPanelAnchor();
+
   if (axes.length === 0) {
     return (
       <Tooltip content="Create source">
@@ -98,6 +101,7 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
     <Popover open={open} onOpenChange={handleOpenChange} modal={false}>
       <Tooltip content="Create source">
         <PopoverTrigger
+          ref={panelAnchor.triggerRef}
           render={
             <SidebarActionButton label="Create source">
               <PlusIcon className="h-3 w-3" />
@@ -106,7 +110,7 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
         />
       </Tooltip>
       <PopoverPortal>
-        <PopoverPositioner sideOffset={4} align="start">
+        <PopoverPositioner {...panelAnchor.positioner}>
           <PopoverPopup className="w-50 p-0" initialFocus={nameInputRef}>
             <div className="flex h-8 items-center justify-between border-b border-line-subtle px-2">
               <PopoverTitle>Create Source</PopoverTitle>

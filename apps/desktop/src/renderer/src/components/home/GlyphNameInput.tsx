@@ -43,7 +43,7 @@ export const GlyphNameInput = forwardRef<HTMLInputElement, GlyphNameInputProps>(
     return (
       <Input
         ref={ref}
-        aria-label="Glyph name"
+        aria-label="Rename glyph"
         value={draft}
         onChange={(event) => updateDraft(event.currentTarget.value as GlyphName)}
         onBlur={() => onFinished(commit())}

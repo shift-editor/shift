@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Button,
   cn,
@@ -7,8 +7,8 @@ import {
   CollapsibleTrigger,
   Input,
   Search,
-  Separator,
   Tooltip,
+  X,
 } from "@shift/ui";
 
 import AllIcon from "@/assets/sidebar-left/all.svg";
@@ -17,7 +17,7 @@ import PlusIcon from "@/assets/general/plus.svg";
 import { SidebarRowButton } from "@/components/sidebar";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { listSelectionMode } from "@/hooks/useListSelection";
-import { CatalogSection } from "./CatalogSection";
+import { GuideTrack, ObjectSectionRow } from "@/components/editor/object-tree/ObjectSectionRow";
 import { Category } from "./Category";
 import { LanguagePicker } from "./LanguagePicker";
 import { LanguageScript } from "./LanguageScript";
@@ -37,6 +37,7 @@ export const GlyphCatalogView = () => {
     categoryFilters,
     selectedLanguageId,
     visibleCategoryFilters,
+    filterIndexOf,
     expandedCategories,
     setCategoryExpanded,
     query,
@@ -48,6 +49,13 @@ export const GlyphCatalogView = () => {
     selectSubCategory,
     selectLanguage,
   } = useGlyphCatalog();
+  // Opens with the field when a search survives a remount.
+  const [searching, setSearching] = useState(query !== "");
+  const [open, setOpen] = useState(true);
+  const closeSearch = () => {
+    setSearching(false);
+    setQuery("");
+  };
 
   const selectedFilterIndexes = useMemo(
     () =>
@@ -68,65 +76,47 @@ export const GlyphCatalogView = () => {
   const filteredGlyphCount = filteredGlyphs.length;
   const allGlyphsSelected = categoryFilters.length === 0 && selectedLanguageId === null;
 
-  return (
-    <div className="flex flex-col gap-2">
-      <Input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search glyphs..."
-        size="md"
-        icon={<Search className="w-3 h-3 text-muted" />}
-        iconPosition="left"
-      />
-      <Separator className="-mx-3 w-auto" />
+  const contents = (
+    <div className="flex flex-col gap-1">
+      <SidebarRowButton onClick={selectAll} isActive={allGlyphsSelected}>
+        <AllIcon className="h-4 w-4 shrink-0 text-primary" />
+        <span className="min-w-0 flex-1 truncate text-left">All</span>
+        <span className="text-xs">{`${filteredGlyphCount}/${allGlyphCount}`}</span>
+      </SidebarRowButton>
 
-      <div>
-        <div className="flex items-center justify-between font-sans mb-2">
-          <span className="text-ui font-medium text-primary">Glyphs</span>
-          <Tooltip content="Create glyph">
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label="Create glyph"
-              aria-disabled={!canAuthor || undefined}
-              onClick={canAuthor ? createQuickGlyph : undefined}
-            >
-              <PlusIcon className="w-3 h-3 text-muted" />
-            </Button>
-          </Tooltip>
-        </div>
-
+      <ObjectSectionRow title="Categories" defaultOpen>
         <div className="flex flex-col gap-1">
-          <SidebarRowButton onClick={selectAll} isActive={allGlyphsSelected}>
-            <AllIcon className="h-4 w-4 shrink-0 text-primary" />
-            <span className="min-w-0 flex-1 truncate text-left">All</span>
-            <span className="text-xs">{`${filteredGlyphCount}/${allGlyphCount}`}</span>
-          </SidebarRowButton>
+          {categories.map((categoryNode) => {
+            const filterIndex = filterIndexOf(categoryNode.category, null);
+            const active = selectedFilterIndexes.has(filterIndex);
+            const open = expandedCategories.has(categoryNode.category);
+            // A chosen category covers its subcategories, which highlight with it, as a
+            // selected contour's points do in the object tree.
+            const covered = categoryNode.subCategories.map(
+              (subCategory) =>
+                active ||
+                selectedFilterIndexes.has(filterIndexOf(categoryNode.category, subCategory.key)),
+            );
+            const coversChildren = open && covered.length > 0 && active;
 
-          <CatalogSection title="Categories">
-            {categories.map((categoryNode) => {
-              const filterIndex = visibleCategoryFilters.findIndex(
-                (filter) =>
-                  filter.category === categoryNode.category && filter.subCategoryKey === null,
-              );
-              const active = selectedFilterIndexes.has(filterIndex);
-
-              return (
-                <div
-                  key={categoryNode.category}
-                  className={cn(
-                    active &&
-                      "relative isolate rounded bg-transparent before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded before:bg-hover/50 before:content-['']",
-                    active &&
-                      selectedFilterIndexes.has(filterIndex - 1) &&
-                      "before:-top-1 before:rounded-t-none",
-                    active && selectedFilterIndexes.has(filterIndex + 1) && "before:rounded-b-none",
-                  )}
+            return (
+              <div key={categoryNode.category}>
+                <Collapsible
+                  open={open}
+                  onOpenChange={(open) => setCategoryExpanded(categoryNode.category, open)}
+                  className="flex flex-col"
                 >
-                  <Collapsible
-                    open={expandedCategories.has(categoryNode.category)}
-                    onOpenChange={(open) => setCategoryExpanded(categoryNode.category, open)}
-                    className="flex flex-col"
+                  <div
+                    className={cn(
+                      active &&
+                        "relative isolate rounded bg-transparent before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded before:bg-hover/50 before:content-['']",
+                      active &&
+                        selectedFilterIndexes.has(filterIndex - 1) &&
+                        "before:-top-1 before:rounded-t-none",
+                      active &&
+                        (coversChildren || selectedFilterIndexes.has(filterIndex + 1)) &&
+                        "before:rounded-b-none",
+                    )}
                   >
                     <CollapsibleTrigger
                       render={
@@ -140,69 +130,187 @@ export const GlyphCatalogView = () => {
                     >
                       <Category category={categoryNode.category} />
                     </CollapsibleTrigger>
-                    <CollapsiblePanel>
-                      <div className="flex flex-col gap-1 pt-1">
-                        {categoryNode.subCategories.map((subCategory) => {
-                          const subCategoryFilterIndex = visibleCategoryFilters.findIndex(
-                            (filter) =>
-                              filter.category === categoryNode.category &&
-                              filter.subCategoryKey === subCategory.key,
-                          );
-                          const subCategoryActive =
-                            selectedFilterIndexes.has(subCategoryFilterIndex);
+                  </div>
+                  <CollapsiblePanel>
+                    <div className="flex flex-col gap-1 pt-1">
+                      {categoryNode.subCategories.map((subCategory, index) => {
+                        const subCategoryFilterIndex = filterIndexOf(
+                          categoryNode.category,
+                          subCategory.key,
+                        );
+                        const joins = subCategoryJoins(covered, index, {
+                          categoryActive: active,
+                          nextFilterSelected: selectedFilterIndexes.has(subCategoryFilterIndex + 1),
+                        });
 
-                          return (
-                            <SubCategory
-                              key={subCategory.key}
-                              label={subCategory.label}
-                              active={subCategoryActive}
-                              joinsPrevious={
-                                subCategoryActive &&
-                                selectedFilterIndexes.has(subCategoryFilterIndex - 1)
-                              }
-                              joinsNext={
-                                subCategoryActive &&
-                                selectedFilterIndexes.has(subCategoryFilterIndex + 1)
-                              }
-                              onSelect={(mode) =>
-                                selectSubCategory(categoryNode.category, subCategory.key, mode)
-                              }
-                            />
-                          );
-                        })}
-                      </div>
-                    </CollapsiblePanel>
-                  </Collapsible>
-                </div>
-              );
-            })}
-          </CatalogSection>
-
-          <CatalogSection
-            title="Languages"
-            actions={
-              <LanguagePicker
-                scripts={allLanguageScripts}
-                trackedLanguageIds={trackedLanguageIds}
-                disabled={!canAuthor}
-                onApply={setTrackedLanguageIds}
-              />
-            }
-          >
-            {languageScripts.map((group) => (
-              <LanguageScript
-                key={group.script}
-                group={group}
-                selectedLanguageId={selectedLanguageId}
-                canGenerate={canAuthor}
-                onSelectLanguage={selectLanguage}
-                languageGlyphs={languageGlyphs}
-                onGenerate={generateGlyphs}
-              />
-            ))}
-          </CatalogSection>
+                        return (
+                          <SubCategory
+                            key={subCategory.key}
+                            label={subCategory.label}
+                            active={covered[index] ?? false}
+                            joinsPrevious={joins.previous}
+                            joinsNext={joins.next}
+                            onSelect={(mode) =>
+                              selectSubCategory(categoryNode.category, subCategory.key, mode)
+                            }
+                          />
+                        );
+                      })}
+                    </div>
+                  </CollapsiblePanel>
+                </Collapsible>
+              </div>
+            );
+          })}
         </div>
-      </div>
+      </ObjectSectionRow>
+
+      <ObjectSectionRow
+        title="Languages"
+        defaultOpen
+        actions={
+          <LanguagePicker
+            scripts={allLanguageScripts}
+            trackedLanguageIds={trackedLanguageIds}
+            disabled={!canAuthor}
+            onApply={setTrackedLanguageIds}
+          />
+        }
+      >
+        <div className="flex flex-col gap-1">
+          {languageScripts.map((group) => (
+            <LanguageScript
+              key={group.script}
+              group={group}
+              selectedLanguageId={selectedLanguageId}
+              canGenerate={canAuthor}
+              onSelectLanguage={selectLanguage}
+              languageGlyphs={languageGlyphs}
+              onGenerate={generateGlyphs}
+            />
+          ))}
+        </div>
+      </ObjectSectionRow>
     </div>
   );
+
+  // Searching swaps the Glyphs title for the field; the filters stay below it.
+  if (searching) {
+    return (
+      <div className="flex flex-col">
+        <div className="flex h-7 items-center gap-1">
+          <GlyphSearchField query={query} onChange={setQuery} onClose={closeSearch} />
+        </div>
+        <div className="pt-2">
+          <GuideTrack>{contents}</GuideTrack>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <ObjectSectionRow
+      title="Glyphs"
+      open={open}
+      onOpenChange={setOpen}
+      actions={
+        <div className="flex items-center">
+          <Tooltip content="Search glyphs">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Search glyphs"
+              className="text-sidebar-icon"
+              onClick={() => setSearching(true)}
+            >
+              <Search aria-hidden className="h-3.5 w-3.5" />
+            </Button>
+          </Tooltip>
+          <Tooltip content="Create glyph">
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label="Create glyph"
+              aria-disabled={!canAuthor || undefined}
+              onClick={canAuthor ? createQuickGlyph : undefined}
+            >
+              <PlusIcon className="w-3 h-3 text-muted" />
+            </Button>
+          </Tooltip>
+        </div>
+      }
+    >
+      {contents}
+    </ObjectSectionRow>
+  );
 };
+
+/** The Glyphs title while searching: a search field, and a button closing it. */
+const GlyphSearchField = ({
+  query,
+  onChange,
+  onClose,
+}: {
+  query: string;
+  onChange: (query: string) => void;
+  /** Clears the search and shows the title row again. */
+  onClose: () => void;
+}) => (
+  <>
+    <div className="min-w-0 flex-1">
+      <Input
+        autoFocus
+        aria-label="Search glyphs"
+        placeholder="Search glyphs..."
+        icon={<Search aria-hidden className="h-3 w-3 text-muted" />}
+        iconPosition="left"
+        value={query}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") onClose();
+        }}
+      />
+    </div>
+    <Tooltip content="Close search">
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Close search"
+        className="shrink-0 text-sidebar-icon"
+        onClick={onClose}
+      >
+        <X aria-hidden className="h-4 w-4" />
+      </Button>
+    </Tooltip>
+  </>
+);
+
+/** Which neighbours a subcategory's highlight runs into: the row above, the row below. */
+interface HighlightJoins {
+  readonly previous: boolean;
+  readonly next: boolean;
+}
+
+/**
+ * Whether a highlighted subcategory's highlight joins the rows around it.
+ *
+ * @remarks
+ * The first subcategory joins its category when that is chosen; the last
+ * joins whatever filter follows the category when that is chosen too.
+ *
+ * @param covered - whether each of the category's subcategories is highlighted.
+ */
+function subCategoryJoins(
+  covered: readonly boolean[],
+  index: number,
+  neighbours: { readonly categoryActive: boolean; readonly nextFilterSelected: boolean },
+): HighlightJoins {
+  if (!covered[index]) return { previous: false, next: false };
+
+  const isFirst = index === 0;
+  const isLast = index === covered.length - 1;
+  return {
+    previous: isFirst ? neighbours.categoryActive : (covered[index - 1] ?? false),
+    next: isLast ? neighbours.nextFilterSelected : (covered[index + 1] ?? false),
+  };
+}

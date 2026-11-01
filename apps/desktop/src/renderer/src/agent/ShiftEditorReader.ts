@@ -1,6 +1,7 @@
 import type {
   AuthoredContour,
   DocumentState,
+  EditorPage,
   EditorView,
   KerningGapView,
   KerningPairSideView,
@@ -97,6 +98,8 @@ export class ShiftEditorReader {
     return {
       route,
       glyph,
+      pages: this.pages(),
+      shownPageId: editor.scene.shownPageIdCell.peek(),
       activeSourceId: editor.activeSourceId,
       editingSourceIds: [...editor.editingSourceIds],
       externalLocation: [...editor.externalLocation].map(([axisId, value]) => ({ axisId, value })),
@@ -106,6 +109,11 @@ export class ShiftEditorReader {
       editing: editor.isEditing,
       applyStatus: this.#edits?.applyStatusCell.peek() ?? null,
     };
+  }
+
+  /** The document's pages in list order, as the pages list shows them. */
+  pages(): EditorPage[] {
+    return this.#editor.pages.list.map(({ id, name }) => ({ id, name }));
   }
 
   /** The canvas camera: its zoom level and pan. */
