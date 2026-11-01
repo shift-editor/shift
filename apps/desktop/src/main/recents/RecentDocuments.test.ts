@@ -120,6 +120,22 @@ describe("RecentDocuments", () => {
     expect(recents.needsSpecimen({ path: otf, documentId: null })).toBe(true);
   });
 
+  it("shows a specimen built under older rules until the file is opened again", () => {
+    const otf = font("London.otf");
+    const modifiedAt = fs.statSync(otf).mtimeMs;
+    const stale = {
+      path: otf,
+      documentId: null,
+      openedAt: 1,
+      thumbnail: { specimen, modifiedAt, revision: 1 },
+    };
+    fs.writeFileSync(storePath, JSON.stringify([stale]));
+
+    const recents = new RecentDocuments(storePath);
+    expect(recents.list()[0].specimen).toEqual(specimen);
+    expect(recents.needsSpecimen({ path: otf, documentId: null })).toBe(true);
+  });
+
   it("keeps a .shift document's specimen when it is reopened from a new path", () => {
     const recents = new RecentDocuments(storePath);
     const original = font("Fraunces.shift");

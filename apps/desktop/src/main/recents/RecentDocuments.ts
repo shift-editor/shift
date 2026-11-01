@@ -98,7 +98,7 @@ export class RecentDocuments {
         openedAt: entry.openedAt,
         location: displayLocation(entry.path, this.#homeDirectory),
         missing: modifiedAt === null,
-        specimen: currentThumbnail(entry, modifiedAt)?.specimen ?? null,
+        specimen: shownThumbnail(entry, modifiedAt)?.specimen ?? null,
       };
     });
   }
@@ -271,10 +271,20 @@ function modificationTime(filePath: string): number | null {
   }
 }
 
+/** The thumbnail built for the file as it is now, under the current specimen rules. */
 function currentThumbnail(entry: RecentEntry, modifiedAt: number | null): Thumbnail | null {
+  const thumbnail = shownThumbnail(entry, modifiedAt);
+  return thumbnail?.revision === SPECIMEN_REVISION ? thumbnail : null;
+}
+
+/**
+ * The thumbnail to show for the file as it is now, even one built under older
+ * specimen rules: it still draws the font, so the tile keeps it until the next
+ * open rebuilds it rather than going blank.
+ */
+function shownThumbnail(entry: RecentEntry, modifiedAt: number | null): Thumbnail | null {
   const thumbnail = entry.thumbnail;
   if (!thumbnail || modifiedAt === null) return null;
-  if (thumbnail.revision !== SPECIMEN_REVISION) return null;
   if (entry.documentId !== null) return thumbnail;
 
   return thumbnail.modifiedAt === modifiedAt ? thumbnail : null;
