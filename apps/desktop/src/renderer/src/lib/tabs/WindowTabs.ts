@@ -45,7 +45,10 @@ export interface WindowTabsView {
 export interface OpenedGlyph {
   /** The edited glyph node, or null when the glyph could not be shown. */
   readonly node: GlyphNode | null;
-  /** True when the glyph was newly placed, so the view should fit it; false for a tab already open. */
+  /**
+   * True when the view should fit the glyph: the first time this window
+   * shows its page, newly placed or kept from an earlier session.
+   */
   readonly placed: boolean;
 }
 
@@ -78,6 +81,8 @@ export class WindowTabs {
   readonly #tabsCell: Signal<readonly WindowTab[]>;
   readonly #selectedGlyphCell: WritableSignal<GlyphId | null>;
   readonly #selectionPageIdCell: WritableSignal<NodeId | null>;
+  // non-reactive: the glyph pages this window has fitted the view to, read only when a glyph opens
+  readonly #framed = new Set<NodeId>();
   #nextId = 1;
 
   constructor(editor: Editor) {
@@ -323,7 +328,9 @@ export class WindowTabs {
       this.#editor.pages.activate(open.pageId);
       const node = this.#editor.scene.first("glyph");
       if (node) this.#editor.enterNode(node.id);
-      return { node, placed: false };
+      // A tab restored from view memory shows a page this window has not
+      // framed yet, so the view fits it as if newly placed.
+      return { node, placed: this.#frame(open.pageId) };
     }
 
     // The document may keep a glyph page for this glyph from an earlier
@@ -336,15 +343,14 @@ export class WindowTabs {
       ]);
       this.#editor.pages.activate(kept.page.id);
       this.#editor.enterNode(kept.node.id);
-      // Its camera was the earlier session's, so the view fits it as if newly placed.
-      return { node: kept.node, placed: true };
+      return { node: kept.node, placed: this.#frame(kept.page.id) };
     }
 
     const page = this.#editor.pages.createGlyphPage();
     const node = this.#editor.openGlyphInText(glyphId, page);
     const tab: MovableTab = { kind: "glyph", id: this.#mintId(), pageId: page.id, glyphId };
     this.#openedCell.set([...this.#movable(), tab]);
-    return { node, placed: true };
+    return { node, placed: this.#frame(page.id) };
   }
 
   /**
@@ -365,6 +371,14 @@ export class WindowTabs {
       if (node?.glyphId === glyphId) return { page, node };
     }
     return null;
+  }
+
+  /** Whether the view should fit `pageId` now: the first time this window shows it. */
+  #frame(pageId: NodeId): boolean {
+    if (this.#framed.has(pageId)) return false;
+
+    this.#framed.add(pageId);
+    return true;
   }
 
   /** The page and glyph tabs, as {@link tabsCell} resolves them now. */
