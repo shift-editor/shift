@@ -372,7 +372,7 @@ mod exports {
         SceneNode, Source, SourceSetWeights, TextLayoutRequest, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
-    use crate::page_layout::lay_out_page;
+    use crate::page_layout::{PlaceKey, RunLayouts, lay_out_page};
     use crate::shaping::{TextPlace, TextShaping};
     use crate::variation::{design_values, external_values, to_location, weights_at};
 
@@ -737,11 +737,29 @@ mod exports {
                 .unwrap_or_else(|| self.session.font());
             let place = self.text_place(&request.location, request.source);
             let units_per_em = font.metrics().units_per_em;
+            let at = PlaceKey::new(&request.location, request.source);
+            let mut runs = self.page_runs.borrow_mut();
+            // A preview's font lays out once, keeping nothing.
+            let mut previewed = RunLayouts::default();
+            let kept = if self.previewed.is_some() {
+                &mut previewed
+            } else {
+                &mut *runs
+            };
             let (mut layout, glyphs) = self.shaping.with_layout_font(
                 font,
                 || self.shaper_font_source(),
                 place,
-                |lay_out| lay_out_page(self.session.scene(), &request.page, units_per_em, lay_out),
+                |layout_font| {
+                    lay_out_page(
+                        self.session.scene(),
+                        &request.page,
+                        units_per_em,
+                        layout_font,
+                        at,
+                        kept,
+                    )
+                },
             )?;
             layout.unloaded = self.unloaded(font, glyphs);
             Ok(layout)

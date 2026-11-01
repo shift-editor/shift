@@ -83,23 +83,161 @@ pub enum PageLayoutError {
 }
 
 #[cfg(feature = "engine")]
-pub(crate) use exports::lay_out_page;
+pub(crate) use exports::{PlaceKey, RunLayouts, lay_out_page};
 
 #[cfg(feature = "engine")]
 mod exports {
+    use std::collections::btree_map::Entry;
     use std::collections::{BTreeMap, BTreeSet};
 
     use shift_engine::scene::{NodeContent, Scene, SceneNode};
-    use shift_font::GlyphId;
+    use shift_font::{FontChangeImpact, GlyphId};
     use shift_layout::{LayoutNode, LayoutTree, MeasureText, NodeKind, Point, Size};
-    use shift_text::layout::{LayoutError, LayoutRequest, TextLayout};
+    use shift_text::layout::{LayoutError, LayoutFont, LayoutLine, TextMeasure, TextSize};
 
     use super::{NodeBox, NodeId, PageLayout, PageLayoutError, RunLines};
+    use crate::shaping::TextShaping;
 
-    /// Lays out `page` of `scene`, each text run through `lay_out`, which
-    /// lays a run's text out over the font as `TextShaping` does; runs are
-    /// sized at their `size` over `units_per_em`. Returns the layout, its
-    /// `unloaded` empty, and every glyph its runs show.
+    /// Each text run as page layout last measured it, kept between layouts
+    /// so a run is shaped again only when its text, the font or the place
+    /// text lays out at changed: its shaped text, and its size and layout
+    /// at each width layout tried.
+    ///
+    /// A run is kept under its items revision, which changes with its items
+    /// and settings; a font change drops every run, as the session's shaper
+    /// is brought up to date ([`Self::forget_if_changed`]), and so does
+    /// laying out at another place.
+    #[derive(Default)]
+    pub(crate) struct RunLayouts {
+        place: Option<PlaceKey>,
+        runs: BTreeMap<NodeId, KeptRun>,
+        /// How many times a run was shaped, for tests to tell a kept run from
+        /// one shaped again.
+        shapes: usize,
+    }
+
+    /// Where text lays out, as page layout keeps runs for: the design
+    /// location's values, bit for bit, and the source.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub(crate) struct PlaceKey {
+        location: Vec<u64>,
+        source: Option<usize>,
+    }
+
+    impl PlaceKey {
+        pub(crate) fn new(location: &[f64], source: Option<usize>) -> Self {
+            Self {
+                location: location.iter().map(|value| value.to_bits()).collect(),
+                source,
+            }
+        }
+    }
+
+    /// One run as [`RunLayouts`] keeps it. Widths are font units, by their
+    /// bits.
+    struct KeptRun {
+        items_revision: usize,
+        measure: Result<TextMeasure, LayoutError>,
+        sizes: BTreeMap<Option<u64>, TextSize>,
+        lines: BTreeMap<Option<u64>, Result<LaidRun, LayoutError>>,
+    }
+
+    /// What a page layout keeps of a run laid out at one width: its lines
+    /// and the glyphs it shows.
+    #[derive(Clone)]
+    struct LaidRun {
+        lines: Vec<LayoutLine>,
+        glyphs: BTreeSet<GlyphId>,
+    }
+
+    impl RunLayouts {
+        /// Drops every run when a change with `impact` may change how text
+        /// lays out ([`TextShaping::LAYOUT_INPUTS`]).
+        pub(crate) fn forget_if_changed(&mut self, impact: FontChangeImpact) {
+            if impact.intersects(TextShaping::LAYOUT_INPUTS) {
+                self.runs.clear();
+            }
+        }
+
+        /// How many times a run was shaped since the session opened.
+        #[cfg(test)]
+        pub(crate) fn shapes(&self) -> usize {
+            self.shapes
+        }
+
+        /// Keeps runs only for laying out at `place`.
+        fn lay_out_at(&mut self, place: PlaceKey) {
+            if self.place.as_ref() != Some(&place) {
+                self.runs.clear();
+                self.place = Some(place);
+            }
+        }
+
+        /// Run `id` as kept, shaped again over `font` when its items revision
+        /// is not the kept one.
+        fn run(&mut self, font: &LayoutFont<'_>, request: &TextRequest) -> &mut KeptRun {
+            let shaped = || KeptRun {
+                items_revision: request.items_revision,
+                measure: TextMeasure::new(font, &request.run.layout_request()),
+                sizes: BTreeMap::new(),
+                lines: BTreeMap::new(),
+            };
+            match self.runs.entry(request.id.clone()) {
+                Entry::Occupied(kept) if kept.get().items_revision == request.items_revision => {
+                    kept.into_mut()
+                }
+                Entry::Occupied(mut stale) => {
+                    self.shapes += 1;
+                    stale.insert(shaped());
+                    stale.into_mut()
+                }
+                Entry::Vacant(absent) => {
+                    self.shapes += 1;
+                    absent.insert(shaped())
+                }
+            }
+        }
+    }
+
+    impl KeptRun {
+        /// The run's size at `width` font units; nothing for text that
+        /// cannot be laid out.
+        fn size(&mut self, font: &LayoutFont<'_>, width: Option<f64>) -> Option<TextSize> {
+            let measure = self.measure.as_ref().ok()?;
+            Some(
+                *self
+                    .sizes
+                    .entry(width.map(f64::to_bits))
+                    .or_insert_with(|| measure.size(font, width)),
+            )
+        }
+
+        /// The run laid out at `width` font units: its lines and glyphs.
+        fn laid_out(
+            &mut self,
+            font: &LayoutFont<'_>,
+            width: Option<f64>,
+        ) -> Result<LaidRun, LayoutError> {
+            let measure = match &self.measure {
+                Ok(measure) => measure,
+                Err(error) => return Err(*error),
+            };
+            self.lines
+                .entry(width.map(f64::to_bits))
+                .or_insert_with(|| {
+                    measure.layout(font, width).map(|layout| LaidRun {
+                        glyphs: layout.glyph_ids(),
+                        lines: layout.lines,
+                    })
+                })
+                .clone()
+        }
+    }
+
+    /// Lays out `page` of `scene`, each text run over `font` at `place`,
+    /// sized at its `size` over `units_per_em`, keeping what it measured in
+    /// `kept` for the next layout. Returns the layout, its `unloaded` empty,
+    /// and every glyph its runs show.
     ///
     /// # Errors
     ///
@@ -111,24 +249,28 @@ mod exports {
         scene: &Scene,
         page: &NodeId,
         units_per_em: f64,
-        lay_out: &mut dyn FnMut(&LayoutRequest) -> Result<TextLayout, LayoutError>,
+        font: &LayoutFont<'_>,
+        place: PlaceKey,
+        kept: &mut RunLayouts,
     ) -> Result<(PageLayout, BTreeSet<GlyphId>), PageLayoutError> {
         let not_a_page = || PageLayoutError::NotAPage { id: page.clone() };
         let page = scene
             .node(page)
             .filter(|node| node.is_page())
             .ok_or_else(not_a_page)?;
+        kept.lay_out_at(place);
         let nodes = PageNodes::of(scene, page);
+        let requests = nodes
+            .nodes
+            .iter()
+            .enumerate()
+            .filter_map(|(index, node)| Some((index, TextRequest::of(scene, node, units_per_em)?)))
+            .collect();
         let mut text = RunText {
-            requests: BTreeMap::new(),
-            laid_out: BTreeMap::new(),
-            lay_out,
+            requests,
+            font,
+            kept,
         };
-        for (index, node) in nodes.nodes.iter().enumerate() {
-            if let Some(run) = TextRequest::of(node, units_per_em) {
-                text.requests.insert(index, run);
-            }
-        }
         let laid_out =
             nodes
                 .tree
@@ -153,12 +295,11 @@ mod exports {
         let runs = laid_out
             .text_widths
             .iter()
-            .map(|text_width| {
-                let id = nodes.nodes[text_width.node].id.clone();
-                let (width, layout) = text.lines_at(text_width.node, text_width.width);
-                match layout {
+            .filter_map(|text_width| {
+                let (id, width, layout) = text.lines_at(text_width.node, text_width.width)?;
+                Some(match layout {
                     Ok(layout) => {
-                        glyphs.extend(layout.glyph_ids());
+                        glyphs.extend(layout.glyphs);
                         RunLines::Lines {
                             id,
                             width,
@@ -166,9 +307,11 @@ mod exports {
                         }
                     }
                     Err(error) => RunLines::Unlaid { id, error },
-                }
+                })
             })
             .collect();
+        // Runs no longer in the scene are not laid out again.
+        text.kept.runs.retain(|id, _| scene.node(id).is_some());
         let layout = PageLayout {
             boxes,
             runs,
@@ -230,18 +373,21 @@ mod exports {
         }
     }
 
-    /// A text run as layout measures it: its request without a width, and
-    /// how many scene units one of its font units spans.
+    /// A text run as layout measures it: its text, when that last changed,
+    /// and how many scene units one of its font units spans.
     struct TextRequest {
-        request: LayoutRequest,
+        id: NodeId,
+        items_revision: usize,
+        run: shift_engine::scene::TextRun,
         /// The run's size over the font's units per em; zero for a size that
         /// is not positive and finite, which lays out as nothing.
         scale: f64,
     }
 
     impl TextRequest {
-        /// The request `node` lays out with, when it is a text run.
-        fn of(node: &SceneNode, units_per_em: f64) -> Option<Self> {
+        /// The request `node` lays out with, when it is a text run of
+        /// `scene`.
+        fn of(scene: &Scene, node: &SceneNode, units_per_em: f64) -> Option<Self> {
             let NodeContent::TextRun {
                 size,
                 items,
@@ -251,13 +397,14 @@ mod exports {
             else {
                 return None;
             };
-            let run = shift_engine::scene::TextRun {
-                items: items.clone(),
-                settings: settings.clone(),
-            };
             let scale = size / units_per_em;
             Some(Self {
-                request: run.layout_request(),
+                id: node.id.clone(),
+                items_revision: scene.items_revision(&node.id)?,
+                run: shift_engine::scene::TextRun {
+                    items: items.clone(),
+                    settings: settings.clone(),
+                },
                 scale: if scale.is_finite() && scale > 0.0 {
                     scale
                 } else {
@@ -275,80 +422,42 @@ mod exports {
         }
     }
 
-    /// Measures the page's text runs, keeping each layout per run and width
-    /// for the rest of the pass.
-    struct RunText<'f> {
+    /// Measures the page's text runs through what `kept` holds of them.
+    struct RunText<'f, 'a, 'k> {
         requests: BTreeMap<usize, TextRequest>,
-        laid_out: BTreeMap<(usize, Option<u64>), Result<TextLayout, LayoutError>>,
-        lay_out: &'f mut dyn FnMut(&LayoutRequest) -> Result<TextLayout, LayoutError>,
+        font: &'f LayoutFont<'a>,
+        kept: &'k mut RunLayouts,
     }
 
-    impl RunText<'_> {
-        /// Run `node` laid out at `width` font units, kept for the pass.
-        fn laid_out(
-            &mut self,
-            node: usize,
-            width: Option<f64>,
-        ) -> &Result<TextLayout, LayoutError> {
-            let Self {
-                requests,
-                laid_out,
-                lay_out,
-            } = self;
-            laid_out
-                .entry((node, width.map(f64::to_bits)))
-                .or_insert_with(|| {
-                    let Some(run) = requests.get(&node) else {
-                        return Ok(TextLayout::default());
-                    };
-                    let mut request = run.request.clone();
-                    request.options.width = width;
-                    lay_out(&request)
-                })
-        }
-
-        /// Run `node`'s width in font units at `width` scene units, and its
-        /// layout there, taken from the pass.
+    impl RunText<'_, '_, '_> {
+        /// Run `node`'s id, its width in font units at `width` scene units,
+        /// and its layout there.
         fn lines_at(
             &mut self,
             node: usize,
             width: Option<f64>,
-        ) -> (Option<f64>, Result<TextLayout, LayoutError>) {
-            let width = self
-                .requests
-                .get(&node)
-                .and_then(|run| run.font_width(width));
-            self.laid_out(node, width);
-            let layout = self
-                .laid_out
-                .remove(&(node, width.map(f64::to_bits)))
-                .unwrap_or_else(|| Ok(TextLayout::default()));
-            (width, layout)
+        ) -> Option<(NodeId, Option<f64>, Result<LaidRun, LayoutError>)> {
+            let request = self.requests.get(&node)?;
+            let width = request.font_width(width);
+            let layout = self.kept.run(self.font, request).laid_out(self.font, width);
+            Some((request.id.clone(), width, layout))
         }
     }
 
-    impl MeasureText for RunText<'_> {
+    impl MeasureText for RunText<'_, '_, '_> {
         fn measure(&mut self, node: usize, width: Option<f64>) -> Size {
-            let Some((scale, width)) = self
-                .requests
-                .get(&node)
-                .map(|run| (run.scale, run.font_width(width)))
-            else {
+            let Some(request) = self.requests.get(&node) else {
                 return Size::ZERO;
             };
-            let Ok(layout) = self.laid_out(node, width) else {
+            let scale = request.scale;
+            let width = request.font_width(width);
+            let Some(size) = self.kept.run(self.font, request).size(self.font, width) else {
                 return Size::ZERO;
             };
-            let widest = layout
-                .lines
-                .iter()
-                .map(|line| line.advance)
-                .fold(0.0, f64::max);
             // An empty run is still one line tall, where its caret goes.
-            let lines = layout.lines.len().max(1);
-            #[allow(clippy::cast_precision_loss, reason = "a line count is far below 2^52")]
-            let height = lines as f64 * layout.line_height;
-            Size::new(widest * scale, height * scale)
+            let lines = size.lines.max(1);
+            let height = f64::from(lines) * size.line_height;
+            Size::new(size.width * scale, height * scale)
         }
     }
 }
@@ -359,16 +468,17 @@ mod tests {
     use std::convert::Infallible;
 
     use shift_engine::scene::{
-        Align, BoxSizing, Insets, Justify, LayoutDirection, NodeContent, Placement, RunSettings,
-        Scene, SceneNode, Sizing, TextItem,
+        Align, BoxSizing, Insets, Justify, LayoutDirection, MoveNode, NodeContent, Placement,
+        RunSettings, Scene, SceneIntent, SceneNode, SetRunItems, Sizing, TextItem,
     };
     use shift_font::interpolation::KerningBlend;
     use shift_font::{
-        DesignLocation, ExternalLocation, Font, Glyph, GlyphClasses, GlyphDataCategory, GlyphLayer,
-        LayerId, NodeId, RunId, ShaperFontSource, TextItemId, index_key,
+        DesignLocation, ExternalLocation, Font, FontChangeImpact, Glyph, GlyphClasses,
+        GlyphDataCategory, GlyphLayer, LayerId, NodeId, RunId, ShaperFontSource, TextItemId,
+        index_key,
     };
 
-    use super::exports::lay_out_page;
+    use super::exports::{PlaceKey, RunLayouts, lay_out_page};
     use super::{NodeBox, PageLayout, PageLayoutError, RunLines};
     use crate::shaping::{TextPlace, TextShaping};
 
@@ -413,7 +523,7 @@ mod tests {
         }
     }
 
-    fn page() -> SceneNode {
+    fn page_node() -> SceneNode {
         node(
             "page",
             None,
@@ -472,22 +582,61 @@ mod tests {
     }
 
     fn lay_out(nodes: Vec<SceneNode>) -> Result<PageLayout, PageLayoutError> {
-        let font = font();
         let scene: Scene = nodes.into_iter().collect();
-        let place = TextPlace {
-            design: DesignLocation::new(),
-            external: ExternalLocation::new(),
-            kerning: KerningBlend::default(),
-        };
-        let units_per_em = font.metrics().units_per_em;
-        TextShaping::default()
-            .with_layout_font(
-                &font,
-                || Ok::<_, Infallible>(source(&font)),
-                place,
-                |lay_out| lay_out_page(&scene, &NodeId::from_raw("page"), units_per_em, lay_out),
-            )
-            .map(|(layout, _)| layout)
+        Page::new().lay_out(&scene, &[])
+    }
+
+    /// A session's font and shaper, and the runs page layout keeps.
+    struct Page {
+        font: Font,
+        shaping: TextShaping,
+        kept: RunLayouts,
+    }
+
+    impl Page {
+        fn new() -> Self {
+            Self {
+                font: font(),
+                shaping: TextShaping::default(),
+                kept: RunLayouts::default(),
+            }
+        }
+
+        /// Lays out `scene`'s page at `location`, keeping what it measured.
+        fn lay_out(
+            &mut self,
+            scene: &Scene,
+            location: &[f64],
+        ) -> Result<PageLayout, PageLayoutError> {
+            let place = TextPlace {
+                design: DesignLocation::new(),
+                external: ExternalLocation::new(),
+                kerning: KerningBlend::default(),
+            };
+            let units_per_em = self.font.metrics().units_per_em;
+            let Self {
+                font,
+                shaping,
+                kept,
+            } = self;
+            shaping
+                .with_layout_font(
+                    font,
+                    || Ok::<_, Infallible>(source(font)),
+                    place,
+                    |layout_font| {
+                        lay_out_page(
+                            scene,
+                            &NodeId::from_raw("page"),
+                            units_per_em,
+                            layout_font,
+                            PlaceKey::new(location, None),
+                            kept,
+                        )
+                    },
+                )
+                .map(|(layout, _)| layout)
+        }
     }
 
     /// Node `id`'s box as `[x, y, width, height]`.
@@ -531,7 +680,7 @@ mod tests {
         };
 
         let layout = lay_out(vec![
-            page(),
+            page_node(),
             row,
             run("first", "row", 0, "aa"),
             run("second", "row", 1, "aaa"),
@@ -556,7 +705,7 @@ mod tests {
             ..run("text", "column", 0, "aaa aaa aaa")
         };
 
-        let layout = lay_out(vec![page(), column, wrapping]).unwrap();
+        let layout = lay_out(vec![page_node(), column, wrapping]).unwrap();
 
         // "aaa aaa " fits in 750; the last word goes to a second line.
         assert_eq!(rect(&layout, "text"), [0.0, 0.0, 750.0, 2400.0]);
@@ -573,7 +722,7 @@ mod tests {
             ..run("placed", "page", 0, "")
         };
 
-        let layout = lay_out(vec![page(), placed]).unwrap();
+        let layout = lay_out(vec![page_node(), placed]).unwrap();
 
         assert_eq!(rect(&layout, "placed"), [120.0, -40.0, 0.0, 1200.0]);
         assert_eq!(lines(&layout, "placed"), (None, vec![]));
@@ -592,7 +741,7 @@ mod tests {
             },
         );
 
-        let layout = lay_out(vec![page(), run("text", "page", 0, "a"), edited]).unwrap();
+        let layout = lay_out(vec![page_node(), run("text", "page", 0, "a"), edited]).unwrap();
 
         let ids: Vec<&NodeId> = layout.boxes.iter().map(|laid| &laid.id).collect();
         assert_eq!(ids, [&NodeId::from_raw("page"), &NodeId::from_raw("text")]);
@@ -600,17 +749,122 @@ mod tests {
 
     #[test]
     fn only_a_page_lays_out() {
-        let scene: Scene = [page(), run("text", "page", 0, "a")].into_iter().collect();
+        let mut page = Page::new();
+        let scene: Scene = [page_node(), run("text", "page", 0, "a")]
+            .into_iter()
+            .collect();
+        let text = NodeId::from_raw("text");
 
-        let not_a_page = lay_out_page(&scene, &NodeId::from_raw("text"), 1000.0, &mut |_| {
-            unreachable!("nothing is laid out")
-        });
+        let not_a_page = page.shaping.with_layout_font(
+            &page.font,
+            || Ok::<_, Infallible>(source(&page.font)),
+            TextPlace {
+                design: DesignLocation::new(),
+                external: ExternalLocation::new(),
+                kerning: KerningBlend::default(),
+            },
+            |font| {
+                lay_out_page(
+                    &scene,
+                    &text,
+                    1000.0,
+                    font,
+                    PlaceKey::new(&[], None),
+                    &mut page.kept,
+                )
+            },
+        );
 
         assert_eq!(
             not_a_page.map(|_| ()),
-            Err(PageLayoutError::NotAPage {
-                id: NodeId::from_raw("text")
-            })
+            Err(PageLayoutError::NotAPage { id: text })
         );
+    }
+
+    /// A page with a column of two wrapping runs.
+    fn two_runs() -> Vec<SceneNode> {
+        let column = SceneNode {
+            sizing: BoxSizing::new(Sizing::Fixed(750.0), Sizing::Hug),
+            ..frame("column", LayoutDirection::Column, 0.0, 0.0)
+        };
+        let filling = |id, position| SceneNode {
+            sizing: BoxSizing::new(Sizing::Fill, Sizing::Hug),
+            ..run(id, "column", position, "aaa aaa aaa")
+        };
+        vec![
+            page_node(),
+            column,
+            filling("first", 0),
+            filling("second", 1),
+        ]
+    }
+
+    #[test]
+    fn laying_a_page_out_again_shapes_none_of_its_runs_again() {
+        let mut page = Page::new();
+        let scene: Scene = two_runs().into_iter().collect();
+
+        let first = page.lay_out(&scene, &[]).unwrap();
+        assert_eq!(page.kept.shapes(), 2);
+        let again = page.lay_out(&scene, &[]).unwrap();
+
+        assert_eq!(page.kept.shapes(), 2);
+        assert_eq!(again, first);
+    }
+
+    #[test]
+    fn a_run_whose_items_changed_is_shaped_again_alone() {
+        let mut page = Page::new();
+        let mut scene: Scene = two_runs().into_iter().collect();
+        page.lay_out(&scene, &[]).unwrap();
+
+        scene
+            .apply_intents(&[SceneIntent::SetRunItems(SetRunItems {
+                id: NodeId::from_raw("first"),
+                items: Vec::new(),
+            })])
+            .unwrap();
+        let layout = page.lay_out(&scene, &[]).unwrap();
+
+        assert_eq!(page.kept.shapes(), 3);
+        assert_eq!(lines(&layout, "first"), (Some(750.0), vec![]));
+    }
+
+    #[test]
+    fn a_run_moved_keeps_its_shaped_text() {
+        let mut page = Page::new();
+        let mut scene: Scene = two_runs().into_iter().collect();
+        page.lay_out(&scene, &[]).unwrap();
+
+        scene
+            .apply_intents(&[SceneIntent::MoveNode(MoveNode {
+                id: NodeId::from_raw("first"),
+                parent_id: Some(NodeId::from_raw("column")),
+                index: key(2),
+            })])
+            .unwrap();
+        page.lay_out(&scene, &[]).unwrap();
+
+        assert_eq!(page.kept.shapes(), 2);
+    }
+
+    #[test]
+    fn a_change_to_what_text_lays_out_from_or_another_place_shapes_every_run_again() {
+        let mut page = Page::new();
+        let scene: Scene = two_runs().into_iter().collect();
+        page.lay_out(&scene, &[]).unwrap();
+
+        // A change layout does not read keeps them.
+        page.kept
+            .forget_if_changed(FontChangeImpact::METADATA | FontChangeImpact::SCENE);
+        page.lay_out(&scene, &[]).unwrap();
+        assert_eq!(page.kept.shapes(), 2);
+
+        page.kept.forget_if_changed(FontChangeImpact::LAYERS);
+        page.lay_out(&scene, &[]).unwrap();
+        assert_eq!(page.kept.shapes(), 4);
+
+        page.lay_out(&scene, &[0.5]).unwrap();
+        assert_eq!(page.kept.shapes(), 6);
     }
 }

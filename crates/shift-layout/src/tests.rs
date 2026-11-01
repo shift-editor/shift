@@ -7,8 +7,8 @@ use std::time::Instant;
 
 use shift_font::GlyphId;
 use shift_text::layout::{
-    CharacterGlyph, LayoutFont, LayoutRequest, LayoutUnit, LineMetrics, TextLayout, TextOptions,
-    TypedFont, TypedGlyph,
+    CharacterGlyph, LayoutFont, LayoutRequest, LayoutUnit, LineMetrics, TextLayout, TextMeasure,
+    TextOptions, TextSize, TypedFont, TypedGlyph,
 };
 
 use crate::{
@@ -55,6 +55,10 @@ struct Texts {
     font: TypedFont,
     runs: BTreeMap<usize, Run>,
     laid_out: BTreeMap<(usize, Option<u64>), TextLayout>,
+    /// Each run shaped once, and its size at each width, as the engine keeps
+    /// them.
+    shaped: BTreeMap<usize, TextMeasure>,
+    sizes: BTreeMap<(usize, Option<u64>), TextSize>,
 }
 
 impl Texts {
@@ -63,43 +67,64 @@ impl Texts {
             font,
             runs: BTreeMap::new(),
             laid_out: BTreeMap::new(),
+            shaped: BTreeMap::new(),
+            sizes: BTreeMap::new(),
+        }
+    }
+
+    /// Forgets every run's shaped text and sizes, as a font change does.
+    fn forget(&mut self) {
+        self.shaped.clear();
+        self.sizes.clear();
+    }
+
+    /// A width in scene units as run `node`'s font units; shift-text reads
+    /// a width of 0 as none, so the narrowest positive one breaks at every
+    /// chance.
+    fn font_width(&self, node: usize, width: Option<f64>) -> Option<f64> {
+        let scale = self.runs[&node].scale;
+        width.map(|width| (width / scale).max(f64::MIN_POSITIVE))
+    }
+
+    fn request(&self, node: usize, width: Option<f64>) -> LayoutRequest {
+        LayoutRequest {
+            units: self.runs[&node].units.clone(),
+            options: TextOptions {
+                shaping: false,
+                width: self.font_width(node, width),
+                ..TextOptions::default()
+            },
         }
     }
 
     /// Run `node` laid out with lines no wider than `width` scene units.
     fn layout(&mut self, node: usize, width: Option<f64>) -> &TextLayout {
-        let run = &self.runs[&node];
+        let request = self.request(node, width);
         let font = &self.font;
         self.laid_out
             .entry((node, width.map(f64::to_bits)))
-            .or_insert_with(|| {
-                let request = LayoutRequest {
-                    units: run.units.clone(),
-                    options: TextOptions {
-                        shaping: false,
-                        // shift-text reads a width of 0 as none; the
-                        // narrowest positive one breaks at every chance.
-                        width: width.map(|width| (width / run.scale).max(f64::MIN_POSITIVE)),
-                        ..TextOptions::default()
-                    },
-                };
-                TextLayout::new(&LayoutFont::typed(font), &request).unwrap()
-            })
+            .or_insert_with(|| TextLayout::new(&LayoutFont::typed(font), &request).unwrap())
     }
 }
 
 impl MeasureText for Texts {
     fn measure(&mut self, node: usize, width: Option<f64>) -> Size {
         let scale = self.runs[&node].scale;
-        let layout = self.layout(node, width);
-        let widest = layout
-            .lines
-            .iter()
-            .map(|line| line.advance)
-            .fold(0.0, f64::max);
-        #[allow(clippy::cast_precision_loss, reason = "a handful of lines")]
-        let height = layout.lines.len() as f64 * layout.line_height;
-        Size::new(widest * scale, height * scale)
+        let font_width = self.font_width(node, width);
+        let font = LayoutFont::typed(&self.font);
+        if !self.shaped.contains_key(&node) {
+            let shaped = TextMeasure::new(&font, &self.request(node, None)).unwrap();
+            self.shaped.insert(node, shaped);
+        }
+        let shaped = &self.shaped[&node];
+        let size = *self
+            .sizes
+            .entry((node, width.map(f64::to_bits)))
+            .or_insert_with(|| shaped.size(&font, font_width));
+        Size::new(
+            size.width * scale,
+            f64::from(size.lines) * size.line_height * scale,
+        )
     }
 }
 
@@ -787,7 +812,7 @@ fn time_a_thousand_leaves() {
         let mut samples = (0..50)
             .map(|_| {
                 if fresh_text {
-                    page.texts.laid_out.clear();
+                    page.texts.forget();
                 }
                 let started = Instant::now();
                 let layout = page.layout();
@@ -800,14 +825,15 @@ fn time_a_thousand_leaves() {
         let at = |quantile: f64| samples[((samples.len() - 1) as f64 * quantile).round() as usize];
         (at(0.5), at(0.95))
     };
-    // Each engine layout measures its text afresh; with every run's text
-    // already laid out, what is left is the layout itself.
+    // Laid out after a font change, every run is shaped and measured again;
+    // laid out again with nothing changed, as the engine keeps runs, only
+    // the layout itself is left.
     let fresh = time(true);
     let measured = time(false);
 
     println!(
-        "{leaves} leaves, {} nodes: p50 {:.3} ms, p95 {:.3} ms with text laid out; \
-         p50 {:.3} ms, p95 {:.3} ms with text already measured",
+        "{leaves} leaves, {} nodes: p50 {:.3} ms, p95 {:.3} ms with every run shaped; \
+         p50 {:.3} ms, p95 {:.3} ms with runs kept",
         page.tree.nodes.len(),
         fresh.0,
         fresh.1,

@@ -28,6 +28,7 @@ use shift_wire::{AnchorData, ComponentData, ContourData, values};
 use wasm_bindgen::prelude::*;
 
 use crate::engine_reads::{FontVariation, InternedIds};
+use crate::page_layout::RunLayouts;
 use crate::shaping::TextShaping;
 
 #[wasm_bindgen(typescript_custom_section)]
@@ -308,6 +309,9 @@ pub(crate) struct Engine {
     /// The shaper text shapes with, compiled from the session's font when
     /// text is first shaped.
     pub(crate) shaping: TextShaping,
+    /// Each text run as page layout last measured it, kept until its text,
+    /// the font or the place it lays out at changes.
+    pub(crate) page_runs: RefCell<RunLayouts>,
     /// The store's answers for glyph records and the shaper's source, each
     /// asked once: glyph data's categories by name and codepoints, and the
     /// attaching anchors of layers the session has not loaded.
@@ -369,15 +373,22 @@ impl Engine {
         self.previewed = None;
         match event {
             EditEvent::Applied(impact) => {
-                self.shaping.forget_if_changed(impact);
+                self.forget_if_changed(impact);
                 self.edit_impact |= impact;
             }
             EditEvent::Rewound | EditEvent::Cancelled => {
-                self.shaping.forget_if_changed(self.edit_impact);
+                self.forget_if_changed(self.edit_impact);
                 self.edit_impact = FontChangeImpact::empty();
             }
             EditEvent::Committed => self.edit_impact = FontChangeImpact::empty(),
         }
+    }
+
+    /// Drops what text was shaped and laid out from, when a change with
+    /// `impact` may have changed it.
+    fn forget_if_changed(&self, impact: FontChangeImpact) {
+        self.shaping.forget_if_changed(impact);
+        self.page_runs.borrow_mut().forget_if_changed(impact);
     }
 
     /// The variation the reads evaluate for the session's font as it stands.
@@ -510,6 +521,7 @@ fn open(session: EngineSession, source: Function) -> Result<u32, JsError> {
             replaced: None,
             variation: RefCell::default(),
             shaping: TextShaping::default(),
+            page_runs: RefCell::default(),
             records: RefCell::new(RecordCache::default()),
             edit_impact: FontChangeImpact::empty(),
             previewed: None,
@@ -831,7 +843,13 @@ pub fn engine_preload(handle: u32, glyph_ids: Vec<String>) -> Result<(), JsError
         engine
             .session
             .load_glyph_closure(&mut HostLayers(&engine.source), glyph_ids)
-            .map_err(js_error)
+            .map_err(js_error)?;
+        // Runs laid out from the placeholders of what loaded lay out again.
+        engine
+            .page_runs
+            .borrow_mut()
+            .forget_if_changed(FontChangeImpact::LAYERS);
+        Ok(())
     })
 }
 

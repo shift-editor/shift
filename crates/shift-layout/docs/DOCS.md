@@ -31,7 +31,7 @@ crates/shift-layout/src/
 
 - `LayoutTree` — one page, parents before children, the page first. `layout(&mut impl MeasureText)` validates it and returns a `PageLayout` or a `LayoutError`.
 - `NodeKind` — `Page` (root, free, hugs), `Frame(FrameLayout)`, `Text` (measured through `MeasureText`), `Fixed(Size)` (a leaf with an intrinsic size it hugs to).
-- `MeasureText` — `measure(node, width) -> Size` in scene units: the widest line and the lines' height at that width. Called several times per run and width within one layout; the engine keeps each layout for the pass.
+- `MeasureText` — `measure(node, width) -> Size` in scene units: the widest line and the lines' height at that width. Called several times per run and width within one layout; the engine answers from each run's text shaped once (shift-text's `TextMeasure`), kept between layouts.
 - `PageLayout` — a `LayoutBox` per input node, in input order (origin in the parent's frame, Y-down, scene units), and a `TextWidth` per text run (`None` for a hugging run).
 
 ## How it works
