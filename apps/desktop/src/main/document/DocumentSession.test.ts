@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceDocumentState } from "../../shared/workspace/lanes";
-import type { NativeDialogs } from "../dialogs/NativeDialogs";
+import { answeringNativeDialogs } from "../dialogs/answeringNativeDialogs";
 import type { ShiftLogger } from "../logging";
 import type { Document } from "./DocumentClient";
 import { DocumentSession } from "./DocumentSession";
@@ -15,37 +15,12 @@ const silentLogger: ShiftLogger = {
 function documentState(dirty = true): WorkspaceDocumentState {
   return {
     workspaceId: "workspace",
-    sourceKind: "shift",
+    sourceKind: "document",
     documentId: "document",
     saveTarget: "/tmp/document.shift",
     canonicalPath: "/tmp/document.shift",
     dirty,
     needsSaveAs: false,
-  };
-}
-
-function nativeDialogs(confirmDirtyDocument: NativeDialogs["confirmDirtyDocument"]): NativeDialogs {
-  return {
-    async openFont() {
-      return null;
-    },
-    async openFontFolder() {
-      return null;
-    },
-    async showCreateFailure() {},
-    async showOpenFailure() {},
-    async saveShiftDocument() {
-      return null;
-    },
-    async exportTrueTypeFont() {
-      return null;
-    },
-    confirmDirtyDocument,
-    async confirmDocumentReopen() {
-      return "close";
-    },
-    async showSaveFailure() {},
-    async showExportFailure() {},
   };
 }
 
@@ -86,7 +61,7 @@ describe("DocumentSession shared close transition", () => {
       dialogWindow: () => null,
       windows: () => [],
       applicationName: () => "Shift",
-      nativeDialogs: nativeDialogs(async (_window, _state, reason) => {
+      nativeDialogs: answeringNativeDialogs(async (_window, _state, reason) => {
         dialogCount++;
         expect(reason).toBe("window");
         await choice;
@@ -135,7 +110,7 @@ describe("DocumentSession shared close transition", () => {
       dialogWindow: () => null,
       windows: () => [],
       applicationName: () => "Shift",
-      nativeDialogs: nativeDialogs(async () => {
+      nativeDialogs: answeringNativeDialogs(async () => {
         dialogCount++;
         return "discard";
       }),
@@ -169,7 +144,7 @@ describe("DocumentSession shared close transition", () => {
       dialogWindow: () => null,
       windows: () => [],
       applicationName: () => "Shift",
-      nativeDialogs: nativeDialogs(async () => {
+      nativeDialogs: answeringNativeDialogs(async () => {
         dialogCount++;
         return choice;
       }),
@@ -209,7 +184,7 @@ describe("DocumentSession shared close transition", () => {
       dialogWindow: () => null,
       windows: () => [],
       applicationName: () => "Shift",
-      nativeDialogs: nativeDialogs(async () => {
+      nativeDialogs: answeringNativeDialogs(async () => {
         dialogCount++;
         if (dialogFails) throw new Error("dialog failed");
         return "discard";
