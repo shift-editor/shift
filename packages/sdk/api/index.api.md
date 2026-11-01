@@ -1375,7 +1375,6 @@ export interface ShiftRead {
     };
     // (undocumented)
     readonly state: ShiftReadState;
-    // (undocumented)
     text: {
         runs(input?: ShiftReadInput<TextRunsInput>): Promise<TextRunSummary[]>;
         get(input: ShiftReadInput<TextRunGetInput>): Promise<TextRunView>;

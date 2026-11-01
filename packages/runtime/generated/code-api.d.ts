@@ -981,6 +981,7 @@ export interface ShiftRead {
     resolve(input: ShiftReadInput<KerningResolveInput>): Promise<ResolvedKerningPairs>;
     at(input: ShiftReadInput<KerningAtInput>): Promise<KerningMasterValue>;
   };
+  /** The canvas text runs, read at the bound revision; writes are not part of a read scope. */
   text: {
     runs(input?: ShiftReadInput<TextRunsInput>): Promise<TextRunSummary[]>;
     get(input: ShiftReadInput<TextRunGetInput>): Promise<TextRunView>;
