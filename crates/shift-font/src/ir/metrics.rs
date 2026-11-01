@@ -118,11 +118,20 @@ impl MetricDefinition {
         self.name = name;
     }
 
-    /// Creates the standard Latin metric rows used by a new font.
+    /// Creates the standard Latin metric rows used by a new font. Each row's
+    /// id is derived from its kind, the same in every font, so two reads of
+    /// one font file key its sources' metric values alike.
     pub fn defaults() -> Vec<Self> {
         MetricKind::STANDARD
             .into_iter()
-            .map(|kind| Self::new(kind, kind.default_name().to_string()))
+            .map(|kind| {
+                let name = kind.default_name();
+                Self::with_id(
+                    MetricId::derived("standard metric", name),
+                    kind,
+                    name.to_string(),
+                )
+            })
             .collect()
     }
 }

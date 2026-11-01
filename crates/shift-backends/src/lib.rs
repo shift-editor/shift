@@ -21,7 +21,7 @@ mod import_report;
 mod kerning_import;
 mod numeric;
 mod shift2fontir;
-mod source_glyph_ids;
+mod source_ids;
 mod traits;
 
 pub use errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
@@ -49,5 +49,5 @@ pub use shift2fontir::{
     AxisConversionError, MappingSide, PropagatedAnchor, PropagatedGlyphAnchors,
     PropagatedSourceAnchors,
 };
-pub use source_glyph_ids::SourceGlyphIds;
+pub use source_ids::SourceIds;
 pub use traits::{FontBackend, FontReader, FontView, FontWriter};

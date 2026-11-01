@@ -1,9 +1,9 @@
-use crate::SourceGlyphIds;
+use crate::SourceIds;
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use glyphs_reader::{Font as GlyphsFont, Shape};
 use rayon::prelude::*;
-use shift_font::{Anchor, Font, Glyph, GlyphId, GlyphLayer, LayerId};
+use shift_font::{Anchor, Font, Glyph, GlyphId, GlyphLayer};
 
 use super::{
     GlyphsAnchorExt,
@@ -26,6 +26,7 @@ pub(crate) struct GlyphsGlyphStream {
     glyph_ids: HashMap<String, GlyphId>,
     glyph_names: Vec<String>,
     sources: GlyphsLayerSources,
+    ids: SourceIds,
     next_glyph: usize,
 }
 
@@ -69,7 +70,7 @@ impl GlyphStream for GlyphsGlyphStream {
                     &self.source.glyphs[name.as_str()],
                     &self.glyph_ids,
                     &self.sources,
-                    std::iter::repeat_with(LayerId::new),
+                    &self.ids,
                 )
             })
             .collect::<FormatBackendResult<Vec<_>>>()?;
@@ -78,29 +79,14 @@ impl GlyphStream for GlyphsGlyphStream {
     }
 }
 
-/// A Glyphs file's glyphs read one at a time: the import stream, with the
-/// ids of each glyph's imported layers minted once, so every read of a glyph
-/// names its layers alike.
+/// A Glyphs file's glyphs read one at a time, through the import stream.
 pub(crate) struct GlyphsAuthoredGlyphs {
     stream: GlyphsGlyphStream,
-    /// Per glyph, in stream order: an id per imported layer, in the file's
-    /// layer order.
-    layer_ids: Box<[Box<[LayerId]>]>,
 }
 
 impl GlyphsAuthoredGlyphs {
     pub(crate) fn new(stream: GlyphsGlyphStream) -> Self {
-        let layer_ids = stream
-            .glyph_names
-            .iter()
-            .map(|name| {
-                let glyph = &stream.source.glyphs[name.as_str()];
-                std::iter::repeat_with(LayerId::new)
-                    .take(imported_layer_count(glyph, &stream.sources))
-                    .collect()
-            })
-            .collect();
-        Self { stream, layer_ids }
+        Self { stream }
     }
 
     fn source_glyph(&self, index: usize) -> &glyphs_reader::Glyph {
@@ -116,8 +102,11 @@ impl AuthoredGlyphs for GlyphsAuthoredGlyphs {
     fn entry(&self, index: usize) -> FormatBackendResult<AuthoredEntry> {
         let glyph = self.source_glyph(index);
         let mut entry = AuthoredEntry::new(glyph_identity(glyph, &self.stream.glyph_ids));
-        let layers = self.stream.sources.imported(glyph);
-        for ((layer, source_id), layer_id) in layers.zip(self.layer_ids[index].iter().copied()) {
+        for (layer, source_id) in self.stream.sources.imported(glyph) {
+            let layer_id = self
+                .stream
+                .ids
+                .layer_id(glyph.name.as_str(), &layer.layer_id);
             entry.glyph.set_layer(GlyphLayer::with_width(
                 layer_id,
                 source_id,
@@ -147,7 +136,7 @@ impl AuthoredGlyphs for GlyphsAuthoredGlyphs {
             self.source_glyph(index),
             &self.stream.glyph_ids,
             &self.stream.sources,
-            self.layer_ids[index].iter().copied(),
+            &self.stream.ids,
         )
     }
 }
@@ -176,14 +165,14 @@ pub(crate) fn stream_retained(
         .values()
         .map(|glyph| glyph.name.to_string())
         .collect::<Vec<_>>();
-    let source_glyph_ids = SourceGlyphIds::for_path(path);
+    let ids = SourceIds::for_path(path);
     let glyph_ids = glyph_names
         .iter()
-        .map(|name| (name.clone(), source_glyph_ids.glyph_id(name)))
+        .map(|name| (name.clone(), ids.glyph_id(name)))
         .collect();
     *header.kerning_mut() =
         convert_kerning(&source, &glyph_ids, &source_ids_by_master_id, &mut report);
-    let sources = add_intermediate_sources(&mut header, &source, source_ids_by_master_id);
+    let sources = add_intermediate_sources(&mut header, &source, source_ids_by_master_id, &ids);
 
     Ok((
         header,
@@ -192,6 +181,7 @@ pub(crate) fn stream_retained(
             glyph_ids,
             glyph_names,
             sources,
+            ids,
             next_glyph: 0,
         },
         report,

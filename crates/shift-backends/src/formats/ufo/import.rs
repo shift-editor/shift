@@ -1,4 +1,4 @@
-use crate::SourceGlyphIds;
+use crate::SourceIds;
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
     path::{Path, PathBuf},
@@ -6,7 +6,7 @@ use std::{
 };
 
 use norad::{DataRequest, Font as NoradFont};
-use shift_font::{Font, GlyphId, LayerId, Source, SourceId};
+use shift_font::{Font, GlyphId, Source, SourceId};
 
 use crate::{
     ImportReport,
@@ -41,12 +41,15 @@ pub(crate) fn stream_retained(
     ufo_path: &Path,
     retained: &Arc<[UfoLayerDirectory]>,
 ) -> FormatBackendResult<(Font, GlifGlyphStream, ImportReport)> {
+    let ids = SourceIds::for_path(ufo_path);
     let (mut header, kerning) = load_header(ufo_path)?;
-    let default_source_id = header.default_source_id().ok_or_else(|| {
+    let default_source = header.default_source().cloned().ok_or_else(|| {
         FormatBackendError::Ufo("UFO header is missing its default source".into())
     })?;
-    let layers = load_layer_directories(retained, &mut header, default_source_id)?;
-    let (glyph_ids, glyphs) = build_glyph_directory(&SourceGlyphIds::for_path(ufo_path), &layers);
+    header.clear_sources();
+    let default_source_id = header.add_source(default_source.identified_as(ids.source_id("0")));
+    let layers = load_layer_directories(retained, &mut header, default_source_id, &ids)?;
+    let (glyph_ids, glyphs) = build_glyph_directory(&ids, &layers);
 
     let mut report = ImportReport::default();
     let mut import = KerningImport::new(&glyph_ids);
@@ -85,6 +88,7 @@ fn load_layer_directories(
     retained: &[UfoLayerDirectory],
     header: &mut Font,
     default_source_id: SourceId,
+    ids: &SourceIds,
 ) -> FormatBackendResult<Vec<LayerDirectory>> {
     let mut layers = Vec::with_capacity(retained.len());
     for (index, retained) in retained.iter().enumerate() {
@@ -92,7 +96,8 @@ fn load_layer_directories(
         let source_id = if index == 0 {
             default_source_id
         } else {
-            header.add_source(Source::layer(retained.name.clone()))
+            let id = ids.source_id(&index.to_string());
+            header.add_source(Source::layer(retained.name.clone()).identified_as(id))
         };
         let source = header.source_mut(source_id).ok_or_else(|| {
             FormatBackendError::Ufo("newly registered UFO source is missing".into())
@@ -201,7 +206,7 @@ fn read_layer_info(layer_path: &Path) -> FormatBackendResult<(Option<String>, pl
 }
 
 fn build_glyph_directory(
-    source_glyph_ids: &SourceGlyphIds,
+    source_ids: &SourceIds,
     layers: &[LayerDirectory],
 ) -> (HashMap<String, GlyphId>, Vec<GlifGlyph>) {
     let mut ordered_names = Vec::new();
@@ -215,17 +220,18 @@ fn build_glyph_directory(
     }
     let glyph_ids = ordered_names
         .iter()
-        .map(|name| (name.clone(), source_glyph_ids.glyph_id(name)))
+        .map(|name| (name.clone(), source_ids.glyph_id(name)))
         .collect::<HashMap<_, _>>();
     let glyphs = ordered_names
         .into_iter()
         .map(|name| {
             let layer_records = layers
                 .iter()
-                .filter_map(|layer| {
+                .enumerate()
+                .filter_map(|(index, layer)| {
                     layer.glyphs.get(&name).map(|path| GlifLayer {
                         source_id: layer.source_id,
-                        layer_id: LayerId::new(),
+                        layer_id: source_ids.layer_id(&name, &index.to_string()),
                         path: path.clone(),
                     })
                 })

@@ -110,6 +110,14 @@ impl Source {
         }
     }
 
+    /// The source with `id` as its id, as a reader that derives source ids
+    /// gives it one.
+    #[must_use]
+    pub fn identified_as(mut self, id: SourceId) -> Self {
+        self.id = id;
+        self
+    }
+
     /// A layer-only source: it carries a format layer named `name` (e.g. a
     /// UFO background layer) but is not a designspace master.
     pub fn layer(name: String) -> Self {

@@ -7,7 +7,7 @@
 //! converting any outline. A glyph is converted when it is asked for, by the
 //! same conversion import runs, with the layer ids the directory gave it, so
 //! a glyph read alone is the glyph a full import produces. Glyph ids come
-//! from [`crate::SourceGlyphIds`], as for the retained source and import.
+//! from [`crate::SourceIds`], as for the retained source and import.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
@@ -16,7 +16,9 @@ use rayon::prelude::*;
 use shift_font::{CoreError, Font, Glyph, GlyphId, GlyphLayer, LayerId, Require};
 
 use crate::font_loader::resolve;
-use crate::{BackendError, BackendResult, FontFormat, FormatBackendError, FormatBackendResult};
+use crate::{
+    BackendError, BackendResult, FontFormat, FormatBackendError, FormatBackendResult, ImportReport,
+};
 
 /// One glyph as opening reads it, before any outline is converted.
 pub(crate) struct AuthoredEntry {
@@ -76,6 +78,9 @@ pub struct AuthoredSource {
     composites: HashMap<GlyphId, BTreeSet<GlyphId>>,
     /// The layers that carry an anchor marks attach to.
     attaching: HashSet<LayerId>,
+    /// What import changes or leaves out of the file, as importing it would
+    /// report it: kept for when the preview is saved as a document.
+    report: ImportReport,
 }
 
 /// An authored source just opened, and its directory.
@@ -119,26 +124,30 @@ impl AuthoredSource {
         let format = resolved.format;
         let path = resolved.path_buf;
         let load = |source: FormatBackendError| BackendError::load(format, path.clone(), source);
-        let AuthoredStream { header, glyphs } = AuthoredStream::open(format, resolved.path)
+        let stream = AuthoredStream::open(format, resolved.path)
             .map_err(load)?
             .ok_or(BackendError::AuthoredUnsupported { format })?;
-        let entries = (0..glyphs.glyph_count())
+        let entries = (0..stream.glyphs.glyph_count())
             .into_par_iter()
-            .map(|index| glyphs.entry(index))
+            .map(|index| stream.glyphs.entry(index))
             .collect::<FormatBackendResult<Vec<_>>>()
             .map_err(load)?;
-        Self::index(header, glyphs, entries, format, path.clone()).map_err(load)
+        Self::index(stream, entries, format, path.clone()).map_err(load)
     }
 
-    /// Indexes `entries`, `glyphs`' entries in stream order, and inserts
-    /// them into `header` as the directory.
+    /// Indexes `entries`, `stream`'s entries in stream order, and inserts
+    /// them into its header as the directory.
     fn index(
-        mut header: Font,
-        glyphs: Box<dyn AuthoredGlyphs>,
+        stream: AuthoredStream,
         entries: Vec<AuthoredEntry>,
         format: FontFormat,
         path: PathBuf,
     ) -> FormatBackendResult<OpenedAuthoredSource> {
+        let AuthoredStream {
+            mut header,
+            glyphs,
+            report,
+        } = stream;
         let mut glyph_index = HashMap::with_capacity(entries.len());
         let mut layer_owners = HashMap::new();
         let mut bases = Vec::with_capacity(entries.len());
@@ -166,8 +175,14 @@ impl AuthoredSource {
                 bases: bases.into_boxed_slice(),
                 composites,
                 attaching,
+                report,
             },
         })
+    }
+
+    /// What importing the file would report changing or leaving out.
+    pub fn report(&self) -> &ImportReport {
+        &self.report
     }
 
     /// `glyph_id`, converted with every layer.
@@ -276,6 +291,7 @@ impl AuthoredSource {
 struct AuthoredStream {
     header: Font,
     glyphs: Box<dyn AuthoredGlyphs>,
+    report: ImportReport,
 }
 
 impl AuthoredStream {
@@ -284,152 +300,40 @@ impl AuthoredStream {
     fn open(format: FontFormat, path: &str) -> FormatBackendResult<Option<Self>> {
         let opened = match format {
             FontFormat::Ufo => {
-                let (header, stream, _) = crate::formats::ufo::stream_font(path)?;
-                Self::new(header, stream)
+                let (header, stream, report) = crate::formats::ufo::stream_font(path)?;
+                Self::new(header, stream, report)
             }
             FontFormat::Designspace => {
-                let (header, stream, _) = crate::formats::designspace::stream_font(path)?;
-                Self::new(header, stream)
+                let (header, stream, report) = crate::formats::designspace::stream_font(path)?;
+                Self::new(header, stream, report)
             }
             FontFormat::Glyphs => {
-                let (header, stream, _) = crate::formats::glyphs::stream_font(path)?;
-                Self::new(
-                    header,
-                    crate::formats::glyphs::GlyphsAuthoredGlyphs::new(stream),
-                )
+                let (header, stream, report) = crate::formats::glyphs::stream_font(path)?;
+                let glyphs = crate::formats::glyphs::GlyphsAuthoredGlyphs::new(stream);
+                Self::new(header, glyphs, report)
             }
             FontFormat::Shift | FontFormat::Ttf | FontFormat::Otf => return Ok(None),
         };
         Ok(Some(opened))
     }
 
-    fn new(header: Font, glyphs: impl AuthoredGlyphs + 'static) -> Self {
+    fn new(header: Font, glyphs: impl AuthoredGlyphs + 'static, report: ImportReport) -> Self {
         Self {
             header,
             glyphs: Box::new(glyphs),
+            report,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
     use std::path::Path;
 
     use shift_font::test_support::fixtures;
-    use shift_font::{DecomposedTransform, GlyphCategory, GlyphSubcategory, LibData, PointType};
 
     use super::*;
     use crate::font_loader::FontLoader;
-
-    #[derive(Debug, PartialEq)]
-    struct PointContent {
-        position: kurbo::Point,
-        point_type: PointType,
-        smooth: bool,
-    }
-
-    #[derive(Debug, PartialEq)]
-    struct ContourContent {
-        closed: bool,
-        points: Vec<PointContent>,
-    }
-
-    #[derive(Debug, PartialEq)]
-    struct GuidelineContent {
-        x: Option<f64>,
-        y: Option<f64>,
-        angle: Option<f64>,
-        name: Option<String>,
-    }
-
-    /// A layer's content without entity ids, which each read of a file mints anew.
-    #[derive(Debug, PartialEq)]
-    struct LayerContent {
-        width: f64,
-        height: Option<f64>,
-        contours: Vec<ContourContent>,
-        components: Vec<(GlyphId, DecomposedTransform)>,
-        anchors: Vec<(Option<String>, kurbo::Point)>,
-        guidelines: Vec<GuidelineContent>,
-        lib: LibData,
-    }
-
-    /// A glyph's content, each layer under its source's position.
-    #[derive(Debug, PartialEq)]
-    struct GlyphContent {
-        id: GlyphId,
-        name: String,
-        unicodes: Vec<u32>,
-        category: Option<GlyphCategory>,
-        sub_category: Option<GlyphSubcategory>,
-        lib: LibData,
-        layers: BTreeMap<usize, LayerContent>,
-    }
-
-    /// Where `layer`'s source is in `font`'s sources, which two reads of one
-    /// file list alike; names may repeat.
-    fn source_position(font: &Font, layer: &GlyphLayer) -> usize {
-        let is_layers = |source: &shift_font::Source| source.id() == layer.source_id();
-        font.sources().iter().position(is_layers).unwrap()
-    }
-
-    fn layer_content(layer: &GlyphLayer) -> LayerContent {
-        LayerContent {
-            width: layer.width(),
-            height: layer.height(),
-            contours: layer
-                .contours_iter()
-                .map(|contour| ContourContent {
-                    closed: contour.is_closed(),
-                    points: contour
-                        .points()
-                        .iter()
-                        .map(|point| PointContent {
-                            position: point.position(),
-                            point_type: point.point_type(),
-                            smooth: point.is_smooth(),
-                        })
-                        .collect(),
-                })
-                .collect(),
-            components: layer
-                .components_iter()
-                .map(|component| (component.base_glyph_id(), *component.transform()))
-                .collect(),
-            anchors: layer
-                .anchors_iter()
-                .map(|anchor| (anchor.name().map(str::to_string), anchor.position()))
-                .collect(),
-            guidelines: layer
-                .guidelines()
-                .iter()
-                .map(|line| GuidelineContent {
-                    x: line.x(),
-                    y: line.y(),
-                    angle: line.angle(),
-                    name: line.name().map(str::to_string),
-                })
-                .collect(),
-            lib: layer.lib().clone(),
-        }
-    }
-
-    fn content(font: &Font, glyph: &Glyph) -> GlyphContent {
-        GlyphContent {
-            id: glyph.id(),
-            name: glyph.name().to_string(),
-            unicodes: glyph.unicodes().to_vec(),
-            category: glyph.category(),
-            sub_category: glyph.sub_category(),
-            lib: glyph.lib().clone(),
-            layers: glyph
-                .layers()
-                .values()
-                .map(|layer| (source_position(font, layer), layer_content(layer)))
-                .collect(),
-        }
-    }
 
     fn open(path: &Path) -> OpenedAuthoredSource {
         AuthoredSource::open(path.to_str().unwrap()).unwrap()
@@ -439,18 +343,21 @@ mod tests {
         FontLoader::new().read_font(path.to_str().unwrap()).unwrap()
     }
 
-    /// Every glyph read alone equals the same glyph from a full import, and
-    /// the directory lists the glyphs in import order, each layer under the
-    /// id its read gives it, keeping its advance.
+    /// Every glyph read alone is the glyph a full import produces, ids and
+    /// all; the directory lists import's sources and axes, and its glyphs in
+    /// import order, each layer a placeholder under its read's id, keeping
+    /// its advance.
     fn assert_reads_as_imported(path: &Path) {
         let imported = import(path);
         let OpenedAuthoredSource { directory, source } = open(path);
 
+        assert_eq!(directory.sources(), imported.sources());
+        assert_eq!(directory.axes(), imported.axes());
         let order = |font: &Font| font.glyphs().map(Glyph::id).collect::<Vec<_>>();
         assert_eq!(order(&directory), order(&imported));
         for expected in imported.glyphs() {
             let read = source.glyph(expected.id()).unwrap();
-            assert_eq!(content(&directory, &read), content(&imported, expected));
+            assert_eq!(&read, expected);
 
             let listed = directory.glyph(read.id()).unwrap();
             let advances = |glyph: &Glyph| {
@@ -462,6 +369,23 @@ mod tests {
             assert_eq!(advances(listed), advances(&read));
             assert!(listed.layers().values().all(|layer| layer.is_empty()));
         }
+    }
+
+    /// Two imports of one file give every source, axis, layer and entity in
+    /// a layer the same id.
+    fn assert_imports_alike(path: &Path) {
+        let (first, second) = (import(path), import(path));
+
+        assert_eq!(first.sources(), second.sources());
+        assert_eq!(first.axes(), second.axes());
+        assert!(first.glyphs().eq(second.glyphs()));
+    }
+
+    #[test]
+    fn every_import_of_a_file_names_its_entities_alike() {
+        assert_imports_alike(&fixtures::mutatorsans_ufo());
+        assert_imports_alike(&fixtures::mutatorsans_designspace());
+        assert_imports_alike(&fixtures::font("MutatorSansVariable.glyphs"));
     }
 
     #[test]
@@ -495,10 +419,7 @@ mod tests {
         );
         let read = source.glyph(glyph.id()).unwrap();
         for layer in &layers {
-            assert_eq!(
-                layer_content(layer),
-                layer_content(read.layer(layer.id()).unwrap())
-            );
+            assert_eq!(Some(layer), read.layer(layer.id()));
         }
     }
 
@@ -556,26 +477,20 @@ mod tests {
         let path = fixtures::font("AnchorPropagation.glyphs");
         let imported = import(&path);
         let OpenedAuthoredSource { directory, source } = open(&path);
-        let attaching_in = |font: &Font, layer_ids: &[LayerId]| {
-            let attaching: HashSet<LayerId> = layer_ids.iter().copied().collect();
-            font.glyphs()
-                .flat_map(|glyph| glyph.layers().values().map(move |layer| (glyph, layer)))
-                .filter(|(_, layer)| attaching.contains(&layer.id()))
-                .map(|(glyph, layer)| (glyph.id(), source_position(font, layer)))
-                .collect::<BTreeSet<_>>()
-        };
-        let imported_attaching: Vec<LayerId> = imported
+        let expected: Vec<LayerId> = imported
             .glyphs()
             .flat_map(|glyph| glyph.layers().values())
             .filter(|layer| layer.anchors_iter().any(shift_font::Anchor::attaches_marks))
             .map(|layer| layer.id())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
             .collect();
         let all: Vec<LayerId> = directory.layer_ids().collect();
 
-        let read = attaching_in(&directory, &source.attaching_anchor_layers(&all));
+        let read = source.attaching_anchor_layers(&all);
 
         assert!(!read.is_empty());
-        assert_eq!(read, attaching_in(&imported, &imported_attaching));
+        assert_eq!(read, expected);
     }
 
     #[test]
@@ -648,6 +563,19 @@ mod tests {
         std::fs::write(&path, source.replace("ref = period;", "ref = missing;")).unwrap();
 
         assert_refuses_missing_base(&path);
+    }
+
+    #[test]
+    fn the_source_keeps_the_report_import_gives() {
+        let path = fixtures::font("MultiFamily.glyphs");
+        let import = FontLoader::new()
+            .stream_font(path.to_str().unwrap())
+            .unwrap();
+
+        let OpenedAuthoredSource { source, .. } = open(&path);
+
+        assert!(!import.report().losses.is_empty());
+        assert_eq!(source.report(), import.report());
     }
 
     #[test]

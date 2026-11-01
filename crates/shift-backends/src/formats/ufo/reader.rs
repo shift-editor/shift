@@ -263,7 +263,7 @@ impl UfoReader {
                 &pending.matrix,
             ));
         }
-        Ok(layer)
+        Ok(layer.with_derived_entity_ids())
     }
 
     fn load_features(ufo_path: &Path) -> FeatureData {

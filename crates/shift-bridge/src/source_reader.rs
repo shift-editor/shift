@@ -5,7 +5,7 @@
 //! for a document, and answers the same shift-engine [`StoreReader`]
 //! requests glyph by glyph from the file itself: nothing is imported or
 //! written. The utility process parses the file separately for the preview's
-//! atlas; both name glyphs alike ([`shift_backends::SourceGlyphIds`]).
+//! atlas; both name glyphs alike ([`shift_backends::SourceIds`]).
 //!
 //! [`LayerReader`]: crate::layer_reader::LayerReader
 

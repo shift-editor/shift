@@ -100,6 +100,21 @@ describe("SourceReader answers the engine's store requests from a UFO", () => {
 });
 
 describe("SourceReader.open", () => {
+  it("gives every glyph, layer and source the same id each time it opens a file", () => {
+    const records = () => {
+      const reader = SourceReader.open(UFO);
+      const engine = engineOpen(reader.directory(), (method, numbers, blobs) =>
+        reader.request(method, numbers, [...blobs]),
+      );
+      const reads = engineReads(engine);
+      const answer = { glyphs: reads.glyphRecords(), sources: reads.sources() };
+      engineRelease(engine);
+      return answer;
+    };
+
+    expect(records()).toEqual(records());
+  });
+
   it("refuses a compiled font, which has no authored glyphs", () => {
     expect(() => SourceReader.open(join(FONTS, "mutatorsans/MutatorSans.ttf"))).toThrow(
       /glyph by glyph/,
