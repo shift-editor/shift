@@ -14,6 +14,7 @@ const recents = {
       location: "~",
       missing: false,
       specimen: null,
+      preview: { status: "pending" as const },
     },
   ],
   open: () => {},

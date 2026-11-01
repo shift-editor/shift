@@ -1,4 +1,6 @@
+import { asNodeId, type NodeId } from "@shift/types";
 import type { Editor } from "@shift/editor";
+import type { PageCamera } from "@shift/editor/types";
 import { effect, track, type Signal } from "@shift/editor/signals";
 import { DocumentViews } from "@/lib/workspace/documentViews";
 import type { WindowTabs } from "./WindowTabs";
@@ -16,8 +18,8 @@ export interface WindowViewMemoryOptions {
 }
 
 /**
- * Remembers a window's tabs and shown page with its other view state, and
- * reopens them with the document.
+ * Remembers a window's tabs, shown page and each page's camera with its
+ * other view state, and reopens them with the document.
  *
  * @remarks
  * View state is personal, so it goes into {@link DocumentViews}, never the
@@ -48,6 +50,9 @@ export class WindowViewMemory {
       track(tabs.tabsCell);
       track(tabs.selectionPageIdCell);
       track(editor.scene.shownPageIdCell);
+      track(editor.pages.camerasCell);
+      track(editor.panCell);
+      track(editor.zoomCell);
       track(this.#keyCell);
       this.#schedule();
     });
@@ -55,11 +60,14 @@ export class WindowViewMemory {
   }
 
   /**
-   * Reopens the tabs and the shown page remembered for the open document.
+   * Reopens the tabs, the shown page and the page cameras remembered for the
+   * open document.
    *
    * @remarks
    * Call once the document's canvas is restored, so the pages the tabs show
-   * exist. Tabs whose page or glyph is gone are dropped and logged.
+   * exist. Tabs whose page or glyph is gone are dropped and logged, and a
+   * camera whose page is gone is dropped. The cameras go back first, so the
+   * shown page opens with its own.
    */
   restore(): void {
     this.#restored = true;
@@ -67,6 +75,7 @@ export class WindowViewMemory {
     const view = key === null ? null : this.#views.read(key);
     if (!view) return;
 
+    this.#editor.pages.restoreCameras(storedCameras(view.cameras));
     this.#tabs.restore({
       tabs: view.tabs ?? [],
       selectionPageId: view.selectionPageId ?? null,
@@ -89,6 +98,7 @@ export class WindowViewMemory {
       tabs: [...tabs],
       selectionPageId: selectionPageId ?? undefined,
       pageId: pageId ?? undefined,
+      cameras: Object.fromEntries(this.#editor.pages.cameras()),
     });
   }
 
@@ -109,4 +119,13 @@ export class WindowViewMemory {
     clearTimeout(this.#timer);
     this.#timer = null;
   }
+}
+
+/** The cameras a view kept, by page id; none when it kept no cameras. */
+function storedCameras(
+  cameras: Readonly<Record<NodeId, PageCamera>> | undefined,
+): ReadonlyMap<NodeId, PageCamera> {
+  return new Map(
+    Object.entries(cameras ?? {}).map(([pageId, camera]) => [asNodeId(pageId), camera]),
+  );
 }

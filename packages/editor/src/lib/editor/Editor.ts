@@ -278,7 +278,8 @@ export class Editor {
     this.#store = new ShiftStore();
     this.#fontStore = options.fontStore;
     this.#sessionScene = options.sessionMode === "workspace" ? null : new SessionScene();
-    this.scene = new Scene(this.#sessionScene ?? this.font.editCoordinator.scene, {
+    const sceneDocument = this.#sessionScene ?? this.font.editCoordinator.scene;
+    this.scene = new Scene(sceneDocument, {
       references: (node) => this.nodeDefinition(node.kind).references?.(node) ?? [],
       recording: () => (this.history.recording ? "undoable" : "unrecorded"),
       changed: (ids) => this.history.touched(ids),
@@ -336,6 +337,7 @@ export class Editor {
     );
     this.history.onCaptureFinishing((changed) => this.#runContentHooks(changed));
     this.pages = new Pages(this);
+    sceneDocument.followReplays((location) => this.pages.reveal(location));
     // A session without a document starts with one page; setup, not an edit.
     // A document's scene has its first page already.
     if (this.#sessionScene) this.history.withoutRecording(() => this.pages.ensure());
@@ -2100,6 +2102,11 @@ export class Editor {
 
   public get zoomCell(): Signal<number> {
     return this.#camera.zoomCell;
+  }
+
+  /** Reactive screen position of the scene origin; with {@link zoomCell}, what a page's camera remembers. */
+  public get panCell(): Signal<Point2D> {
+    return this.#camera.panCell;
   }
 
   public get fps(): Signal<number> {

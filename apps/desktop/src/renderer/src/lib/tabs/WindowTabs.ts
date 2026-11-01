@@ -1,6 +1,7 @@
 import type { Editor } from "@shift/editor";
 import { computed, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
 import type { GlyphNode, PageNode } from "@shift/editor/types";
+import type { EditLocation } from "@shift/wasm/protocol";
 import type { GlyphId, NodeId } from "@shift/types";
 import { CANVAS_PATH, glyphIdFromPath } from "@/lib/editorRoute";
 import type { StoredTab } from "@/lib/workspace/documentViews";
@@ -150,6 +151,46 @@ export class WindowTabs {
   /** Returns the tab showing glyph `glyphId`, or null when it has none. */
   glyphTab(glyphId: GlyphId): MovableTab | null {
     return this.#movable().find((tab) => tab.kind === "glyph" && tab.glyphId === glyphId) ?? null;
+  }
+
+  /**
+   * Returns the tab that holds `pageId`: the overview for its selection
+   * page, or the page or glyph tab open on it; null when none does.
+   */
+  tabHolding(pageId: NodeId): WindowTab | null {
+    if (pageId === this.#selectionPageIdCell.peek()) return GLYPHS_TAB;
+
+    return this.#movable().find((tab) => tab.pageId === pageId) ?? null;
+  }
+
+  /**
+   * Opens the tab for where an undo or redo was made when it is closed, and
+   * returns it: the tab holding its page, else a new page tab, or a glyph tab
+   * for a glyph page; when closing a glyph tab took the page with it, the
+   * glyph's tab again. Null when neither page nor glyph is left.
+   */
+  reopenTabFor(location: EditLocation): WindowTab | null {
+    const page = this.#editor.scene.nodeOfKind(location.pageId ?? null, "page");
+    if (page) return this.tabHolding(page.id) ?? this.#reopenPageTab(page);
+
+    const [glyphId] = location.glyphIds;
+    if (!glyphId) return null;
+
+    this.openGlyph(glyphId);
+    return this.glyphTab(glyphId);
+  }
+
+  /**
+   * Has `show` show the tab for each undo or redo's page, as the window's
+   * navigation shows any tab.
+   *
+   * @returns a function that stops following.
+   */
+  followReveals(show: (tab: WindowTab) => void): () => void {
+    return this.#editor.pages.onReveal((location) => {
+      const tab = this.reopenTabFor(location);
+      if (tab) show(tab);
+    });
   }
 
   /** Returns the page's tab, opening one after the last tab when it has none. */
@@ -365,20 +406,47 @@ export class WindowTabs {
     for (const page of scene.pages()) {
       if (page.role !== "glyph" || held.has(page.id)) continue;
 
-      const run = scene.children(page.id).find((node) => node.kind === "textRun");
-      const node =
-        run?.kind === "textRun" ? this.#editor.nodeDefinition("textRun").childGlyph(run) : null;
+      const node = this.#glyphOn(page.id);
       if (node?.glyphId === glyphId) return { page, node };
     }
     return null;
   }
 
-  /** Whether the view should fit `pageId` now: the first time this window shows it. */
+  /** A new tab for `page`: its page tab, or a glyph tab for a glyph page. */
+  #reopenPageTab(page: PageNode): WindowTab | null {
+    if (page.role !== "glyph") return this.openPage(page.id);
+
+    const glyph = this.#glyphOn(page.id);
+    if (!glyph) return null;
+
+    const tab: MovableTab = {
+      kind: "glyph",
+      id: this.#mintId(),
+      pageId: page.id,
+      glyphId: glyph.glyphId,
+    };
+    this.#openedCell.set([...this.#movable(), tab]);
+    return tab;
+  }
+
+  /** The glyph node a glyph page shows, in its one text run. */
+  #glyphOn(pageId: NodeId): GlyphNode | null {
+    const run = this.#editor.scene.children(pageId).find((node) => node.kind === "textRun");
+    if (run?.kind !== "textRun") return null;
+
+    return this.#editor.nodeDefinition("textRun").childGlyph(run);
+  }
+
+  /**
+   * Whether the view should fit `pageId` now: the first time this window
+   * shows it, unless the page has a camera to show it with, such as one the
+   * window kept from an earlier session.
+   */
   #frame(pageId: NodeId): boolean {
     if (this.#framed.has(pageId)) return false;
 
     this.#framed.add(pageId);
-    return true;
+    return !this.#editor.pages.remembersCamera(pageId);
   }
 
   /** The page and glyph tabs, as {@link tabsCell} resolves them now. */

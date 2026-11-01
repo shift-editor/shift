@@ -228,6 +228,7 @@ export {
   Check,
   ChevronDown,
   ChevronRight,
+  CircleHelp,
   Copy,
   FileIcon,
   LayoutGrid,

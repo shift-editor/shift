@@ -7,6 +7,7 @@ import {
   SHIFT_WEBSITE_URL,
   SHIFT_X_URL,
 } from "../../shared/links";
+import { helpCommandLabels } from "../../shared/commands";
 
 const appCommands: Command[] = [
   {
@@ -36,32 +37,32 @@ const appCommands: Command[] = [
 const helpCommands: Command[] = [
   {
     id: "help.openWebsite",
-    label: "Website",
+    label: helpCommandLabels["help.openWebsite"],
     run: () => shell.openExternal(SHIFT_WEBSITE_URL),
   },
   {
     id: "help.openDiscord",
-    label: "Discord",
+    label: helpCommandLabels["help.openDiscord"],
     run: () => shell.openExternal(SHIFT_DISCORD_URL),
   },
   {
     id: "help.openX",
-    label: "X / Twitter",
+    label: helpCommandLabels["help.openX"],
     run: () => shell.openExternal(SHIFT_X_URL),
   },
   {
     id: "help.reportIssue",
-    label: "Report a Problem…",
+    label: helpCommandLabels["help.reportIssue"],
     run: () => shell.openExternal(SHIFT_NEW_ISSUE_URL),
   },
   {
     id: "help.showLogs",
-    label: "Show Logs",
+    label: helpCommandLabels["help.showLogs"],
     run: () => shell.showItemInFolder(log.transports.file.getFile().path),
   },
   {
     id: "help.emailFeedback",
-    label: "Feedback…",
+    label: helpCommandLabels["help.emailFeedback"],
     run: (ctx) => ctx.windows.showFeedback(),
   },
 ];

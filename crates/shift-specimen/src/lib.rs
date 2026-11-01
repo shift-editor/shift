@@ -14,6 +14,10 @@
 //!
 //! Outlines are returned in font units with the y axis pointing down, ready to
 //! use as SVG path data.
+//!
+//! Beside the short specimen, [`Specimen::family_name`] draws the font's family
+//! name in the font itself, sized for the launcher's wide "Last opened" tile by
+//! the rules in [`NameBox`].
 
 // Library code returns errors instead of panicking: a panic kills the
 // WebAssembly engine. Tests may unwrap (clippy.toml).
@@ -28,6 +32,10 @@ use skrifa::raw::TableProvider;
 use skrifa::raw::types::Tag;
 use skrifa::{FontRef, MetadataProvider};
 use unicode_script::{Script, UnicodeScript};
+
+mod name;
+
+pub use name::{NameBox, NameFit, NameSpecimen};
 
 /// Letters of a non-Latin script a font must cover before that script is
 /// treated as its main script.
@@ -49,9 +57,19 @@ pub struct Specimen {
     /// Viewport around the ink in the same units as [`Self::outline`],
     /// padded and enlarged to at least a minimum height.
     pub view_box: ViewBox,
+    /// Font units per em, to draw the specimen at a given font size.
+    pub units_per_em: f64,
     /// Whether the text runs right to left; a thumbnail wider than the
     /// specimen aligns it to the right edge.
     pub right_to_left: bool,
+    /// The family name drawn in the font and fitted to [`NameBox::WIDE_TILE`],
+    /// or `None` when the font cannot draw it legibly there; the tile then
+    /// shows this specimen instead.
+    pub family_name: Option<NameSpecimen>,
+    /// The font's name for a caption: the family and its style, as
+    /// `Host Grotesk Bold`, leaving out a `Regular` style; `None` when the
+    /// font has no family name.
+    pub display_name: Option<String>,
 }
 
 /// Rectangle in SVG viewport coordinates.
@@ -70,7 +88,7 @@ pub struct ViewBox {
 pub fn specimen(font_data: &[u8]) -> Option<Specimen> {
     let font = SpecimenFont::new(font_data)?;
     let coverage = Coverage::from_characters(font.characters());
-    specimen_from(&font, &coverage)
+    font.specimen(&coverage)
 }
 
 /// Builds the specimen from a compiled subset of a font, deciding with the
@@ -78,11 +96,12 @@ pub fn specimen(font_data: &[u8]) -> Option<Specimen> {
 ///
 /// `font_data` must include the glyphs for every character in
 /// [`subset_plan`]'s result, plus the first glyphs with outlines in glyph
-/// order; `characters` is every character the whole font maps.
+/// order, and the full font's `name` table; `characters` is every character
+/// the whole font maps.
 pub fn specimen_with_characters(font_data: &[u8], characters: &[char]) -> Option<Specimen> {
     let font = SpecimenFont::new(font_data)?;
     let coverage = Coverage::from_characters(characters.iter().copied());
-    specimen_from(&font, &coverage)
+    font.specimen(&coverage)
 }
 
 /// What a font source must compile so [`specimen_with_characters`] can draw
@@ -96,11 +115,14 @@ pub struct SubsetPlan {
     pub needs_features: bool,
 }
 
-/// Plans the smallest compile that still draws the right specimen.
+/// Plans the smallest compile that still draws the right specimen and the
+/// family name.
 ///
 /// Only the glyph-independent rules are applied here: the specimen text is
-/// still chosen after shaping the compiled subset.
-pub fn subset_plan(characters: &[char]) -> SubsetPlan {
+/// still chosen, and the family name fitted, after shaping the compiled
+/// subset. `family_name` is the name the compiled font will carry in `name`
+/// ID 16 (or 1); its characters the font maps are planned too.
+pub fn subset_plan(characters: &[char], family_name: Option<&str>) -> SubsetPlan {
     let coverage = Coverage::from_characters(characters.iter().copied());
     if coverage.is_symbol_font() {
         return SubsetPlan {
@@ -111,6 +133,7 @@ pub fn subset_plan(characters: &[char]) -> SubsetPlan {
 
     let covered = |character: &char| characters.contains(character);
     let mut planned: Vec<char> = ['A', 'g', 'G', 'a'].into_iter().filter(covered).collect();
+    planned.extend(family_name.unwrap_or_default().chars().filter(covered));
     let draws_ag = covered(&'A') && covered(&'g');
     let script = coverage.main_script();
     if let Some(script) = script {
@@ -129,30 +152,6 @@ pub fn subset_plan(characters: &[char]) -> SubsetPlan {
         characters: planned,
         needs_features: !draws_ag && script.is_some_and(SpecimenScript::needs_contextual_forms),
     }
-}
-
-fn specimen_from(font: &SpecimenFont, coverage: &Coverage) -> Option<Specimen> {
-    if coverage.is_symbol_font() {
-        return font.glyph_order_specimen();
-    }
-    if let Some(script) = font.declared_script()
-        && let Some(specimen) = font.script_specimen(script, coverage)
-    {
-        return Some(specimen);
-    }
-    if let Some(specimen) = font.shaped_specimen("Ag") {
-        return Some(specimen);
-    }
-    if let Some(script) = coverage.main_script()
-        && let Some(specimen) = font.script_specimen(script, coverage)
-    {
-        return Some(specimen);
-    }
-
-    ["AG", "ag"]
-        .into_iter()
-        .find_map(|text| font.shaped_specimen(text))
-        .or_else(|| font.glyph_order_specimen())
 }
 
 /// Letters of the main script kept in a subset for the "first two drawn
@@ -355,6 +354,21 @@ struct PlacedGlyph {
     y: f64,
 }
 
+/// Text shaped onto one line, with the clusters that draw ink.
+#[derive(Default)]
+struct ShapedLine {
+    placed: Vec<PlacedGlyph>,
+    clusters: Vec<usize>,
+    inked_clusters: Vec<usize>,
+}
+
+/// SVG path data for placed glyphs and the bounds of their ink, in font
+/// units with y down.
+struct DrawnGlyphs {
+    path: String,
+    ink: Bounds,
+}
+
 /// A compiled font at its default location: skrifa reads the tables that
 /// choose the specimen, and the shared proof primitive shapes and outlines
 /// it.
@@ -374,6 +388,41 @@ impl<'a> SpecimenFont<'a> {
             proof,
             units_per_em,
         })
+    }
+
+    /// Chooses the short specimen and draws the family name beside it.
+    fn specimen(&self, coverage: &Coverage) -> Option<Specimen> {
+        let specimen = self.short_specimen(coverage)?;
+        Some(Specimen {
+            family_name: self.name_specimen(NameBox::WIDE_TILE),
+            display_name: self.display_name(),
+            ..specimen
+        })
+    }
+
+    /// Applies the specimen rules in order; see the module documentation.
+    fn short_specimen(&self, coverage: &Coverage) -> Option<Specimen> {
+        if coverage.is_symbol_font() {
+            return self.glyph_order_specimen();
+        }
+        if let Some(script) = self.declared_script()
+            && let Some(specimen) = self.script_specimen(script, coverage)
+        {
+            return Some(specimen);
+        }
+        if let Some(specimen) = self.shaped_specimen("Ag") {
+            return Some(specimen);
+        }
+        if let Some(script) = coverage.main_script()
+            && let Some(specimen) = self.script_specimen(script, coverage)
+        {
+            return Some(specimen);
+        }
+
+        ["AG", "ag"]
+            .into_iter()
+            .find_map(|text| self.shaped_specimen(text))
+            .or_else(|| self.glyph_order_specimen())
     }
 
     fn characters(&self) -> impl Iterator<Item = char> + '_ {
@@ -432,6 +481,24 @@ impl<'a> SpecimenFont<'a> {
 
     /// Shapes `text` and returns it only when every cluster draws ink.
     fn shaped_specimen(&self, text: &str) -> Option<Specimen> {
+        let line = self.shape_line(text)?;
+        let every_cluster_inked = line
+            .clusters
+            .iter()
+            .all(|cluster| line.inked_clusters.contains(cluster));
+        if !every_cluster_inked {
+            return None;
+        }
+
+        let right_to_left = text
+            .chars()
+            .any(|character| matches!(character.script(), Script::Arabic | Script::Hebrew));
+        self.outline(text.to_string(), &line.placed, right_to_left)
+    }
+
+    /// Shapes `text` onto one line from the origin, or `None` when it is
+    /// empty or any character falls back to `.notdef`.
+    fn shape_line(&self, text: &str) -> Option<ShapedLine> {
         if text.is_empty() {
             return None;
         }
@@ -440,35 +507,24 @@ impl<'a> SpecimenFont<'a> {
             .proof
             .shape_glyphs(text, &ShapingOptions::default())
             .glyphs;
-        let mut placed = Vec::new();
-        let mut inked_clusters = Vec::new();
+        let mut line = ShapedLine::default();
         let mut pen_x = 0.0;
         for glyph in &shaped {
             if glyph.glyph_id == 0 {
                 return None;
             }
             if self.has_ink(glyph.glyph_id) {
-                inked_clusters.push(glyph.cluster);
+                line.inked_clusters.push(glyph.cluster);
             }
-            placed.push(PlacedGlyph {
+            line.clusters.push(glyph.cluster);
+            line.placed.push(PlacedGlyph {
                 glyph_id: glyph.glyph_id,
                 x: pen_x + f64::from(glyph.x_offset),
                 y: f64::from(glyph.y_offset),
             });
             pen_x += f64::from(glyph.x_advance);
         }
-
-        let every_cluster_inked = shaped
-            .iter()
-            .all(|glyph| inked_clusters.contains(&glyph.cluster));
-        if !every_cluster_inked {
-            return None;
-        }
-
-        let right_to_left = text
-            .chars()
-            .any(|character| matches!(character.script(), Script::Arabic | Script::Hebrew));
-        self.outline(text.to_string(), &placed, right_to_left)
+        Some(line)
     }
 
     /// Places the first two glyphs with ink by glyph order, skipping `.notdef`.
@@ -516,25 +572,34 @@ impl<'a> SpecimenFont<'a> {
         placed: &[PlacedGlyph],
         right_to_left: bool,
     ) -> Option<Specimen> {
-        let mut outline = String::new();
-        let mut bounds: Option<Bounds> = None;
+        let drawn = self.draw_glyphs(placed, 0.0)?;
+        Some(Specimen {
+            text,
+            outline: drawn.path,
+            view_box: self.fit(drawn.ink),
+            units_per_em: self.units_per_em,
+            right_to_left,
+            family_name: None,
+            display_name: None,
+        })
+    }
+
+    /// Draws placed glyphs as one SVG path whose baseline sits at `baseline`
+    /// (font units, y down), or `None` when none of them has ink.
+    fn draw_glyphs(&self, placed: &[PlacedGlyph], baseline: f64) -> Option<DrawnGlyphs> {
+        let mut path = String::new();
+        let mut ink: Option<Bounds> = None;
         for glyph in placed {
-            let mut pen = SvgPen::new(glyph.x, glyph.y);
+            let mut pen = SvgPen::new(glyph.x, glyph.y - baseline);
             self.draw(glyph.glyph_id, &mut pen);
-            outline.push_str(&pen.path);
-            bounds = match (bounds, pen.bounds) {
+            path.push_str(&pen.path);
+            ink = match (ink, pen.bounds) {
                 (Some(current), Some(next)) => Some(current.union(next)),
                 (current, next) => current.or(next),
             };
         }
 
-        let bounds = bounds?;
-        Some(Specimen {
-            text,
-            outline,
-            view_box: self.fit(bounds),
-            right_to_left,
-        })
+        Some(DrawnGlyphs { path, ink: ink? })
     }
 
     /// Pads the ink and grows the viewport to the minimum height, centred on
