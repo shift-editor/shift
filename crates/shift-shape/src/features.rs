@@ -91,7 +91,8 @@ const REGISTERED_NAMES: [(&[u8; 4], &str); 60] = [
 ];
 
 /// The kind of thing a feature changes, which a feature list groups by.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum FeatureGroup {
     Ligatures,
     LetterCase,
@@ -100,6 +101,7 @@ pub enum FeatureGroup {
     StylisticSets,
     CharacterVariants,
     Alternates,
+    #[default]
     Other,
 }
 
@@ -151,7 +153,8 @@ fn default_name(tag: Tag) -> Option<String> {
 }
 
 /// What a feature does when text does not set it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum FeatureDefault {
     /// The shaper always applies it: a script's shaping needs it, or export
     /// generates it. Text never switches it.
@@ -159,6 +162,7 @@ pub enum FeatureDefault {
     /// The shaper applies it unless text turns it off, such as `liga`.
     On,
     /// The shaper applies it only when text turns it on, such as `ss01`.
+    #[default]
     Off,
 }
 
@@ -174,12 +178,27 @@ impl FeatureDefault {
             Self::Off
         }
     }
+
+    /// Whether the shaper applies a feature treated so when text sets it to
+    /// `setting` (`None` when text leaves it): text's setting wins, a value
+    /// above 0 applying it and 0 not; left unset, a `Required` or `On`
+    /// feature applies and an `Off` one does not. The Features section
+    /// offers no switch for a `Required` one.
+    pub fn applies(self, setting: Option<u32>) -> bool {
+        match (self, setting) {
+            (_, Some(value)) => value > 0,
+            (Self::Required | Self::On, None) => true,
+            (Self::Off, None) => false,
+        }
+    }
 }
 
 /// A feature the shaping font defines.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct FontFeature {
-    pub tag: Tag,
+    /// The feature tag, such as `liga` or `ss01`.
+    pub tag: String,
     /// The name it is shown by: the one a `featureNames` block gives a
     /// stylistic set or character variant, otherwise the registered name or a
     /// numbered set's; `None` for a tag with none.
@@ -214,7 +233,7 @@ impl Shaper {
         Ok(names
             .into_iter()
             .map(|(tag, name)| FontFeature {
-                tag,
+                tag: tag.to_string(),
                 name: name.or_else(|| default_name(tag)),
                 default: FeatureDefault::of(tag),
                 group: FeatureGroup::of(tag),

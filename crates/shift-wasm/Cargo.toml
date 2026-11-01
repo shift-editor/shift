@@ -27,7 +27,13 @@ engine = [
 # that answers them: what the editor's generated side is written from. Kept
 # out of the default build, which would otherwise link shift-wire, and with
 # it napi's symbols wherever another crate turns napi on.
-engine-protocol = ["dep:shift-engine", "dep:shift-layout", "dep:shift-wire"]
+engine-protocol = [
+    "dep:shift-engine",
+    "dep:shift-layout",
+    "dep:shift-shape",
+    "dep:shift-wire",
+    "shift-shape/pack",
+]
 
 [dependencies]
 fontir = "1.0.0"
