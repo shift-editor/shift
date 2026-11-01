@@ -145,6 +145,55 @@ fn turning_on_a_feature_that_is_off_by_default_applies_it() {
 }
 
 #[test]
+fn features_list_each_tag_once_with_names_and_defaults() {
+    let font = font_with(
+        &[
+            ("a", Some('a')),
+            ("a.ss01", None),
+            ("f", Some('f')),
+            ("i", Some('i')),
+            ("f_i", None),
+        ],
+        "languagesystem DFLT dflt;
+         languagesystem latn dflt;
+         feature ccmp { sub a by a; } ccmp;
+         feature liga { sub f i by f_i; } liga;
+         feature ss01 {
+             featureNames { name \"Single-storey a\"; };
+             sub a by a.ss01;
+         } ss01;",
+    );
+
+    let features: Vec<_> = shaper(&font)
+        .features()
+        .unwrap()
+        .into_iter()
+        .map(|feature| (feature.tag.to_string(), feature.name, feature.default))
+        .collect();
+
+    assert_eq!(
+        features,
+        vec![
+            (
+                "ccmp".to_string(),
+                Some("Glyph Composition".to_string()),
+                FeatureDefault::Required
+            ),
+            (
+                "liga".to_string(),
+                Some("Standard Ligatures".to_string()),
+                FeatureDefault::On
+            ),
+            (
+                "ss01".to_string(),
+                Some("Single-storey a".to_string()),
+                FeatureDefault::Off
+            ),
+        ]
+    );
+}
+
+#[test]
 fn inserted_glyphs_shape_as_themselves() {
     let font = ligature_font();
     let location = ExternalLocation::new();

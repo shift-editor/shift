@@ -65,7 +65,7 @@ import type {
   WorkspaceEditCoordinator,
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
-import type { LayoutRequest, TextLayout as LaidOutText } from "@shift/wasm/protocol";
+import type { FontFeature, LayoutRequest, TextLayout as LaidOutText } from "@shift/wasm/protocol";
 import { EngineVariationReader, StatelessVariationReader, locationValues } from "../wasm/variation";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
@@ -1472,6 +1472,22 @@ export class Font {
       };
     });
     return engine.layoutText(text, place);
+  }
+
+  /**
+   * The features the font's compiled feature code defines, in tag order,
+   * each with the name it is shown by, its default and its group, from the
+   * window's engine's shaper font. Tracks the revision of each change flag
+   * the shaper font reads, so a computed that lists them does again after an
+   * edit that may change it.
+   *
+   * @returns empty without an open engine or a shaper.
+   */
+  fontFeatures(): readonly FontFeature[] {
+    const engine = this.#store.engine;
+    if (!engine) return [];
+    for (const flag of engine.shaperInputs()) track(engine.revision(flag));
+    return engine.fontFeatures() ?? [];
   }
 
   /** @knipclassignore — used by VariationPanel component */

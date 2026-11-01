@@ -48,6 +48,7 @@ import type {
   InterpolatedMetrics,
   MissingKerningOrigin,
   FontChangeFlag,
+  FontFeature,
   LayoutRequest,
   SourceSetWeights,
   PlacedText,
@@ -348,6 +349,19 @@ export class EngineSession {
   /** The change flags whose change may change what {@link layoutText} returns. */
   layoutInputs(): readonly FontChangeFlag[] {
     return this.#reads.layoutInputs();
+  }
+
+  /**
+   * The features the session's shaper font defines, in tag order, as
+   * shift-shape lists them: name, default and group. Empty without a shaper.
+   */
+  fontFeatures(): readonly FontFeature[] {
+    return this.#reads.fontFeatures();
+  }
+
+  /** The change flags whose change may change the session's shaper font. */
+  shaperInputs(): readonly FontChangeFlag[] {
+    return this.#reads.shaperInputs();
   }
 
   /**

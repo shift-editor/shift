@@ -33,6 +33,7 @@ mod exports {
     use shift_shaper_font::{LiveShaper, ShaperFontError, ShaperFontRequest, ShaperFontState};
 
     use super::ShapingFailure;
+    use crate::engine_reads::{FeatureDefault, FeatureGroup, FontFeature};
 
     /// A session's shaper: the shaper font compiled from the session's font,
     /// and a shaper over it that maps characters through the font's Unicode
@@ -150,6 +151,26 @@ mod exports {
             TextLayout::new(&layout_font, request)
         }
 
+        /// The features the shaper font defines, in tag order, with the
+        /// shaper brought up to date first as for [`Self::layout_text`];
+        /// empty when there is no shaper or its font cannot be read.
+        pub(crate) fn features<E: std::fmt::Display>(
+            &self,
+            font: &Font,
+            source: impl FnOnce() -> Result<ShaperFontSource, E>,
+        ) -> Vec<FontFeature> {
+            let state = self.current(font, source);
+            let Ok(shaper) = state.shaper() else {
+                return Vec::new();
+            };
+            shaper
+                .features()
+                .unwrap_or_default()
+                .into_iter()
+                .map(FontFeature::from)
+                .collect()
+        }
+
         /// The shaper state, brought up to date with `font` when an edit may
         /// have changed what it reads.
         fn current<E: std::fmt::Display>(
@@ -168,6 +189,43 @@ mod exports {
                 state.failure = updated.err().filter(|_| state.shaper.is_none());
             }
             state
+        }
+    }
+
+    impl From<shift_shaper_font::FontFeature> for FontFeature {
+        fn from(feature: shift_shaper_font::FontFeature) -> Self {
+            Self {
+                tag: feature.tag.to_string(),
+                name: feature.name,
+                default: feature.default.into(),
+                group: feature.group.into(),
+            }
+        }
+    }
+
+    impl From<shift_shaper_font::FeatureDefault> for FeatureDefault {
+        fn from(default: shift_shaper_font::FeatureDefault) -> Self {
+            match default {
+                shift_shaper_font::FeatureDefault::Required => Self::Required,
+                shift_shaper_font::FeatureDefault::On => Self::On,
+                shift_shaper_font::FeatureDefault::Off => Self::Off,
+            }
+        }
+    }
+
+    impl From<shift_shaper_font::FeatureGroup> for FeatureGroup {
+        fn from(group: shift_shaper_font::FeatureGroup) -> Self {
+            use shift_shaper_font::FeatureGroup as Group;
+            match group {
+                Group::Ligatures => Self::Ligatures,
+                Group::LetterCase => Self::LetterCase,
+                Group::Figures => Self::Figures,
+                Group::FractionsAndPositions => Self::FractionsAndPositions,
+                Group::StylisticSets => Self::StylisticSets,
+                Group::CharacterVariants => Self::CharacterVariants,
+                Group::Alternates => Self::Alternates,
+                Group::Other => Self::Other,
+            }
         }
     }
 
@@ -225,6 +283,7 @@ mod exports {
         use shift_layout::{LayoutRequest, LayoutUnit, TextLayout, TextOptions};
 
         use super::{TextPlace, TextShaping};
+        use crate::engine_reads::{FeatureDefault, FeatureGroup, FontFeature};
 
         const LIGATURE: &str = "feature liga { sub f i by f_i; } liga;";
 
@@ -331,6 +390,24 @@ mod exports {
                 kerning: KerningBlend::default(),
             };
             shaping.layout_text(font, || Ok::<_, Infallible>(source(font)), &request, place)
+        }
+
+        #[test]
+        fn features_list_the_shaper_font_s_with_their_names_and_defaults() {
+            let font = font_with(&[("f", Some('f')), ("i", Some('i')), ("f_i", None)]);
+            let shaping = TextShaping::default();
+
+            let features = shaping.features(&font, || Ok::<_, Infallible>(source(&font)));
+
+            assert_eq!(
+                features,
+                [FontFeature {
+                    tag: "liga".to_string(),
+                    name: Some("Standard Ligatures".to_string()),
+                    default: FeatureDefault::On,
+                    group: FeatureGroup::Ligatures,
+                }]
+            );
         }
 
         #[test]

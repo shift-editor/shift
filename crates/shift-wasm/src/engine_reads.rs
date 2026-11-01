@@ -102,6 +102,15 @@ pub trait EngineReads {
     /// The flags whose change may change what [`Self::layout_text`]
     /// returns.
     fn layout_inputs(&self) -> Vec<FontChangeFlag>;
+    /// The features the session's shaper font defines, once per tag in tag
+    /// order, each with the name it is shown by, what it does when text does
+    /// not set it, and its group, as `shift_shape::Shaper::features` lists
+    /// them. The shaper is brought up to date first, as for
+    /// [`Self::layout_text`]; empty when there is none.
+    fn font_features(&self) -> Vec<FontFeature>;
+    /// The flags whose change may change the session's shaper font, and so
+    /// what [`Self::font_features`] returns.
+    fn shaper_inputs(&self) -> Vec<FontChangeFlag>;
     /// Every interned source set's weights at a design location, as the
     /// basis the session's font gives each set evaluates them
     /// (`InterpolationBasis::weights_at`): the weights of the sets a frame
@@ -141,6 +150,46 @@ pub struct PlacedText {
     /// The glyphs it shows whose layers the session has not loaded, which
     /// laid out from their placeholders.
     pub unloaded: Vec<GlyphId>,
+}
+
+/// What a feature does when text does not set it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Pack)]
+pub enum FeatureDefault {
+    /// The shaper always applies it: a script's shaping needs it, or export
+    /// generates it. Text never switches it.
+    Required,
+    /// Applied unless text turns it off, such as `liga`.
+    On,
+    /// Applied only when text turns it on, such as `ss01`.
+    #[default]
+    Off,
+}
+
+/// The kind of thing a feature changes, which a feature list groups by.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Pack)]
+pub enum FeatureGroup {
+    Ligatures,
+    LetterCase,
+    Figures,
+    FractionsAndPositions,
+    StylisticSets,
+    CharacterVariants,
+    Alternates,
+    #[default]
+    Other,
+}
+
+/// A feature the session's shaper font defines.
+#[derive(Clone, Debug, PartialEq, Eq, Pack)]
+pub struct FontFeature {
+    /// The feature tag, such as `liga` or `ss01`.
+    pub tag: String,
+    /// The name it is shown by: the font's own for a stylistic set or
+    /// character variant, otherwise the registered or numbered name; null
+    /// for a tag with none.
+    pub name: Option<String>,
+    pub default: FeatureDefault,
+    pub group: FeatureGroup,
 }
 
 /// The authored pair an edit to the kerning between two glyphs at a source changes.
@@ -202,8 +251,9 @@ mod exports {
     use wasm_bindgen::prelude::*;
 
     use super::{
-        Axis, EditablePair, EngineReads, FontChangeFlag, InterpolatedMetrics, KerningSnapshot,
-        PlacedText, Source, SourceSetWeights, TextLayoutRequest, engine_reads_request,
+        Axis, EditablePair, EngineReads, FontChangeFlag, FontFeature, InterpolatedMetrics,
+        KerningSnapshot, PlacedText, Source, SourceSetWeights, TextLayoutRequest,
+        engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::shaping::{TextPlace, TextShaping};
@@ -564,6 +614,15 @@ mod exports {
 
         fn layout_inputs(&self) -> Vec<FontChangeFlag> {
             FontChangeFlag::of(TextShaping::LAYOUT_INPUTS).collect()
+        }
+
+        fn font_features(&self) -> Vec<FontFeature> {
+            self.shaping
+                .features(self.session.font(), || self.shaper_font_source())
+        }
+
+        fn shaper_inputs(&self) -> Vec<FontChangeFlag> {
+            FontChangeFlag::of(TextShaping::INPUTS).collect()
         }
 
         fn source_set_weights(&self, location: Vec<f64>) -> SourceSetWeights {

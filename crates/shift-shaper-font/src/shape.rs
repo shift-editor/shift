@@ -8,7 +8,9 @@ use shift_shape::{
 };
 
 use shift_shape::Tag;
-pub use shift_shape::{FeatureSetting, ShapeError, TextDirection};
+pub use shift_shape::{
+    FeatureDefault, FeatureGroup, FeatureSetting, FontFeature, ShapeError, TextDirection,
+};
 
 use super::positioning::{GeneratedPositioning, LiveAdvances, MarkerHook};
 use super::{ShaperFont, ShaperGlyphOrder};
@@ -92,6 +94,16 @@ impl LiveShaper {
     /// Returns the shaper font this shaper uses.
     pub fn font(&self) -> &Arc<ShaperFont> {
         &self.glyphs.font
+    }
+
+    /// Returns the features the shaper font defines, in tag order, with
+    /// their names, defaults and groups; see [`Shaper::features`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShapeError::InvalidFont`] when the shaper font cannot be read.
+    pub fn features(&self) -> Result<Vec<FontFeature>, ShapeError> {
+        self.shaper.features()
     }
 
     /// Shapes one run of text.

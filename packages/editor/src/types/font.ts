@@ -33,6 +33,7 @@ import type {
 } from "../lib/wasm/engine";
 import type {
   FontChangeFlag,
+  FontFeature,
   LayoutRequest,
   TextLayout as LaidOutText,
 } from "@shift/wasm/protocol";
@@ -106,6 +107,8 @@ export interface FontEngine {
   revision(flag: FontChangeFlag): Signal<number>;
   /** The flags whose change may change what {@link layoutText} returns. */
   layoutInputs(): readonly FontChangeFlag[];
+  /** The flags whose change may change the engine's shaper font, and so {@link fontFeatures}. */
+  shaperInputs(): readonly FontChangeFlag[];
   /**
    * Stops showing a gesture's preview in text: {@link layoutText} reads the
    * font as it stands again.
@@ -203,6 +206,14 @@ export interface FontEngine {
    * @returns null only while the engine is not open.
    */
   layoutText(text: LayoutRequest, place: KerningPlace): LaidOutText | null;
+
+  /**
+   * The features the engine's shaper font defines, in tag order, each with
+   * the name it is shown by, its default and its group.
+   *
+   * @returns null only while the engine is not open; empty when it has no shaper.
+   */
+  fontFeatures(): readonly FontFeature[] | null;
 }
 
 /**
