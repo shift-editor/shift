@@ -1,10 +1,9 @@
 import { isConvertiblePreviewPath } from "@shared/workspace/previewConversion";
-import type { Editor } from "@shift/editor";
-import type { Font } from "@shift/editor/model";
 import type { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
 import type { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import type { PreviewFontSession, WorkspaceFontSession } from "@/types/fontSession";
 import type { Workspace } from "./Workspace";
+import type { PreviewFont } from "./PreviewFont";
 import { WindowTabs } from "@/lib/tabs/WindowTabs";
 import { PageRenameGesture } from "@/lib/pages/PageRenameGesture";
 
@@ -42,16 +41,15 @@ export function createWorkspaceFontSession(
  *
  * @param catalog - Resident catalog owned for the session lifetime.
  * @param client - Session transport disposed after the renderer composition.
- * @param font - Imported font model disposed with the session.
- * @param editor - Read-only editor sharing the imported font model.
+ * @param preview - The previewed font and its read-only editor, disposed with the session.
  * @returns a preview session whose disposal releases every owned resource.
  */
 export function createPreviewFontSession(
   catalog: GlyphCatalog,
   client: FontSessionClient,
-  font: Font,
-  editor: Editor,
+  preview: PreviewFont,
 ): PreviewFontSession {
+  const { font, editor } = preview;
   return {
     mode: "preview",
     canConvert: isConvertiblePreviewPath(client.sourceCell.peek()?.canonicalPath ?? ""),
@@ -63,7 +61,7 @@ export function createPreviewFontSession(
     pageRename: new PageRenameGesture(),
     dispose() {
       catalog.dispose();
-      font.dispose();
+      preview.dispose();
       client.dispose();
     },
   };

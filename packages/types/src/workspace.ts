@@ -40,6 +40,13 @@ export interface WorkspaceSnapshot {
 export type StoredWorkspaceSnapshot = Omit<WorkspaceSnapshot, keyof EngineFontRecords>;
 
 /**
+ * What a store answers at open besides the engine's records, as an engine
+ * reads it from its own font: a {@link StoredWorkspaceSnapshot} without the
+ * workspace's id.
+ */
+export type EngineFontHeader = Omit<StoredWorkspaceSnapshot, "workspaceId">;
+
+/**
  * The axes, sources and kerning of an open font, as the window's engine
  * reads them from its own font without asking its store.
  */

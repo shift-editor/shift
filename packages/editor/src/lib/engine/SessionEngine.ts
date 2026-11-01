@@ -1,8 +1,10 @@
 import type {
+  EngineFontHeader,
   EngineFontRecords,
   FontIntent,
   GlyphId,
   GlyphName,
+  GlyphSnapshot,
   LayerId,
   NodeId,
   SlugWeightSet,
@@ -132,6 +134,32 @@ export class SessionEngine implements FontEngine {
    */
   fontRecords(): EngineFontRecords {
     return this.#require().fontRecords();
+  }
+
+  /**
+   * The open font's metadata, metrics, metric rows, axis mappings, named
+   * instances and tracked languages: what a store answers at open beside
+   * {@link fontRecords}.
+   *
+   * @throws When no session is open, or the font's axis mappings cannot be compiled.
+   */
+  fontHeader(): EngineFontHeader {
+    return this.#require().fontHeader();
+  }
+
+  /**
+   * Loads `glyphIds` and the glyphs their components use, then reads each:
+   * its projection and master layers, as the native workspace's glyph
+   * snapshots give them. Loading tells layout readers, as {@link preload} does.
+   *
+   * @returns The glyphs first, then the glyphs their components use, each once.
+   * @throws When no session is open, the store's reader cannot answer, or a
+   * projection cannot be built.
+   */
+  glyphSnapshots(glyphIds: readonly GlyphId[]): readonly GlyphSnapshot[] {
+    const session = this.#require();
+    this.preload(glyphIds);
+    return session.glyphSnapshots(glyphIds);
   }
 
   /**

@@ -36,7 +36,10 @@ use shift_text::layout::{LayoutError, TextLayout};
 
 pub use crate::page_layout::{NodeBox, PageLayout, PageLayoutError, PageLayoutRequest, RunLines};
 pub use shift_text::shape::{FeatureDefault, FeatureGroup, FontFeature};
-use shift_wire::KerningSnapshot;
+use shift_wire::{
+    AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphSnapshot, KerningSnapshot,
+    MetricDefinition, NamedInstance, SourceMetricsInterpolationSnapshot,
+};
 
 /// What the editor reads from one engine session's font. Glyphs and sources
 /// are named by the numbers the session interned for them; `glyphs` lists
@@ -232,6 +235,60 @@ pub trait EngineReads {
         anchors: Vec<AnchorId>,
         components: Vec<ComponentId>,
     ) -> Result<Option<Counterparts>, CounterpartsReadError>;
+    /// The font's records a store answers beside its axes, sources, kerning
+    /// and glyph records: its metadata, metrics and metric rows, how source
+    /// metrics interpolate, its axis mappings and their compiled bases, its
+    /// named instances and its tracked languages, as the native workspace
+    /// reads them from its font.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontRecordsError`] when the font's axis mappings cannot be
+    /// compiled.
+    fn font_header(&self) -> Result<FontHeader, FontRecordsError>;
+    /// Each of `glyphs`, then the glyphs their components use, transitively,
+    /// each once: its projection (`Font::glyph_projection`) and its master
+    /// layers, as the native workspace's glyph snapshots give them. A glyph
+    /// the font lacks is left out.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontRecordsError::NotLoaded`] for a glyph whose layers the
+    /// session has not loaded (load its closure first), and
+    /// [`FontRecordsError::Unprojectable`] when a projection cannot be built.
+    fn glyph_snapshots(&self, glyphs: Vec<GlyphId>)
+    -> Result<Vec<GlyphSnapshot>, FontRecordsError>;
+}
+
+/// The records [`EngineReads::font_header`] reads: what a font's store
+/// answers at open besides its axes, sources, kerning and glyph records.
+#[derive(Clone, Debug, Pack)]
+pub struct FontHeader {
+    pub metadata: FontMetadata,
+    pub metrics: FontMetrics,
+    pub metric_definitions: Vec<MetricDefinition>,
+    pub source_metrics_interpolation: Option<SourceMetricsInterpolationSnapshot>,
+    pub axis_mappings: Vec<AxisMapping>,
+    pub axis_mapping_bases: Vec<AxisMappingBasis>,
+    pub named_instances: Vec<NamedInstance>,
+    /// Tracked Hyperglot language ids; `None` when the font stores no list.
+    pub language_ids: Option<Vec<String>>,
+}
+
+/// Why [`EngineReads::font_header`] or [`EngineReads::glyph_snapshots`]
+/// could not answer. Details are text: shift-font's errors cannot cross to
+/// the editor.
+#[derive(Clone, Debug, PartialEq, Eq, Pack, thiserror::Error)]
+pub enum FontRecordsError {
+    /// The session has not loaded `glyph`'s layers.
+    #[error("glyph {glyph} is not loaded")]
+    NotLoaded { glyph: GlyphId },
+    /// The font's axis mappings cannot be compiled.
+    #[error("the axis mappings cannot be compiled: {detail}")]
+    Mappings { detail: String },
+    /// A glyph's projection cannot be built.
+    #[error("glyph {glyph} cannot be projected: {detail}")]
+    Unprojectable { glyph: GlyphId, detail: String },
 }
 
 /// A text run to lay out, and where.
@@ -349,7 +406,7 @@ pub(crate) use exports::{FontVariation, InternedIds};
 #[cfg(feature = "engine")]
 mod exports {
     use std::cell::RefCell;
-    use std::collections::{BTreeSet, HashMap};
+    use std::collections::{BTreeSet, HashMap, HashSet};
     use std::hash::Hash;
     use std::rc::Rc;
 
@@ -357,19 +414,21 @@ mod exports {
     use shift_font::naming::new_anchor_name;
     use shift_font::{
         AxisMapping, AxisMappingBasis, DesignLocation, ExternalLocation, Font, FontChangeImpact,
-        FontCopyId, GlyphId, GlyphRecords, InterpolationBasis, Kerning, KerningSide,
+        FontCopyId, Glyph, GlyphId, GlyphRecords, InterpolationBasis, Kerning, KerningSide,
         MissingKerningOrigin, ResolvedKerning, SourceId,
     };
     use shift_text::layout::FeatureSetting;
     use shift_wire::values::{self, WireParse};
+    use shift_wire::{self as wire, GlyphLayerSnapshot, GlyphState};
     use wasm_bindgen::prelude::*;
 
     use super::{
         AnchorId, Axis, ComponentId, Counterparts, CounterpartsReadError, EditablePair,
         EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag, FontFeature,
-        GlyphIdentityChange, InterpolatedMetrics, KerningSnapshot, LayerId, LayoutError, NodeId,
-        PageLayout, PageLayoutError, PageLayoutRequest, PlacedText, PointId, RevisedNode,
-        SceneNode, Source, SourceSetWeights, TextLayoutRequest, engine_reads_request,
+        FontHeader, FontRecordsError, GlyphIdentityChange, GlyphSnapshot, InterpolatedMetrics,
+        KerningSnapshot, LayerId, LayoutError, NodeId, PageLayout, PageLayoutError,
+        PageLayoutRequest, PlacedText, PointId, RevisedNode, SceneNode, Source, SourceSetWeights,
+        TextLayoutRequest, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::page_layout::{PlaceKey, RunLayouts, lay_out_page};
@@ -899,9 +958,114 @@ mod exports {
                 &components,
             )?)
         }
+
+        fn font_header(&self) -> Result<FontHeader, FontRecordsError> {
+            let font = self.session.font();
+            let axis_mapping_bases =
+                font.axis_mapping_bases()
+                    .map_err(|error| FontRecordsError::Mappings {
+                        detail: error.to_string(),
+                    })?;
+            Ok(FontHeader {
+                metadata: wire::FontMetadata::from(font.metadata()),
+                metrics: wire::FontMetrics::from(font.metrics()),
+                metric_definitions: font
+                    .metric_definitions()
+                    .iter()
+                    .map(wire::MetricDefinition::from)
+                    .collect(),
+                source_metrics_interpolation: font
+                    .source_metric_interpolation()
+                    .as_ref()
+                    .map(wire::SourceMetricsInterpolationSnapshot::from),
+                axis_mappings: font
+                    .axis_mappings()
+                    .iter()
+                    .map(wire::AxisMapping::from)
+                    .collect(),
+                axis_mapping_bases: axis_mapping_bases
+                    .iter()
+                    .map(wire::AxisMappingBasis::from)
+                    .collect(),
+                named_instances: font
+                    .named_instances()
+                    .iter()
+                    .map(wire::NamedInstance::from)
+                    .collect(),
+                language_ids: font.language_ids(),
+            })
+        }
+
+        fn glyph_snapshots(
+            &self,
+            glyphs: Vec<GlyphId>,
+        ) -> Result<Vec<GlyphSnapshot>, FontRecordsError> {
+            self.component_closure(glyphs)
+                .into_iter()
+                .filter_map(|glyph_id| {
+                    let glyph = self.session.font().glyph(glyph_id)?;
+                    Some(self.glyph_snapshot(glyph))
+                })
+                .collect()
+        }
     }
 
     impl Engine {
+        /// `roots`, then the glyphs their loaded layers' components draw,
+        /// transitively, each once, in the order they were reached.
+        fn component_closure(&self, roots: Vec<GlyphId>) -> Vec<GlyphId> {
+            let font = self.session.font();
+            let mut seen = HashSet::new();
+            let mut closure = Vec::new();
+            let mut frontier = roots;
+            while !frontier.is_empty() {
+                let reached: Vec<GlyphId> = frontier
+                    .into_iter()
+                    .filter(|glyph_id| seen.insert(*glyph_id))
+                    .collect();
+                frontier = font
+                    .component_glyph_ids_of_glyphs(&reached)
+                    .into_iter()
+                    .collect();
+                closure.extend(reached);
+            }
+            closure
+        }
+
+        /// `glyph`'s projection and master layers, as the native workspace's
+        /// glyph snapshot gives them.
+        fn glyph_snapshot(&self, glyph: &Glyph) -> Result<GlyphSnapshot, FontRecordsError> {
+            let font = self.session.font();
+            let glyph_id = glyph.id();
+            let residency = self.session.residency();
+            if glyph
+                .layers()
+                .keys()
+                .any(|layer_id| residency.is_unloaded(*layer_id))
+            {
+                return Err(FontRecordsError::NotLoaded { glyph: glyph_id });
+            }
+            let projection = font.glyph_projection(glyph_id).map_err(|error| {
+                FontRecordsError::Unprojectable {
+                    glyph: glyph_id,
+                    detail: error.to_string(),
+                }
+            })?;
+            let layers = font
+                .master_layers(glyph)
+                .map(|layer| GlyphLayerSnapshot {
+                    glyph_id,
+                    source_id: layer.source_id(),
+                    state: GlyphState::from_layer(layer),
+                })
+                .collect();
+            Ok(GlyphSnapshot {
+                glyph_id,
+                projection: projection.as_ref().map(Into::into),
+                layers,
+            })
+        }
+
         /// Of `glyphs`, those whose layers the session has not loaded in
         /// `font`.
         fn unloaded(&self, font: &Font, glyphs: BTreeSet<GlyphId>) -> Vec<GlyphId> {

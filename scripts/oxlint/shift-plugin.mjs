@@ -48,8 +48,11 @@ const GLYPH_SNAPSHOT_ALLOWED = [
   "packages/editor/src/types/font.ts",
   "packages/editor/src/types/glyph.ts",
   "packages/editor/src/lib/model/",
+  // The engine reads a preview's glyphs as snapshots, for the model to hydrate.
+  "packages/editor/src/lib/engine/SessionEngine.ts",
+  "packages/editor/src/lib/wasm/engineModule.ts",
   "renderer/src/lib/workspace/",
-  "renderer/src/workspace/runtime.ts",
+  "renderer/src/workspace/PreviewFont.ts",
   "testing/",
 ];
 

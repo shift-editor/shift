@@ -19,6 +19,7 @@ import type {
   KerningGroupId,
   KerningValueEdit,
   FontIntent,
+  GlyphSnapshot,
   GlyphSnapshotRequest,
   GlyphName,
   SourceId,
@@ -1323,12 +1324,13 @@ export class Font {
       const snapshots = await this.#reader.read(queue);
       const byGlyphId = new Map(snapshots.map((snapshot) => [snapshot.glyphId, snapshot]));
       for (const glyphId of queue) {
-        if (!byGlyphId.get(glyphId)?.projection) {
+        const snapshot = byGlyphId.get(glyphId);
+        if (!snapshot || !hasGeometry(snapshot)) {
           throw new Error(`source did not return glyph projection ${glyphId}`);
         }
       }
       for (const snapshot of snapshots) {
-        if (!this.#store.entryForId(snapshot.glyphId) || !snapshot.projection) {
+        if (!this.#store.entryForId(snapshot.glyphId) || !hasGeometry(snapshot)) {
           throw new Error(`source returned invalid glyph projection ${snapshot.glyphId}`);
         }
       }
@@ -2181,6 +2183,11 @@ export class Font {
 const NO_REVISIONS: Signal<number> = computed(() => 0);
 const NO_ENGINE_VARIATION: Signal<EngineVariation | null> = computed(() => null);
 const NO_AXES: readonly AxisRecord[] = [];
+
+/** Whether a read glyph has something to draw: a projection, or authored layers. */
+function hasGeometry(snapshot: GlyphSnapshot): boolean {
+  return Boolean(snapshot.projection) || snapshot.layers.length > 0;
+}
 
 /** The intent that moves one glyph into a kerning group, or out of its group with null. */
 function memberIntent(

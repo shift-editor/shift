@@ -131,7 +131,10 @@ export class FontSessionClient {
     return snapshot;
   }
 
-  /** Reads one retained location-independent glyph and its component closure. */
+  /**
+   * Reads one retained location-independent glyph of a compiled font's preview
+   * and its component closure; other previews read glyphs from their engine.
+   */
   async sourceGlyph(glyphId: GlyphId): Promise<readonly GlyphSnapshot[]> {
     await this.connect();
 
