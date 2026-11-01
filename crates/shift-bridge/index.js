@@ -582,6 +582,7 @@ module.exports.configRead = nativeBinding.configRead
 module.exports.configSetTheme = nativeBinding.configSetTheme
 module.exports.configSetThemeSlots = nativeBinding.configSetThemeSlots
 module.exports.NapiConfigSeverity = nativeBinding.NapiConfigSeverity
+module.exports.NapiNameFit = nativeBinding.NapiNameFit
 module.exports.NapiThemeAppearance = nativeBinding.NapiThemeAppearance
 module.exports.NapiThemeMode = nativeBinding.NapiThemeMode
 module.exports.themeRead = nativeBinding.themeRead

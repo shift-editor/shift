@@ -19,17 +19,78 @@ pub struct NapiSpecimen {
   pub outline: String,
   /// SVG `viewBox` as `[x, y, width, height]`, fitted to the ink.
   pub view_box: Vec<f64>,
+  /// Font units per em, to draw the specimen at a given font size.
+  pub units_per_em: f64,
   pub right_to_left: bool,
+  /// The family name drawn in the font for the launcher's wide tile, or null
+  /// when it does not fit legibly and the tile shows this specimen instead.
+  pub family_name: Option<NapiNameSpecimen>,
+}
+
+/// A font's family name drawn in the font and fitted to the launcher's wide
+/// "Last opened" tile.
+#[napi(object)]
+pub struct NapiNameSpecimen {
+  /// The family name: `name` ID 16, else ID 1.
+  pub text: String,
+  /// SVG path data in font units, y down, one or two lines.
+  pub outline: String,
+  /// SVG `viewBox` as `[x, y, width, height]`: the ink horizontally, so the
+  /// ink starts at the left edge, and the line boxes vertically.
+  pub view_box: Vec<f64>,
+  /// Size to draw the `viewBox` at, in CSS pixels.
+  pub width: f64,
+  pub height: f64,
+  pub fit: NapiNameFit,
+}
+
+/// The fitting rule that placed a family name.
+#[napi(string_enum = "camelCase")]
+pub enum NapiNameFit {
+  /// One line at full size.
+  Full,
+  /// One line shrunk to fit.
+  Scaled,
+  /// Two lines broken at a word.
+  TwoLines,
+}
+
+impl From<shift_specimen::NameFit> for NapiNameFit {
+  fn from(fit: shift_specimen::NameFit) -> Self {
+    match fit {
+      shift_specimen::NameFit::Full => Self::Full,
+      shift_specimen::NameFit::Scaled => Self::Scaled,
+      shift_specimen::NameFit::TwoLines => Self::TwoLines,
+    }
+  }
+}
+
+fn view_box_array(view_box: shift_specimen::ViewBox) -> Vec<f64> {
+  vec![view_box.x, view_box.y, view_box.width, view_box.height]
+}
+
+impl From<shift_specimen::NameSpecimen> for NapiNameSpecimen {
+  fn from(name: shift_specimen::NameSpecimen) -> Self {
+    Self {
+      text: name.text,
+      outline: name.outline,
+      view_box: view_box_array(name.view_box),
+      width: name.width,
+      height: name.height,
+      fit: name.fit.into(),
+    }
+  }
 }
 
 impl From<shift_specimen::Specimen> for NapiSpecimen {
   fn from(specimen: shift_specimen::Specimen) -> Self {
-    let view_box = specimen.view_box;
     Self {
       text: specimen.text,
       outline: specimen.outline,
-      view_box: vec![view_box.x, view_box.y, view_box.width, view_box.height],
+      view_box: view_box_array(specimen.view_box),
+      units_per_em: specimen.units_per_em,
       right_to_left: specimen.right_to_left,
+      family_name: specimen.family_name.map(Into::into),
     }
   }
 }
@@ -85,7 +146,7 @@ pub(crate) fn acquire_specimen_glyphs(
   workspace: &mut FontWorkspace,
 ) -> std::result::Result<(), WorkspaceError> {
   let font = workspace.font();
-  let plan = shift_specimen::subset_plan(&font_characters(font));
+  let plan = shift_specimen::subset_plan(&font_characters(font), family_name(font));
   if plan.needs_features {
     return workspace.acquire_all_layers();
   }
@@ -115,6 +176,11 @@ pub(crate) fn acquire_specimen_glyphs(
   Ok(())
 }
 
+/// The family name a compiled font carries in `name` ID 16 (or 1).
+fn family_name(font: &impl FontView) -> Option<&str> {
+  font.metadata().family_name.as_deref()
+}
+
 fn font_characters(font: &impl FontView) -> Vec<char> {
   font
     .glyphs()
@@ -138,13 +204,14 @@ fn shows_planned_character(glyph: &Glyph, planned: &[char]) -> bool {
 /// Builds a source font's specimen by compiling only the glyphs it can use.
 ///
 /// The specimen rules decide from the whole font's character map; only the
-/// candidate glyphs, `.notdef`, and the first drawn glyphs are compiled. A
+/// candidate glyphs, the family name's glyphs, `.notdef`, and the first drawn
+/// glyphs are compiled. A
 /// font whose specimen needs contextual forms is compiled whole instead.
 fn source_specimen(
   font: &impl FontView,
 ) -> std::result::Result<Option<shift_specimen::Specimen>, String> {
   let characters = font_characters(font);
-  let plan = shift_specimen::subset_plan(&characters);
+  let plan = shift_specimen::subset_plan(&characters, family_name(font));
 
   let exporter = FontExporter::new();
   let binary = if plan.needs_features {
@@ -190,4 +257,27 @@ fn is_font_binary(path: &std::path::Path) -> bool {
     .is_some_and(|extension| {
       extension.eq_ignore_ascii_case("ttf") || extension.eq_ignore_ascii_case("otf")
     })
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn a_source_font_draws_its_family_name_from_the_compiled_subset() {
+    let path =
+      std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/fonts/Homenaje.glyphs");
+    let font = FontLoader::new()
+      .read_font(&path.to_string_lossy())
+      .expect("Homenaje should load");
+
+    let specimen = source_specimen(&font)
+      .expect("Homenaje should compile")
+      .expect("Homenaje draws a specimen");
+
+    assert_eq!(
+      specimen.family_name.map(|name| name.text),
+      Some("Homenaje".to_string())
+    );
+  }
 }

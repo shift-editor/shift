@@ -247,6 +247,8 @@ export type {
   SetLanguages,
   SetMetricDefinitions,
   Source,
+  NameFit,
+  NameSpecimen,
   Specimen,
   Unicode,
   UpdateAxis,
