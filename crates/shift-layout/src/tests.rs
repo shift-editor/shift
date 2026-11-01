@@ -483,3 +483,20 @@ fn the_placement_key_is_shared_by_layouts_that_place_alike_and_only_by_them() {
     }
     assert_eq!(unbounded.placement_key(), first.placement);
 }
+
+#[test]
+fn words_skip_spaces_and_punctuation_and_name_their_screen_edges() {
+    let fixture = Fixture::open("ShapingTest.ufo");
+
+    let layout = fixture.lay_out("fi, \u{628}\u{628}", shaped());
+
+    let words: Vec<(u32, u32, Direction, u32, u32)> = layout
+        .words
+        .iter()
+        .map(|word| (word.start, word.end, word.direction, word.left, word.right))
+        .collect();
+    assert_eq!(
+        words,
+        [(0, 2, Direction::Ltr, 0, 2), (4, 6, Direction::Rtl, 6, 4)]
+    );
+}

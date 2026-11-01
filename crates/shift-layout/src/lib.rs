@@ -25,6 +25,8 @@ mod placement;
 mod request;
 #[cfg(feature = "layout")]
 mod units;
+#[cfg(feature = "layout")]
+mod words;
 
 #[cfg(feature = "layout")]
 pub use font::LayoutFont;
@@ -86,6 +88,8 @@ pub struct TextLayout {
     /// A caret stop at each grapheme boundary of each line, in logical
     /// order, line by line.
     pub carets: Vec<CaretStop>,
+    /// The words, in reading order, with their edges on screen.
+    pub words: Vec<LayoutWord>,
     /// The width lines align in: the request's width, or the widest line.
     pub width: f64,
     /// Why some text was laid out as typed instead of shaped, when it was.
@@ -183,6 +187,22 @@ pub struct GlyphBounds {
     pub y_max: f64,
 }
 
+/// A word: a UAX #29 word segment that holds a letter, digit or the like,
+/// not spaces or punctuation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct LayoutWord {
+    /// The units it covers, from `start` up to `end`.
+    pub start: u32,
+    pub end: u32,
+    /// The direction it reads in, as its first unit's glyph is laid out.
+    pub direction: Direction,
+    /// The boundaries at its left and right edges on screen: its start and
+    /// end left to right, its end and start right to left.
+    pub left: u32,
+    pub right: u32,
+}
+
 /// The glyphs one unit shows.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
@@ -248,6 +268,7 @@ impl TextLayout {
             lines::Placement::new(font, &request.options).place(&paragraphs, &shaped)?;
         layout.unit_glyphs = layout.glyphs_by_unit(request.units.len());
         layout.carets = carets::Carets::new(font, &layout).stops(&paragraphs);
+        layout.words = layout.words_of(&paragraphs);
         layout.unshaped = unshaped;
         layout.placement = layout.placement_key();
         Ok(layout)

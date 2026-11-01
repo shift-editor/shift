@@ -77,3 +77,14 @@ export interface TextRunRecord {
    */
   readonly shaping: boolean;
 }
+
+/** How a run's text is shaped: the fields of its record the Text section edits. */
+export type TextRunSettings = Pick<TextRunRecord, "shaping">;
+
+/**
+ * A run record as the store may hold it: one saved before a setting
+ * existed lacks it. `Text` gives each missing setting its default when it
+ * reads the run, so every other reader sees a whole {@link TextRunRecord}.
+ */
+export type StoredTextRunRecord = Omit<TextRunRecord, keyof TextRunSettings> &
+  Partial<TextRunSettings>;
