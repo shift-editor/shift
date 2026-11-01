@@ -3,8 +3,8 @@ use std::ops::Range;
 
 use harfrust::font::{BuiltinFontFuncs, FontFuncs};
 use harfrust::{
-    Direction, Feature, FontRef, GlyphId, Language, NormalizedCoord, Script, ShapeOptions,
-    ShaperData, ShaperInstance, Tag, UnicodeBuffer,
+    Direction, Feature, FontRef, GlyphId, Language, NormalizedCoord, Script, ShapeHook,
+    ShapeOptions, ShaperData, ShaperInstance, Tag, UnicodeBuffer,
 };
 
 use crate::itemize::script_runs;
@@ -219,6 +219,11 @@ impl Shaper {
 
     /// Shapes one run of text.
     ///
+    /// `hook`, when given, is told about each layout table and lookup as
+    /// shaping applies them and may adjust positions among the font's own
+    /// lookups (see [`ShapeHook`]). It sees shaper glyph ids, and clusters
+    /// that index the run's units.
+    ///
     /// # Errors
     ///
     /// Returns [`ShapeError`] when the run is too long to index, inserts more
@@ -228,15 +233,18 @@ impl Shaper {
         &self,
         source: &S,
         request: &ShapeRequest<S::Glyph>,
+        hook: Option<&mut dyn ShapeHook>,
     ) -> Result<Vec<ShapedGlyph<S::Glyph>>, ShapeError> {
-        Ok(self.shape_run(source, request)?.glyphs)
+        Ok(self.shape_run(source, request, hook)?.glyphs)
     }
 
     /// Shapes a paragraph, run by run.
     ///
     /// The paragraph splits where its script changes, and each run is shaped
     /// in its script's direction, so Arabic and Hebrew come back right to
-    /// left. Runs stay in logical order.
+    /// left. Runs stay in logical order. `hook` is told about each run's
+    /// shaping in turn, as in [`Self::shape`]; its clusters index the run's
+    /// units, not the paragraph's.
     ///
     /// # Errors
     ///
@@ -245,29 +253,30 @@ impl Shaper {
         &self,
         source: &S,
         request: &ParagraphRequest<S::Glyph>,
+        mut hook: Option<&mut dyn ShapeHook>,
     ) -> Result<Vec<ShapedRun<S::Glyph>>, ShapeError> {
-        script_runs(request.units)
-            .into_iter()
-            .map(|run| {
-                let start = unit_index(run.units.start)?;
-                let end = unit_index(run.units.end)?;
-                let script = run.script.map(|script| script.short_name().to_string());
-                let units = &request.units[run.units];
-                let RunGlyphs {
-                    mut glyphs,
-                    direction,
-                } = self.shape_run(source, &request.run(units, script.as_deref()))?;
-                for glyph in &mut glyphs {
-                    glyph.cluster += start;
-                }
-                Ok(ShapedRun {
-                    units: start..end,
-                    script,
-                    direction,
-                    glyphs,
-                })
-            })
-            .collect()
+        let mut runs = Vec::new();
+        for run in script_runs(request.units) {
+            let start = unit_index(run.units.start)?;
+            let end = unit_index(run.units.end)?;
+            let script = run.script.map(|script| script.short_name().to_string());
+            let units = &request.units[run.units];
+            let run_hook = hook.as_mut().map(|hook| &mut **hook as &mut dyn ShapeHook);
+            let RunGlyphs {
+                mut glyphs,
+                direction,
+            } = self.shape_run(source, &request.run(units, script.as_deref()), run_hook)?;
+            for glyph in &mut glyphs {
+                glyph.cluster += start;
+            }
+            runs.push(ShapedRun {
+                units: start..end,
+                script,
+                direction,
+                glyphs,
+            });
+        }
+        Ok(runs)
     }
 
     /// Shapes one run and reports the direction it was shaped in.
@@ -275,6 +284,7 @@ impl Shaper {
         &self,
         source: &S,
         request: &ShapeRequest<S::Glyph>,
+        hook: Option<&mut dyn ShapeHook>,
     ) -> Result<RunGlyphs<S::Glyph>, ShapeError> {
         let mut funcs = SourceFuncs {
             source,
@@ -299,7 +309,8 @@ impl Shaper {
             buffer,
             ShapeOptions::new()
                 .features(&features)
-                .font_funcs(Some(&mut funcs)),
+                .font_funcs(Some(&mut funcs))
+                .hook(hook.map(|hook| hook as &mut dyn ShapeHook)),
         );
 
         let glyphs = shaped

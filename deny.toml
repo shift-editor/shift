@@ -61,5 +61,10 @@ wildcards = "allow"
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
-# fontsrc follows norad's main branch until its changes are released.
-allow-git = ["https://github.com/linebender/norad"]
+# fontsrc follows norad's main branch until its changes are released. The
+# editor's shaping uses the shift-editor HarfRust fork's shape hook until
+# HarfRust releases one.
+allow-git = [
+  "https://github.com/linebender/norad",
+  "https://github.com/shift-editor/harfrust",
+]
