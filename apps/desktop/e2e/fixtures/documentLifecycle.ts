@@ -55,9 +55,9 @@ export async function createAnotherDirtyFont(
  * route (`waitForWorkspaceReady`, `waitForEditorReady`) after it.
  */
 export async function convertPreview(page: Page, convert: () => Promise<void>): Promise<void> {
-  const reloaded = page.waitForEvent("load");
-  await convert();
-  await reloaded;
+  // `Promise.all` fails as soon as `convert` throws and owns the load wait, so a failed Save
+  // never leaves that wait running unobserved until the page closes.
+  await Promise.all([page.waitForEvent("load"), convert()]);
 }
 
 /** The mode of the font session in `page`'s window (`workspace`, `preview`, …), as agents read it. */
