@@ -8,7 +8,7 @@
 
 use std::ops::Range;
 
-use shift_text::shape::{NOTDEF, ShapeDirection, Unit, itemize, line_breaks, visual_order};
+use shift_text::shape::{self, NOTDEF, ShapeDirection, Unit, itemize, line_breaks, visual_order};
 
 use crate::shape::{RunGlyph, ShapedGlyph, ShapedRun};
 use crate::{ProofError, ProofFont, ScriptSetting, ShapingOptions, TextDirection};
@@ -132,6 +132,34 @@ impl<'l> LineUnits<'l> {
         line
     }
 
+    /// Itemizes the line with shift-text, reading it in `base` direction or
+    /// its first strong character's, splits each run at named glyphs, and
+    /// orders the parts for display; returns them with the paragraph's
+    /// direction.
+    fn display_parts(
+        &self,
+        base: Option<shape::TextDirection>,
+    ) -> (Vec<DisplayPart<'l>>, shape::TextDirection) {
+        let itemized = itemize(&self.units, base);
+        let mut levels = Vec::new();
+        let mut parts = Vec::new();
+        for run in &itemized.runs {
+            for part in self.parts(run.units.clone()) {
+                levels.push(run.level);
+                parts.push(Some(DisplayPart {
+                    part,
+                    direction: run.direction(),
+                    script: run.script,
+                }));
+            }
+        }
+        let ordered = visual_order(&levels)
+            .into_iter()
+            .filter_map(|index| parts.get_mut(index).and_then(Option::take))
+            .collect();
+        (ordered, itemized.direction)
+    }
+
     /// Splits `units` at named glyphs: stretches of characters, and each
     /// named glyph on its own, in logical order.
     fn parts(&self, units: Range<usize>) -> Vec<LinePart<'l>> {
@@ -158,6 +186,15 @@ impl<'l> LineUnits<'l> {
 enum LinePart<'l> {
     Text(Range<usize>),
     Glyph { index: usize, name: &'l str },
+}
+
+/// A part of a line in display order, with the run it belongs to.
+struct DisplayPart<'l> {
+    part: LinePart<'l>,
+    /// The direction its bidi run reads in, which a stretch is shaped in.
+    direction: shape::TextDirection,
+    /// Its run's ISO 15924 script tag; `None` for common characters only.
+    script: Option<&'static str>,
 }
 
 /// Byte offsets in `line` where a wrapped part may start: shift-text's line
@@ -215,45 +252,32 @@ impl ProofFont<'_> {
         }
 
         let line = LineUnits::new(&pieces);
-        let itemized = itemize(&line.units, options.base_direction());
-        let direction = TextDirection::from(itemized.direction);
-        let mut levels = Vec::new();
-        let mut parts = Vec::new();
-        for run in &itemized.runs {
-            let script = options
-                .script
-                .as_ref()
-                .map(ScriptSetting::tag)
-                .or(run.script);
-            let run_direction = Some(ShapeDirection::from(run.direction()));
-            for part in line.parts(run.units.clone()) {
-                let glyphs = match part {
-                    LinePart::Text(units) => self
-                        .shape_units(
-                            &line.units[units.clone()],
-                            &line.starts[units],
-                            run_direction,
-                            script,
-                            options,
-                        )?
-                        .glyphs
-                        .into_iter()
-                        .map(RunGlyph::shaped)
-                        .collect(),
-                    LinePart::Glyph { index, name } => {
-                        vec![self.named_glyph(name, line.starts[index], direction)]
-                    }
-                };
-                levels.push(run.level);
-                parts.push(glyphs);
+        let (ordered, direction) = line.display_parts(options.base_direction());
+        let direction = TextDirection::from(direction);
+        let mut glyphs = Vec::new();
+        for DisplayPart {
+            part,
+            direction: run_direction,
+            script,
+        } in ordered
+        {
+            match part {
+                LinePart::Text(units) => {
+                    let script = options.script.as_ref().map(ScriptSetting::tag).or(script);
+                    let shaped = self.shape_units(
+                        &line.units[units.clone()],
+                        &line.starts[units],
+                        Some(ShapeDirection::from(run_direction)),
+                        script,
+                        options,
+                    )?;
+                    glyphs.extend(shaped.glyphs.into_iter().map(RunGlyph::shaped));
+                }
+                LinePart::Glyph { index, name } => {
+                    glyphs.push(self.named_glyph(name, line.starts[index], direction));
+                }
             }
         }
-
-        let mut parts: Vec<Option<Vec<RunGlyph>>> = parts.into_iter().map(Some).collect();
-        let glyphs = visual_order(&levels)
-            .into_iter()
-            .filter_map(|index| parts.get_mut(index).and_then(Option::take))
-            .flatten();
         Ok(self.place(glyphs, direction))
     }
 
@@ -364,6 +388,48 @@ mod tests {
         assert_eq!(pieces("H/a.ss01H"), [text(0, "H"), glyph(1, "a.ss01H")]);
         assert_eq!(pieces("/a.alt/b"), [glyph(0, "a.alt"), glyph(6, "b")]);
         assert_eq!(pieces("/a H"), [glyph(0, "a"), text(3, "H")]);
+    }
+
+    /// The line's parts in display order: `>` or `<` and the text of a
+    /// stretch by its run's direction, `/name` for a named glyph.
+    fn order(line: &str, base: Option<shape::TextDirection>) -> Vec<String> {
+        let pieces = pieces(line);
+        let units = LineUnits::new(&pieces);
+        let characters: Vec<char> = units
+            .units
+            .iter()
+            .map(|unit| match unit {
+                Unit::Character(character) => *character,
+                Unit::Glyph(_) => '\u{FFFC}',
+            })
+            .collect();
+        units
+            .display_parts(base)
+            .0
+            .into_iter()
+            .map(|display| match display.part {
+                LinePart::Text(range) => {
+                    let arrow = match display.direction {
+                        shape::TextDirection::LeftToRight => '>',
+                        shape::TextDirection::RightToLeft => '<',
+                    };
+                    let text: String = characters[range].iter().collect();
+                    format!("{arrow}{text}")
+                }
+                LinePart::Glyph { name, .. } => format!("/{name}"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn orders_mixed_runs_visually_and_splits_scripts() {
+        assert_eq!(order("abc אבג", None), [">abc ", "<אבג"]);
+        assert_eq!(order("אבג abc", None), [">abc", "<אבג "]);
+    }
+
+    #[test]
+    fn a_named_glyph_takes_the_direction_around_it() {
+        assert_eq!(order("אב/x ג", None), ["<ג", "/x", "<אב"]);
     }
 
     #[test]
