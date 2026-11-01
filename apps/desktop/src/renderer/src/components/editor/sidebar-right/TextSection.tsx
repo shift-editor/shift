@@ -161,9 +161,9 @@ const Row = ({
 );
 
 const ALIGNMENTS: readonly { align: TextAlign; label: string; Icon: typeof AlignLeftIcon }[] = [
-  { align: "left", label: "Align left", Icon: AlignLeftIcon },
-  { align: "center", label: "Align center", Icon: AlignCenterIcon },
-  { align: "right", label: "Align right", Icon: AlignRightIcon },
+  { align: "left", label: "Align text left", Icon: AlignLeftIcon },
+  { align: "center", label: "Center text", Icon: AlignCenterIcon },
+  { align: "right", label: "Align text right", Icon: AlignRightIcon },
 ];
 
 interface AlignButtonsProps {
