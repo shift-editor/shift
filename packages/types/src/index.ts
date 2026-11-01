@@ -105,6 +105,7 @@ export type {
   WorkspaceGlyphLayerSnapshot,
   WorkspaceSnapshot,
   StoredWorkspaceSnapshot,
+  EngineFontHeader,
   EngineFontRecords,
   EngineStorelessRecords,
 } from "./workspace";

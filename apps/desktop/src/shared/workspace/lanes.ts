@@ -306,7 +306,9 @@ export interface WorkspaceSync {
   sourceSnapshot(): Promise<FontSourceSnapshot | null>;
 
   /**
-   * Reads one retained, location-independent preview glyph and its component closure.
+   * Reads one retained, location-independent glyph of a compiled font's preview
+   * (TrueType, OpenType) and its component closure. Other previews read glyphs
+   * from their engine.
    *
    * @param glyphId - Glyph in the open preview.
    * @returns The glyph first, then the glyphs its components reference.

@@ -32,6 +32,8 @@ import { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinat
 import { getGlyphInfo } from "@/workspace/glyphInfo";
 import { FailingWindowEngine } from "./FailingWindowEngine";
 import { layerReaderHost } from "../../../preload/layerReaders";
+import { openPreviewFont } from "@/workspace/PreviewFont";
+import type { Editor } from "@shift/editor";
 
 export type WorkspaceStack = {
   client: FontSessionClient;
@@ -59,27 +61,12 @@ export type WorkspaceStack = {
  * pattern as WorkspaceHost.test.ts, extended to the renderer side.
  */
 export function createWorkspaceStack(): WorkspaceStack {
-  const documentsRoot = mkdtempSync(join(tmpdir(), "shift-editor-stack-"));
-
-  const shellLane = new MessageChannel();
-  new WorkspaceHost({
-    documentsRoot,
-    atlasCacheRoot: join(documentsRoot, "atlas-cache"),
-    shell: nodePortTransport(shellLane.port2),
-    portTransport: (port) => nodePortTransport(port as NodeMessagePort),
-  }).start();
-  const shellChannel = new Channel<ShellPortCallMap, ShellEventMap>(
-    nodePortTransport(shellLane.port1),
-  );
-  const shell = laneClient<WorkspaceShell, ShellPortCallMap, ShellEventMap>(shellChannel);
+  const host = startWorkspaceHost();
+  const { shell } = host;
 
   const refusals = { pending: 0 };
   const client = new FontSessionClient(null, {
-    transport: async () => {
-      const lane = new MessageChannel();
-      await shellChannel.call("connect", undefined, [lane.port1]);
-      return refusingPersists(nodePortTransport(lane.port2), refusals);
-    },
+    transport: async () => refusingPersists(await host.connect(), refusals),
   });
   // The window's engine reads the same store through the preload's reader, as in production.
   const engine = new FailingWindowEngine(layerReaderHost(), client);
@@ -124,10 +111,83 @@ export function createWorkspaceStack(): WorkspaceStack {
     dispose(): void {
       engine.dispose();
       client.dispose();
+      host.dispose();
+    },
+  };
+}
+
+/** A real WorkspaceHost in-process, as the utility process runs it, and its shell lane. */
+interface InProcessHost {
+  readonly shell: WorkspaceShell;
+  /** Connects a new sync lane, as main posts a window its port. */
+  connect(): Promise<Transport>;
+  dispose(): void;
+}
+
+/** Starts a {@link WorkspaceHost} over node MessagePorts, its documents in a new temporary directory. */
+function startWorkspaceHost(): InProcessHost {
+  const documentsRoot = mkdtempSync(join(tmpdir(), "shift-editor-stack-"));
+  const shellLane = new MessageChannel();
+  new WorkspaceHost({
+    documentsRoot,
+    atlasCacheRoot: join(documentsRoot, "atlas-cache"),
+    shell: nodePortTransport(shellLane.port2),
+    portTransport: (port) => nodePortTransport(port as NodeMessagePort),
+  }).start();
+  const shellChannel = new Channel<ShellPortCallMap, ShellEventMap>(
+    nodePortTransport(shellLane.port1),
+  );
+  return {
+    shell: laneClient<WorkspaceShell, ShellPortCallMap, ShellEventMap>(shellChannel),
+    async connect(): Promise<Transport> {
+      const lane = new MessageChannel();
+      await shellChannel.call("connect", undefined, [lane.port1]);
+      return nodePortTransport(lane.port2);
+    },
+    dispose(): void {
       shellChannel.dispose();
       rmSync(documentsRoot, { recursive: true, force: true });
     },
   };
+}
+
+/** A preview window's font over the real utility and preload, as the preview runtime opens it. */
+export interface PreviewStack {
+  readonly font: Font;
+  readonly editor: Editor;
+  dispose(): void;
+}
+
+/**
+ * Opens `sourcePath` as a preview, as a window that browses a font file does:
+ * the utility opens it for the atlas, and the window's font opens through
+ * {@link openPreviewFont}, reading the file through the preload's reader.
+ */
+export async function openPreviewStack(sourcePath: string): Promise<PreviewStack> {
+  const host = startWorkspaceHost();
+  const client = new FontSessionClient(null, { mode: "preview", transport: host.connect });
+  try {
+    await host.shell.openSource(sourcePath);
+    const preview = await openPreviewFont({
+      client,
+      layers: layerReaderHost(),
+      glyphInfo: getGlyphInfo(),
+      clipboard: { writeText: async () => {}, readText: async () => "" },
+    });
+    return {
+      font: preview.font,
+      editor: preview.editor,
+      dispose(): void {
+        preview.dispose();
+        client.dispose();
+        host.dispose();
+      },
+    };
+  } catch (error) {
+    client.dispose();
+    host.dispose();
+    throw error;
+  }
 }
 
 /** A glyph created in a workspace font and loaded, with its layer at the default source. */

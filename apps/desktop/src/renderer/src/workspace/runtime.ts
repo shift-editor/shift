@@ -1,20 +1,15 @@
 import type { GlyphInfo } from "@shift/glyph-info";
-import type { GlyphId, GlyphSnapshot } from "@shift/types";
 import { electronSystemClipboard } from "@/lib/clipboard/electronSystemClipboard";
 import { AuthoredGlyphAtlasSource } from "@/lib/graphics/backends/AuthoredGlyphAtlasSource";
 import { ImportedGlyphAtlasSource } from "@/lib/graphics/backends/ImportedGlyphAtlasSource";
-import { Editor } from "@shift/editor";
-import { Font, FontStore, loadEngine } from "@shift/editor/model";
 import { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
-import { registerBuiltInTools } from "@/lib/tools/tools";
-import { locationFromDesignAxisLocation } from "@shift/editor/variation";
-import type { GlyphReader } from "@shift/editor/types";
 import { FontSessionClient } from "@/lib/workspace/FontSessionClient";
 import { getShiftHost } from "@/host/shiftHost";
 import { Workspace } from "./Workspace";
 import { createPreviewFontSession, createWorkspaceFontSession } from "./FontSession";
 import type { FontSession } from "@/types/fontSession";
 import { getGlyphInfo } from "./glyphInfo";
+import { openPreviewFont } from "./PreviewFont";
 
 declare global {
   var shiftFontSession: Promise<FontSession> | null;
@@ -63,46 +58,15 @@ async function createFontSession(
       return createWorkspaceFontSession(catalog, workspace, client);
     }
     case "preview": {
-      // A preview has no engine session, but its text lays out in the
-      // engine module (shift-text's layout, as typed): load it before anything
-      // asks for a layout, so the open glyph's run lays out at once.
-      await Promise.all([client.connect(), loadEngine()]);
-      const source = client.sourceCell.peek();
-      if (!source) throw new Error("font source connected without a snapshot");
-
-      const store = new FontStore({ font: source.font });
-      const font = new Font({
-        store,
+      const preview = await openPreviewFont({
+        client,
+        layers: getShiftHost().layers,
         glyphInfo,
-        reader: sourceGlyphReader(client),
-      });
-      const editor = new Editor({
-        font,
-        fontStore: store,
         clipboard: electronSystemClipboard,
-        sessionMode: "preview",
       });
-      registerBuiltInTools(editor);
-      editor.setActiveTool("select");
-
-      const catalog = new GlyphCatalog(editor, glyphInfo, new ImportedGlyphAtlasSource(client));
-      return createPreviewFontSession(catalog, client, font, editor);
+      const atlas = new ImportedGlyphAtlasSource(client);
+      const catalog = new GlyphCatalog(preview.editor, glyphInfo, atlas);
+      return createPreviewFontSession(catalog, client, preview);
     }
   }
-}
-
-function sourceGlyphReader(client: FontSessionClient): GlyphReader {
-  return {
-    async read(glyphIds: readonly GlyphId[]) {
-      const closures = await Promise.all(glyphIds.map((glyphId) => client.sourceGlyph(glyphId)));
-      const snapshots = new Map<GlyphId, GlyphSnapshot>();
-      for (const closure of closures) {
-        for (const snapshot of closure) snapshots.set(snapshot.glyphId, snapshot);
-      }
-      return [...snapshots.values()];
-    },
-    glyphPreviews(glyphIds, location) {
-      return client.glyphPreviews(glyphIds, locationFromDesignAxisLocation(location));
-    },
-  };
 }

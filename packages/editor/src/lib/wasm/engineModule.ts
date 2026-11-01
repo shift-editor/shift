@@ -1,10 +1,12 @@
 import type {
+  EngineFontHeader,
   EngineFontRecords,
   EngineStorelessRecords,
   FontIntent,
   FontReplacement,
   GlyphId,
   GlyphName,
+  GlyphSnapshot,
   KerningGroupId,
   KerningSide,
   LayerId,
@@ -458,6 +460,34 @@ export class EngineSession {
   /** The change flags whose change may change the session's shaper font. */
   shaperInputs(): readonly FontChangeFlag[] {
     return this.#reads.shaperInputs();
+  }
+
+  /**
+   * The session's font's metadata, metrics and metric rows, how its source
+   * metrics interpolate, its axis mappings and their compiled bases, its
+   * named instances and tracked languages: the records a store answers at
+   * open beside {@link fontRecords}.
+   *
+   * @throws When the font's axis mappings cannot be compiled.
+   */
+  fontHeader(): EngineFontHeader {
+    const header = this.#reads.fontHeader();
+    return {
+      ...header,
+      sourceMetricsInterpolation: header.sourceMetricsInterpolation ?? null,
+      languageIds: header.languageIds ?? null,
+    };
+  }
+
+  /**
+   * Each of `glyphIds`, then the glyphs their components use, transitively:
+   * its projection and master layers, as the native workspace's glyph
+   * snapshots give them. Load the glyphs first ({@link preload}).
+   *
+   * @throws When a glyph's layers are not loaded, or its projection cannot be built.
+   */
+  glyphSnapshots(glyphIds: readonly GlyphId[]): readonly GlyphSnapshot[] {
+    return this.#reads.glyphSnapshots(glyphIds);
   }
 
   /**
