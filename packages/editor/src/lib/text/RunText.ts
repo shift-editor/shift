@@ -1,5 +1,7 @@
 import type { RunId } from "@shift/types";
 import type {
+  Direction,
+  FeatureSetting,
   LayoutLine,
   LayoutRequest,
   LayoutUnit,
@@ -39,6 +41,8 @@ export class RunText {
   readonly #laidOutCell: ComputedSignal<LaidOutText | null>;
   readonly #reports: Effect;
   readonly #layoutCell: ComputedSignal<TextLayout | null>;
+  readonly #scriptsCell: ComputedSignal<readonly string[]>;
+  readonly #directionCell: ComputedSignal<Direction>;
 
   constructor(editor: Editor, runIdCell: Signal<RunId>, owner: RunTextOwner) {
     this.#laidOutCell = computed(
@@ -90,6 +94,25 @@ export class RunText {
       },
       { name: "text.layoutForRun" },
     );
+
+    this.#scriptsCell = computed(() => this.#layoutCell.value?.scripts ?? [], {
+      name: "text.scripts",
+      equals: sameStrings,
+    });
+
+    this.#directionCell = computed(() => this.#layoutCell.value?.lineDirection(0) ?? "ltr", {
+      name: "text.direction",
+    });
+  }
+
+  /** The ISO 15924 scripts the run's text is laid out in, in order of first use. */
+  get scriptsCell(): ComputedSignal<readonly string[]> {
+    return this.#scriptsCell;
+  }
+
+  /** The direction the run's first paragraph reads in, as layout resolved it. */
+  get directionCell(): ComputedSignal<Direction> {
+    return this.#directionCell;
   }
 
   /** The run's layout; invalidates on content, location, source, glyph loads, and edits layout reads. */
@@ -99,25 +122,37 @@ export class RunText {
 
   dispose(): void {
     this.#reports.dispose();
+    this.#directionCell.dispose();
+    this.#scriptsCell.dispose();
     this.#layoutCell.dispose();
     this.#laidOutCell.dispose();
   }
 }
 
-/** The layout request for a run, shaped with the font's default features unless shaping is off. */
+/** The layout request for a run: its items, with the run's settings as layout options. */
 function layoutRequest(record: TextRunRecord): LayoutRequest {
   return {
     units: record.items.map(layoutUnit),
     options: {
-      language: null,
-      script: null,
-      features: [],
+      language: record.language,
+      script: record.script,
+      features: featureSettings(record.features),
       shaping: record.shaping,
-      align: null,
-      lineHeight: { kind: "auto" },
+      align: record.align,
+      lineHeight:
+        record.lineHeight === null ? { kind: "auto" } : { kind: "em", em: record.lineHeight },
       width: null,
     },
   };
+}
+
+/** A run's forced features as layout settings: `1` turns one on, `0` off. */
+function featureSettings(features: Readonly<Record<string, boolean>>): FeatureSetting[] {
+  return Object.entries(features).map(([tag, on]) => ({ tag, value: on ? 1 : 0 }));
+}
+
+function sameStrings(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 function layoutUnit(item: TextItem): LayoutUnit {

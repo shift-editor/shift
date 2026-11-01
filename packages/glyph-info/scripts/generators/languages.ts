@@ -40,6 +40,10 @@ export function generateLanguages(hyperglotPath: string, outputPath: string): nu
     languages.set(basename(file, ".yaml"), language);
   }
 
+  const scriptCodes = parseScriptCodes(
+    join(hyperglotPath, "lib", "hyperglot", "extra_data", "script-names.yaml"),
+  );
+
   languages.set(
     "default",
     parseLanguage(join(hyperglotPath, "lib", "hyperglot", "extra_data", "default.yaml")),
@@ -73,6 +77,7 @@ export function generateLanguages(hyperglotPath: string, outputPath: string): nu
         name: language.preferred_name ?? language.name,
         autonym: orthography.autonym ?? null,
         script: orthography.script,
+        scriptCode: scriptCode(scriptCodes, orthography.script),
         baseCodepoints: codepoints,
       });
     }
@@ -106,6 +111,25 @@ export function generateLanguages(hyperglotPath: string, outputPath: string): nu
   );
 
   return generated.length;
+}
+
+/** Reads Hyperglot's script names with their ISO 15924 codes. */
+function parseScriptCodes(path: string): Map<string, string> {
+  const parsed = load(readFileSync(path, "utf-8")) as Record<string, { iso_15924?: string }> | null;
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error(`Invalid Hyperglot script names: ${path}`);
+  }
+  const codes = new Map<string, string>();
+  for (const [name, entry] of Object.entries(parsed)) {
+    if (entry?.iso_15924) codes.set(name, entry.iso_15924);
+  }
+  return codes;
+}
+
+function scriptCode(codes: Map<string, string>, script: string): string {
+  const code = codes.get(script);
+  if (!code) throw new Error(`Hyperglot script without an ISO 15924 code: ${script}`);
+  return code;
 }
 
 function parseLanguage(path: string): HyperglotLanguage {

@@ -1,4 +1,4 @@
-import { mintRunId, type GlyphId, type RunId, type TextItemId } from "@shift/types";
+import { mintRunId, type GlyphId, type NodeId, type RunId, type TextItemId } from "@shift/types";
 import { computed, keyedCache, signal, track, untracked } from "../signals";
 import type { ComputedSignal, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
@@ -6,7 +6,7 @@ import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunNode } from "../../types/node";
-import type { TextRunRecord } from "../../types/text";
+import type { TextRunRecord, TextRunSettings } from "../../types/text";
 import {
   characterTextItem,
   glyphTextItem,
@@ -14,9 +14,19 @@ import {
   type TextItem,
   type TextLayout,
 } from "./layout";
-import type { TextLayout as LaidOutText } from "@shift/wasm/protocol";
+import type {
+  FontFeature,
+  Direction,
+  TextAlign,
+  TextLayout as LaidOutText,
+} from "@shift/wasm/protocol";
 import { RunText } from "./RunText";
 import { GlyphNameParser, type TextParseContext, type TextParser } from "./parsing";
+
+/** The smallest size a run node sets its text at: one scene unit to the em. */
+const MIN_TEXT_SIZE = 1;
+/** The smallest distance between baselines, in ems. */
+const MIN_LINE_HEIGHT = 0.1;
 
 /** Owns proof text records and one reactive layout per run identity. */
 export class Text {
@@ -61,14 +71,35 @@ export class Text {
    */
   readonly currentRunCell: Signal<TextRunRecord | null> = computed(
     () => {
+      const node = this.currentRunNodeCell.value;
+      return node ? this.run(node.runId) : null;
+    },
+    { name: "text.currentRun" },
+  );
+
+  /** The node that places {@link currentRunCell}'s run, whose size the Text section sets. */
+  readonly currentRunNodeCell: Signal<TextRunNode | null> = computed(
+    () => {
       const editing = this.#editor.textEditing.stateCell.value;
       const scene = this.#editor.scene;
       // Scene lookups read without subscribing; rerun when its nodes change.
       track(scene.cell);
-      const node = scene.nodeOfKind(editing?.nodeId ?? null, "textRun") ?? scene.only("textRun");
-      return node ? this.run(node.runId) : null;
+      return scene.nodeOfKind(editing?.nodeId ?? null, "textRun") ?? scene.only("textRun");
     },
-    { name: "text.currentRun" },
+    { name: "text.currentRunNode" },
+  );
+
+  /**
+   * The features the font's compiled feature code defines, in tag order,
+   * with their names, defaults and groups, as Rust lists them.
+   *
+   * @remarks
+   * Follows the shaper font: editing what it compiles from lists the new
+   * features once it recompiles. Empty in a preview, which has no engine.
+   */
+  readonly featuresCell: Signal<readonly FontFeature[]> = computed(
+    () => this.#editor.font.fontFeatures(),
+    { name: "text.features", equals: sameFeatures },
   );
 
   constructor(store: ShiftStore<ShiftEditorRecord>, editor: Editor) {
@@ -126,6 +157,11 @@ export class Text {
       scope: "document",
       items: [...items],
       shaping: true,
+      features: {},
+      language: null,
+      script: null,
+      lineHeight: null,
+      align: null,
     };
     this.#store.put(record);
     return record;
@@ -176,8 +212,99 @@ export class Text {
    * Writes the run record, so call it inside a history capture.
    */
   setShaping(id: RunId, shaping: boolean): void {
+    this.#setSetting(id, "shaping", shaping);
+  }
+
+  /**
+   * Turns a feature on or off for a run, or back to the font's default.
+   *
+   * @param on - `true` or `false` to force the feature; `null` for the default.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setFeature(id: RunId, tag: string, on: boolean | null): void {
     const run = this.run(id);
-    if (run && run.shaping !== shaping) this.#store.put({ ...run, shaping });
+    if (!run || (run.features[tag] ?? null) === on) return;
+
+    const { [tag]: _previous, ...rest } = run.features;
+    this.#store.put({ ...run, features: on === null ? rest : { ...rest, [tag]: on } });
+  }
+
+  /**
+   * Returns every feature of a run to the font's default.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  resetFeatures(id: RunId): void {
+    const run = this.run(id);
+    if (run && Object.keys(run.features).length > 0) this.#store.put({ ...run, features: {} });
+  }
+
+  /**
+   * Sets the BCP 47 language a run is shaped as, or null for the font's default.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setLanguage(id: RunId, language: string | null): void {
+    this.#setSetting(id, "language", language);
+  }
+
+  /**
+   * Sets the ISO 15924 script a whole run is shaped in, or null for each
+   * stretch's own.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setScript(id: RunId, script: string | null): void {
+    this.#setSetting(id, "script", script);
+  }
+
+  /**
+   * Sets the distance between a run's baselines in ems, at least a tenth of
+   * an em, or null for the font's line spacing.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setLineHeight(id: RunId, lineHeight: number | null): void {
+    this.#setSetting(
+      id,
+      "lineHeight",
+      lineHeight === null ? null : Math.max(MIN_LINE_HEIGHT, lineHeight),
+    );
+  }
+
+  /**
+   * Sets the size a run node sets its text at: the scene units one em spans.
+   *
+   * @param size - At least one scene unit.
+   *
+   * @remarks
+   * Writes the scene node, so call it inside a history capture.
+   */
+  setSize(nodeId: NodeId, size: number): void {
+    const node = this.#editor.scene.nodeOfKind(nodeId, "textRun");
+    const clamped = Math.max(MIN_TEXT_SIZE, size);
+    if (node && node.size !== clamped) this.#editor.scene.updateNode({ id: nodeId, size: clamped });
+  }
+
+  /**
+   * Sets how a run's lines line up, or null to follow each line's direction.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setAlign(id: RunId, align: TextAlign | null): void {
+    this.#setSetting(id, "align", align);
+  }
+
+  #setSetting<K extends keyof TextRunSettings>(id: RunId, key: K, value: TextRunSettings[K]): void {
+    const run = this.run(id);
+    if (run && run[key] !== value) this.#store.put({ ...run, [key]: value });
   }
 
   /**
@@ -196,6 +323,16 @@ export class Text {
 
   deleteRun(id: RunId): void {
     this.#store.delete(id);
+  }
+
+  /** The ISO 15924 scripts a run's text is laid out in, as layout itemized it, in order of first use. */
+  scriptsCell(id: RunId): Signal<readonly string[]> {
+    return this.#runs.get(id).scriptsCell;
+  }
+
+  /** The direction a run's first paragraph reads in, as layout resolved it; left to right for no text. */
+  directionCell(id: RunId): Signal<Direction> {
+    return this.#runs.get(id).directionCell;
   }
 
   /** Returns a stable computed whose layout invalidates on content, location, source, or glyph acquisition. */
@@ -291,4 +428,19 @@ export class Text {
       this.#loading.delete(id);
     }
   }
+}
+
+function sameFeatures(a: readonly FontFeature[], b: readonly FontFeature[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((feature, index) => {
+      const other = b[index]!;
+      return (
+        feature.tag === other.tag &&
+        feature.name === other.name &&
+        feature.default === other.default &&
+        feature.group === other.group
+      );
+    })
+  );
 }
