@@ -9,7 +9,7 @@ export default defineConfig({
       "packages/validation/vitest.config.ts",
       "packages/ui/vitest.config.ts",
       "packages/glyph-info/vitest.config.ts",
-      "crates/shift-node/vitest.config.ts",
+      "crates/shift-bridge/vitest.config.ts",
     ],
   },
 });

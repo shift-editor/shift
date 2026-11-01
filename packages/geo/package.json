@@ -15,7 +15,7 @@
     }
   },
   "scripts": {
-    "typecheck": "tsgo --noEmit",
+    "typecheck": "tsgo --noEmit && tsgo --noEmit -p tsconfig.config.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "oxlint --fix src/",
