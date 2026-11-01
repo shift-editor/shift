@@ -178,21 +178,16 @@ fn marks_in_arabic_sit_as_exported() {
 }
 
 #[test]
-fn a_mark_nothing_attaches_inside_a_joined_word_neither_joins_nor_breaks_it() {
+fn a_mark_nothing_attaches_sets_as_exported() {
     let font = fixture("ShapingTest.ufo");
-    let text = "\u{628}\u{670}\u{628}";
 
-    // The anchorless superscript alef attaches to nothing, so the editor
-    // shows it at its own advance where export sets it at none; the join
-    // around it steps as exported.
-    let heights =
-        |placed: Vec<Placed>| -> Vec<f64> { placed.iter().map(|glyph| glyph.y).collect() };
-    assert_eq!(
-        heights(laid_out(&font, text)),
-        heights(exported(&font, text))
-    );
-    let alef = &laid_out(&font, text)[1];
-    assert_eq!(alef.advance, 300.0);
+    // The anchorless superscript alef (300 wide) and hamza below (no width)
+    // attach to nothing; each takes the advance shaping gives it, none, and
+    // the join around it steps as exported.
+    for text in ["\u{628}\u{670}\u{628}", "\u{628}\u{655}\u{628}"] {
+        assert_matches_export(&font, text);
+        assert_eq!(laid_out(&font, text)[1].advance, 0.0);
+    }
 }
 
 #[test]

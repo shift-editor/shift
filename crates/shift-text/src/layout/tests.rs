@@ -170,6 +170,39 @@ fn a_mark_on_an_arabic_letter_sits_on_its_top_anchor() {
 }
 
 #[test]
+fn a_mark_of_no_advance_that_nothing_attaches_takes_no_space() {
+    let fixture = Fixture::open("ShapingTest.ufo");
+
+    let layout = fixture.lay_out("\u{628}\u{655}\u{628}", shaped());
+
+    let names = fixture.names(&layout);
+    let hamza = names
+        .iter()
+        .position(|name| name == "hamzabelow-ar")
+        .unwrap();
+    assert_eq!(fixture.advance("hamzabelow-ar"), 0.0);
+    assert!(layout.glyphs[hamza].is_mark);
+    assert_eq!(layout.glyphs[hamza].advance, 0.0);
+}
+
+#[test]
+fn a_mark_that_nothing_attaches_takes_the_advance_shaping_gives_it() {
+    let fixture = Fixture::open("ShapingTest.ufo");
+
+    let layout = fixture.lay_out("\u{628}\u{670}\u{628}", shaped());
+
+    // The anchorless superscript alef draws 300 wide, but shaping zeroes a
+    // GDEF mark's advance, as it does in the exported font.
+    let names = fixture.names(&layout);
+    let alef = names
+        .iter()
+        .position(|name| name == "alefabove-ar")
+        .unwrap();
+    assert_eq!(fixture.advance("alefabove-ar"), 300.0);
+    assert_eq!(layout.glyphs[alef].advance, 0.0);
+}
+
+#[test]
 fn an_english_word_in_arabic_reads_left_of_the_arabic_before_it() {
     let fixture = Fixture::open("ShapingTest.ufo");
 
