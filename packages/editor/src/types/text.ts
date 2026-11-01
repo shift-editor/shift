@@ -1,5 +1,7 @@
-import type { NodeId, RunId, SourceId, TextItemId } from "@shift/types";
+import type { Point2D } from "@shift/geo";
+import type { GlyphId, NodeId, RunId, SourceId, TextItemId } from "@shift/types";
 import type { PlacedText } from "@shift/wasm/protocol";
+import type { PageNode } from "./node";
 import type { TextItem } from "../lib/text/layout/types";
 import type { ExternalAxisLocation } from "./variation";
 
@@ -52,6 +54,16 @@ export interface TextEditingRecord {
    * caret and selection for the next visit.
    */
   readonly active: boolean;
+}
+
+/** Where `Text.placeRun` puts a new run, and what it starts with. */
+export interface RunPlacement {
+  /** The page the run goes on. */
+  readonly page: PageNode;
+  /** The run's origin, in the page's (scene) space. */
+  readonly at: Point2D;
+  /** The glyphs the run starts with, in order; empty for a run to type into. */
+  readonly glyphs: readonly GlyphId[];
 }
 
 /** Stores document-scoped proof text content. */

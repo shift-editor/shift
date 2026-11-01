@@ -1,8 +1,9 @@
+import { openFontInfo } from "./fixtures/appLocators";
 import type { Locator, Page } from "@playwright/test";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
 
 async function openSettings(page: Page, category: "Axes" | "Sources" | "Instances") {
-  await page.getByRole("button", { name: "Settings" }).click();
+  await openFontInfo(page);
   const dialog = page.getByRole("dialog", { name: "Settings" });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: category, exact: true }).click();

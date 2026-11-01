@@ -6,16 +6,20 @@ import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoor
 interface WorkspaceDocumentBridgeOptions {
   readonly host: ShiftHost;
   readonly edits: WorkspaceEditCoordinator;
+  /** Writes view state still waiting to be written, before main closes or saves. */
+  readonly flushView: () => void;
 }
 
 export class WorkspaceDocumentBridge {
   readonly #host: ShiftHost;
   readonly #edits: WorkspaceEditCoordinator;
+  readonly #flushView: () => void;
   #requests: ChannelServer<DocumentEventMap> | null = null;
 
   constructor(options: WorkspaceDocumentBridgeOptions) {
     this.#host = options.host;
     this.#edits = options.edits;
+    this.#flushView = options.flushView;
   }
 
   async connect(): Promise<void> {
@@ -32,8 +36,15 @@ export class WorkspaceDocumentBridge {
     this.#requests = serveChannel<DocumentCallMap, DocumentEventMap>(
       domPortTransport(await port.received),
       {
-        "document.state": () => this.#edits.state(),
-        "document.save": ({ path }) => this.#edits.save(path),
+        // Main asks for the state before closing or quitting, so the window's view is written first.
+        "document.state": () => {
+          this.#flushView();
+          return this.#edits.state();
+        },
+        "document.save": ({ path }) => {
+          this.#flushView();
+          return this.#edits.save(path);
+        },
         "document.export": ({ path }) => this.#edits.export(path),
         "document.releaseStore": () => this.#edits.releaseStore(),
       },

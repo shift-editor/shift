@@ -1,12 +1,18 @@
 import type { Editor } from "@shift/editor";
 import type { Font } from "@shift/editor/model";
 import type { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
+import type { WindowTabs } from "@/lib/tabs/WindowTabs";
+import type { PageRenameGesture } from "@/lib/pages/PageRenameGesture";
 import type { Workspace } from "@/workspace/Workspace";
 
 interface FontSessionBase {
   readonly catalog: GlyphCatalog;
   readonly font: Font;
   readonly editor: Editor;
+  /** The window's tabs, owned by the session. */
+  readonly tabs: WindowTabs;
+  /** A double-click on a page's row that spans the view swap it causes. */
+  readonly pageRename: PageRenameGesture;
   dispose(): void;
 }
 

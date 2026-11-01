@@ -1,4 +1,4 @@
-import type { GlyphCatalogControllerFrame } from "./glyphCatalog";
+import type { GlyphCatalogItem, GlyphCatalogControllerFrame } from "./glyphCatalog";
 
 export type GlyphCatalogRendererKind = "slug" | "svg";
 
@@ -6,6 +6,9 @@ export type GlyphCatalogRendererKind = "slug" | "svg";
 export interface GlyphCatalogRenderer {
   /** Applies the latest catalog frame and optional inline-name input host. */
   update(frame: GlyphCatalogControllerFrame, inputContainer: HTMLDivElement | null): void;
+
+  /** Returns the glyph whose cell is under a viewport point, or null over empty space. */
+  glyphAt(clientX: number, clientY: number): GlyphCatalogItem | null;
 
   /** Releases rendering resources and catalog event subscriptions. Idempotent. */
   destroy(): void;

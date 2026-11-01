@@ -20,6 +20,7 @@ import type {
   AuthoredLayer,
   AuthoredPoint,
   DocumentState,
+  EditorPage,
   EditorView,
   FontOverview,
   GlyphSummary,
@@ -82,6 +83,8 @@ export type GlyphListing = GlyphSummary;
 export type FontSummary = FontOverview;
 /** A location resolved: its design coordinates, the source there, and the metrics. */
 export type LocationSummary = ResolvedLocation;
+/** One of the document's pages, as the pages list shows it. */
+export type PageEntry = EditorPage;
 /** The window's editor facts: open glyph, sources, location, selection, tool and edit state. */
 export type EditorViewState = EditorView;
 /** The window's document and whether it has edits Save has not written. */

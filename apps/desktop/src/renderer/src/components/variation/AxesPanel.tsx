@@ -60,12 +60,12 @@ const AxisActionsMenu = ({ axis, onEdit, onReset, onDelete }: AxisActionsMenuPro
       </MenuTrigger>
     </Tooltip>
     <MenuPortal>
-      <MenuPositioner sideOffset={4} align="end">
+      <MenuPositioner sideOffset={4} align="start">
         <MenuPopup>
           <MenuItem onClick={onEdit}>Edit</MenuItem>
           <MenuItem onClick={onReset}>Reset</MenuItem>
           <MenuSeparator />
-          <MenuItem onClick={onDelete}>Delete axis</MenuItem>
+          <MenuItem onClick={onDelete}>Delete</MenuItem>
         </MenuPopup>
       </MenuPositioner>
     </MenuPortal>

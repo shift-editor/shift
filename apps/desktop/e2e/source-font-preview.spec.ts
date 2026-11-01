@@ -66,7 +66,7 @@ glyphsPreviewTest(
     await slider.press("ArrowLeft");
     await expect.poll(async () => (await editor.editorView()).activeSourceId).toBeNull();
     await expect.poll(() => catalogLocation(page)).not.toEqual(beforeLocation);
-    await editorShell(page).getByLabel("Font overview").click();
+    await editorShell(page).getByRole("tab", { name: "Glyphs", exact: true }).click();
     await page.waitForURL(/#\/home$/);
     await expect(glyphCatalogCanvas(page)).toHaveAttribute("data-grid-readiness", "Complete");
     await expect

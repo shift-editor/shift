@@ -18,7 +18,9 @@ export type ShiftIconName =
   | "select"
   | "shape"
   | "sidebar-left"
-  | "sidebar-right";
+  | "sidebar-left-open"
+  | "sidebar-right"
+  | "sidebar-right-open";
 
 const ICONS: Record<ShiftIconName, string> = {
   "align-bottom":
@@ -55,8 +57,12 @@ const ICONS: Record<ShiftIconName, string> = {
     '<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">\n<rect x="3" y="3" width="26" height="26" rx="1.5" stroke="currentColor"/>\n</svg>',
   "sidebar-left":
     '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">\n<rect x="1.625" y="2.625" width="12.75" height="10.75" rx="2" stroke="currentColor" stroke-width="1.25"/>\n<path d="M6.125 2.625V13.375" stroke="currentColor" stroke-width="1.25"/>\n</svg>',
+  "sidebar-left-open":
+    '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">\n<rect x="1.625" y="2.625" width="12.75" height="10.75" rx="2" stroke="currentColor" stroke-width="1.25"/>\n<path d="M3.625 2.625H6.125V13.375H3.625C2.52 13.375 1.625 12.48 1.625 11.375V4.625C1.625 3.52 2.52 2.625 3.625 2.625Z" fill="currentColor" fill-opacity="0.35"/>\n<path d="M6.125 2.625V13.375" stroke="currentColor" stroke-width="1.25"/>\n</svg>',
   "sidebar-right":
     '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">\n<rect x="1.625" y="2.625" width="12.75" height="10.75" rx="2" stroke="currentColor" stroke-width="1.25"/>\n<path d="M9.875 2.625V13.375" stroke="currentColor" stroke-width="1.25"/>\n</svg>',
+  "sidebar-right-open":
+    '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">\n<rect x="1.625" y="2.625" width="12.75" height="10.75" rx="2" stroke="currentColor" stroke-width="1.25"/>\n<path d="M9.875 2.625H12.375C13.48 2.625 14.375 3.52 14.375 4.625V11.375C14.375 12.48 13.48 13.375 12.375 13.375H9.875V2.625Z" fill="currentColor" fill-opacity="0.35"/>\n<path d="M9.875 2.625V13.375" stroke="currentColor" stroke-width="1.25"/>\n</svg>',
 };
 
 export function ShiftIcon({

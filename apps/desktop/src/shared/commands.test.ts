@@ -14,6 +14,11 @@ describe("command shortcuts", () => {
     expect(toElectronAccelerator(shortcut)).toBe("CmdOrCtrl+Shift+C");
   });
 
+  it("closes a tab with Cmd+W and the window with Shift+Cmd+W", () => {
+    expect(toElectronAccelerator(commandShortcuts["tab.close"])).toBe("CmdOrCtrl+W");
+    expect(toElectronAccelerator(commandShortcuts["window.close"])).toBe("CmdOrCtrl+Shift+W");
+  });
+
   it("converts symbolic and alternate modifiers to Electron syntax", () => {
     expect(toElectronAccelerator(commandShortcuts["view.zoomIn"])).toBe("CmdOrCtrl+Plus");
     expect(toElectronAccelerator(commandShortcuts["ui.increaseSize"])).toBe("CmdOrCtrl+Alt+Plus");
