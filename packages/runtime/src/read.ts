@@ -34,16 +34,22 @@ import type {
 } from "./capabilities";
 import type { NamedInstance, Source } from "@shift/types";
 
-/** Thrown when the font changed after a read scope bound its revision. */
+/**
+ * Thrown when the font changed after a read scope bound its revision, or
+ * before a call whose `ifFontRevision` it no longer matches.
+ */
 export class FontChangedError extends Error {
   override readonly name = "FontChangedError";
   readonly expectedRevision: FontRevision;
   readonly actualRevision: FontRevision;
 
-  constructor(expectedRevision: FontRevision, actualRevision: FontRevision) {
-    super(
-      `The font changed during shift.read (expected revision ${expectedRevision}, now ${actualRevision}); start a new read`,
-    );
+  /** @param message - defaults to the message a stale `shift.read` scope gives. */
+  constructor(
+    expectedRevision: FontRevision,
+    actualRevision: FontRevision,
+    message = `The font changed during shift.read (expected revision ${expectedRevision}, now ${actualRevision}); start a new read`,
+  ) {
+    super(message);
     this.expectedRevision = expectedRevision;
     this.actualRevision = actualRevision;
   }

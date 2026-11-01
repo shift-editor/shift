@@ -56,6 +56,11 @@ export class Pages {
     return this.#listCell.peek();
   }
 
+  /** Returns the user's page `pageId`, or null when no page in the list has that id. */
+  page(pageId: NodeId): PageNode | null {
+    return this.list.find((page) => page.id === pageId) ?? null;
+  }
+
   /**
    * Adds a glyph page and returns it. Does not show it.
    *

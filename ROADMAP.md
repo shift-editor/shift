@@ -931,6 +931,7 @@ interface ShiftScriptContext {
 - [x] Expose Shift as MCP server
 - [ ] Tools: getGlyph, movePoint, addContour, exportPreview
 - [ ] Claude can read/write font data
+- [x] Agents control what a window shows: tool, page, open glyph, camera, selection, and view commands (`shift.editor`, `shift.commands`)
 
 **AI-Assisted Features**
 

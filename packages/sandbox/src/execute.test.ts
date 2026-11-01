@@ -8,8 +8,10 @@ import {
   asSourceId,
 } from "@shift/types";
 import {
+  CommandNotRunnableError,
   FontChangedError,
   ShiftReadScope,
+  type EditorInspection,
   type KerningPairQuery,
   type LayerGetInput,
   type ShiftCapabilities,
@@ -54,31 +56,22 @@ const capabilities: ShiftCapabilities = {
       ];
     },
   },
-  editor: {
-    async inspect({ windowId }) {
-      return observation({
-        windowId,
-        sessionId: "session-a",
-        mode: "workspace",
-        route: "/editor/glyph-a",
-        glyph: {
-          glyphId: asGlyphId("glyph-a"),
-          name: "A",
-          nodeId: asNodeId("node-a"),
-          sourceId: asSourceId("source-a"),
-        },
-        pages: [{ id: asNodeId("node-page"), name: "Page 1" }],
-        shownPageId: asNodeId("node-page"),
-        activeSourceId: asSourceId("source-a"),
-        editingSourceIds: [asSourceId("source-a")],
-        externalLocation: [],
-        selectionIds: [asPointId("point-a")],
-        tool: { id: "select", state: "idle" },
-        dragging: false,
-        editing: true,
-        applyStatus: "idle",
-      });
+  commands: {
+    async list() {
+      return [{ id: "view.zoomIn", title: "Zoom In", shortcut: "CmdOrCtrl+Plus", enabled: true }];
     },
+    async run({ command }) {
+      if (command !== "view.zoomIn") throw new CommandNotRunnableError(command, "file");
+      return { ran: true };
+    },
+  },
+  editor: {
+    inspect: async ({ windowId }) => inspection(windowId),
+    setTool: async ({ windowId }) => inspection(windowId),
+    showPage: async ({ windowId }) => inspection(windowId),
+    openGlyph: async ({ windowId }) => inspection(windowId),
+    setView: async ({ windowId }) => inspection(windowId),
+    select: async ({ windowId }) => inspection(windowId),
   },
   font: {
     async get() {
@@ -227,6 +220,32 @@ function authoredKerningPair() {
     second: { kind: "group" as const, groupId: asKerningGroupId("kerningGroup_a"), name: "A" },
     amount: -75,
   };
+}
+
+function inspection(windowId: number): ShiftObservation<EditorInspection> {
+  return observation({
+    windowId,
+    sessionId: "session-a",
+    mode: "workspace",
+    route: "/editor/glyph-a",
+    glyph: {
+      glyphId: asGlyphId("glyph-a"),
+      name: "A",
+      nodeId: asNodeId("node-a"),
+      sourceId: asSourceId("source-a"),
+    },
+    pages: [{ id: asNodeId("node-page"), name: "Page 1" }],
+    shownPageId: asNodeId("node-page"),
+    activeSourceId: asSourceId("source-a"),
+    editingSourceIds: [asSourceId("source-a")],
+    externalLocation: [],
+    selectionIds: [asPointId("point-a")],
+    tool: { id: "select", state: "idle" },
+    viewport: { zoom: 1, center: { x: 250, y: 350 } },
+    dragging: false,
+    editing: true,
+    applyStatus: "idle",
+  });
 }
 
 function kerningResolution(query: KerningPairQuery) {
@@ -433,6 +452,90 @@ describe("Shift sandbox executes bounded code over live capabilities", () => {
     await expect(
       executeShiftCode(capabilities, "async () => shift.glyphs.list({ windowId: 7, limit: 0 })"),
     ).rejects.toThrow();
+  });
+
+  it("passes window control calls to the host as parsed inputs", async () => {
+    const seen: unknown[] = [];
+    const record = async (input: { windowId: number }) => {
+      seen.push(input);
+      return inspection(input.windowId);
+    };
+    const host: ShiftCapabilities = {
+      ...capabilities,
+      commands: {
+        ...capabilities.commands,
+        async run(input) {
+          seen.push(input);
+          return { ran: true };
+        },
+      },
+      editor: {
+        ...capabilities.editor,
+        setTool: record,
+        showPage: record,
+        openGlyph: record,
+        setView: record,
+        select: record,
+      },
+    };
+
+    const result = await executeShiftCode(
+      host,
+      "async () => { const target = { windowId: 7, ifFontRevision: 'revision-a' }; const commands = await shift.commands.list({ windowId: 7 }); const ran = await shift.commands.run({ ...target, command: 'view.zoomIn' }); await shift.editor.setTool({ ...target, tool: 'pen' }); await shift.editor.showPage({ ...target, pageId: 'node-page' }); await shift.editor.openGlyph({ ...target, glyph: { name: 'A' } }); await shift.editor.setView({ ...target, zoom: 2, center: { x: 10, y: 20 } }); const view = await shift.editor.select({ ...target, ids: ['point-a'] }); return { commands, ran, viewport: view.value.viewport }; }",
+    );
+
+    expect(result).toEqual({
+      commands: [
+        { id: "view.zoomIn", title: "Zoom In", shortcut: "CmdOrCtrl+Plus", enabled: true },
+      ],
+      ran: { ran: true },
+      viewport: { zoom: 1, center: { x: 250, y: 350 } },
+    });
+    const target = { windowId: 7, ifFontRevision: FONT_REVISION };
+    expect(seen).toEqual([
+      { ...target, command: "view.zoomIn" },
+      { ...target, tool: "pen" },
+      { ...target, pageId: "node-page" },
+      { ...target, glyph: { name: "A" } },
+      { ...target, zoom: 2, center: { x: 10, y: 20 } },
+      { ...target, ids: ["point-a"] },
+    ]);
+  });
+
+  it("rejects window control inputs of the wrong shape before they reach the host", async () => {
+    await expect(
+      executeShiftCode(capabilities, "async () => shift.editor.setView({ windowId: 7 })"),
+    ).rejects.toThrow("editor.setView takes zoom, center or both");
+    await expect(
+      executeShiftCode(capabilities, "async () => shift.editor.setView({ windowId: 7, zoom: 0 })"),
+    ).rejects.toThrow();
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.editor.select({ windowId: 7, ids: 'point-a' })",
+      ),
+    ).rejects.toThrow();
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.editor.openGlyph({ windowId: 7, glyph: { name: 'A', glyphId: 'glyph-a' } })",
+      ),
+    ).rejects.toThrow();
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.commands.list({ windowId: 7, ifFontRevision: 'r' })",
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("lets a script recognise a command agents may not run by its error name", async () => {
+    const result = await executeShiftCode(
+      capabilities,
+      "async () => { try { await shift.commands.run({ windowId: 7, command: 'file.save' }); return null; } catch (error) { return error.name; } }",
+    );
+
+    expect(result).toBe("CommandNotRunnableError");
   });
 
   it("cannot access Node process globals", async () => {

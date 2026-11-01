@@ -1,4 +1,9 @@
-import type { GlyphSelector, LayerSelector, SourceSelector } from "@shift/runtime";
+import {
+  GlyphNotFoundError,
+  type GlyphSelector,
+  type LayerSelector,
+  type SourceSelector,
+} from "@shift/runtime";
 import type { GlyphId, LayerId, SourceId } from "@shift/types";
 import type { Font } from "@shift/editor/model";
 
@@ -16,13 +21,13 @@ export class ShiftSelectors {
     this.#font = font;
   }
 
-  /** @throws {Error} when the font has no such glyph. */
+  /** @throws {GlyphNotFoundError} when the font has no such glyph. */
   glyphId(selector: GlyphSelector): GlyphId {
     const entry =
       selector.name !== undefined
         ? this.#font.entryForName(selector.name)
         : this.#font.entryForId(selector.glyphId);
-    if (!entry) throw new Error(`Glyph ${selector.name ?? selector.glyphId} is not in this font`);
+    if (!entry) throw new GlyphNotFoundError(selector.name ?? selector.glyphId);
     return entry.id;
   }
 

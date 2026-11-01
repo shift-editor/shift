@@ -9,10 +9,14 @@ import {
 } from "@shared/workspace/channel";
 import type { FontSession } from "@/types/fontSession";
 import type { E2EHooks } from "@/testing/e2e/hooks";
+import type { WindowRouter } from "@/lib/tabs/WindowNavigation";
+import { AgentControl, type ControlCalls } from "./AgentControl";
+import { ShiftEditorControl } from "./ShiftEditorControl";
 import type { AppReaders } from "./AppReaders";
 import { ShiftFontReader } from "./ShiftFontReader";
 import { ShiftEditorReader } from "./ShiftEditorReader";
 import { ShiftKerningReader } from "./ShiftKerningReader";
+import { AgentRevisions } from "./AgentRevisions";
 
 /** Serves bounded editor observations for one live renderer window. */
 export class AgentBridge {
@@ -22,7 +26,7 @@ export class AgentBridge {
   readonly #kerning: ShiftKerningReader;
   readonly #editor: ShiftEditorReader;
   readonly #readers: AppReaders;
-  readonly #revisionNamespace = crypto.randomUUID();
+  readonly #revisions: AgentRevisions;
   #requests: ChannelServer<AgentEventMap> | null = null;
   #e2eHooks: E2EHooks | null = null;
   #disposed = false;
@@ -37,6 +41,7 @@ export class AgentBridge {
       session.workspace?.editCoordinator ?? null,
     );
     this.#readers = { font: this.#reader, kerning: this.#kerning, editor: this.#editor };
+    this.#revisions = new AgentRevisions(session.workspace?.editCoordinator ?? null);
   }
 
   /** Connects the renderer lane requested by Electron main. */
@@ -57,6 +62,7 @@ export class AgentBridge {
         "font.revision": ({ ifFontRevision }) => this.#readRevision(ifFontRevision),
         "editor.inspect": ({ ifFontRevision }) =>
           this.#observe(ifFontRevision, () => this.#editor.inspect(window.location.hash.slice(1))),
+        ...this.#controlCalls(),
         "font.get": ({ ifFontRevision }) =>
           this.#observe(ifFontRevision, () => this.#reader.getFont()),
         "locations.resolve": ({ location, ifFontRevision }) =>
@@ -116,6 +122,15 @@ export class AgentBridge {
     this.#requests = null;
   }
 
+  /** The calls that control the window: its commands, tool, page, open glyph, camera and selection. */
+  #controlCalls(): ControlCalls {
+    const { editor, font, tabs } = this.#session;
+    const control = new ShiftEditorControl(editor, font, tabs, HASH_ROUTER);
+    return new AgentControl(control, this.#editor, this.#revisions, HASH_ROUTER, (command) =>
+      this.#host.commands.run(command),
+    ).calls;
+  }
+
   /** @throws {Error} for a hook or method the E2E hooks do not have. */
   async #callHook(hook: string, method: string, args: unknown[]): Promise<unknown> {
     const { createE2EHooks } = await import("@/testing/e2e/hooks");
@@ -152,33 +167,11 @@ export class AgentBridge {
     return observation.fontRevision;
   }
 
-  async #observe<Value>(
+  #observe<Value>(
     ifFontRevision: FontRevision | undefined,
     read: () => Value | Promise<Value>,
   ): Promise<ShiftObservation<Value>> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await this.#session.workspace?.editCoordinator.settled();
-      const before = this.#fontRevision();
-      this.#assertRevision(ifFontRevision, before);
-
-      const value = await read();
-      await this.#session.workspace?.editCoordinator.settled();
-      const after = this.#fontRevision();
-      if (before === after) return { fontRevision: before, value };
-      if (ifFontRevision) this.#assertRevision(ifFontRevision, after);
-    }
-
-    throw new Error("The font changed while Shift was reading it; retry the observation");
-  }
-
-  #fontRevision(): FontRevision {
-    const sequence = this.#session.workspace?.editCoordinator.authoredRevisionCell.peek() ?? 0;
-    return `${this.#revisionNamespace}:${sequence}`;
-  }
-
-  #assertRevision(expected: FontRevision | undefined, current: FontRevision): void {
-    if (!expected || expected === current) return;
-    throw new Error(`Font revision mismatch: expected ${expected}, current ${current}`);
+    return this.#revisions.observe(ifFontRevision, read);
   }
 
   #editorCaptureBounds() {
@@ -190,6 +183,14 @@ export class AgentBridge {
     return { x, y, width, height };
   }
 }
+
+/** The window's route as its hash router keeps it, for code outside React. */
+const HASH_ROUTER: WindowRouter = {
+  pathname: () => window.location.hash.slice(1),
+  navigate: (path) => {
+    window.location.hash = path;
+  },
+};
 
 function nextAgentPort(): { received: Promise<MessagePort>; cancel: () => void } {
   let cancel = () => {};

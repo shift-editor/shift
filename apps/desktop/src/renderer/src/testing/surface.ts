@@ -17,6 +17,8 @@
  * lint allows it only as a call argument, for code under test that takes an
  * `Editor`.
  */
+import type { ControlOperation } from "@/agent/AgentControl";
+import type { AgentCallMap } from "@shared/agent/protocol";
 import type { DeleteMode, Editor } from "@shift/editor";
 import type { GlyphOutlineTarget, PositionGuide, SourceSelectionMode } from "@shift/editor/types";
 import type { ToolName } from "@shift/editor/tools";
@@ -38,7 +40,7 @@ import type {
   SourceMetrics,
   Unicode,
 } from "@shift/types";
-import type { EditorCommandId } from "@shared/commands";
+import type { CommandId, EditorCommandId } from "@shared/commands";
 import type { WorkspaceDocumentState } from "@shared/workspace/lanes";
 import type { DrawOptions, GlyphFixture, PointNames } from "./fixtures";
 import type { AxisFixture, AxisLocation, FontBuilder } from "./fonts";
@@ -624,6 +626,20 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   screenPosition(position: Point2D): ScreenPoint;
   /** The viewport's centre, in screen pixels. Test-only: not agent data. */
   viewportCentre(): ScreenPoint;
+  /**
+   * Makes one window-control call as an agent does over MCP
+   * (`shift.commands.run`, `shift.editor.*`), on this editor and behind the
+   * same font-revision guard; only the window id is left out.
+   */
+  agentControl<K extends ControlOperation>(
+    operation: K,
+    input: AgentCallMap[K]["request"],
+  ): Promise<AgentCallMap[K]["response"]>;
+  /**
+   * Sends `commands.run` on to `run`, as the window's own command request
+   * sends a command to main's registry. Test-only: main is not in process.
+   */
+  connectAppCommands(run: (command: CommandId) => Promise<void>): void;
   /** The document's save state behind every edit made so far, as agents read it; null without a document. */
   documentState(): Promise<DocumentSaveState | null>;
 
@@ -633,6 +649,12 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   shownPageId(): string | null;
   /** Whether a page with id `id` exists, glyph pages included. Test-only: not agent data. */
   pageExists(id: string): boolean;
+  /**
+   * Closes the shown tab and shows its neighbour, as Close Tab does in the
+   * window's renderer; false when only the glyph overview is shown, so Close
+   * Tab closes the window instead.
+   */
+  closeTab(): boolean;
   /** Adds a page after the last one, as the pages list's add button does, without showing it. */
   addPage(name?: string): PageEntry;
   /** Shows a page on the canvas, as choosing it in the pages list does. */
