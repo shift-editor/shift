@@ -94,6 +94,7 @@ import { Hover } from "./Hover";
 import { Snapping } from "./Snapping";
 import { Renderer } from "./rendering/Renderer";
 import { Scene } from "./Scene";
+import { SessionScene } from "./SessionScene";
 import type { Canvas2DSurface, MarkerCanvasSurface } from "./rendering/CanvasSurface";
 import type { EditorRenderTheme } from "./rendering/Theme";
 import type { CameraTransform } from "./managers";
@@ -121,7 +122,7 @@ import type { TransformTarget } from "../../types/transformTarget";
 import type { ComponentTargets } from "../../types/componentTargets";
 import type { PositionSelection } from "../../types/positionEdit";
 import type { ShiftObject } from "../../types/object";
-import type { ShiftEditorRecord, ShiftRecordId } from "../../types/records";
+import type { NodeReference, ShiftEditorRecord } from "../../types/records";
 import type { GlyphNode, NodeKind, PageNode, ShiftNode } from "../../types/node";
 import {
   AnchorObject,
@@ -202,6 +203,8 @@ export class Editor {
   /** Immutable persistence and editing capability; glyph edits still require an authored layer. */
   readonly sessionMode: FontSessionMode;
   readonly scene: Scene;
+  /** The scene of a session with no document, held apart from any engine; null in a workspace. */
+  readonly #sessionScene: SessionScene | null;
   readonly text: Text;
   readonly textEditing: TextEditing;
   /** The document's pages and the page the canvas shows. */
@@ -274,10 +277,12 @@ export class Editor {
     this.sessionMode = options.sessionMode;
     this.#store = new ShiftStore();
     this.#fontStore = options.fontStore;
-    this.scene = new Scene(
-      this.#store,
-      (node) => this.nodeDefinition(node.kind).references?.(node) ?? [],
-    );
+    this.#sessionScene = options.sessionMode === "workspace" ? null : new SessionScene();
+    this.scene = new Scene(this.#sessionScene ?? this.font.editCoordinator.scene, {
+      references: (node) => this.nodeDefinition(node.kind).references?.(node) ?? [],
+      recording: () => (this.history.recording ? "undoable" : "unrecorded"),
+      changed: (ids) => this.history.touched(ids),
+    });
 
     const initialExternalLocation = emptyExternalAxisLocation();
 
@@ -301,7 +306,7 @@ export class Editor {
       this.#activeSourceIdCell,
       this.#editingSourceIdsCell,
     );
-    this.text = new Text(this.#store, this);
+    this.text = new Text(this);
     this.textEditing = new TextEditing(this.#store, this);
 
     const GlyphDefinition = options.nodeDefinitions?.glyph ?? GlyphNodeDefinition;
@@ -323,7 +328,7 @@ export class Editor {
     };
 
     this.selection = new Selection(this.#store);
-    this.editing = new Editing(this.#store);
+    this.editing = new Editing(this.#store, this.scene);
     this.history = new EditorHistory(
       this,
       this.#store,
@@ -331,8 +336,9 @@ export class Editor {
     );
     this.history.onCaptureFinishing((changed) => this.#runContentHooks(changed));
     this.pages = new Pages(this);
-    // A session starts with one page; setup, not an edit.
-    this.pages.ensure();
+    // A session without a document starts with one page; setup, not an edit.
+    // A document's scene has its first page already.
+    if (this.#sessionScene) this.history.withoutRecording(() => this.pages.ensure());
     this.hover = new Hover();
     this.snapping = new Snapping(this);
     this.#selectedPoints = computed(
@@ -1785,7 +1791,7 @@ export class Editor {
     });
   }
 
-  #runContentHooks(changed: ReadonlySet<ShiftRecordId>): void {
+  #runContentHooks(changed: ReadonlySet<NodeReference>): void {
     const touched = new Set<ShiftNode>();
     for (const id of changed) {
       const node = isNodeId(id) ? this.scene.node(id) : null;
@@ -2512,6 +2518,7 @@ export class Editor {
     this.#renderer.destroy();
     this.#toolManager.dispose();
     this.text.dispose();
+    this.#sessionScene?.dispose();
     this.history.dispose();
     this.#handlesCell.set(new Map());
     this.#events.dispose();

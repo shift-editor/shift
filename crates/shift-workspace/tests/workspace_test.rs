@@ -2686,7 +2686,14 @@ fn a_move_sent_compacted_persists_against_an_unloaded_layer() {
     let mut workspace = FontWorkspace::resume(&store_path).unwrap();
     assert_eq!(workspace.loaded_layer_count(), 0);
     workspace
-        .persist_compact_change_set(applied.changes.compact(), shift_store::SaveState::Unsaved)
+        .persist_compact_change_set(
+            shift_engine::DocumentChangeSet {
+                font: applied.changes,
+                scene: shift_engine::scene::SceneChangeSet::default(),
+            }
+            .compact(),
+            shift_store::SaveState::Unsaved,
+        )
         .unwrap();
 
     assert_eq!(workspace.font().layer(layer_id), window.layer(layer_id));

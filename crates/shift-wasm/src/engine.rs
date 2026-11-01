@@ -14,9 +14,10 @@ use std::rc::Rc;
 use js_sys::{Array, Float64Array, Function, Object, Reflect, Uint8Array};
 use pack::{CarryingNames, Packed};
 use serde::Serialize;
+use shift_engine::scene::{Scene, SceneChangeSet, SceneIntent, SceneNode};
 use shift_engine::{
-    ApplyError, EditHistory, EngineSession, LayerSource, RecordCache, RecordSource, StoreReadError,
-    StoreReaderClient,
+    ApplyError, EditHistory, EditLocation, EngineSession, LayerSource, RecordCache, RecordSource,
+    Recording, Replayed, StoreReadError, StoreReaderClient,
 };
 use shift_font::{
     AppliedIntents, Contour, Font, FontChangeImpact, FontIntent, FontIntentSet, GlyphDataCategory,
@@ -38,6 +39,7 @@ import type {
   GlyphStructure,
   KerningGroupId,
   LayerId,
+  NodeId,
 } from "@shift/types";
 
 /**
@@ -284,6 +286,12 @@ pub(crate) struct Engine {
     /// The intents `EngineEdits::hold` sent, which the next apply, stage or
     /// preview takes.
     pub(crate) held: Vec<FontIntent>,
+    /// The scene intents `EngineEdits::hold_scene` sent, which the next apply
+    /// or stage takes.
+    pub(crate) held_scene: Vec<SceneIntent>,
+    /// Where the latest undo or redo's edit was made, until
+    /// `EngineEdits::replayed_location` takes it.
+    pub(crate) replayed_location: Option<EditLocation>,
     /// The font-level records the latest apply, undo or redo changed, until
     /// `EngineEdits::replacement` takes them.
     pub(crate) replaced: Option<FontReplacement>,
@@ -313,11 +321,16 @@ impl Engine {
     /// font-level records it changed for `EngineEdits::replacement`, in the
     /// native workspace's packed shape, with the records of the glyphs it
     /// changed as they now stand.
-    fn edit_object(&mut self, before: &Font, applied: &AppliedIntents) -> Result<Object, JsError> {
+    fn edit_object(
+        &mut self,
+        before: &Font,
+        applied: &AppliedIntents,
+        scene: &SceneChangeSet,
+    ) -> Result<Object, JsError> {
         let layers = engine_layers(before, &applied.layers)?;
         let edit = Object::new();
         set(&edit, "layers", &layers)?;
-        let impact = applied.changes.impact();
+        let impact = applied.changes.impact() | scene.impact();
         self.on(EditEvent::Applied(impact));
         set(&edit, "impact", &JsValue::from(impact.bits()))?;
         let mut replaced = FontReplacement::changed_by(
@@ -395,6 +408,32 @@ impl Engine {
             intents: std::mem::take(&mut self.held),
         }
     }
+
+    /// Applies the held font and scene intents within the open edit and
+    /// records both: what the font intents did, the font as it was before
+    /// them, and what the scene intents changed.
+    fn apply_held(&mut self) -> Result<(AppliedIntents, Font, SceneChangeSet), JsError> {
+        let intents = self.take_held();
+        let scene_intents = std::mem::take(&mut self.held_scene);
+        if !self.history.is_open() {
+            return Err(JsError::new("no edit is open; begin one first"));
+        }
+        let before = self.session.font().clone();
+        let applied = if intents.intents.is_empty() {
+            AppliedIntents {
+                changes: shift_font::FontChangeSet::default(),
+                layers: Vec::new(),
+            }
+        } else {
+            self.session
+                .apply(&mut HostLayers(&self.source), &intents)
+                .map_err(apply_error)?
+        };
+        let scene = self.session.apply_scene(&scene_intents).map_err(js_error)?;
+        self.history.record(applied.changes.clone());
+        self.history.record_scene(scene.clone());
+        Ok((applied, before, scene))
+    }
 }
 
 impl Engine {
@@ -427,18 +466,31 @@ pub(crate) fn with_engine<T>(
 
 /// Opens a session over a font directory, as named MessagePack from the
 /// store's reader, with every layer a placeholder; it loads layers through
-/// `source`, a `StoreRequest`. Returns its handle.
+/// `source`, a `StoreRequest`. `scene` is the document's scene as the store's
+/// `scene_nodes` returns it; without one the session's scene is empty, for a
+/// reader of the font's records alone. Returns its handle.
 ///
 /// # Errors
 ///
-/// Fails when `directory` does not decode to a font.
+/// Fails when `directory` does not decode to a font, or `scene` to scene
+/// nodes.
 #[wasm_bindgen(js_name = engineOpen)]
 pub fn engine_open(
     directory: &[u8],
     #[wasm_bindgen(unchecked_param_type = "StoreRequest")] source: Function,
+    scene: Option<Vec<u8>>,
 ) -> Result<u32, JsError> {
     let font: Font = rmp_serde::from_slice(directory)?;
-    let session = EngineSession::open_directory(font);
+    let mut session = EngineSession::open_directory(font);
+    if let Some(scene) = scene {
+        let nodes: Vec<SceneNode> = rmp_serde::from_slice(&scene)?;
+        session = session.with_scene(nodes.into_iter().collect::<Scene>());
+    }
+    open(session, source)
+}
+
+/// Keeps `session`, reading through `source`, and returns its handle.
+fn open(session: EngineSession, source: Function) -> Result<u32, JsError> {
     ENGINES.with_borrow_mut(|engines| {
         let handle = u32::try_from(engines.len())?;
         engines.push(Some(Engine {
@@ -448,6 +500,8 @@ pub fn engine_open(
             before_edit: None,
             ids: InternedIds::default(),
             held: Vec::new(),
+            held_scene: Vec::new(),
+            replayed_location: None,
             replaced: None,
             variation: RefCell::default(),
             shaping: TextShaping::default(),
@@ -466,11 +520,18 @@ pub fn engine_open(
 /// # Errors
 ///
 /// Fails on an unknown handle.
+///
+/// `page` is the page the editor shows, which the edit's undo step records as
+/// where it was made; absent with no page shown.
 #[wasm_bindgen(js_name = engineBeginEdit)]
-pub fn engine_begin_edit(handle: u32) -> Result<(), JsError> {
+pub fn engine_begin_edit(
+    handle: u32,
+    #[wasm_bindgen(unchecked_param_type = "NodeId | undefined")] page: Option<String>,
+) -> Result<(), JsError> {
+    let page = page.map(|page| page.parse()).transpose()?;
     with_engine(handle, |engine| {
         engine.before_edit = Some(engine.session.clone());
-        engine.history.begin();
+        engine.history.begin(page);
         Ok(())
     })
 }
@@ -487,17 +548,8 @@ pub fn engine_begin_edit(handle: u32) -> Result<(), JsError> {
 #[wasm_bindgen(js_name = engineApply, unchecked_return_type = "EngineEditLayers")]
 pub fn engine_apply(handle: u32) -> Result<JsValue, JsError> {
     with_engine(handle, |engine| {
-        let intents = engine.take_held();
-        if !engine.history.is_open() {
-            return Err(JsError::new("no edit is open; begin one first"));
-        }
-        let before = engine.session.font().clone();
-        let applied = engine
-            .session
-            .apply(&mut HostLayers(&engine.source), &intents)
-            .map_err(apply_error)?;
-        let edit = engine.edit_object(&before, &applied)?;
-        engine.history.record(applied.changes);
+        let (applied, before, scene) = engine.apply_held()?;
+        let edit = engine.edit_object(&before, &applied, &scene)?;
         Ok(edit.into())
     })
 }
@@ -518,7 +570,7 @@ pub fn engine_rewind_edit(handle: u32) -> Result<(), JsError> {
             .ok_or_else(|| JsError::new("no edit is open; begin one first"))?;
         engine.session = before;
         engine.on(EditEvent::Rewound);
-        engine.history.begin();
+        engine.history.restart();
         Ok(())
     })
 }
@@ -534,19 +586,10 @@ pub fn engine_rewind_edit(handle: u32) -> Result<(), JsError> {
 #[wasm_bindgen(js_name = engineStage, unchecked_return_type = "EngineStage")]
 pub fn engine_stage(handle: u32) -> Result<JsValue, JsError> {
     with_engine(handle, |engine| {
-        let intents = engine.take_held();
-        if !engine.history.is_open() {
-            return Err(JsError::new("no edit is open; begin one first"));
-        }
-        let before = engine.session.font().clone();
-        let applied = engine
-            .session
-            .apply(&mut HostLayers(&engine.source), &intents)
-            .map_err(apply_error)?;
+        let (applied, before, scene) = engine.apply_held()?;
         let layers = engine_layers(&before, &applied.layers)?;
-        let impact = applied.changes.impact();
+        let impact = applied.changes.impact() | scene.impact();
         engine.on(EditEvent::Applied(impact));
-        engine.history.record(applied.changes);
 
         let stage = Object::new();
         set(&stage, "layers", &layers)?;
@@ -555,19 +598,33 @@ pub fn engine_stage(handle: u32) -> Result<JsValue, JsError> {
     })
 }
 
-/// Closes the open edit as one undo step and returns its change set, as named
-/// MessagePack, to persist; `undefined` when it changed nothing.
+/// Closes the open edit and returns its document change set, font and scene
+/// together, as named MessagePack, to persist; `undefined` when it changed
+/// nothing. An `undoable` edit is the latest undo step; an `unrecorded` one is
+/// kept but undo passes over it.
 ///
 /// # Errors
 ///
-/// Fails on an unknown handle, or when the edit's changes cannot be coalesced
-/// or encoded.
+/// Fails on an unknown handle, an unknown recording, or when the edit's
+/// changes cannot be coalesced or encoded.
 #[wasm_bindgen(js_name = engineEndEdit)]
-pub fn engine_end_edit(handle: u32) -> Result<Option<Uint8Array>, JsError> {
+pub fn engine_end_edit(
+    handle: u32,
+    #[wasm_bindgen(unchecked_param_type = "\"undoable\" | \"unrecorded\"")] recording: &str,
+) -> Result<Option<Uint8Array>, JsError> {
+    let recording = match recording {
+        "undoable" => Recording::Undoable,
+        "unrecorded" => Recording::Unrecorded,
+        other => return Err(JsError::new(&format!("unknown recording {other:?}"))),
+    };
     with_engine(handle, |engine| {
         engine.before_edit = None;
         engine.on(EditEvent::Committed);
-        let Some(change_set) = engine.history.end(engine.session.font())? else {
+        let Some(change_set) =
+            engine
+                .history
+                .end(engine.session.font(), engine.session.scene(), recording)?
+        else {
             return Ok(None);
         };
         Ok(Some(Uint8Array::from(
@@ -644,19 +701,21 @@ pub fn engine_discard_redo(handle: u32) -> Result<(), JsError> {
 }
 
 /// An undo or redo as an `EngineEdit` carrying its change set and whether it
-/// left the font as last saved, or `undefined`.
+/// left the document as last saved, or `undefined`. Keeps where the edit was
+/// made for `EngineEdits::replayed_location`.
 fn replayed(
     engine: &mut Engine,
     before: &Font,
-    applied: Option<AppliedIntents>,
+    replayed: Option<Replayed>,
 ) -> Result<JsValue, JsError> {
-    let Some(applied) = applied else {
+    let Some(replayed) = replayed else {
         return Ok(JsValue::UNDEFINED);
     };
-    let edit = engine.edit_object(before, &applied)?;
+    let edit = engine.edit_object(before, &replayed.applied, &replayed.scene)?;
     // An undo or redo is a whole edit of its own.
     engine.on(EditEvent::Committed);
-    let change_set = rmp_serde::to_vec_named(&applied.changes.compact())?;
+    let change_set = rmp_serde::to_vec_named(&replayed.change_set().compact())?;
+    engine.replayed_location = Some(replayed.location);
     set(&edit, "changeSet", &Uint8Array::from(&change_set[..]))?;
     set(
         &edit,
