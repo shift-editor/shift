@@ -17,6 +17,9 @@ overrides:
   minimatch@9>brace-expansion: 5.0.9
   '@electron/rebuild>@electron/node-gyp': 10.2.0-electron.2
 
+patchedDependencies:
+  ts-poet@6.12.0: 815430f70cf3072183b25162d80e7963d58e026be25fb431afdf24728da7caf0
+
 importers:
 
   .:
@@ -390,7 +393,7 @@ importers:
     dependencies:
       ts-poet:
         specifier: 6.12.0
-        version: 6.12.0
+        version: 6.12.0(patch_hash=815430f70cf3072183b25162d80e7963d58e026be25fb431afdf24728da7caf0)
     devDependencies:
       '@types/node':
         specifier: ^25.3.0
@@ -9858,7 +9861,7 @@ snapshots:
       '@ts-morph/common': 0.28.1
       code-block-writer: 13.0.3
 
-  ts-poet@6.12.0:
+  ts-poet@6.12.0(patch_hash=815430f70cf3072183b25162d80e7963d58e026be25fb431afdf24728da7caf0):
     dependencies:
       dprint-node: 1.0.8
 
