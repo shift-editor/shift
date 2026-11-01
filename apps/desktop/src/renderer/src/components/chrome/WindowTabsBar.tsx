@@ -52,7 +52,7 @@ export const WindowTabsBar = () => {
   };
 
   const tabLabel = (id: string): string => {
-    const tab = openTabs.find((candidate) => candidate.id === id);
+    const tab = tabs.tab(id);
     return tab ? label(tab) : "Tab";
   };
 
@@ -62,7 +62,7 @@ export const WindowTabsBar = () => {
         aria-label="Open tabs"
         value={active?.id ?? null}
         onValueChange={(id) => {
-          const tab = openTabs.find((candidate) => candidate.id === id);
+          const tab = tabs.tab(id);
           if (tab) show(tab);
         }}
       >

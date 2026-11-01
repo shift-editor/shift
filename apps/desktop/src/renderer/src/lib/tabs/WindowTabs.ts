@@ -92,7 +92,7 @@ export class WindowTabs {
         resolveTabs(
           this.#openedCell.value,
           editor.scene.pagesCell.value,
-          editor.scene.shownPageIdCell.value,
+          editor.scene.shownPageCell.value,
         ),
       { name: "desktop.windowTabs" },
     );
@@ -130,6 +130,11 @@ export class WindowTabs {
       case "canvas":
         return location.pageId ? this.pageTab(location.pageId) : null;
     }
+  }
+
+  /** Returns the tab with id `tabId`, or null when no tab has it. */
+  tab(tabId: string): WindowTab | null {
+    return this.#tabsCell.peek().find((tab) => tab.id === tabId) ?? null;
   }
 
   /** Returns the tab showing page `pageId`, or null when it has none. */
@@ -355,10 +360,9 @@ export class WindowTabs {
 function resolveTabs(
   opened: readonly MovableTab[],
   pages: readonly PageNode[],
-  shownPageId: NodeId | null,
+  shownPage: PageNode | null,
 ): readonly WindowTab[] {
   const pageIds = new Set(pages.map((page) => page.id));
-  const shownPage = pages.find((page) => page.id === shownPageId) ?? null;
   const shownIsUntabbedUserPage =
     shownPage !== null && shownPage.role === undefined && !hasPageTab(opened, shownPage.id);
   let fallback = shownIsUntabbedUserPage ? shownPage.id : null;
