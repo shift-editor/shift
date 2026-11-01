@@ -13,11 +13,12 @@ const test = documentTest.extend({
 
 const FONT_NAME = "MutatorSans.ttf";
 
+/** The file's tile, found by its button's name: the caption shows the font's name instead. */
 function recentFile(launcher: Page) {
   return launcher
     .getByRole("list", { name: "Recent files" })
     .getByRole("listitem")
-    .filter({ hasText: FONT_NAME });
+    .filter({ has: launcher.getByRole("button", { name: FONT_NAME, exact: true }) });
 }
 
 test("a font opened once is listed in Recent files after relaunch and reopens from its card", async ({
