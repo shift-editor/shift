@@ -1,0 +1,19 @@
+{
+  "extends": "../../../tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "types": [],
+    "paths": {
+      "@shift-editor/sdk": ["../../src/index.ts"],
+      "@shift-editor/sdk/ui": ["../../src/ui.ts"]
+    },
+    // test:packed copies `shared/` into each consumer, so `../shared` from
+    // `next/app` or `vite/src` resolves here as it does there.
+    "rootDirs": ["next", "vite", "."]
+  },
+  "include": ["../../src/style.d.ts", "**/*.ts", "**/*.tsx"],
+  // next.config.ts imports `next`, which only the packed consumer installs;
+  // `next build` in `pnpm test:packed` typechecks it there.
+  "exclude": ["next/next.config.ts"]
+}
