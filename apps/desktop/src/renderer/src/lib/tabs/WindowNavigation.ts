@@ -81,6 +81,14 @@ export class WindowNavigation {
     return true;
   }
 
+  /**
+   * Whether Close Tab now closes the window rather than a tab: only the pinned
+   * overview is shown.
+   */
+  closeShownClosesWindow(): boolean {
+    return this.#tabs.closeShownClosesWindow(this.#location());
+  }
+
   #location() {
     return windowLocation(this.#router.pathname(), this.#editor.scene.shownPageIdCell.peek());
   }

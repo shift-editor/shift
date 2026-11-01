@@ -100,7 +100,7 @@ import type {
 import { AgentControl, type ControlCall, type ControlOperation } from "@/agent/AgentControl";
 import { AgentRevisions } from "@/agent/AgentRevisions";
 import { ShiftEditorControl } from "@/agent/ShiftEditorControl";
-import type { WindowRouter } from "@/lib/tabs/WindowNavigation";
+import { WindowNavigation, type WindowRouter } from "@/lib/tabs/WindowNavigation";
 import type { AgentCallMap } from "@shared/agent/protocol";
 import { ShiftEditorReader, type DrawnHandle } from "@/agent/ShiftEditorReader";
 import { ShiftFontReader } from "@/agent/ShiftFontReader";
@@ -1670,6 +1670,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   pageExists(id: string): boolean {
     return this.scene.nodeOfKind(asNodeId(id), "page") !== null;
+  }
+
+  closeTab(): boolean {
+    return new WindowNavigation(this, this.#tabs, this.#route).closeShown();
   }
 
   addPage(name?: string): PageEntry {

@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
 import { useTestEditor } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
-import type { RendererCommandId } from "../../shared/commands";
-import { CommandRegistry, type CommandContext } from "../commands/Command";
-import { registerCommands } from "../commands/Commands";
-import { AgentCommands } from "./AgentCommands";
+import type { RendererCommandId } from "@shared/commands";
+import { CommandRegistry, type CommandContext } from "../../../../main/commands/Command";
+import { registerCommands } from "../../../../main/commands/Commands";
+import { AgentCommands } from "../../../../main/agent/AgentCommands";
 
 const WINDOW_ID = 7;
 

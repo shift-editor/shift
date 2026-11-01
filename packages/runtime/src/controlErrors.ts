@@ -41,6 +41,22 @@ export class CommandDisabledError extends Error {
   }
 }
 
+/**
+ * Thrown when Close Tab would close the window: only the glyph overview is
+ * left, and closing a window is not a change to what it shows.
+ */
+export class LastTabError extends Error {
+  override readonly name = "LastTabError";
+  readonly command: string;
+
+  constructor(command: string) {
+    super(
+      `${command} would close this window, since only the glyph overview is left; agents can close a tab only while another is open`,
+    );
+    this.command = command;
+  }
+}
+
 /** Thrown when a tool id names no tool, or a tool this session disables. */
 export class ToolNotFoundError extends Error {
   override readonly name = "ToolNotFoundError";

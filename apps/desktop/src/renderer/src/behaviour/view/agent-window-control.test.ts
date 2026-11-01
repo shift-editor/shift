@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { asNodeId, asSelectableId } from "@shift/types";
 import { useTestEditor } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
@@ -66,6 +66,23 @@ describe("agents change what the window shows without touching the font", () => 
     expect(value.glyph).toMatchObject({ name: "B" });
     expect(value.route).toBe(`/editor/${encodeURIComponent(value.glyph!.glyphId)}`);
     expect(value.shownPageId).not.toBe(proofs.id);
+  });
+
+  it("opens a glyph with no tab on a new glyph page, unsaved as when the user opens it", async () => {
+    await editor.addGlyph("B", 66);
+    await editor.addGlyph("C", 67);
+    await editor.save();
+    await editor.openGlyph("B");
+    const openedByUser = await editor.documentState();
+    const userPageId = editor.shownPageId();
+    await editor.save();
+
+    const { value } = await editor.agentControl("editor.openGlyph", { glyph: { name: "C" } });
+
+    expect(openedByUser).toMatchObject({ dirty: true });
+    expect(value.shownPageId).not.toBe(userPageId);
+    expect(editor.pageExists(value.shownPageId!)).toBe(true);
+    expect(await editor.documentState()).toMatchObject({ dirty: true });
   });
 
   it("refuses a glyph the font does not have and keeps the open one", async () => {
@@ -139,7 +156,7 @@ describe("agents change what the window shows without touching the font", () => 
     expect(editor.selectionIds()).toEqual([a]);
   });
 
-  it("changes no font data: the revision stays and the document stays saved", async () => {
+  it("changes no font data: the revision stays, and reopening a glyph's tab leaves the document saved", async () => {
     const { a } = await editor.draw({
       contours: [
         {
@@ -168,6 +185,43 @@ describe("agents change what the window shows without touching the font", () => 
     expect(revisions).toEqual(Array(revisions.length).fill(before));
     expect(await editor.documentState()).toMatchObject({ dirty: false });
     expect(await editor.outline()).toEqual(outline);
+  });
+
+  describe("Close Tab", () => {
+    // The window's renderer closes its shown tab, or closes the window when only
+    // the glyph overview is left, as it does for Cmd+W.
+    let windowClosed: boolean;
+    beforeEach(() => {
+      windowClosed = false;
+      editor.connectAppCommands(async (command) => {
+        if (command === "tab.close" && !editor.closeTab()) windowClosed = true;
+      });
+    });
+
+    it("closes the shown glyph tab and its page, and shows its neighbour", async () => {
+      await editor.addGlyph("B", 66);
+      const { value: opened } = await editor.agentControl("editor.openGlyph", {
+        glyph: { name: "B" },
+      });
+
+      await editor.agentControl("commands.run", { command: "tab.close" });
+
+      expect(editor.pageExists(opened.shownPageId!)).toBe(false);
+      expect(editor.editorView().route).not.toBe(opened.route);
+      expect(windowClosed).toBe(false);
+    });
+
+    it("refuses to close the window when only the glyph overview is left", async () => {
+      await editor.agentControl("editor.openGlyph", { glyph: { name: "A" } });
+      await editor.agentControl("commands.run", { command: "tab.close" });
+      const overview = editor.editorView().route;
+
+      await expect(
+        editor.agentControl("commands.run", { command: "tab.close" }),
+      ).rejects.toMatchObject({ name: "LastTabError", command: "tab.close" });
+      expect(windowClosed).toBe(false);
+      expect(editor.editorView().route).toBe(overview);
+    });
   });
 
   it("does nothing when the font changed since ifFontRevision", async () => {

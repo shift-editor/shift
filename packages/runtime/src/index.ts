@@ -101,6 +101,7 @@ export {
   CommandNotFoundError,
   CommandNotRunnableError,
   GlyphNotFoundError,
+  LastTabError,
   ObjectNotFoundError,
   PageNotFoundError,
   ToolNotFoundError,

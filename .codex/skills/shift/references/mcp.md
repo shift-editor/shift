@@ -42,7 +42,7 @@ async () => {
 
 ## Control the window
 
-MCP can change what a window shows, as the user would with its menus, toolbar, pages list and glyph overview. None of this changes the font or a file, marks the document unsaved, or moves `fontRevision`.
+MCP can change what a window shows, as the user would with its menus, toolbar, pages list and glyph overview. None of this changes font data or a file, or moves `fontRevision`. Opening a glyph in a new tab adds a glyph page to the document, as the glyph overview does, so the document then shows unsaved changes.
 
 ```js
 async () => {
@@ -50,16 +50,20 @@ async () => {
   const windowId = session.windowId;
   await shift.editor.openGlyph({ windowId, glyph: { name: "a" } });
   await shift.editor.setTool({ windowId, tool: "select" });
-  const { value: view } = await shift.editor.setView({ windowId, zoom: 2, center: { x: 250, y: 300 } });
+  const { value: view } = await shift.editor.setView({
+    windowId,
+    zoom: 2,
+    center: { x: 250, y: 300 },
+  });
   return view.viewport;
 };
 ```
 
-- `commands.list({ windowId })` lists the app commands you may run, `{ id, title, shortcut, enabled }`: only those that change the view or session state (`view.zoomIn`, `view.zoomOut`, `ui.increaseSize`, `ui.decreaseSize`, `ui.resetSize`, `edit.selectAll`, `edit.deselect`, `tab.close`, `app.showSettings`). `commands.run({ windowId, command })` runs one as its menu item does. `tab.close` with only the glyph overview left closes the window.
+- `commands.list({ windowId })` lists the app commands you may run, `{ id, title, shortcut, enabled }`: only those that change the view or session state (`view.zoomIn`, `view.zoomOut`, `ui.increaseSize`, `ui.decreaseSize`, `ui.resetSize`, `edit.selectAll`, `edit.deselect`, `tab.close`, `app.showSettings`). `commands.run({ windowId, command })` runs one as its menu item does. `tab.close` closes the shown tab; with only the glyph overview left it fails with `LastTabError` and the window stays open.
 - Commands that edit the font (Undo and Redo too), touch files (Save, Export, Open) or act outside the window (Copy, help links) are not listed; running one fails with `CommandNotRunnableError`. A listed command that cannot run now (`enabled: false`) fails with `CommandDisabledError`.
 - `editor.setTool({ tool })` takes a tool id as `editor.inspect` reports it (`select`, `pen`, `hand`, `text`, `spacing`, `kerning`, `shape`); a preview disables `pen` and `shape`. `editor.showPage({ pageId })` takes a page from `editor.inspect`'s `pages`. `editor.openGlyph({ glyph })` opens a glyph (`{ name }` or `{ glyphId }`) in its tab. `editor.select({ ids })` replaces the selection with point, contour, anchor and component ids from `layers.get` (an empty list clears it).
 - `editor.setView({ zoom?, center? })` zooms (clamped to 0.01–32) and centres the canvas. `editor.inspect`'s `viewport` gives `{ zoom, center }`; `center` is in the open glyph's units (font units, y up, as `layers.get` gives points) while a glyph is open, and in the page's units otherwise, and null before the canvas is shown.
-- Every editor call answers with the inspection afterwards. Pass `ifFontRevision` to act only if the font is still the one you read; otherwise the call fails with `FontChangedError` and does nothing. Other failures are typed: `CommandNotFoundError`, `ToolNotFoundError`, `PageNotFoundError`, `GlyphNotFoundError`, `ObjectNotFoundError`, `CanvasHiddenError`.
+- Every editor call answers with the inspection afterwards. Pass `ifFontRevision` to act only if the font is still the one you read; otherwise the call fails with `FontChangedError` and does nothing. Other failures are typed: `CommandNotFoundError`, `ToolNotFoundError`, `PageNotFoundError`, `GlyphNotFoundError`, `ObjectNotFoundError`, `CanvasHiddenError`, `LastTabError`.
 
 ## Read kerning
 

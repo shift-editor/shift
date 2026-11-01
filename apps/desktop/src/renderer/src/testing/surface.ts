@@ -617,6 +617,12 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   shownPageId(): string | null;
   /** Whether a page with id `id` exists, glyph pages included. Test-only: not agent data. */
   pageExists(id: string): boolean;
+  /**
+   * Closes the shown tab and shows its neighbour, as Close Tab does in the
+   * window's renderer; false when only the glyph overview is shown, so Close
+   * Tab closes the window instead.
+   */
+  closeTab(): boolean;
   /** Adds a page after the last one, as the pages list's add button does, without showing it. */
   addPage(name?: string): PageEntry;
   /** Shows a page on the canvas, as choosing it in the pages list does. */

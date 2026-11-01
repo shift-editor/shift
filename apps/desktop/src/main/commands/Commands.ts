@@ -85,7 +85,9 @@ const windowCommands: Command[] = [
   },
   {
     // The window's renderer closes its shown tab, or asks for window.close when only
-    // the pinned Glyphs tab is left; a window with no renderer to ask closes.
+    // the pinned Glyphs tab is left; a window with no renderer to ask closes. It is a
+    // view command for agents only while it closes a tab: the renderer refuses an
+    // agent's run that would close the window (`ShiftEditorControl.checkCommand`).
     id: "tab.close",
     effect: "view",
     label: "Close Tab",

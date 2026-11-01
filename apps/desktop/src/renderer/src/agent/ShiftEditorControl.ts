@@ -1,5 +1,6 @@
 import {
   CanvasHiddenError,
+  LastTabError,
   ObjectNotFoundError,
   PageNotFoundError,
   ToolNotFoundError,
@@ -10,6 +11,7 @@ import {
 import type { Editor } from "@shift/editor";
 import type { Font } from "@shift/editor/model";
 import type { NodeId, SelectableId } from "@shift/types";
+import type { CommandId } from "@shared/commands";
 import { editorPath } from "@/lib/editorRoute";
 import { WindowNavigation, type WindowRouter } from "@/lib/tabs/WindowNavigation";
 import type { WindowTabs } from "@/lib/tabs/WindowTabs";
@@ -23,9 +25,11 @@ import { ShiftViewport } from "./ShiftViewport";
  *
  * @remarks
  * Each method makes the same model calls the UI makes for it. None changes
- * font data or the document: tools, pages shown, tabs, the camera and the
- * selection are session state, never an undo step. Every method checks its
- * input first and changes nothing when it throws.
+ * font data or is an undo step: tools, pages shown, tabs, the camera and the
+ * selection are session state. The one document change is the UI's own:
+ * opening a glyph that has no tab yet adds a glyph page to the document, as
+ * the glyph overview does. Every method checks its input first and changes
+ * nothing when it throws.
  */
 export class ShiftEditorControl {
   readonly #editor: Editor;
@@ -91,6 +95,10 @@ export class ShiftEditorControl {
    * Opens a glyph in its tab, as double-clicking it in the glyph overview does:
    * the tab it is already open in, or a new tab framed on the glyph.
    *
+   * @remarks
+   * A new tab puts the glyph on a new glyph page, which the document saves, so
+   * the document then has unsaved changes, as it does when the user opens it.
+   *
    * @throws {GlyphNotFoundError} when the font has no such glyph.
    */
   async openGlyph(selector: GlyphSelector): Promise<void> {
@@ -102,6 +110,17 @@ export class ShiftEditorControl {
     if (opened.placed) this.#editor.fitGlyphFrame(opened.node);
 
     this.#router.navigate(editorPath(glyphId));
+  }
+
+  /**
+   * Refuses an app command that would close the window instead of changing
+   * what it shows: Close Tab while only the glyph overview is left.
+   *
+   * @throws {LastTabError} when `command` is Close Tab and no tab but the overview is open.
+   */
+  checkCommand(command: CommandId): void {
+    if (command !== "tab.close") return;
+    if (this.#navigation.closeShownClosesWindow()) throw new LastTabError(command);
   }
 
   /**

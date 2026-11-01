@@ -23,7 +23,9 @@ export type ControlCalls = { readonly [K in ControlOperation]: ControlCall<K> };
  *
  * @remarks
  * Each call checks `ifFontRevision` before it changes anything. None changes
- * font data, so each answers with the revision it was checked against.
+ * font data, so each answers with the revision it was checked against. A
+ * command that would close the window (Close Tab with only the overview left)
+ * is refused before it runs.
  */
 export class AgentControl {
   /** The handlers the agent lane serves, by call name. */
@@ -45,6 +47,7 @@ export class AgentControl {
     this.calls = {
       "commands.run": ({ command, ifFontRevision }) =>
         revisions.write(ifFontRevision, async () => {
+          control.checkCommand(command);
           await runCommand(command);
           return null;
         }),

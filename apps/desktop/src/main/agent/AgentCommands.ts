@@ -8,7 +8,7 @@ import {
   type FontRevision,
   type ShiftObservation,
 } from "@shift/runtime";
-import { commandShortcuts, toElectronAccelerator, type CommandId } from "../../shared/commands";
+import { commandShortcut, toElectronAccelerator, type CommandId } from "../../shared/commands";
 import type { Command, CommandContext, CommandRegistry } from "../commands/Command";
 
 /** What {@link AgentCommands} needs of one window an agent names. */
@@ -80,6 +80,6 @@ export class AgentCommands {
 }
 
 function shortcutOf(command: Command): string | null {
-  const shortcut = commandShortcuts[command.id];
+  const shortcut = commandShortcut(command.id);
   return shortcut ? toElectronAccelerator(shortcut) : null;
 }
