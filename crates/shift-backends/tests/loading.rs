@@ -511,7 +511,7 @@ fn load_binary(bytes: Vec<u8>, file_name: &str) -> Font {
 }
 
 #[test]
-fn a_binary_font_takes_its_typographic_family_and_style_names() {
+fn a_binary_font_takes_its_typographic_family_name() {
     let bytes = with_names(
         &fs::read(fixtures::mutatorsans_ttf()).unwrap(),
         &[],
@@ -526,11 +526,11 @@ fn a_binary_font_takes_its_typographic_family_and_style_names() {
     let font = load_binary(bytes, "MutatorSans-SemiBold.ttf");
 
     assert_eq!(font.metadata().family_name.as_deref(), Some("Mutator Sans"));
-    assert_eq!(font.metadata().style_name.as_deref(), Some("SemiBold"));
+    assert_eq!(font.metadata().style_name.as_deref(), Some("Regular"));
 }
 
 #[test]
-fn a_binary_font_without_typographic_names_takes_family_and_subfamily() {
+fn a_binary_font_without_a_typographic_family_takes_name_id_1() {
     let bytes = with_names(
         &fs::read(fixtures::mutatorsans_ttf()).unwrap(),
         &[16, 17],

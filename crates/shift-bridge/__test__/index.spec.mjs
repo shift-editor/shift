@@ -456,7 +456,8 @@ describe("font source previews", () => {
   it("describes a compiled font as one source without a location", () => {
     const snapshot = openPreview("fixtures/fonts/mutatorsans/MutatorSans.ttf");
 
-    expect(snapshot.metadata).toEqual({ styleName: "Regular" });
+    // The fixture names its family only in name ID 16.
+    expect(snapshot.metadata).toEqual({ familyName: "MutatorMathTest", styleName: "Regular" });
     expect(snapshot.metrics).toEqual({ unitsPerEm: 1000 });
     expect(snapshot.metricDefinitions).toEqual(standardMetricDefinitions);
     expect(snapshot.sources).toEqual([
