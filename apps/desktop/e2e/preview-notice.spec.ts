@@ -13,7 +13,7 @@ test(
   { tag: "@golden" },
   async ({ electronApp, page }) => {
     const workspaceWindow = electronApp.waitForEvent("window");
-    await page.getByRole("button", { name: "Open Font…", exact: true }).click();
+    await page.getByRole("button", { name: "Open…", exact: true }).click();
     const workspacePage = await workspaceWindow;
     // The workspace opens in a second window that macOS places and sizes itself. The notice is
     // centred in it, so give it the fixed visual size before capturing.

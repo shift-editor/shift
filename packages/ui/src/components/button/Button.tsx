@@ -3,8 +3,17 @@ import { Button as BaseButton, type ButtonProps as BaseButtonProps } from "@base
 import { cn } from "../../lib/utils";
 
 export type ButtonProps = BaseButtonProps & {
-  variant?: "default" | "ghost" | "primary" | "toolbar" | "row" | "muted" | "transparent" | "field";
-  size?: "sm" | "md" | "lg" | "icon" | "icon-sm" | "field";
+  variant?:
+    | "default"
+    | "ghost"
+    | "primary"
+    | "outline"
+    | "toolbar"
+    | "row"
+    | "muted"
+    | "transparent"
+    | "field";
+  size?: "sm" | "md" | "lg" | "action" | "icon" | "icon-sm" | "field";
   isActive?: boolean;
   icon?: React.ReactNode;
 };
@@ -12,6 +21,8 @@ export type ButtonProps = BaseButtonProps & {
 const variantStyles = {
   primary: "rounded-md bg-accent text-on-accent hover:bg-accent/90",
   default: "border border-line-subtle bg-background hover:bg-surface-hover",
+  /** A secondary action beside a primary one: no fill, a hairline drawn inside its edge. */
+  outline: "text-primary ring-1 ring-chrome ring-inset hover:bg-hover/50",
   ghost: "hover:bg-hover/50 data-[active]:bg-hover/50",
   toolbar:
     "text-sidebar-icon hover:bg-icon-button-hover data-[active]:bg-transparent data-[active]:text-accent data-[active]:hover:bg-icon-button-hover",
@@ -30,6 +41,8 @@ const sizeStyles = {
   sm: "h-7 px-2 text-xs",
   md: "h-9 px-4 text-sm",
   lg: "h-11 px-6 text-base",
+  /** A page's main actions, with room for a shortcut after the label. */
+  action: "h-7.5 gap-2.5 rounded-lg pr-2.5 pl-3 text-label font-medium",
   icon: "h-8 w-8 p-1",
   "icon-sm": "h-6 w-6 p-0.5",
   field: "h-7 w-full justify-between px-2 text-ui",

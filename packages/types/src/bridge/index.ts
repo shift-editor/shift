@@ -28,6 +28,8 @@ export type {
   LayerDifferenceKind,
   LayerMatch,
   PointMatch,
+  NameFit,
+  NameSpecimen,
   Specimen,
   Unicode,
 } from "./generated";

@@ -120,7 +120,7 @@ fn plans_only_the_latin_candidates_for_a_latin_font() {
     let characters: Vec<char> = ('A'..='Z').chain('a'..='z').collect();
 
     assert_eq!(
-        subset_plan(&characters),
+        subset_plan(&characters, None),
         SubsetPlan {
             characters: vec!['A', 'G', 'a', 'g'],
             needs_features: false,
@@ -131,7 +131,7 @@ fn plans_only_the_latin_candidates_for_a_latin_font() {
 #[test]
 fn plans_the_script_pair_and_fallback_letters_for_a_non_latin_font() {
     let hebrew: Vec<char> = ('\u{05D0}'..='\u{05EA}').collect();
-    let plan = subset_plan(&hebrew);
+    let plan = subset_plan(&hebrew, None);
 
     assert!(plan.characters.contains(&'א') && plan.characters.contains(&'ב'));
     assert!(plan.characters.len() <= 2 + SCRIPT_FALLBACK_LETTERS);
@@ -143,8 +143,8 @@ fn needs_the_whole_font_only_for_arabic_without_latin() {
     let arabic: Vec<char> = ('\u{0621}'..='\u{064A}').collect();
     let with_latin: Vec<char> = arabic.iter().copied().chain(['A', 'g']).collect();
 
-    assert!(subset_plan(&arabic).needs_features);
-    assert!(!subset_plan(&with_latin).needs_features);
+    assert!(subset_plan(&arabic, None).needs_features);
+    assert!(!subset_plan(&with_latin, None).needs_features);
 }
 
 #[test]

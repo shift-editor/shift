@@ -9,7 +9,7 @@ test(
   "opens the launcher at 960×720, within 90% of the screen",
   { tag: "@os" },
   async ({ electronApp, page }) => {
-    await expect(page.getByRole("button", { name: "New Font", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New font", exact: true })).toBeVisible();
     const browserWindow = await electronApp.browserWindow(page);
     const workArea = await primaryWorkArea(electronApp);
     const expected = [

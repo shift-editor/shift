@@ -99,7 +99,11 @@ fn binary_directory(
         })
         .collect::<Result<Vec<_>, FontReadError>>()?;
     let metrics = font.metrics(Size::unscaled(), LocationRef::default());
-    let family_name = localized_string(font, StringId::FAMILY_NAME);
+    // The typographic family (ID 16) when the font has one: a style outside
+    // Regular, Italic, Bold and Bold Italic carries its weight in name ID 1
+    // ("Foo SemiBold"), so ID 1 alone would make it a family of its own.
+    let family_name = localized_string(font, StringId::TYPOGRAPHIC_FAMILY_NAME)
+        .or_else(|| localized_string(font, StringId::FAMILY_NAME));
     let style_name = localized_string(font, StringId::SUBFAMILY_NAME);
     let mut header = ShiftFont::new();
     header.metadata_mut().family_name = family_name;

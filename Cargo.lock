@@ -2622,6 +2622,7 @@ dependencies = [
  "shift-proof",
  "skrifa",
  "unicode-script",
+ "write-fonts",
 ]
 
 [[package]]

@@ -19,7 +19,7 @@ const execFileAsync = promisify(execFile);
 
 export async function createNewFont(page: Page, electronApp: ElectronApplication): Promise<Page> {
   const workspaceWindow = electronApp.waitForEvent("window");
-  await page.getByRole("button", { name: "New Font", exact: true }).click();
+  await page.getByRole("button", { name: "New font", exact: true }).click();
 
   const workspacePage = await workspaceWindow;
   await waitForWorkspaceReady(workspacePage);
@@ -358,7 +358,7 @@ export async function openFontFromLauncher(
   electronApp: ElectronApplication,
 ): Promise<Page> {
   const workspaceWindow = electronApp.waitForEvent("window");
-  await launcher.getByRole("button", { name: "Open Font…", exact: true }).click();
+  await launcher.getByRole("button", { name: "Open…", exact: true }).click();
 
   const workspacePage = await workspaceWindow;
   await workspacePage.waitForURL(/#\/home$/);

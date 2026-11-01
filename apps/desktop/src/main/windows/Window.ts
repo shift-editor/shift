@@ -15,6 +15,12 @@ export interface WindowOptions {
   autoShow: boolean;
   /** Height of the renderer's title-bar row, which Windows' caption buttons match. */
   titleBarHeight?: number;
+  /**
+   * macOS: the system draws the traffic lights where it puts them in any
+   * window, instead of the renderer drawing its own. For windows, such as the
+   * launcher, that need nothing the renderer's lights add.
+   */
+  systemTrafficLights?: boolean;
 }
 
 const WINDOW_DEFAULT_OPTIONS = {
@@ -56,10 +62,15 @@ const INITIAL_TITLE_BAR_COLORS: TitleBarColors = { background: "#e2e2e2", symbol
  * On Windows and Linux the renderer also draws the menus that would otherwise
  * sit in a native menu bar.
  */
-function platformChrome(titleBarHeight: number): BrowserWindowConstructorOptions {
+function platformChrome(
+  titleBarHeight: number,
+  systemTrafficLights: boolean,
+): BrowserWindowConstructorOptions {
   switch (process.platform) {
     case "darwin":
-      return { titleBarStyle: "hidden", trafficLightPosition: { x: -100, y: -100 } };
+      return systemTrafficLights
+        ? { titleBarStyle: "hidden" }
+        : { titleBarStyle: "hidden", trafficLightPosition: { x: -100, y: -100 } };
     case "win32":
       return {
         titleBarStyle: "hidden",
@@ -93,7 +104,7 @@ export class Window {
     this.#maximiseOnPresent = options.maximised ?? WINDOW_DEFAULT_OPTIONS.maximised;
     this.#titleBarHeight = options.titleBarHeight ?? TITLE_BAR_HEIGHT;
     const browserWindowOptions = {
-      ...platformChrome(this.#titleBarHeight),
+      ...platformChrome(this.#titleBarHeight, options.systemTrafficLights ?? false),
       ...BROWSER_WINDOW_DEFAULT_OPTIONS,
       ...options.browserWindowOptions,
     };
