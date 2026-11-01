@@ -1,9 +1,10 @@
 import type { NodeId } from "@shift/types";
 import type { Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
-import { computed, type Signal } from "../signals";
+import { computed, signal, type Signal, type WritableSignal } from "../signals";
 import { sameNodeList, type PageNode } from "../../types/node";
 import { IndexKey } from "../../types/indexKey";
+import type { EditLocation } from "@shift/wasm/protocol";
 import type { PageCamera } from "../../types/page";
 
 /**
@@ -11,16 +12,19 @@ import type { PageCamera } from "../../types/page";
  *
  * @remarks
  * Pages are root scene nodes, so this is a view over `Scene` plus per-page
- * session state: the cameras. `Scene.shownPageIdCell` is the one owner of the
- * shown page; {@link activate} switches it through `Scene.showPage`. Page
- * edits (`create`, `rename`, `move`, `delete`) write scene records inside a
- * history capture, one undo step each. Switching pages is navigation: it
- * writes no record and is never undone.
+ * view state: the cameras, which the window keeps with its other view state
+ * ({@link cameras}, {@link restoreCameras}) so they survive reopening.
+ * `Scene.shownPageIdCell` is the one owner of the shown page; {@link activate}
+ * switches it through `Scene.showPage`. Page edits (`create`, `rename`,
+ * `move`, `delete`) write scene records inside a history capture, one undo
+ * step each. Switching pages is navigation: it writes no record and is never
+ * undone. An undo or redo shows the page it changed ({@link reveal}).
  */
 export class Pages {
   readonly #editor: Editor;
-  // non-reactive: session camera memory, read only when a page is activated.
-  readonly #cameras = new Map<NodeId, PageCamera>();
+  // non-reactive: camera memory, read when a page is activated and when the window saves its view
+  #cameras = new Map<NodeId, PageCamera>();
+  readonly #revealedCell: WritableSignal<EditLocation | null>;
 
   readonly #listCell: Signal<readonly PageNode[]>;
 
@@ -29,6 +33,7 @@ export class Pages {
    */
   constructor(editor: Editor) {
     this.#editor = editor;
+    this.#revealedCell = signal<EditLocation | null>(null, { name: "editor.pages.revealed" });
     this.#listCell = computed(
       () => editor.scene.pagesCell.value.filter((page) => page.role !== "glyph"),
       { name: "editor.pages.list", equals: sameNodeList },
@@ -176,13 +181,69 @@ export class Pages {
       this.activate(neighbour.id);
     }
 
+    // The page keeps its camera, so undoing the delete shows it as it was left.
     this.#editor.history.capture("Delete page", () => this.#removePage(pageId));
-    this.#cameras.delete(pageId);
     return true;
   }
 
   /**
-   * Shows a page, restoring the camera it had when last shown this session.
+   * Where each undo or redo was made, a new value each time, for the window
+   * to show the tab that holds it; null before the first.
+   */
+  get revealedCell(): Signal<EditLocation | null> {
+    return this.#revealedCell;
+  }
+
+  /**
+   * Shows the page an undo or redo changed, before the change is drawn.
+   *
+   * @remarks
+   * Called by the document as it replays a step. Leaves the canvas alone
+   * when the page is gone, as after undoing its creation, but still
+   * announces the location on {@link revealedCell}, whose glyphs can reopen
+   * a closed glyph tab.
+   */
+  reveal(location: EditLocation): void {
+    if (location.pageId) this.activate(location.pageId);
+    this.#revealedCell.set(location);
+  }
+
+  /**
+   * Each page's camera, as last left, the shown page's as it is now; pages
+   * no longer in the scene are left out.
+   */
+  cameras(): ReadonlyMap<NodeId, PageCamera> {
+    const scene = this.#editor.scene;
+    const cameras = new Map<NodeId, PageCamera>();
+    for (const [pageId, camera] of this.#cameras) {
+      if (scene.nodeOfKind(pageId, "page")) cameras.set(pageId, camera);
+    }
+    const shown = scene.shownPageIdCell.peek();
+    if (shown) cameras.set(shown, this.#camera());
+    return cameras;
+  }
+
+  /**
+   * Takes back the cameras a window kept, dropping those of pages that no
+   * longer exist, and puts the shown page's camera back at once.
+   */
+  restoreCameras(cameras: ReadonlyMap<NodeId, PageCamera>): void {
+    const scene = this.#editor.scene;
+    this.#cameras = new Map(
+      [...cameras].filter(([pageId]) => scene.nodeOfKind(pageId, "page") !== null),
+    );
+    const shown = scene.shownPageIdCell.peek();
+    const camera = shown ? this.#cameras.get(shown) : undefined;
+    if (camera) this.#apply(camera);
+  }
+
+  /** Whether `pageId` has a camera to show it with, so showing it should not refit the view. */
+  remembersCamera(pageId: NodeId): boolean {
+    return this.#cameras.has(pageId);
+  }
+
+  /**
+   * Shows a page, restoring the camera it had when last shown.
    *
    * @remarks
    * Leaves whatever was edited, selected, or hovered on the previous page and
@@ -199,8 +260,10 @@ export class Pages {
     this.#editor.toolManager.reset();
 
     const camera = this.#cameras.get(pageId);
-    if (!camera) return;
+    if (camera) this.#apply(camera);
+  }
 
+  #apply(camera: PageCamera): void {
     this.#editor.setZoom(camera.zoom);
     this.#editor.setPan(camera.pan);
   }

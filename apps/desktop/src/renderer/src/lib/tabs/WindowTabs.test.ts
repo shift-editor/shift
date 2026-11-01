@@ -37,12 +37,13 @@ describe("window tabs", () => {
 
   it("records no undo step for opening a glyph", async () => {
     tabs.openGlyph(glyphA);
-    const shown = editor.shownPageId();
+    const glyphPage = editor.shownPageId()!;
 
     await editor.undo();
 
-    expect(editor.shownPageId()).toEqual(shown);
-    expect(editor.editorView().glyph?.name).toBe("tab.one");
+    // Undo took back the edit before the open, adding tab.two; the glyph's page stays.
+    expect(editor.glyphNamed("tab.two")).toBeNull();
+    expect(editor.pageExists(glyphPage)).toBe(true);
   });
 
   it("selects a glyph on the overview's own page, which is no tab", () => {
@@ -118,6 +119,16 @@ describe("window tabs", () => {
     expect(next).toEqual(page);
     expect(glyphTabs()).toEqual([]);
     expect(editor.pageExists(glyphTab.pageId)).toBe(false);
+  });
+
+  it("finds the tab holding a page, reopening a closed page's or glyph page's tab", () => {
+    const second = addPageId();
+    tabs.openGlyph(glyphA);
+    const glyphPage = glyphTabs()[0]!.pageId;
+
+    expect(tabs.tabHolding(glyphPage)).toEqual(glyphTabs()[0]);
+    expect(tabs.tabHolding(second)).toMatchObject({ kind: "page", pageId: second });
+    expect(tabs.tabHolding(asNodeId("node_gone"))).toBeNull();
   });
 
   it("closes a page's tab when the page is deleted, and never the overview", () => {
