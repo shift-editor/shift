@@ -48,6 +48,17 @@ A failure that callers may handle, test, or wrap is a type, not text.
 - Convert to text only at a boundary that requires it: a NAPI or MCP message, or a foreign API such as fontir's `Error::InvalidEntry`.
 - A public error type cannot hold a private one. Export a wrapped error type alongside the public error that contains it.
 - When new code calls an existing function that returns `String` errors, type that function's error first instead of wrapping the string again. Inherited stringly errors spread through every caller that adapts to them.
+- **Never turn a failure into an empty answer.** `unwrap_or_default()`, `unwrap_or(0)` or `.ok()` on a `Result` makes "the font is unreadable" look like "there is nothing here", and the caller cannot tell. Return the error; where a boundary must answer anyway (a WASM read), give the answer a variant that says why, as `ShapedParagraph::Unshapable { reason }` does.
+
+```rust
+// Before: an unreadable GSUB lists no substitutions; an index past u32 gives an empty range.
+let substitutions = shaper.feature_substitutions(tag).unwrap_or_default();
+let start = u32::try_from(index).unwrap_or(0);
+
+// After
+let substitutions = shaper.feature_substitutions(tag)?;
+let start = u32::try_from(index).or_overflow()?;
+```
 
 ## Lookups and ids
 
@@ -69,6 +80,34 @@ Let the type system state intent instead of comments, flags and tuples. Clippy e
 - **An enum, not a `bool`, for any choice with consequences.** `persist(change_set, AfterPersist::KeepUnsaved)` says what happens; `persist(change_set, false)` doesn't, and a `!flag` deep inside can silently discard data. Keep `bool` for genuine yes/no facts (`is_closed`, `smooth`).
 - **Collect into domain types.** A collection type that callers build in loops implements `FromIterator` and `Extend`, so `let location: DesignLocation = axes.map(|a| (a.id(), a.default())).collect();` replaces `let mut location = DesignLocation::new(); for … { location.set(…) }`.
 - **Name a type instead of a tuple** once it has three fields, is returned from a function, is stored in a collection, or is destructured with `_` placeholders. Points are `kurbo::Point`, not `(f64, f64)`.
+- **Name a type instead of nesting generics.** When a signature stacks three or more of `Result`, `Vec`, `Option` and `HashMap`, each layer means something; give it a name. An `Option` inside a `Vec` usually is an enum with a reason.
+
+```rust
+// Before: what does a `None` paragraph mean?
+fn shape_paragraphs(…) -> Result<Vec<Option<Vec<ShapedRun>>>, ShapingFailure>
+
+// After
+pub enum ShapedParagraph {
+    Runs { runs: Vec<ShapedRun> },
+    Unshapable { reason: String },
+}
+fn shape_paragraphs(…) -> Vec<ShapedParagraph>
+```
+
+- **Phases are an enum, events are an enum.** A struct whose `Option` fields and `bool`s are only valid in some combinations is a state machine written as loose fields; make each phase a variant that holds what that phase has. Several methods that each adjust the same fields for one kind of event (`applied`, `went_back`, `committed`) become one `fn on(&mut self, event: EditEvent)` with a `match`. What changed is one flag set (`FontChangeImpact`), not a `bool` or a revision counter per concern.
+- **Each part says what "the same" means.** A derived `PartialEq` over a whole request, used to decide whether to recompile or re-read, compares fields that don't matter and can't express "this part changed only by appending". Give each part its own comparison, as `CompileInput::recompiles` does for `UnitsPerEm`, `FeatureSource` and `ShaperAxes`, and let the owner combine them.
+
+```rust
+// Before: one derived equality decides what a change costs.
+if attempt.units_per_em != next.units_per_em
+    || attempt.feature_source != next.feature_source
+    || attempt.axes != next.axes { … }
+
+// After: each input type answers for itself.
+let recompiles = self.units_per_em.recompiles(&next.units_per_em)
+    || self.feature_source.recompiles(&next.feature_source)
+    || self.axes.recompiles(&next.axes);
+```
 - **A method, not a free function**, when the first argument is the owner: `font.master_layers(glyph)`, not `master_layers(font, glyph)`. Extension traits are fine across crates.
 - **Entity kinds are an enum.** `EntityKind::Glyph` with `Display`, never `kind: "glyph"` or a `kind: &str` parameter, so kinds can't drift and callers can match them.
 - **Repeated conversion shapes get one helper.** `.into_iter().map(Into::into).collect()` written ten times in a `From` impl becomes `convert_all(v)`; `changed.then(|| read()).transpose()?` becomes `if_changed(changed, read)?`.
@@ -77,6 +116,19 @@ Let the type system state intent instead of comments, flags and tuples. Clippy e
 - **Method paths over closures** that only call a method: `.map(Axis::id)`, not `.map(|axis| axis.id())`.
 - **Points and vectors are `kurbo::Point`/`Vec2`**, and blending uses their operators (`point += weight * master_point`), not paired `x`/`y` arithmetic.
 - **Prefer `let … else`, `if let` chains (edition 2024) and early returns** over nested `match` or `if let`, and name non-trivial intermediate values.
+- **A closure does one thing.** A `filter_map` whose body builds a tuple with two `?`s, a dereference and a conversion reads as noise; the missing piece is usually a type that owns the mapping (`ShaperGlyphOrder`) or a named method on it.
+
+```rust
+// Before
+self.shaper_glyphs = glyph_order
+    .iter()
+    .enumerate()
+    .filter_map(|(index, glyph_id)| Some(((*glyph_id)?, u32::try_from(index).ok()?)))
+    .collect();
+
+// After: the order type knows its glyphs' positions.
+self.glyphs.set_glyph_order(glyph_order);
+```
 
 ## Data structures
 
@@ -90,7 +142,7 @@ An edit should cost what the edited thing costs, not what the font costs. A `Fon
 
 ## Rules the editor needs
 
-When the editor needs a shift-font rule synchronously, write it as a plain-data function in shift-font that native callers use, and export that function from `crates/shift-wasm`. Don't write a second Rust version for WebAssembly. The export only converts numbers to and from shift-font types; "Choosing a route" in `crates/shift-wasm/docs/DOCS.md` says what belongs there and what may stay in TypeScript.
+When the editor needs a shift-font rule synchronously, write it as a plain-data function in shift-font that native callers use, and export that function from `crates/shift-wasm`. Don't write a second Rust version for WebAssembly, and don't re-declare its types there: a `FontFeature` or `FeatureGroup` copied into `shift-wasm` beside `shift-shape`'s is two enums to keep in sync. Derive the wire format on the original type, or convert with one `From`. The export only converts numbers to and from shift-font types; "Choosing a route" in `crates/shift-wasm/docs/DOCS.md` says what belongs there and what may stay in TypeScript.
 
 ## Review checklist
 
@@ -103,5 +155,9 @@ When the editor needs a shift-font rule synchronously, write it as a plain-data 
 - [ ] No new `bool` parameter for a choice with consequences; no new `kind: "…"` string.
 - [ ] Collections built in loops implement `FromIterator`/`Extend` and are collected.
 - [ ] No tuple of three or more fields returned, stored or destructured with `_`; no free function whose first parameter is its owner.
+- [ ] No `unwrap_or_default()`, `unwrap_or(…)` or `.ok()` that turns an error into an empty answer.
+- [ ] No signature nesting three or more generic layers; no `filter_map` closure doing two `?`s into a tuple.
+- [ ] No `Option`/`bool` fields standing in for phases; no derived `PartialEq` deciding what a change costs; events and change kinds are enums or flag sets.
+- [ ] No type re-declared in `shift-wasm` that `shift-font` or `shift-shape` already defines.
 - [ ] No scan of the whole font for a query an edit repeats; indexes that must agree are declared on one type and updated through a copy; no `imbl` outside `ir/persistent.rs`.
 - [ ] `cargo fmt`, `cargo clippy` for the affected crates, and their tests pass.

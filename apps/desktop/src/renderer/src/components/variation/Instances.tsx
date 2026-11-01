@@ -116,13 +116,11 @@ const InstanceActionsMenu = ({
         </MenuTrigger>
       </Tooltip>
       <MenuPortal>
-        <MenuPositioner sideOffset={4} align="end">
+        <MenuPositioner sideOffset={4} align="start">
           <MenuPopup>
             <MenuItem onClick={onEdit}>Edit</MenuItem>
             <MenuSeparator />
-            <MenuItem variant="danger" onClick={onDelete}>
-              Delete instance
-            </MenuItem>
+            <MenuItem onClick={onDelete}>Delete</MenuItem>
           </MenuPopup>
         </MenuPositioner>
       </MenuPortal>

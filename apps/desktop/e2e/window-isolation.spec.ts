@@ -25,7 +25,7 @@ test("keeps authored document state isolated between windows", async ({ electron
   expect(await firstEditor.selectionIds()).toHaveLength(1);
   expect(await firstEditor.pointCount()).toBe(4);
 
-  await firstPage.getByRole("button", { name: "Font overview" }).click();
+  await firstPage.getByRole("tab", { name: "Glyphs", exact: true }).click();
   await firstPage.waitForURL(/#\/home$/);
   await firstPage.getByRole("button", { name: "Create glyph", exact: true }).click();
   await glyphIdForName(firstPage, "newGlyph.1");

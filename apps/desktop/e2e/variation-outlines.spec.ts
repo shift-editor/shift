@@ -167,7 +167,7 @@ test("selects displayed objects at an interpolated instance", async ({ page, edi
   });
 
   const sidebar = editorSidebar(page);
-  await sidebar.getByRole("tab", { name: "Objects", exact: true }).click();
+  await sidebar.getByRole("tab", { name: "Layers", exact: true }).click();
   await sidebar.getByTestId(`object-${pointId}`).click();
   await expect.poll(() => editor.selectionIds()).toEqual([pointId]);
 });

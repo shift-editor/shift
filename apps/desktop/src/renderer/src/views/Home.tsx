@@ -13,13 +13,20 @@ export const Home = () => {
     sidebarPanelProps,
     toggleLeftSidebar,
     toggleRightSidebar,
+    leftSidebarOpen,
+    rightSidebarOpen,
     resetLeftSidebar,
     resetRightSidebar,
   } = useSidebarLayout("home");
 
   return (
     <main className="grid h-screen w-full grid-rows-[auto_minmax(0,1fr)]">
-      <Toolbar toggleLeftSidebar={toggleLeftSidebar} toggleRightSidebar={toggleRightSidebar} />
+      <Toolbar
+        toggleLeftSidebar={toggleLeftSidebar}
+        toggleRightSidebar={toggleRightSidebar}
+        leftSidebarOpen={leftSidebarOpen}
+        rightSidebarOpen={rightSidebarOpen}
+      />
       <ResizablePanelGroup
         id="home-layout-panels"
         orientation="horizontal"

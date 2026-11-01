@@ -37,6 +37,7 @@ export type CommandId =
   | "glyph.reverseSelectedContour"
   | "glyph.makeFirstPoint"
   | "window.showHome"
+  | "tab.close"
   | "window.close"
   | "window.minimise"
   | "window.maximise"
@@ -57,7 +58,8 @@ export interface CommandShortcut {
 /** Canonical keyboard shortcuts shared by native menus and renderer routing. */
 export const commandShortcuts = {
   "app.showSettings": shortcut(","),
-  "window.close": shortcut("w"),
+  "tab.close": shortcut("w"),
+  "window.close": shortcut("w", true),
   "window.minimise": shortcut("m"),
   "view.zoomIn": shortcut("+"),
   "view.zoomOut": shortcut("-"),
@@ -101,7 +103,11 @@ function shortcut(key: string, shiftKey = false, altKey = false): CommandShortcu
  * Renderer command IDs are sent from main to the focused font window. Main
  * owns native menu routing; renderer UI owns the resulting surface or edit.
  */
-export type RendererCommandId = EditorCommandId | "app.showSettings" | "glyph.addComponent";
+export type RendererCommandId =
+  | EditorCommandId
+  | "app.showSettings"
+  | "glyph.addComponent"
+  | "tab.close";
 
 /** Identifies a renderer command that acts on the current editor or text focus. */
 export type EditorCommandId =

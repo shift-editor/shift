@@ -786,3 +786,53 @@ function weightAxis(): AxisDefinition {
     hidden: false,
   };
 }
+
+describe("Font owns a glyph's name and codepoint rules", () => {
+  async function twoGlyphs() {
+    const stack = createWorkspaceStack();
+    await stack.createWorkspace();
+    const a = stack.font.createGlyphForUnicode(0x41 as Unicode);
+    const b = stack.font.createGlyphForUnicode(0x42 as Unicode);
+    await stack.editCoordinator.settled();
+    return { stack, a, b };
+  }
+
+  it("renames a glyph, refusing a blank name or another glyph's", async () => {
+    const { stack, a, b } = await twoGlyphs();
+
+    const blank = stack.font.renameGlyph(a.id, "   ");
+    const taken = stack.font.renameGlyph(a.id, b.name);
+    const renamed = stack.font.renameGlyph(a.id, " A.alt ");
+    await stack.editCoordinator.settled();
+
+    expect(blank).toEqual({ kind: "refused", conflict: { kind: "blankName" } });
+    expect(taken).toEqual({ kind: "refused", conflict: { kind: "nameTaken", name: b.name } });
+    expect(renamed).toEqual({ kind: "changed" });
+    expect(stack.font.entryForId(a.id)?.name).toBe("A.alt");
+  });
+
+  it("replaces the primary codepoint, refusing one another glyph has, and clears it when blank", async () => {
+    const { stack, a, b } = await twoGlyphs();
+
+    const taken = stack.font.setPrimaryCodepoint(a.id, "42");
+    const invalid = stack.font.setPrimaryCodepoint(a.id, "not hex");
+    const moved = stack.font.setPrimaryCodepoint(a.id, "U+E000");
+    await stack.editCoordinator.settled();
+    const codepoints = stack.font.entryForId(a.id)?.unicodes;
+    const cleared = stack.font.setPrimaryCodepoint(a.id, "");
+    await stack.editCoordinator.settled();
+
+    expect(taken).toEqual({
+      kind: "refused",
+      conflict: { kind: "codepointTaken", codepoint: 0x42, owner: b.name },
+    });
+    expect(invalid).toEqual({
+      kind: "refused",
+      conflict: { kind: "invalidCodepoint", text: "not hex" },
+    });
+    expect(moved).toEqual({ kind: "changed" });
+    expect(codepoints).toEqual([0xe000]);
+    expect(cleared).toEqual({ kind: "changed" });
+    expect(stack.font.entryForId(a.id)?.unicodes).toEqual([]);
+  });
+});

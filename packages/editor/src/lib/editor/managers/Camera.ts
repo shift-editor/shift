@@ -26,6 +26,11 @@ import {
   transformBounds,
 } from "../spaces";
 
+/** Where {@link Camera.textInsertionPoint} sits across the view, as a fraction of its width. */
+const TEXT_INSERTION_X = 0.2;
+/** Where {@link Camera.textInsertionPoint} sits down the view, as a fraction of its height. */
+const TEXT_INSERTION_Y = 0.5;
+
 /** Smallest zoom, in screen pixels per scene unit. */
 const MIN_ZOOM = 0.01;
 /** Largest zoom, in screen pixels per scene unit. */
@@ -304,6 +309,23 @@ export class Camera {
    */
   public screenToScene(screen: ScreenPoint): ScenePoint {
     return applyTransform(this.#inverseView.peek(), screen);
+  }
+
+  /**
+   * Where text placed in view starts, in scene space.
+   *
+   * @remarks
+   * A fifth of the way in from the left edge and halfway down: where the user
+   * is looking, with most of the view's width to type into.
+   *
+   * @returns null before the canvas has a size, when there is no view to aim at.
+   */
+  textInsertionPoint(): ScenePoint | null {
+    if (this.logicalWidth <= 0 || this.logicalHeight <= 0) return null;
+
+    return this.screenToScene(
+      screenPoint(this.logicalWidth * TEXT_INSERTION_X, this.logicalHeight * TEXT_INSERTION_Y),
+    );
   }
 
   /**

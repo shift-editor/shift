@@ -73,6 +73,20 @@ const windowCommands: Command[] = [
     run: (ctx) => ctx.windows.showHome(),
   },
   {
+    // The window's renderer closes its shown tab, or asks for window.close when only
+    // the pinned Glyphs tab is left; a window with no renderer to ask closes.
+    id: "tab.close",
+    label: "Close Tab",
+    enabled: (ctx) => ctx.windows.active() !== null,
+    run: (ctx) => {
+      if (ctx.renderer.available()) {
+        ctx.renderer.run("tab.close");
+        return;
+      }
+      ctx.windows.active()?.close();
+    },
+  },
+  {
     id: "window.close",
     label: "Close Window",
     enabled: (ctx) => ctx.windows.active() !== null,

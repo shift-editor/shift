@@ -25,6 +25,7 @@ import {
   FontChangeFlagSchema,
   type FontChangeFlag,
   type FontFeature,
+  type GlyphIdentityChange,
   type LayoutRequest,
   type PlacedText,
 } from "@shift/wasm/protocol";
@@ -350,6 +351,14 @@ export class WindowEngine implements FontEngine {
     external: readonly number[],
   ): readonly number[] | null {
     return this.#opened?.session.atlasWeights(sets, weightCount, external) ?? null;
+  }
+
+  glyphRename(glyphId: GlyphId, name: string): GlyphIdentityChange | null {
+    return this.#require().glyphRename(glyphId, name);
+  }
+
+  glyphPrimaryCodepoint(glyphId: GlyphId, codepoint: number | null): GlyphIdentityChange | null {
+    return this.#require().glyphPrimaryCodepoint(glyphId, codepoint);
   }
 
   nextGlyphName(name: string): GlyphName {

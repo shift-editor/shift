@@ -65,9 +65,14 @@ import type {
   WorkspaceEditCoordinator,
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
-import type { FontFeature, LayoutRequest, PlacedText } from "@shift/wasm/protocol";
+import type {
+  FontFeature,
+  GlyphIdentityChange,
+  LayoutRequest,
+  PlacedText,
+} from "@shift/wasm/protocol";
 import { EngineVariationReader, StatelessVariationReader, locationValues } from "../wasm/variation";
-import type { GlyphReader } from "../../types/glyph";
+import type { GlyphIdentityEdit, GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
@@ -91,7 +96,7 @@ import type {
   VariationReader,
 } from "../../types/variation";
 import { uniqueInOrder } from "../utils/utils";
-import { fallbackGlyphNameForUnicode } from "../utils/unicode";
+import { fallbackGlyphNameForUnicode, parseCodepoint } from "../utils/unicode";
 import { createBatchRequest } from "../utils/batchRequest";
 
 /**
@@ -774,6 +779,50 @@ export class Font {
    */
   glyphHandleForName(name: GlyphName): GlyphHandle {
     return this.#directoryCell.peek().glyphHandleForName(name);
+  }
+
+  /**
+   * Renames a glyph, as shift-font allows (`Font::glyph_rename`): surrounding
+   * whitespace dropped, a blank, invalid or taken name refused.
+   *
+   * @remarks
+   * The rename is undoable; an unchanged name changes nothing.
+   *
+   * @throws When the window's engine is not open.
+   */
+  renameGlyph(glyphId: GlyphId, name: string): GlyphIdentityEdit {
+    return this.#applyIdentityChange(glyphId, this.#requireEngine().glyphRename(glyphId, name));
+  }
+
+  /**
+   * Sets a glyph's primary codepoint, the one it is listed and typed by, as
+   * shift-font allows (`Font::glyph_primary_codepoint`).
+   *
+   * @remarks
+   * The codepoint replaces the primary one and the glyph keeps its others; a
+   * blank `text` removes the primary one. A codepoint another glyph has is
+   * refused. Undoable.
+   *
+   * @param text - the codepoint as hex, `U+` optional; blank removes it.
+   * @throws When the window's engine is not open.
+   */
+  setPrimaryCodepoint(glyphId: GlyphId, text: string): GlyphIdentityEdit {
+    const blank = text.trim() === "";
+    const codepoint = blank ? null : parseCodepoint(text);
+    if (!blank && codepoint === null) {
+      return { kind: "refused", conflict: { kind: "invalidCodepoint", text } };
+    }
+
+    const change = this.#requireEngine().glyphPrimaryCodepoint(glyphId, codepoint);
+    return this.#applyIdentityChange(glyphId, change);
+  }
+
+  #applyIdentityChange(glyphId: GlyphId, change: GlyphIdentityChange | null): GlyphIdentityEdit {
+    if (!change || change.kind === "unchanged") return { kind: "unchanged" };
+    if (change.kind === "refused") return change;
+
+    this.updateGlyphIdentity(glyphId, change.name, [...change.unicodes] as Unicode[]);
+    return { kind: "changed" };
   }
 
   /**

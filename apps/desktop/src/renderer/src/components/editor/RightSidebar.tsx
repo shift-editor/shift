@@ -1,7 +1,7 @@
 import { GlyphSidebar } from "@shift/editor/ui";
 import { useSignalState } from "@shift/editor/signals";
 import { isSegmentId } from "@shift/glyph-state";
-import { isAnchorId, isComponentId, isContourId, isPointId, type GlyphId } from "@shift/types";
+import { isAnchorId, isComponentId, isContourId, isPointId } from "@shift/types";
 import { useRef } from "react";
 import { Button } from "@shift/ui";
 import { BooleanOps } from "./BooleanOps";
@@ -24,11 +24,6 @@ export const RightSidebar = () => {
   const showPreviewNotice = usePreviewNotice();
   const readOnlyFont = session.mode === "preview";
   const editor = useEditor();
-  // Read the catalog's glyph list directly: the catalog context changes on every scrub step.
-  const availableGlyphs = useSignalState(session.catalog.glyphsCell);
-  const glyphLabel = (glyphId: GlyphId) =>
-    availableGlyphs.find((candidate) => candidate.id === glyphId)?.displayName;
-  const familyName = useSignalState(session.catalog.familyNameCell) ?? "Untitled";
   const selection = useSignalState(editor.selection.stateCell, { schedule: "frame" });
   const kerningActive = useSignalState(editor.toolIdCell) === "kerning";
 
@@ -43,25 +38,21 @@ export const RightSidebar = () => {
     <GlyphSidebar
       session={session}
       host={{
-        glyphLabel,
-        header: (
-          <>
-            <div className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-ui font-medium text-primary">{familyName}</span>
-              {readOnlyFont ? (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Read-only preview"
-                  className="h-5 w-5 p-0 text-sidebar-icon"
-                  onClick={showPreviewNotice}
-                >
-                  <LockIcon aria-hidden className="h-3.5 w-3.5" />
-                </Button>
-              ) : null}
-            </div>
+        headerActions: (
+          <div className="flex shrink-0 items-center gap-1">
+            {readOnlyFont ? (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Read-only preview"
+                className="h-5 w-5 p-0 text-sidebar-icon"
+                onClick={showPreviewNotice}
+              >
+                <LockIcon aria-hidden className="h-3.5 w-3.5" />
+              </Button>
+            ) : null}
             <ZoomMenu />
-          </>
+          </div>
         ),
         selection: kerningActive ? (
           <KerningPairSection />
