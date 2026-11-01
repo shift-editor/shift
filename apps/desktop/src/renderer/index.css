@@ -114,6 +114,7 @@
   --editor-text-cursor-color: #0c92f4;
   --editor-text-selection-fill: rgba(12, 146, 244, 0.2);
   --editor-text-hover-outline: #0c92f4;
+  --editor-text-feature-highlight-fill: #0c92f4;
   --editor-text-composite-arm-fill: rgba(128, 128, 128, 0.22);
   --editor-text-component-overlay-a: rgba(169, 236, 183, 0.26);
   --editor-text-component-overlay-b: rgba(255, 182, 207, 0.26);

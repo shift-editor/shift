@@ -523,20 +523,20 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       if (glyph.open) batch.stroke(glyph.open);
       if (outlined.has(itemId)) this.#outline.draw(canvas, model, { stroke: outlineStroke });
     };
-    const later: (readonly [PlacedGlyph, TextItemId, GlyphRenderModel])[] = [];
+    const later: HighlightedGlyph[] = [];
     canvas.withPathBatch(canvas.theme.glyph, (batch) => {
       this.#forEachRunGlyph(node, layout, (placed, itemId, model) => {
         const glyphId = placed.glyph.glyphId;
-        if (glyphId && highlighted?.has(glyphId)) later.push([placed, itemId, model]);
+        if (glyphId && highlighted?.has(glyphId)) later.push({ placed, itemId, model });
         else paint(batch, placed, itemId, model);
       });
     });
     if (later.length === 0) return;
 
     canvas.withPathBatch(
-      { ...canvas.theme.glyph, fill: canvas.theme.textRun.hoverOutline },
+      { ...canvas.theme.glyph, fill: canvas.theme.textRun.featureHighlightFill },
       (batch) => {
-        for (const [placed, itemId, model] of later) paint(batch, placed, itemId, model);
+        for (const { placed, itemId, model } of later) paint(batch, placed, itemId, model);
       },
     );
   }
@@ -633,6 +633,13 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     }
     return ids;
   }
+}
+
+/** A run glyph a feature highlight names, held to draw after the rest. */
+interface HighlightedGlyph {
+  readonly placed: PlacedGlyph;
+  readonly itemId: TextItemId;
+  readonly model: GlyphRenderModel;
 }
 
 /** One distinct glyph's display paths, resolved once per draw of a run. */
