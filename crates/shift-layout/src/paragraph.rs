@@ -12,7 +12,7 @@ use crate::font::{FontReads, GeneratedPositions, LayoutFont, font_units};
 
 /// The tag of the generated kerning feature.
 const KERN: Tag = Tag::new(b"kern");
-use crate::request::{LayoutUnit, TextOptions};
+use crate::request::{LayoutError, LayoutUnit, TextOptions};
 use crate::{Direction, GlyphBounds};
 
 /// The advance a nonspacing mark of zero width takes when text is laid out
@@ -28,6 +28,8 @@ const TYPED_MARK_ANCHOR_X: f64 = 300.0;
 pub(crate) struct Paragraph {
     /// The first unit's index in the text.
     pub start: u32,
+    /// One past its last unit, before the line break that ends it.
+    pub end: u32,
     pub units: Vec<Unit<GlyphId>>,
     /// Whether a line break ends it, the unit after its last.
     pub ends_in_break: bool,
@@ -35,13 +37,19 @@ pub(crate) struct Paragraph {
 
 impl Paragraph {
     /// Splits `units` at their line breaks; no paragraphs for no units.
-    pub(crate) fn split(units: &[LayoutUnit]) -> Vec<Self> {
-        if units.is_empty() {
-            return Vec::new();
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LayoutError::TooLong`] for more units than a `u32` names.
+    pub(crate) fn split(units: &[LayoutUnit]) -> Result<Vec<Self>, LayoutError> {
+        let count = crate::index_count(units.len())?;
+        if count == 0 {
+            return Ok(Vec::new());
         }
         let mut paragraphs = Vec::new();
         let mut current = Self {
             start: 0,
+            end: count,
             units: Vec::new(),
             ends_in_break: false,
         };
@@ -53,8 +61,10 @@ impl Paragraph {
                 LayoutUnit::Glyph { glyph_id } => current.units.push(Unit::Glyph(*glyph_id)),
                 LayoutUnit::LineBreak => {
                     current.ends_in_break = true;
+                    current.end = index;
                     let next = Self {
                         start: index + 1,
+                        end: count,
                         units: Vec::new(),
                         ends_in_break: false,
                     };
@@ -63,12 +73,7 @@ impl Paragraph {
             }
         }
         paragraphs.push(current);
-        paragraphs
-    }
-
-    /// One past its last unit, before the line break that ends it.
-    pub(crate) fn end(&self) -> u32 {
-        self.start + u32::try_from(self.units.len()).unwrap_or(u32::MAX)
+        Ok(paragraphs)
     }
 
     /// Shapes and positions the paragraph, or lays it out as typed when the
@@ -157,7 +162,7 @@ impl Paragraph {
                 let mut shaped = ShapedRun {
                     start: self.start + run.units.start,
                     end: self.start + run.units.end,
-                    level: u32::from(run.level),
+                    level: run.level,
                     direction: run.direction.into(),
                     script: run.script,
                     glyphs,
@@ -211,7 +216,7 @@ impl Paragraph {
             direction: Direction::Ltr,
             runs: vec![ShapedRun {
                 start: self.start,
-                end: self.end(),
+                end: self.end,
                 level: 0,
                 direction: Direction::Ltr,
                 script: None,
@@ -327,7 +332,7 @@ pub(crate) struct ShapedText {
 pub(crate) struct ShapedRun {
     pub start: u32,
     pub end: u32,
-    pub level: u32,
+    pub level: u8,
     pub direction: Direction,
     pub script: Option<String>,
     pub glyphs: Vec<RunGlyph>,

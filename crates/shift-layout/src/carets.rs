@@ -48,7 +48,7 @@ impl<'f, 'l, 'a> Carets<'f, 'l, 'a> {
             else {
                 continue;
             };
-            let text_end = line.end.min(paragraph.end());
+            let text_end = line.end.min(paragraph.end);
             let first = stops.len();
             for &boundary in boundaries.range(line.start..=text_end) {
                 stops.push(self.stop(number, line, boundary, text_end, boundaries));
@@ -265,7 +265,7 @@ impl Paragraph {
             .map(|(byte, _)| self.start + unit_at_byte[byte])
             .collect();
         boundaries.insert(self.start);
-        boundaries.insert(self.end());
+        boundaries.insert(self.end);
         boundaries
     }
 }

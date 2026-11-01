@@ -20,6 +20,8 @@ mod font;
 mod lines;
 #[cfg(feature = "layout")]
 mod paragraph;
+#[cfg(feature = "layout")]
+mod placement;
 mod request;
 #[cfg(feature = "layout")]
 mod units;
@@ -27,8 +29,8 @@ mod units;
 #[cfg(feature = "layout")]
 pub use font::LayoutFont;
 pub use request::{
-    CharacterGlyph, FeatureSetting, LayoutRequest, LayoutUnit, LineHeight, LineMetrics, TextAlign,
-    TextOptions, TypedFont, TypedGlyph,
+    CharacterGlyph, FeatureSetting, LayoutError, LayoutRequest, LayoutUnit, LineHeight,
+    LineMetrics, TextAlign, TextOptions, TypedFont, TypedGlyph,
 };
 
 use shift_font::GlyphId;
@@ -36,6 +38,16 @@ use shift_font::GlyphId;
 // Unit and glyph indices are `u32`; every target Shift builds for has a
 // `usize` at least that wide.
 const _: () = assert!(usize::BITS >= u32::BITS);
+
+/// A count of units, glyphs or lines as the `u32` index layout names them by.
+///
+/// # Errors
+///
+/// Returns [`LayoutError::TooLong`] past `u32::MAX`.
+#[cfg(feature = "layout")]
+pub(crate) fn index_count(count: usize) -> Result<u32, LayoutError> {
+    u32::try_from(count).map_err(|_| LayoutError::TooLong)
+}
 
 /// A unit or glyph index as a slice index, which never loses data (see the
 /// assertion above).
@@ -49,7 +61,7 @@ pub(crate) const fn slice_index(index: u32) -> usize {
 }
 
 /// The direction a line, run or glyph reads in.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum Direction {
     #[default]
@@ -78,6 +90,11 @@ pub struct TextLayout {
     pub width: f64,
     /// Why some text was laid out as typed instead of shaped, when it was.
     pub unshaped: Option<String>,
+    /// A key that is the same for two layouts exactly when they place every
+    /// line, run, glyph and caret alike, glyph bounds aside, so a reader can
+    /// tell an edit that moved nothing in the text without comparing the
+    /// layouts ([`TextLayout::placement_key`]).
+    pub placement: String,
 }
 
 /// One line: a paragraph, or the part of one that fits the width.
@@ -209,9 +226,14 @@ pub struct SecondaryCaret {
 #[cfg(feature = "layout")]
 impl TextLayout {
     /// Lays out `request` over `font`.
-    pub fn new(font: &LayoutFont<'_>, request: &LayoutRequest) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LayoutError::TooLong`] when the text has more units, or
+    /// lays out into more glyphs or lines, than a `u32` index can name.
+    pub fn new(font: &LayoutFont<'_>, request: &LayoutRequest) -> Result<Self, LayoutError> {
         let mut unshaped = None;
-        let paragraphs = paragraph::Paragraph::split(&request.units);
+        let paragraphs = paragraph::Paragraph::split(&request.units)?;
         let shaped: Vec<paragraph::ShapedText> = paragraphs
             .iter()
             .map(|paragraph| {
@@ -222,11 +244,13 @@ impl TextLayout {
                 shaped
             })
             .collect();
-        let mut layout = lines::Placement::new(font, &request.options).place(&paragraphs, &shaped);
+        let mut layout =
+            lines::Placement::new(font, &request.options).place(&paragraphs, &shaped)?;
         layout.unit_glyphs = layout.glyphs_by_unit(request.units.len());
         layout.carets = carets::Carets::new(font, &layout).stops(&paragraphs);
         layout.unshaped = unshaped;
-        layout
+        layout.placement = layout.placement_key();
+        Ok(layout)
     }
 }
 
