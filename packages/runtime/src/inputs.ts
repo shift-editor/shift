@@ -27,6 +27,11 @@ const axisCoordinate = z.strictObject({ axisId, value: z.number() });
 const location = z.array(axisCoordinate).max(64);
 const kerningPosition = z.enum(["first", "second"]);
 const name = z.string().min(1).max(256);
+/** A page's name, as the pages list keeps it: surrounding spaces are dropped, so it needs another character. */
+const pageName = z
+  .string()
+  .max(256)
+  .refine((value) => value.trim() !== "", "A page name needs a character that is not a space");
 const glyphSelector = z.union([z.strictObject({ glyphId }), z.strictObject({ name })]);
 const sourceSelector = z.union([z.strictObject({ sourceId }), z.strictObject({ name })]);
 /** A layer by stable id, or a glyph's layer at a source (the default source when omitted). */
@@ -184,6 +189,11 @@ export const shiftInputSchemas = {
     }),
   }),
   "text.delete": z.strictObject({ windowId, ifFontRevision, runId: nodeId }),
+  "pages.create": z.strictObject({ windowId, ifFontRevision, name: pageName.optional() }),
+  "pages.rename": z.strictObject({ windowId, ifFontRevision, pageId: nodeId, name: pageName }),
+  "pages.delete": z.strictObject({ windowId, ifFontRevision, pageId: nodeId }),
+  "history.undo": z.strictObject({ windowId, ifFontRevision }),
+  "history.redo": z.strictObject({ windowId, ifFontRevision }),
   "layers.get": z.union([
     z.strictObject({ windowId, ifFontRevision, ...layerSelector.byId }),
     z.strictObject({ windowId, ifFontRevision, ...layerSelector.byGlyph }),

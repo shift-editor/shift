@@ -64,6 +64,15 @@ const capabilities: ShiftCapabilities = {
     setOptions: (input) => host.call("shift.text.setOptions", input),
     delete: (input) => host.call("shift.text.delete", input),
   },
+  pages: {
+    create: (input) => host.call("shift.pages.create", input),
+    rename: (input) => host.call("shift.pages.rename", input),
+    delete: (input) => host.call("shift.pages.delete", input),
+  },
+  history: {
+    undo: (input) => host.call("shift.history.undo", input),
+    redo: (input) => host.call("shift.history.redo", input),
+  },
 };
 const runtime = serveChannel<SandboxCallMap, SandboxEventMap>(transport, {
   "sandbox.execute": ({ code }) => executeShiftCode(capabilities, code),

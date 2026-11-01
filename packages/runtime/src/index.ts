@@ -1,6 +1,8 @@
 export { shiftInputSchemas } from "./inputs";
 export { FontChangedError, ShiftReadScope } from "./read";
 export {
+  HistoryUnavailableError,
+  LastPageError,
   ProofTextError,
   TextCaretError,
   TextRunOptionsError,
@@ -45,6 +47,10 @@ export type {
   GlyphResolveInput,
   GlyphSelector,
   GlyphSummary,
+  HistoryInput,
+  HistoryLocation,
+  HistoryRedo,
+  HistoryUndo,
   InstanceGetInput,
   InstanceSelector,
   KerningAtInput,
@@ -72,7 +78,11 @@ export type {
   LayerSelector,
   LayerSvg,
   LocationResolveInput,
+  PageChange,
+  PageCreateInput,
+  PageDeleteInput,
   PagePoint,
+  PageRenameInput,
   ResolvedComponent,
   ResolvedGlyph,
   ResolvedGlyphs,

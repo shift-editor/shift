@@ -81,6 +81,11 @@ export class SandboxRuntimeProcess {
       "shift.text.setCaret": (input) => this.#capabilities.text.setCaret(input),
       "shift.text.setOptions": (input) => this.#capabilities.text.setOptions(input),
       "shift.text.delete": (input) => this.#capabilities.text.delete(input),
+      "shift.pages.create": (input) => this.#capabilities.pages.create(input),
+      "shift.pages.rename": (input) => this.#capabilities.pages.rename(input),
+      "shift.pages.delete": (input) => this.#capabilities.pages.delete(input),
+      "shift.history.undo": (input) => this.#capabilities.history.undo(input),
+      "shift.history.redo": (input) => this.#capabilities.history.redo(input),
     });
 
     this.#process = proc;

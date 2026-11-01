@@ -104,7 +104,10 @@ import { ShiftEditorControl } from "@/agent/ShiftEditorControl";
 import { WindowNavigation, type WindowRouter } from "@/lib/tabs/WindowNavigation";
 import { ShiftEditorReader, type DrawnHandle } from "@/agent/ShiftEditorReader";
 import { AgentText, type TextCall } from "@/agent/AgentText";
-import type { AgentCallMap, TextOperation } from "@shared/agent/protocol";
+import { AgentDocument, type DocumentCall } from "@/agent/AgentDocument";
+import { ShiftPages } from "@/agent/ShiftPages";
+import { ShiftHistory } from "@/agent/ShiftHistory";
+import type { AgentCallMap, DocumentOperation, TextOperation } from "@shared/agent/protocol";
 import { ShiftTextRuns } from "@/agent/ShiftTextRuns";
 import { ShiftFontReader } from "@/agent/ShiftFontReader";
 import { ShiftKerningReader } from "@/agent/ShiftKerningReader";
@@ -265,6 +268,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
   readonly #actions = new SurfaceActions(this);
   /** The proof-text calls agents make, over this editor's readers and edit coordinator. */
   readonly #agentText: AgentText;
+  /** The page edits and undo/redo agents make, over this editor and its edit coordinator. */
+  readonly #agentDocument: AgentDocument;
   /** The frames {@link recordCanvas} has recorded, each the paths it fills and strokes. */
   readonly #canvasFrames: { fills: Path2D[]; strokes: Path2D[] }[] = [];
   /** The overlay frames {@link recordCanvas} has recorded, each the lines it strokes. */
@@ -294,6 +299,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
     };
     this.#agentText = new AgentText(
       new ShiftTextRuns(this, this.#reads.editor),
+      new AgentRevisions(stack.editCoordinator),
+    );
+    this.#agentDocument = new AgentDocument(
+      new ShiftPages(this, this.#reads.editor),
+      new ShiftHistory(this),
       new AgentRevisions(stack.editCoordinator),
     );
     registerBuiltInTools(this);
@@ -1390,6 +1400,14 @@ export class TestEditor extends Editor implements EditorTestSurface {
     input: AgentCallMap[K]["request"],
   ): Promise<AgentCallMap[K]["response"]> {
     const call: TextCall<K> = this.#agentText.calls[operation];
+    return call(input);
+  }
+
+  agentDocument<K extends DocumentOperation>(
+    operation: K,
+    input: AgentCallMap[K]["request"],
+  ): Promise<AgentCallMap[K]["response"]> {
+    const call: DocumentCall<K> = this.#agentDocument.calls[operation];
     return call(input);
   }
   async pointAt(position: Point2D): Promise<AuthoredPoint | null> {

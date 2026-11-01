@@ -19,6 +19,9 @@ import { ShiftKerningReader } from "./ShiftKerningReader";
 import { AgentRevisions } from "./AgentRevisions";
 import { ShiftTextRuns } from "./ShiftTextRuns";
 import { AgentText } from "./AgentText";
+import { AgentDocument } from "./AgentDocument";
+import { ShiftPages } from "./ShiftPages";
+import { ShiftHistory } from "./ShiftHistory";
 
 /** Serves bounded editor observations for one live renderer window. */
 export class AgentBridge {
@@ -29,6 +32,7 @@ export class AgentBridge {
   readonly #editor: ShiftEditorReader;
   readonly #readers: AppReaders;
   readonly #text: AgentText;
+  readonly #document: AgentDocument;
   readonly #revisions: AgentRevisions;
   #requests: ChannelServer<AgentEventMap> | null = null;
   #e2eHooks: E2EHooks | null = null;
@@ -46,6 +50,11 @@ export class AgentBridge {
     this.#readers = { font: this.#reader, kerning: this.#kerning, editor: this.#editor };
     this.#revisions = new AgentRevisions(session.workspace?.editCoordinator ?? null);
     this.#text = new AgentText(new ShiftTextRuns(session.editor, this.#editor), this.#revisions);
+    this.#document = new AgentDocument(
+      new ShiftPages(session.editor, this.#editor),
+      new ShiftHistory(session.editor),
+      this.#revisions,
+    );
   }
 
   /** Connects the renderer lane requested by Electron main. */
@@ -98,6 +107,7 @@ export class AgentBridge {
             this.#reader.renderLayer(selector, { overlays, appearance }),
           ),
         ...this.#text.calls,
+        ...this.#document.calls,
         "agent.read": async ({ reader, method, args }) => {
           const { value } = await this.#observe(undefined, () => this.#read(reader, method, args));
           return value;

@@ -48,3 +48,31 @@ export class TextRunOptionsError extends Error {
 export class TextCaretError extends Error {
   override readonly name = "TextCaretError";
 }
+
+/** Thrown when deleting a page would leave the document with none: a document always has a page. */
+export class LastPageError extends Error {
+  override readonly name = "LastPageError";
+  readonly pageId: NodeId;
+
+  constructor(pageId: NodeId) {
+    super(
+      `Page ${pageId} is the document's only page, and a document always has one; pages.create adds another first`,
+    );
+    this.pageId = pageId;
+  }
+}
+
+/**
+ * Thrown when undo or redo is asked of a window with no undo history: a
+ * preview of a font file opened directly, where Edit › Undo and Redo are
+ * disabled too.
+ */
+export class HistoryUnavailableError extends Error {
+  override readonly name = "HistoryUnavailableError";
+
+  constructor() {
+    super(
+      "This window previews a font file, which has no undo history; save it as a .shift document to edit and undo",
+    );
+  }
+}

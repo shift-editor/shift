@@ -12,6 +12,9 @@ import type {
   GlyphPage,
   GlyphSelector,
   GlyphSummary,
+  HistoryInput,
+  HistoryRedo,
+  HistoryUndo,
   KerningAtInput,
   KerningGroupSummary,
   KerningMasterValue,
@@ -21,6 +24,10 @@ import type {
   LayerOverlays,
   LayerSelector,
   LayerSvg,
+  PageChange,
+  PageCreateInput,
+  PageDeleteInput,
+  PageRenameInput,
   ResolvedGlyphs,
   ResolvedKerningPairs,
   ResolvedLayer,
@@ -200,6 +207,26 @@ export type AgentCallMap = {
     request: ShiftReadInput<TextRunDeleteInput> & { ifFontRevision?: FontRevision };
     response: ShiftObservation<null>;
   };
+  "pages.create": {
+    request: ShiftReadInput<PageCreateInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<PageChange>;
+  };
+  "pages.rename": {
+    request: ShiftReadInput<PageRenameInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<PageChange>;
+  };
+  "pages.delete": {
+    request: ShiftReadInput<PageDeleteInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<PageChange>;
+  };
+  "history.undo": {
+    request: ShiftReadInput<HistoryInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<HistoryUndo>;
+  };
+  "history.redo": {
+    request: ShiftReadInput<HistoryInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<HistoryRedo>;
+  };
   /**
    * Calls one agent reader's method with `args` once pending edits settle,
    * returning its plain result. Only the E2E read hook sends it.
@@ -212,6 +239,12 @@ export type AgentCallMap = {
 
 /** The agent lane's proof-text calls, `text.runs` to `text.delete`. */
 export type TextOperation = Extract<keyof AgentCallMap, `text.${string}`>;
+
+/** The agent lane's document edits: the pages list's (`pages.*`) and Edit › Undo and Redo (`history.*`). */
+export type DocumentOperation = Extract<
+  keyof AgentCallMap,
+  `pages.${string}` | `history.${string}`
+>;
 
 /** The agent-lane calls that change what the editor shows, each answering with its view. */
 export type EditorControlOperation =

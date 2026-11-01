@@ -16,6 +16,9 @@ import type {
   GlyphPage,
   GlyphResolveInput,
   GlyphSummary,
+  HistoryInput,
+  HistoryRedo,
+  HistoryUndo,
   KerningAtInput,
   KerningGroupsInput,
   KerningGroupSummary,
@@ -27,6 +30,10 @@ import type {
   LayerRenderInput,
   LayerResolveInput,
   LayerSvg,
+  PageChange,
+  PageCreateInput,
+  PageDeleteInput,
+  PageRenameInput,
   LocationResolveInput,
   ResolvedGlyphs,
   ResolvedKerningPairs,
@@ -186,6 +193,26 @@ export type SandboxHostCallMap = {
   "shift.text.delete": {
     request: TextRunDeleteInput;
     response: ShiftObservation<null>;
+  };
+  "shift.pages.create": {
+    request: PageCreateInput;
+    response: ShiftObservation<PageChange>;
+  };
+  "shift.pages.rename": {
+    request: PageRenameInput;
+    response: ShiftObservation<PageChange>;
+  };
+  "shift.pages.delete": {
+    request: PageDeleteInput;
+    response: ShiftObservation<PageChange>;
+  };
+  "shift.history.undo": {
+    request: HistoryInput;
+    response: ShiftObservation<HistoryUndo>;
+  };
+  "shift.history.redo": {
+    request: HistoryInput;
+    response: ShiftObservation<HistoryRedo>;
   };
 };
 
