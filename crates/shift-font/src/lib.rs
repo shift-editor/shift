@@ -34,6 +34,7 @@
 #![warn(clippy::unwrap_used, clippy::print_stdout)]
 
 pub mod anchor_attachment;
+pub mod anchor_name;
 pub mod anchor_propagation;
 pub mod changes;
 pub mod check;

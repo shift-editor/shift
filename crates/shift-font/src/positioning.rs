@@ -18,15 +18,9 @@ use std::sync::Arc;
 use kurbo::{Point, Vec2};
 
 use crate::GlyphId;
-use crate::anchor_propagation::{PropagatedAnchors, PropagationAnchor};
-
-/// The anchor a glyph is entered at, joining the glyph before it in reading
-/// order: fontc reads exactly this name as a cursive entry.
-pub const ENTRY_ANCHOR: &str = "entry";
-
-/// The anchor a glyph is left from, joining the glyph after it in reading
-/// order: fontc reads exactly this name as a cursive exit.
-pub const EXIT_ANCHOR: &str = "exit";
+use crate::anchor_name::AttachTo;
+pub use crate::anchor_name::{ENTRY_ANCHOR, EXIT_ANCHOR};
+use crate::anchor_propagation::PropagatedAnchors;
 
 /// A feature export generates from kerning or anchors.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -162,6 +156,9 @@ impl<'a, F: PositioningFont + ?Sized> RunPositioning<'a, F> {
     ///
     /// Pairs that name a mark directly are not kerned, though fontc writes
     /// them into a lookup of their own.
+    // NOTE: so live text and the exported font can disagree on a pair that
+    // names a mark: export kerns it, this does not. Revisit if fonts rely on
+    // kerning marks.
     pub fn kerns(&mut self) -> Vec<f64> {
         let mut firsts = Vec::new();
         let mut pairs = Vec::new();
@@ -203,7 +200,7 @@ impl<'a, F: PositioningFont + ?Sized> RunPositioning<'a, F> {
                 continue;
             }
             if let Some(base) = base
-                && self.attach(index, base, AnchorTarget::BaseOrLigature)
+                && self.attach(index, base, AttachTo::BaseOrLigature)
             {
                 attached.push(index);
             }
@@ -224,7 +221,7 @@ impl<'a, F: PositioningFont + ?Sized> RunPositioning<'a, F> {
                 if !self.glyphs[target].is_mark {
                     break;
                 }
-                if self.attach(index, target, AnchorTarget::Base) {
+                if self.attach(index, target, AttachTo::Base) {
                     attached.push(index);
                     break;
                 }
@@ -235,7 +232,7 @@ impl<'a, F: PositioningFont + ?Sized> RunPositioning<'a, F> {
 
     /// Puts the mark at `mark` on the glyph at `target` where their anchors
     /// match, and returns whether they did.
-    fn attach(&mut self, mark: usize, target: usize, kind: AnchorTarget) -> bool {
+    fn attach(&mut self, mark: usize, target: usize, to: AttachTo) -> bool {
         let (Some(mark_id), Some(target_id)) =
             (self.glyphs[mark].glyph_id, self.glyphs[target].glyph_id)
         else {
@@ -246,13 +243,11 @@ impl<'a, F: PositioningFont + ?Sized> RunPositioning<'a, F> {
         else {
             return false;
         };
-        let Some((mark_anchor, target_anchor)) =
-            matching_anchors(&mark_anchors.anchors, &target_anchors.anchors, kind)
-        else {
+        let Some(attachment) = mark_anchors.attaching(&target_anchors, to) else {
             return false;
         };
         let pen = self.pen_from(target, mark);
-        let offset = self.positions[target].offset() + (target_anchor - mark_anchor) - pen;
+        let offset = self.positions[target].offset() + (attachment.target - attachment.mark) - pen;
         self.positions[mark].x_offset = offset.x;
         self.positions[mark].y_offset = offset.y;
         true
@@ -295,7 +290,7 @@ impl<'a, F: PositioningFont + ?Sized> RunPositioning<'a, F> {
             .iter()
             .map(|glyph| {
                 let anchors = self.font.anchors(glyph.glyph_id?)?;
-                Some(CursiveAnchors::of(&anchors.anchors))
+                Some(CursiveAnchors::of(&anchors))
             })
             .collect();
         // The glyph each joined glyph hangs from; a root hangs from none.
@@ -357,67 +352,6 @@ impl<'a, F: PositioningFont + ?Sized> RunPositioning<'a, F> {
     }
 }
 
-/// Which anchors of the glyph a mark attaches to it by.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum AnchorTarget {
-    /// `name` only, as on a mark another mark stacks on.
-    Base,
-    /// `name`, or a ligature's last `name_N`.
-    BaseOrLigature,
-}
-
-/// The first of the mark's `_name` anchors the target has a match for, and
-/// that match.
-fn matching_anchors(
-    mark: &[PropagationAnchor],
-    target: &[PropagationAnchor],
-    kind: AnchorTarget,
-) -> Option<(Vec2, Vec2)> {
-    mark.iter().find_map(|mark_anchor| {
-        let group = mark_anchor.name.strip_prefix('_')?;
-        if group.is_empty() || group.bytes().all(|byte| byte.is_ascii_digit()) {
-            return None;
-        }
-        let target_anchor =
-            target
-                .iter()
-                .find(|anchor| anchor.name == group)
-                .or_else(|| match kind {
-                    AnchorTarget::Base => None,
-                    AnchorTarget::BaseOrLigature => last_ligature_anchor(target, group),
-                })?;
-        Some((mark_anchor.point(), target_anchor.point()))
-    })
-}
-
-/// A ligature's anchor for `group` on its last component: the `group_N`
-/// with the largest `N`.
-fn last_ligature_anchor<'a>(
-    anchors: &'a [PropagationAnchor],
-    group: &str,
-) -> Option<&'a PropagationAnchor> {
-    anchors
-        .iter()
-        .filter_map(|anchor| {
-            let index: u32 = anchor
-                .name
-                .strip_prefix(group)?
-                .strip_prefix('_')?
-                .parse()
-                .ok()?;
-            Some((index, anchor))
-        })
-        .max_by_key(|(index, _)| *index)
-        .map(|(_, anchor)| anchor)
-}
-
-impl PropagationAnchor {
-    /// Where the anchor is, as a vector from the glyph's origin.
-    fn point(&self) -> Vec2 {
-        Vec2::new(self.x, self.y)
-    }
-}
-
 /// A glyph's cursive anchors.
 #[derive(Clone, Copy)]
 struct CursiveAnchors {
@@ -426,16 +360,10 @@ struct CursiveAnchors {
 }
 
 impl CursiveAnchors {
-    fn of(anchors: &[PropagationAnchor]) -> Self {
-        let named = |name: &str| {
-            anchors
-                .iter()
-                .find(|anchor| anchor.name == name)
-                .map(|anchor| Point::new(anchor.x, anchor.y))
-        };
+    fn of(anchors: &PropagatedAnchors) -> Self {
         Self {
-            entry: named(ENTRY_ANCHOR),
-            exit: named(EXIT_ANCHOR),
+            entry: anchors.entry(),
+            exit: anchors.exit(),
         }
     }
 }
