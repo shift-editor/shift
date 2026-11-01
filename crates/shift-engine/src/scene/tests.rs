@@ -123,6 +123,7 @@ fn deleting_a_node_removes_everything_under_it_and_undoes_whole() {
 fn a_refused_intent_leaves_the_scene_unchanged() {
     let mut scene = two_pages();
     let before = scene.clone();
+    let revisions = scene.revised_nodes();
 
     let cycle = scene.apply_intents(&[
         SceneIntent::SetRunItems(SetRunItems {
@@ -140,6 +141,26 @@ fn a_refused_intent_leaves_the_scene_unchanged() {
 
     assert_eq!(cycle, Err(SceneError::Cycle(NodeId::from_raw("run"))));
     assert_eq!(scene, before);
+    assert_eq!(scene.revised_nodes(), revisions);
+
+    // A subtree deleted earlier in a refused batch comes back where it was.
+    let deleted_then_refused = scene.apply_intents(&[
+        SceneIntent::DeleteNode(DeleteNode {
+            id: NodeId::from_raw("first"),
+        }),
+        SceneIntent::DeleteNode(DeleteNode {
+            id: NodeId::from_raw("missing"),
+        }),
+    ]);
+    assert_eq!(
+        deleted_then_refused,
+        Err(SceneError::NodeNotFound(NodeId::from_raw("missing")))
+    );
+    assert_eq!(scene.revised_nodes(), revisions);
+    assert_eq!(
+        ids(&scene.descendants(&NodeId::from_raw("first"))),
+        ["node_run", "node_glyph"]
+    );
     assert_eq!(
         scene.apply_intents(&[SceneIntent::CreateNode(SceneNode {
             parent_id: Some(NodeId::from_raw("second")),
@@ -219,7 +240,7 @@ fn a_change_set_round_trips_through_named_messagepack() {
 #[test]
 fn a_new_page_takes_the_first_index_key() {
     assert_eq!(
-        SceneNode::new_page(DEFAULT_PAGE_NAME).index,
+        SceneNode::new_page(DEFAULT_PAGE_NAME).unwrap().index,
         index_key::between(None, None).unwrap()
     );
 }

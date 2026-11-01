@@ -2,7 +2,8 @@
 
 use pack::Pack;
 use serde::{Deserialize, Serialize};
-use shift_font::{GlyphId, NodeId, RunId, SourceId, TextItemId, index_key};
+use shift_font::index_key::{self, IndexKeyError};
+use shift_font::{GlyphId, NodeId, RunId, SourceId, TextItemId};
 
 /// One placed object on the canvas.
 ///
@@ -70,29 +71,28 @@ pub enum TextItem {
     Linebreak { id: TextItemId },
 }
 
-/// The index of a node with no siblings yet.
-fn first_index() -> String {
-    index_key::between(None, None).expect("a key with no neighbours always exists")
-}
-
 /// The name of the page a document gets when it has none.
 pub const DEFAULT_PAGE_NAME: &str = "Page 1";
 
 impl SceneNode {
-    /// A new page of the user's, named `name`, sorting first among pages that
-    /// have no index yet.
-    pub fn new_page(name: &str) -> Self {
-        Self {
+    /// A new page of the user's, named `name`, with the key of a node that
+    /// has no siblings yet.
+    ///
+    /// # Errors
+    ///
+    /// Returns shift-font's [`IndexKeyError`] when no first key can be made.
+    pub fn new_page(name: &str) -> Result<Self, IndexKeyError> {
+        Ok(Self {
             id: NodeId::new(),
             parent_id: None,
-            index: first_index(),
+            index: index_key::between(None, None)?,
             x: 0.0,
             y: 0.0,
             content: NodeContent::Page {
                 name: name.to_owned(),
                 role: None,
             },
-        }
+        })
     }
 
     /// Whether the node is a page.

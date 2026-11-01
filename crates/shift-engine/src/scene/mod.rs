@@ -106,6 +106,14 @@ struct Entry {
     items_revision: usize,
 }
 
+/// What a batch of intents has done so far: the changes it made, and the
+/// entries they replaced, to put back if a later intent is refused.
+#[derive(Default)]
+struct Journal {
+    changes: Vec<SceneChange>,
+    previous: Vec<(NodeId, Option<Entry>)>,
+}
+
 /// A node as a reader gets it, with when it last changed: a reader keeps
 /// what it built from a node while `revision` is the same, and what it built
 /// from a text run's items while `items_revision` is.
@@ -278,13 +286,16 @@ impl Scene {
     ///
     /// Returns the first intent's [`SceneError`]; see [`SceneIntent`].
     pub fn apply_intents(&mut self, intents: &[SceneIntent]) -> Result<SceneChangeSet, SceneError> {
-        let mut staged = self.clone();
-        let mut changes = Vec::new();
+        let mut journal = Journal::default();
         for intent in intents {
-            staged.apply_intent(intent, &mut changes)?;
+            if let Err(error) = self.apply_intent(intent, &mut journal) {
+                self.restore(journal.previous);
+                return Err(error);
+            }
         }
-        *self = staged;
-        Ok(SceneChangeSet::coalesce([&SceneChangeSet { changes }]))
+        Ok(SceneChangeSet::coalesce([&SceneChangeSet {
+            changes: journal.changes,
+        }]))
     }
 
     /// Installs a recorded change set, as undo and redo replay one. On
@@ -295,22 +306,30 @@ impl Scene {
     /// Returns [`SceneError::ChangeOriginMismatch`] when a node is no longer
     /// what the change set found.
     pub fn apply_change_set(&mut self, change_set: &SceneChangeSet) -> Result<(), SceneError> {
-        let mut staged = self.clone();
+        let mut previous = Vec::with_capacity(change_set.changes.len());
         for change in &change_set.changes {
-            let current = staged.node(&change.id);
-            if current != change.node.before.as_ref() {
+            if self.node(&change.id) != change.node.before.as_ref() {
+                self.restore(previous);
                 return Err(SceneError::ChangeOriginMismatch(change.id.clone()));
             }
-            staged.replace(&change.id, change.node.after.clone(), Items::Changed);
+            let before = self.replace(&change.id, change.node.after.clone(), Items::Changed);
+            previous.push((change.id.clone(), before));
         }
-        *self = staged;
         Ok(())
+    }
+
+    /// Puts back the entries a refused batch replaced, latest first, so the
+    /// scene is exactly as it was, revisions included.
+    fn restore(&mut self, previous: Vec<(NodeId, Option<Entry>)>) {
+        for (id, entry) in previous.into_iter().rev() {
+            self.put(&id, entry);
+        }
     }
 
     fn apply_intent(
         &mut self,
         intent: &SceneIntent,
-        changes: &mut Vec<SceneChange>,
+        journal: &mut Journal,
     ) -> Result<(), SceneError> {
         match intent {
             SceneIntent::CreateNode(node) => {
@@ -318,7 +337,7 @@ impl Scene {
                     return Err(SceneError::NodeExists(node.id.clone()));
                 }
                 self.check_placement(node)?;
-                self.record(node.clone(), Items::Changed, changes);
+                self.record(node.clone(), Items::Changed, journal);
             }
             SceneIntent::UpdateNode(node) => {
                 let current = self.require(&node.id)?;
@@ -332,7 +351,7 @@ impl Scene {
                 let mut node = node.clone();
                 node.keep_items_of(current);
                 self.check_placement(&node)?;
-                self.record(node, Items::Kept, changes);
+                self.record(node, Items::Kept, journal);
             }
             SceneIntent::MoveNode(MoveNode {
                 id,
@@ -343,7 +362,7 @@ impl Scene {
                 node.parent_id.clone_from(parent_id);
                 node.index.clone_from(index);
                 self.check_placement(&node)?;
-                self.record(node, Items::Kept, changes);
+                self.record(node, Items::Kept, journal);
             }
             SceneIntent::DeleteNode(DeleteNode { id }) => {
                 self.require(id)?;
@@ -356,11 +375,7 @@ impl Scene {
                 doomed.reverse();
                 doomed.push(id.clone());
                 for id in doomed {
-                    let before = self.replace(&id, None, Items::Changed);
-                    changes.push(SceneChange {
-                        id,
-                        node: Replacement::new(before, None),
-                    });
+                    self.journaled(&id, None, Items::Changed, journal);
                 }
             }
             SceneIntent::SetRunItems(SetRunItems { id, items }) => {
@@ -369,20 +384,36 @@ impl Scene {
                     return Err(SceneError::NotATextRun(id.clone()));
                 };
                 current.clone_from(items);
-                self.record(node, Items::Changed, changes);
+                self.record(node, Items::Changed, journal);
             }
         }
         Ok(())
     }
 
     /// Puts `node` in the scene and notes the change.
-    fn record(&mut self, node: SceneNode, items: Items, changes: &mut Vec<SceneChange>) {
+    fn record(&mut self, node: SceneNode, items: Items, journal: &mut Journal) {
         let id = node.id.clone();
-        let before = self.replace(&id, Some(node.clone()), items);
-        changes.push(SceneChange {
-            id,
-            node: Replacement::new(before, Some(node)),
+        self.journaled(&id, Some(node), items, journal);
+    }
+
+    /// Replaces `id`'s node with `node` (`None` removes it), noting the
+    /// change and the entry it replaced.
+    fn journaled(
+        &mut self,
+        id: &NodeId,
+        node: Option<SceneNode>,
+        items: Items,
+        journal: &mut Journal,
+    ) {
+        let before = self.replace(id, node.clone(), items);
+        journal.changes.push(SceneChange {
+            id: id.clone(),
+            node: Replacement::new(
+                before.as_ref().map(|entry| entry.node.as_ref().clone()),
+                node,
+            ),
         });
+        journal.previous.push((id.clone(), before));
     }
 
     /// Checks that `node` may sit where it says: a page at the top, any other
@@ -416,31 +447,39 @@ impl Scene {
     /// Replaces the node at `id` (none for `None`) and returns what was there.
     /// The node gets a new revision, and a new items revision unless `items`
     /// says they are the ones it had.
-    fn replace(&mut self, id: &NodeId, node: Option<SceneNode>, items: Items) -> Option<SceneNode> {
+    /// Replaces `id`'s node with `node` (`None` removes it), giving it a new
+    /// revision, and returns the entry it replaced.
+    fn replace(&mut self, id: &NodeId, node: Option<SceneNode>, items: Items) -> Option<Entry> {
+        let entry = node.map(|node| {
+            let revision = next_revision();
+            let items_revision = match (items, self.nodes.get(id)) {
+                (Items::Kept, Some(previous)) => previous.items_revision,
+                _ => revision,
+            };
+            Entry {
+                node: Arc::new(node),
+                revision,
+                items_revision,
+            }
+        });
+        self.put(id, entry)
+    }
+
+    /// Files `entry` as `id`'s (`None` removes it), keeping the sibling
+    /// order in step, and returns the entry it replaced.
+    fn put(&mut self, id: &NodeId, entry: Option<Entry>) -> Option<Entry> {
         let before = self.nodes.remove(id);
         if let Some(previous) = &before
             && let Some(siblings) = self.children.get_mut(&previous.node.parent_id)
         {
             siblings.remove(&SiblingKey::of(&previous.node));
         }
-        if let Some(node) = node {
+        if let Some(entry) = entry {
             self.children
-                .get_or_default(node.parent_id.clone())
-                .insert(SiblingKey::of(&node), id.clone());
-            let revision = next_revision();
-            let items_revision = match (items, &before) {
-                (Items::Kept, Some(previous)) => previous.items_revision,
-                _ => revision,
-            };
-            self.nodes.insert(
-                id.clone(),
-                Entry {
-                    node: Arc::new(node),
-                    revision,
-                    items_revision,
-                },
-            );
+                .get_or_default(entry.node.parent_id.clone())
+                .insert(SiblingKey::of(&entry.node), id.clone());
+            self.nodes.insert(id.clone(), entry);
         }
-        before.map(|entry| Arc::unwrap_or_clone(entry.node))
+        before
     }
 }

@@ -12,6 +12,9 @@ pub enum StoreError {
     #[error(transparent)]
     Font(#[from] shift_font::error::CoreError),
 
+    #[error(transparent)]
+    IndexKey(#[from] shift_font::index_key::IndexKeyError),
+
     #[error("scene node {id} could not be encoded: {source}")]
     SceneNodeEncoding {
         id: String,

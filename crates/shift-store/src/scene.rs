@@ -46,7 +46,7 @@ impl ShiftStore {
 
 /// Writes a [`DEFAULT_PAGE_NAME`] page to `tx`'s main database.
 pub(crate) fn insert_first_page_in_tx(tx: &Transaction<'_>) -> Result<(), StoreError> {
-    let page = SceneNode::new_page(DEFAULT_PAGE_NAME);
+    let page = SceneNode::new_page(DEFAULT_PAGE_NAME)?;
     let changes = SceneChangeSet {
         changes: vec![SceneChange {
             id: page.id.clone(),
