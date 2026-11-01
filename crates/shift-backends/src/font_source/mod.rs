@@ -1,4 +1,5 @@
 pub(crate) mod atlas;
+pub(crate) mod authored;
 mod error;
 pub(crate) mod geometry;
 pub(crate) mod inputs;
@@ -11,6 +12,7 @@ pub use crate::formats::glyphs::GlyphsFont;
 pub use crate::formats::opentype::{OpenTypeFont, build_binary_atlas_page};
 pub use crate::formats::ufo::UfoFont;
 pub use atlas::{SourceAtlasDescriptor, SourceAtlasError, SourceAtlasPage};
+pub use authored::{AuthoredReadError, AuthoredSource, OpenedAuthoredSource};
 pub use error::FontReadError;
 pub(crate) use error::malformed;
 pub(crate) use geometry::inferred_smooth_point_indices;

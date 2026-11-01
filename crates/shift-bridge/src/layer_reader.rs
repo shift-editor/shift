@@ -128,7 +128,7 @@ impl StoreReader for LayerReader {
 }
 
 /// A store failure as the error that crosses to the engine, as its text.
-fn unreadable(error: impl std::fmt::Display) -> StoreReadError {
+pub(crate) fn unreadable(error: impl std::fmt::Display) -> StoreReadError {
   StoreReadError::Unreadable {
     detail: error.to_string(),
   }

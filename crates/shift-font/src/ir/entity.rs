@@ -53,6 +53,17 @@ macro_rules! id_impls {
                 Self::from_text(&prefixed_id($prefix))
             }
 
+            /// The id derived from `key` within `namespace`: the same for
+            /// the same pair in every process and every run, so two readers
+            /// of one source name the same entity alike. `key` must be
+            /// unique within `namespace`.
+            pub fn derived(namespace: &str, key: &str) -> Self {
+                Self::from_text(&format!(
+                    concat!($prefix, "_{}"),
+                    derived_id_suffix(namespace, key)
+                ))
+            }
+
             pub fn from_raw(raw: impl std::fmt::Display) -> Self {
                 let raw = raw.to_string();
                 if raw.starts_with(concat!($prefix, "_")) {

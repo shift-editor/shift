@@ -8,8 +8,8 @@ use shift_backends::{
   AxisIndex as SourceAxisIndex, DirectoryGlyph, DirectoryInstance, DirectorySource, ExportFormat,
   FontDirectory, FontExportRequest, FontExportResult, FontExporter, FontSource, FontView,
   GlyphIndex, GlyphPointKind as SourceGlyphPointKind, GlyphProjection as SourceGlyphProjection,
-  GlyphShape as SourceGlyphShape, OpenedFont, SourceAtlasDescriptor, SourceGlyphIds,
-  VariationAxisKind, font_loader::FontLoader,
+  GlyphShape as SourceGlyphShape, OpenedFont, SourceAtlasDescriptor, SourceIds, VariationAxisKind,
+  font_loader::FontLoader,
 };
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
@@ -131,7 +131,7 @@ struct RetainedSource {
 impl RetainedSource {
   fn open(path: &Path) -> BridgeResult<Self> {
     let font = FontLoader::new().open_source(path)?;
-    let identity = SourceIdentity::new(font.directory(), &SourceGlyphIds::for_path(path))?;
+    let identity = SourceIdentity::new(font.directory(), &SourceIds::for_path(path))?;
     Ok(Self { font, identity })
   }
 
@@ -716,7 +716,7 @@ struct SourceIdentity {
 }
 
 impl SourceIdentity {
-  fn new(directory: &FontDirectory, glyph_ids: &SourceGlyphIds) -> BridgeResult<Self> {
+  fn new(directory: &FontDirectory, glyph_ids: &SourceIds) -> BridgeResult<Self> {
     let glyph_ids = directory
       .glyphs()
       .iter()
