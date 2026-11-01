@@ -1,9 +1,8 @@
 import releaseAppIcon from "@/assets/app-icon.png";
 import nightlyAppIcon from "@/assets/app-icon-nightly.png";
-import ReleaseLauncherLockup from "@/assets/launcher-lockup.svg";
-import NightlyLauncherLockup from "@/assets/launcher-lockup-nightly.svg";
+import LauncherLockupSvg from "@/assets/launcher-lockup.svg";
 import { shiftDistribution } from "./release";
 
 export const appIcon = shiftDistribution === "nightly" ? nightlyAppIcon : releaseAppIcon;
-export const LauncherLockup =
-  shiftDistribution === "nightly" ? NightlyLauncherLockup : ReleaseLauncherLockup;
+/** The ghost and "Shift." wordmark, drawn in currentColor; one lockup for every distribution. */
+export const LauncherLockup = LauncherLockupSvg;

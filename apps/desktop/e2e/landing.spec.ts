@@ -10,10 +10,21 @@ test.describe("Landing view", () => {
     await expectPageSnapshot(page, "landing-default.png");
   });
 
+  test("the help button runs a Help menu command", async ({ electronApp, page }) => {
+    const feedbackOpened = electronApp.waitForEvent("window");
+
+    await page.getByRole("button", { name: "Help", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Feedback…", exact: true }).click();
+
+    const feedbackPage = await feedbackOpened;
+    await feedbackPage.waitForURL(/#\/feedback$/);
+    await expect(feedbackPage.getByRole("heading", { name: "Feedback" })).toBeVisible();
+  });
+
   test("creates an editable font through New font", async ({ electronApp, page }) => {
     const workspaceWindow = electronApp.waitForEvent("window");
 
-    await page.getByRole("button", { name: "New Font", exact: true }).click();
+    await page.getByRole("button", { name: "New font", exact: true }).click();
 
     const workspacePage = await workspaceWindow;
     await workspacePage.waitForURL(/#\/home$/);
