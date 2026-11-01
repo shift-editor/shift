@@ -1272,15 +1272,20 @@ export class Font {
    * included. A synchronous read: the engine loads the glyph first if it has
    * not yet.
    *
-   * @returns null when the layers belong to different glyphs, don't match
-   * completely, `reference` lacks one of `ids`, or there is no engine.
-   * @throws When the engine's store cannot answer.
+   * @returns null when the layers don't match completely, or there is no
+   * engine, as in a preview.
+   * @throws When no glyph owns `reference`, the engine's store cannot answer,
+   * or the engine cannot match the layers (layers of two glyphs, an id
+   * `reference` lacks).
    */
   counterparts(reference: LayerId, target: LayerId, ids: Counterparts): Counterparts | null {
-    const glyphId = this.#store.glyphIdForLayer(reference);
-    if (!glyphId) return null;
+    const engine = this.#store.engine;
+    if (!engine) return null;
 
-    return this.#store.engine?.counterparts(glyphId, reference, target, ids) ?? null;
+    const glyphId = this.#store.glyphIdForLayer(reference);
+    if (!glyphId) throw new Error(`no glyph owns layer ${reference}`);
+
+    return engine.counterparts(glyphId, reference, target, ids);
   }
 
   /**

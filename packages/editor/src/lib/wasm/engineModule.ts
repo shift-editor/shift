@@ -285,8 +285,11 @@ export class EngineSession {
 
   /**
    * The `target` layer's ids for `ids` in `reference`, as shift-font's
-   * `LayerMatch::counterparts` pairs them; null when the layers don't match
-   * completely, `reference` lacks one of `ids`, or either layer is not loaded.
+   * `Font::counterparts` pairs them; null when the layers don't match
+   * completely.
+   *
+   * @throws A `CounterpartsReadError` for a layer not loaded or unknown,
+   * layers of two glyphs, or an id `reference` lacks.
    */
   counterparts(reference: LayerId, target: LayerId, ids: Counterparts): Counterparts | null {
     return this.#reads.counterparts(reference, target, ids.points, ids.anchors, ids.components);

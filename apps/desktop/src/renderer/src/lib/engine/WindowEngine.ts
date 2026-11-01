@@ -448,9 +448,7 @@ export class WindowEngine implements FontEngine {
     target: LayerId,
     ids: Counterparts,
   ): Counterparts | null {
-    const session = this.#opened?.session;
-    if (!session) return null;
-
+    const session = this.#require();
     // Loading a glyph changes nothing a reader holds, so no revision changes.
     session.preload([glyphId]);
     return session.counterparts(reference, target, ids);

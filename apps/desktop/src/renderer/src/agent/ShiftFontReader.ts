@@ -226,8 +226,8 @@ export class ShiftFontReader {
    * The `target` layer's points, anchors and components for `ids` in the
    * `reference` layer, as the window's engine matches the two layers.
    *
-   * @returns null when the layers don't match completely or `reference` lacks one of `ids`.
-   * @throws {Error} as {@link getLayer} does, for either layer.
+   * @returns null when the layers don't match completely.
+   * @throws {Error} as {@link getLayer} does, for either layer, and as `Font.counterparts` does.
    */
   counterparts(
     reference: LayerSelector,

@@ -242,9 +242,10 @@ export interface FontEngine {
    * unsaved edits included. Loads the glyph first if the engine has not:
    * loading changes no answer a reader holds, so it bumps no revision.
    *
-   * @returns null when the layers don't match completely, `reference` lacks
-   * one of `ids`, or the engine is not open.
-   * @throws When the store's reader cannot answer.
+   * @returns null when the layers don't match completely.
+   * @throws When the engine is not open, the store's reader cannot answer, or
+   * the engine cannot match the layers (`CounterpartsReadError`: an unknown
+   * layer, layers of two glyphs, or an id `reference` lacks).
    */
   counterparts(
     glyphId: GlyphId,

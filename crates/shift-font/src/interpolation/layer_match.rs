@@ -2,7 +2,9 @@
 
 use std::collections::HashMap;
 
-use crate::{AnchorId, ComponentId, ContourId, GlyphId, GlyphLayer, LayerId, PointId, PointType};
+use crate::{
+    AnchorId, ComponentId, ContourId, Font, GlyphId, GlyphLayer, LayerId, PointId, PointType,
+};
 
 /// One structural difference that prevents two glyph layers from sharing values.
 ///
@@ -121,24 +123,72 @@ impl LayerMatch {
     }
 
     /// The target layer's ids for `points`, `anchors` and `components` of
-    /// the reference layer, each list in the order given.
+    /// the reference layer, each list in the order given; `None` when the
+    /// match is incomplete, so no edit reaches only part of the target.
     ///
-    /// Returns `None` when the match is incomplete, so no edit reaches only
-    /// part of the target, or when the reference layer lacks one of the ids.
+    /// # Errors
+    ///
+    /// Returns [`CounterpartsError::UnknownPoint`],
+    /// [`CounterpartsError::UnknownAnchor`] or
+    /// [`CounterpartsError::UnknownComponent`] for an id the reference layer
+    /// lacks.
     pub fn counterparts(
         &self,
         points: &[PointId],
         anchors: &[AnchorId],
         components: &[ComponentId],
-    ) -> Option<Counterparts> {
+    ) -> Result<Option<Counterparts>, CounterpartsError> {
         if !self.is_complete() {
-            return None;
+            return Ok(None);
         }
-        Some(Counterparts {
-            points: counterparts_in(&self.points, points)?,
-            anchors: counterparts_in(&self.anchors, anchors)?,
-            components: counterparts_in(&self.components, components)?,
-        })
+        Ok(Some(Counterparts {
+            points: counterparts_in(&self.points, points, |point| {
+                CounterpartsError::UnknownPoint { point }
+            })?,
+            anchors: counterparts_in(&self.anchors, anchors, |anchor| {
+                CounterpartsError::UnknownAnchor { anchor }
+            })?,
+            components: counterparts_in(&self.components, components, |component| {
+                CounterpartsError::UnknownComponent { component }
+            })?,
+        }))
+    }
+}
+
+impl Font {
+    /// `target`'s ids for `points`, `anchors` and `components` of
+    /// `reference`, two layers of one glyph, as [`GlyphLayer::match_with`]
+    /// pairs them ([`LayerMatch::counterparts`]); `None` when the layers
+    /// don't match completely.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CounterpartsError::UnknownLayer`] for a layer the font
+    /// lacks, [`CounterpartsError::DifferentGlyphs`] for layers of two
+    /// glyphs, and as [`LayerMatch::counterparts`] for an id `reference`
+    /// lacks.
+    pub fn counterparts(
+        &self,
+        reference: LayerId,
+        target: LayerId,
+        points: &[PointId],
+        anchors: &[AnchorId],
+        components: &[ComponentId],
+    ) -> Result<Option<Counterparts>, CounterpartsError> {
+        let owner = |layer| {
+            self.glyph_id_by_layer(layer)
+                .ok_or(CounterpartsError::UnknownLayer { layer })
+        };
+        if owner(reference)? != owner(target)? {
+            return Err(CounterpartsError::DifferentGlyphs { reference, target });
+        }
+        let layer = |layer| {
+            self.layer(layer)
+                .ok_or(CounterpartsError::UnknownLayer { layer })
+        };
+        layer(reference)?
+            .match_with(layer(target)?)
+            .counterparts(points, anchors, components)
     }
 }
 
@@ -152,12 +202,39 @@ pub struct Counterparts {
     pub components: Vec<ComponentId>,
 }
 
-/// The target id `matches` pairs with each of `ids`; none when one has no pair.
+/// Why [`Font::counterparts`] or [`LayerMatch::counterparts`] could not
+/// answer. Layers that don't match completely are an answer, `None`, not an
+/// error.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub enum CounterpartsError {
+    /// The font has no layer `layer`.
+    #[error("the font has no layer {layer}")]
+    UnknownLayer { layer: LayerId },
+    /// The layers belong to different glyphs, whose entities never correspond.
+    #[error("layers {reference} and {target} belong to different glyphs")]
+    DifferentGlyphs { reference: LayerId, target: LayerId },
+    /// The reference layer has no point `point`.
+    #[error("the reference layer has no point {point}")]
+    UnknownPoint { point: PointId },
+    /// The reference layer has no anchor `anchor`.
+    #[error("the reference layer has no anchor {anchor}")]
+    UnknownAnchor { anchor: AnchorId },
+    /// The reference layer has no component `component`.
+    #[error("the reference layer has no component {component}")]
+    UnknownComponent { component: ComponentId },
+}
+
+/// The target id `matches` pairs with each of `ids`, or `missing`'s error
+/// for the first id with no pair.
 fn counterparts_in<Id: Clone + Eq + std::hash::Hash>(
     matches: &HashMap<Id, Id>,
     ids: &[Id],
-) -> Option<Vec<Id>> {
-    ids.iter().map(|id| matches.get(id).cloned()).collect()
+    missing: impl Fn(Id) -> CounterpartsError,
+) -> Result<Vec<Id>, CounterpartsError> {
+    ids.iter()
+        .map(|id| matches.get(id).cloned().ok_or_else(|| missing(id.clone())))
+        .collect()
 }
 
 impl GlyphLayer {
@@ -582,31 +659,40 @@ mod tests {
 
         assert_eq!(
             counterparts,
-            Some(Counterparts {
+            Ok(Some(Counterparts {
                 points: vec![target_last, target_first],
                 anchors: vec![target.anchors()[0].id()],
                 components: vec![target.components_iter().nth(1).unwrap().id()],
-            })
+            }))
         );
     }
 
     #[test]
-    fn counterparts_are_none_for_an_incomplete_match_or_an_id_the_reference_lacks() {
+    fn counterparts_are_none_for_an_incomplete_match() {
         let reference = layer();
-        let mut fewer_anchors = reference.clone();
-        fewer_anchors.add_anchor(Anchor::new(Some("bottom".to_string()), 50.0, 0.0));
+        let mut more_anchors = reference.clone();
+        more_anchors.add_anchor(Anchor::new(Some("bottom".to_string()), 50.0, 0.0));
 
         assert_eq!(
             reference
-                .match_with(&fewer_anchors)
-                .counterparts(&[], &[], &[]),
-            None
+                .match_with(&more_anchors)
+                .counterparts(&point_ids(&reference), &[], &[]),
+            Ok(None)
         );
+    }
+
+    #[test]
+    fn counterparts_name_an_id_the_reference_lacks() {
+        let reference = layer();
+        let point = PointId::new();
+
         assert_eq!(
-            reference
-                .match_with(&reference.clone())
-                .counterparts(&[PointId::new()], &[], &[]),
-            None
+            reference.match_with(&reference.clone()).counterparts(
+                std::slice::from_ref(&point),
+                &[],
+                &[]
+            ),
+            Err(CounterpartsError::UnknownPoint { point })
         );
     }
 }
