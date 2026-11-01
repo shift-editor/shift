@@ -190,7 +190,8 @@ for (const scale of SCALES) {
           move = null;
           await editor.settle();
           flushFrames();
-          if (mode === "run") await editor.closeSession();
+          // The proof text is document content, so the session closes discarding it.
+          if (mode === "run") await editor.close();
         },
       },
     );

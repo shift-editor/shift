@@ -4,7 +4,7 @@ import { effect } from "../signals/index";
 import { characterTextItem } from "../text/layout";
 import { currentEditingId } from "../../types/editing";
 import { currentSelectionId } from "../../types/object";
-import type { ShiftEditorRecord } from "../../types/records";
+import type { SelectionRecord, ShiftEditorRecord } from "../../types/records";
 import type { StoreChange } from "../../types/store";
 import type { TextRunRecord } from "../../types/text";
 import { ShiftStore } from "./ShiftStore";
@@ -50,6 +50,9 @@ describe("ShiftStore change publication", () => {
   });
 });
 
+/** Records of two types, for the store's own behaviour. */
+type TestRecord = TextRunRecord | SelectionRecord;
+
 function run(...characters: string[]): TextRunRecord {
   return {
     id: mintRunId(),
@@ -63,8 +66,8 @@ describe("ShiftStore per-record reads", () => {
   it("reruns a reader when its record changes and not when another record does", () => {
     const watched = run("A");
     const other = run("B");
-    const store = new ShiftStore<ShiftEditorRecord>([watched, other]);
-    const seen: (ShiftEditorRecord | null)[] = [];
+    const store = new ShiftStore<TestRecord>([watched, other]);
+    const seen: (TestRecord | null)[] = [];
     const reader = effect(() => {
       seen.push(store.record(watched.id));
     });
@@ -79,9 +82,9 @@ describe("ShiftStore per-record reads", () => {
   });
 
   it("delivers a record put after a reader saw it missing", () => {
-    const store = new ShiftStore<ShiftEditorRecord>();
+    const store = new ShiftStore<TestRecord>();
     const later = run("A");
-    const seen: (ShiftEditorRecord | null)[] = [];
+    const seen: (TestRecord | null)[] = [];
     const reader = effect(() => {
       seen.push(store.record(later.id));
     });
@@ -94,7 +97,7 @@ describe("ShiftStore per-record reads", () => {
 });
 
 describe("ShiftStore indexes", () => {
-  const byCharacter = (store: ShiftStore<ShiftEditorRecord>) =>
+  const byCharacter = (store: ShiftStore<TestRecord>) =>
     store.index("textrun", (record) =>
       record.items.flatMap((item) =>
         item.kind === "character" ? [String.fromCodePoint(item.codepoint)] : [],
@@ -103,13 +106,13 @@ describe("ShiftStore indexes", () => {
 
   it("files records that existed before the index was created", () => {
     const first = run("A", "B");
-    const store = new ShiftStore<ShiftEditorRecord>([first]);
+    const store = new ShiftStore<TestRecord>([first]);
 
     expect(byCharacter(store).get("B")).toEqual([first]);
   });
 
   it("moves a replaced record between keys and drops a deleted one", () => {
-    const store = new ShiftStore<ShiftEditorRecord>();
+    const store = new ShiftStore<TestRecord>();
     const index = byCharacter(store);
     const record = run("A");
     store.put(record);
@@ -124,7 +127,7 @@ describe("ShiftStore indexes", () => {
   });
 
   it("ignores records of other types", () => {
-    const store = new ShiftStore<ShiftEditorRecord>();
+    const store = new ShiftStore<TestRecord>();
     const index = store.index("textrun", () => ["every run"]);
     store.put({ id: currentSelectionId, type: "selection", scope: "session", ids: [] });
 
@@ -132,7 +135,7 @@ describe("ShiftStore indexes", () => {
   });
 
   it("reruns a reader of one key only when that key's records change", () => {
-    const store = new ShiftStore<ShiftEditorRecord>();
+    const store = new ShiftStore<TestRecord>();
     const index = byCharacter(store);
     let runs = 0;
     const reader = effect(() => {
@@ -148,7 +151,7 @@ describe("ShiftStore indexes", () => {
   });
 
   it("stops following the store once disposed", () => {
-    const store = new ShiftStore<ShiftEditorRecord>();
+    const store = new ShiftStore<TestRecord>();
     const index = byCharacter(store);
     index.dispose();
 
@@ -161,8 +164,8 @@ describe("ShiftStore indexes", () => {
 describe("ShiftStore records of one type", () => {
   it("reruns a reader only when a record of its type changes", () => {
     const first = run("A");
-    const store = new ShiftStore<ShiftEditorRecord>([first]);
-    const seen: (readonly ShiftEditorRecord[])[] = [];
+    const store = new ShiftStore<TestRecord>([first]);
+    const seen: (readonly TestRecord[])[] = [];
     const reader = effect(() => {
       seen.push(store.recordsOfType("textrun"));
     });

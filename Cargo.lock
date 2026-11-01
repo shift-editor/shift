@@ -2511,6 +2511,8 @@ version = "0.1.0"
 dependencies = [
  "pack",
  "proptest",
+ "rmp-serde",
+ "serde",
  "shift-font",
  "thiserror",
 ]
@@ -2634,6 +2636,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "shift-engine",
  "shift-font",
  "tempfile",
  "thiserror",

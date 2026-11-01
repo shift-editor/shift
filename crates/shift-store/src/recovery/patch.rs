@@ -10,13 +10,15 @@ use super::{
     catalog::{
         AXES, AXIS_MAPPINGS, FONT_LIB, GLYPH_COMPONENTS, GLYPH_LAYERS, GLYPH_LIB, GLYPH_UNICODES,
         GLYPHS, KERNING_GROUP_MEMBERS, KERNING_GROUPS, KERNING_PAIRS, METRIC_DEFINITIONS,
-        NAMED_INSTANCES, RecoveryTable, SOURCE_LIB, SOURCE_LOCATIONS, SOURCE_METRIC_VALUES,
-        SOURCES,
+        NAMED_INSTANCES, RecoveryTable, SCENE_NODES, SOURCE_LIB, SOURCE_LOCATIONS,
+        SOURCE_METRIC_VALUES, SOURCES,
     },
 };
 use crate::{
-    FontInfo, StoreError, change_set::StoreWriter, layer::write_layer_in_tx, write_mode::WriteMode,
+    FontInfo, StoreError, change_set::StoreWriter, layer::write_layer_in_tx,
+    scene::write_scene_changes_in_tx, workspace_state::Revision, write_mode::WriteMode,
 };
+use shift_engine::scene::SceneChangeSet;
 
 const GLOBAL_OWNER: &str = "";
 
@@ -25,9 +27,10 @@ impl RecoveryOverlay {
         &mut self,
         change_set: &font::FontChangeSet,
         post_font: &font::Font,
+        scene: &SceneChangeSet,
         preserved_font_info: Option<&FontInfo>,
     ) -> Result<(), StoreError> {
-        if change_set.is_empty() {
+        if change_set.is_empty() && scene.is_empty() {
             return Ok(());
         }
 
@@ -213,7 +216,14 @@ impl RecoveryOverlay {
             mark_replaced(&tx, KERNING_PAIRS, source_id.as_str())?;
         }
 
-        mark_dirty(&tx)?;
+        write_scene_changes_in_tx(
+            &tx,
+            scene,
+            "main",
+            |tx, id| mark_tombstone(tx, SCENE_NODES, id),
+            |tx, id| clear_tombstone(tx, SCENE_NODES, id),
+        )?;
+        mark_dirty(&tx, Revision::of(change_set))?;
         tx.commit()?;
         Ok(())
     }
@@ -235,18 +245,19 @@ impl RecoveryOverlay {
         clear_tombstone(&tx, GLYPH_LAYERS, layer.id().as_str())?;
         write_layer_in_tx(&tx, glyph_id, layer)?;
         mark_replaced(&tx, GLYPH_COMPONENTS, layer.id().as_str())?;
-        mark_dirty(&tx)?;
+        mark_dirty(&tx, Revision::Advance)?;
         tx.commit()?;
         Ok(())
     }
 }
 
-fn mark_dirty(tx: &Transaction<'_>) -> Result<(), StoreError> {
+/// Marks the overlay dirty, advancing its revision as `revision` says.
+fn mark_dirty(tx: &Transaction<'_>, revision: Revision) -> Result<(), StoreError> {
     tx.execute(
         "UPDATE recovery_metadata
-         SET state = 'dirty', pending_commit_id = NULL, revision = revision + 1
+         SET state = 'dirty', pending_commit_id = NULL, revision = revision + ?1
          WHERE id = 1",
-        [],
+        [revision.step()],
     )?;
     Ok(())
 }

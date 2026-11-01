@@ -100,15 +100,13 @@ export interface PageNode extends Node {
   readonly role?: "glyph";
 }
 
-export const PageNode = {
-  /**
-   * Whether two page lists hold the same page records in the same order, so a
-   * list derived from the scene keeps its identity while no page changes.
-   */
-  sameList(a: readonly PageNode[], b: readonly PageNode[]): boolean {
-    return a.length === b.length && a.every((page, index) => page === b[index]);
-  },
-};
+/**
+ * Whether two node lists hold the same node objects in the same order, so a
+ * list derived from the scene keeps its identity while none of them changes.
+ */
+export function sameNodeList<N extends ShiftNode>(a: readonly N[], b: readonly N[]): boolean {
+  return a.length === b.length && a.every((node, index) => node === b[index]);
+}
 
 /**
  * Maps each scene node kind to its node type.

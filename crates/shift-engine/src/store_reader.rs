@@ -1,7 +1,7 @@
 //! What a session reads from its store, as a request protocol, for an engine
-//! that runs apart from the store: layers, component references, and glyph
+//! that runs apart from the store: layers, component references, glyph
 //! data's categories and attaching anchors for its glyph records and shaper
-//! font.
+//! font, and the document's scene.
 //!
 //! The editor's engine runs in WebAssembly in the window, and the store is
 //! read by a native reader in the window's preload. The engine asks through a
@@ -59,6 +59,16 @@ pub trait StoreReader {
     /// request order: the Glyphs glyph data the reader holds, which is too
     /// large to ship with the engine.
     fn glyph_data_categories(&self, glyphs: Vec<NamedGlyph>) -> Vec<GlyphDataCategory>;
+
+    /// Every node of the document's scene, unsaved edits included, as one
+    /// MessagePack array of named-field nodes, which decodes to
+    /// `Vec<SceneNode>`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StoreReadError`] when the reader is closed or the store
+    /// cannot be read.
+    fn scene_nodes(&self) -> Result<Bytes, StoreReadError>;
 
     /// Those of `layer_ids` that carry an anchor marks attach to, as
     /// persisted, in id order; a layer the store lacks carries none.

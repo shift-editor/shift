@@ -330,6 +330,10 @@ typed_id!(ContourId, "contour");
 typed_id!(ComponentId, "component");
 typed_id!(AnchorId, "anchor");
 typed_id!(GuidelineId, "guideline");
+// Scene ids: one per canvas node, run or text item, freed with it.
+typed_id!(NodeId, "node");
+typed_id!(RunId, "run");
+typed_id!(TextItemId, "textItem");
 interned_id!(LayerId, "layer");
 interned_id!(GlyphId, "glyph");
 

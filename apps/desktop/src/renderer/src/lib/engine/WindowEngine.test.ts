@@ -72,7 +72,7 @@ describe("the window's engine releases its store", () => {
     engine.releaseStore();
     expect(open).toEqual([]);
 
-    engine.beginEdit();
+    engine.beginEdit(null);
     const edited = engine.apply([
       { kind: "addContour", addContour: { layerId, contourId: mintContourId(), closed: true } },
     ]);
