@@ -65,7 +65,12 @@ import type {
   WorkspaceEditCoordinator,
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
-import type { FontFeature, LayoutRequest, TextLayout as LaidOutText } from "@shift/wasm/protocol";
+import type {
+  FeatureSubstitution,
+  FontFeature,
+  LayoutRequest,
+  TextLayout as LaidOutText,
+} from "@shift/wasm/protocol";
 import { EngineVariationReader, StatelessVariationReader, locationValues } from "../wasm/variation";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
@@ -1488,6 +1493,21 @@ export class Font {
     if (!engine) return [];
     for (const flag of engine.shaperInputs()) track(engine.revision(flag));
     return engine.fontFeatures() ?? [];
+  }
+
+  /**
+   * Every substitution a feature can make, ordered by output glyph then
+   * input, from the window's engine's shaper font: the glyphs the feature
+   * brings in and what each replaces. Tracks what the shaper font reads, as
+   * {@link fontFeatures} does.
+   *
+   * @returns empty without an open engine or a shaper.
+   */
+  featureSubstitutions(tag: string): readonly FeatureSubstitution[] {
+    const engine = this.#store.engine;
+    if (!engine) return [];
+    for (const flag of engine.shaperInputs()) track(engine.revision(flag));
+    return engine.featureSubstitutions(tag) ?? [];
   }
 
   /** @knipclassignore — used by VariationPanel component */

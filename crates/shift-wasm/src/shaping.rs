@@ -33,7 +33,7 @@ mod exports {
     use shift_shaper_font::{LiveShaper, ShaperFontError, ShaperFontRequest, ShaperFontState};
 
     use super::ShapingFailure;
-    use crate::engine_reads::{FeatureDefault, FeatureGroup, FontFeature};
+    use crate::engine_reads::{FeatureDefault, FeatureGroup, FeatureSubstitution, FontFeature};
 
     /// A session's shaper: the shaper font compiled from the session's font,
     /// and a shaper over it that maps characters through the font's Unicode
@@ -171,6 +171,33 @@ mod exports {
                 .collect()
         }
 
+        /// Every substitution feature `tag` can make in the shaper font, with
+        /// the shaper brought up to date first as for [`Self::layout_text`];
+        /// empty for an invalid tag, an unreadable `GSUB`, or no shaper.
+        pub(crate) fn feature_substitutions<E: std::fmt::Display>(
+            &self,
+            font: &Font,
+            source: impl FnOnce() -> Result<ShaperFontSource, E>,
+            tag: &str,
+        ) -> Vec<FeatureSubstitution> {
+            let Ok(tag) = shift_shape::Tag::new_checked(tag.as_bytes()) else {
+                return Vec::new();
+            };
+            let state = self.current(font, source);
+            let Ok(shaper) = state.shaper() else {
+                return Vec::new();
+            };
+            shaper
+                .feature_substitutions(tag)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|rule| FeatureSubstitution {
+                    input: rule.input,
+                    output: rule.output,
+                })
+                .collect()
+        }
+
         /// The shaper state, brought up to date with `font` when an edit may
         /// have changed what it reads.
         fn current<E: std::fmt::Display>(
@@ -283,7 +310,7 @@ mod exports {
         use shift_layout::{LayoutRequest, LayoutUnit, TextLayout, TextOptions};
 
         use super::{TextPlace, TextShaping};
-        use crate::engine_reads::{FeatureDefault, FeatureGroup, FontFeature};
+        use crate::engine_reads::{FeatureDefault, FeatureGroup, FeatureSubstitution, FontFeature};
 
         const LIGATURE: &str = "feature liga { sub f i by f_i; } liga;";
 
@@ -408,6 +435,25 @@ mod exports {
                     group: FeatureGroup::Ligatures,
                 }]
             );
+        }
+
+        #[test]
+        fn substitutions_list_what_a_feature_brings_in_by_glyph_id() {
+            let font = font_with(&[("f", Some('f')), ("i", Some('i')), ("f_i", None)]);
+            let shaping = TextShaping::default();
+            let id = |name: &str| font.glyph_by_name(name).unwrap().id();
+            let read = |tag: &str| {
+                shaping.feature_substitutions(&font, || Ok::<_, Infallible>(source(&font)), tag)
+            };
+
+            assert_eq!(
+                read("liga"),
+                [FeatureSubstitution {
+                    input: vec![id("f"), id("i")],
+                    output: id("f_i"),
+                }]
+            );
+            assert!(read("li").is_empty());
         }
 
         #[test]

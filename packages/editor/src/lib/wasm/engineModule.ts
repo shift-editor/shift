@@ -47,6 +47,7 @@ import type {
   EngineReads,
   InterpolatedMetrics,
   MissingKerningOrigin,
+  FeatureSubstitution,
   FontChangeFlag,
   FontFeature,
   LayoutRequest,
@@ -357,6 +358,14 @@ export class EngineSession {
    */
   fontFeatures(): readonly FontFeature[] {
     return this.#reads.fontFeatures();
+  }
+
+  /**
+   * Every substitution feature `tag` can make in the session's shaper font,
+   * as shift-shape reads them from its `GSUB`; empty without a shaper.
+   */
+  featureSubstitutions(tag: string): readonly FeatureSubstitution[] {
+    return this.#reads.featureSubstitutions(tag);
   }
 
   /** The change flags whose change may change the session's shaper font. */

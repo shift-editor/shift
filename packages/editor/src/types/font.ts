@@ -32,6 +32,7 @@ import type {
   SourceSetWeights,
 } from "../lib/wasm/engine";
 import type {
+  FeatureSubstitution,
   FontChangeFlag,
   FontFeature,
   LayoutRequest,
@@ -214,6 +215,14 @@ export interface FontEngine {
    * @returns null only while the engine is not open; empty when it has no shaper.
    */
   fontFeatures(): readonly FontFeature[] | null;
+
+  /**
+   * Every substitution a feature can make in the engine's shaper font,
+   * ordered by output glyph then input.
+   *
+   * @returns null only while the engine is not open; empty for a feature that substitutes nothing.
+   */
+  featureSubstitutions(tag: string): readonly FeatureSubstitution[] | null;
 }
 
 /**

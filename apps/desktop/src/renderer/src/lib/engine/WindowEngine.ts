@@ -23,6 +23,7 @@ import {
 } from "@shift/editor/model";
 import {
   FontChangeFlagSchema,
+  type FeatureSubstitution,
   type FontChangeFlag,
   type FontFeature,
   type LayoutRequest,
@@ -112,6 +113,10 @@ export class WindowEngine implements FontEngine {
 
   fontFeatures(): readonly FontFeature[] | null {
     return this.#opened?.session.fontFeatures() ?? null;
+  }
+
+  featureSubstitutions(tag: string): readonly FeatureSubstitution[] | null {
+    return this.#opened?.session.featureSubstitutions(tag) ?? null;
   }
 
   get variationCell(): Signal<EngineVariation | null> {

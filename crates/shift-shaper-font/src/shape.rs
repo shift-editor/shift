@@ -3,13 +3,13 @@ use std::sync::Arc;
 
 use shift_font::{AxisId, ExternalLocation, GlyphId};
 use shift_shape::{
-    AxisNormalization, GlyphSource, NOTDEF, NormalizedCoord, ParagraphHook, Shaper,
+    AxisNormalization, GlyphSource, NOTDEF, NormalizedCoord, ParagraphHook, Shaper, Tag,
     character_glyphs,
 };
 
-use shift_shape::Tag;
 pub use shift_shape::{
-    FeatureDefault, FeatureGroup, FeatureSetting, FontFeature, ShapeError, TextDirection,
+    FeatureDefault, FeatureGroup, FeatureSetting, FontFeature, ShapeError, Substitution,
+    TextDirection,
 };
 
 use super::positioning::{GeneratedPositioning, LiveAdvances, MarkerHook};
@@ -104,6 +104,21 @@ impl LiveShaper {
     /// Returns [`ShapeError::InvalidFont`] when the shaper font cannot be read.
     pub fn features(&self) -> Result<Vec<FontFeature>, ShapeError> {
         self.shaper.features()
+    }
+
+    /// Returns every substitution a feature can make, in Shift glyphs; see
+    /// [`Shaper::feature_substitutions`]. A glyph the shaper font has but the
+    /// font no longer does drops the substitutions it appears in.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShapeError::InvalidFont`] when the shaper font, or its
+    /// `GSUB`, cannot be read.
+    pub fn feature_substitutions(
+        &self,
+        tag: Tag,
+    ) -> Result<Vec<Substitution<GlyphId>>, ShapeError> {
+        self.shaper.feature_substitutions(&self.glyphs, tag)
     }
 
     /// Shapes one run of text.
