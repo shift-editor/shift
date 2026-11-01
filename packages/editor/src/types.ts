@@ -5,6 +5,7 @@ export type {
 } from "./types/componentTransform";
 export type { Coordinates } from "./types/coordinates";
 export type { PendingEditId } from "./types/editing";
+export type { EngineStore } from "./types/engine";
 export type {
   EngineVariation,
   FontEngine,

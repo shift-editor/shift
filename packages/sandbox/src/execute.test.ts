@@ -10,6 +10,7 @@ import {
 import {
   CommandNotRunnableError,
   FontChangedError,
+  LastPageError,
   ShiftReadScope,
   TextRunNotFoundError,
   type EditorInspection,
@@ -228,7 +229,43 @@ const capabilities: ShiftCapabilities = {
       return observation(null);
     },
   },
+  pages: {
+    async create({ name }) {
+      return observation(pageChange(asNodeId("node-page-2"), name ?? "Page 2"));
+    },
+    async rename({ pageId, name }) {
+      return observation(pageChange(pageId, name));
+    },
+    async delete({ pageId }) {
+      if (pageId === "node-page") throw new LastPageError(pageId);
+      return observation(pageChange(pageId, "Page 2"));
+    },
+  },
+  history: {
+    async undo() {
+      return observation({ undone: true, location: HISTORY_LOCATION });
+    },
+    async redo() {
+      return observation({ redone: false, location: null });
+    },
+  },
 };
+
+const HISTORY_LOCATION = {
+  pageId: asNodeId("node-page"),
+  glyphIds: [],
+  nodeIds: [asNodeId("run-a")],
+};
+
+function pageChange(pageId: ReturnType<typeof asNodeId>, name: string) {
+  return {
+    page: { id: pageId, name },
+    pages: [
+      { id: asNodeId("node-page"), name: "Page 1" },
+      { id: pageId, name },
+    ],
+  };
+}
 
 const TEXT_RUN_OPTIONS = {
   shaping: true,
@@ -548,6 +585,70 @@ describe("Shift sandbox executes bounded code over live capabilities", () => {
       },
       { windowId: 7, runId: "run-a" },
     ]);
+  });
+
+  it("passes page edits and undo/redo to the host as parsed inputs and keeps their typed errors", async () => {
+    const seen: unknown[] = [];
+    const record =
+      <Input, Value>(call: (input: Input) => Promise<Value>) =>
+      (input: Input) => {
+        seen.push(input);
+        return call(input);
+      };
+    const host: ShiftCapabilities = {
+      ...capabilities,
+      pages: {
+        create: record(capabilities.pages.create),
+        rename: record(capabilities.pages.rename),
+        delete: record(capabilities.pages.delete),
+      },
+      history: {
+        undo: record(capabilities.history.undo),
+        redo: record(capabilities.history.redo),
+      },
+    };
+
+    const result = await executeShiftCode(
+      host,
+      "async () => { const target = { windowId: 7, ifFontRevision: 'revision-a' }; const created = await shift.pages.create({ ...target, name: 'Proofs' }); const pageId = created.value.page.id; await shift.pages.rename({ ...target, pageId, name: 'Spacing' }); await shift.pages.delete({ windowId: 7, pageId }); const undo = await shift.history.undo(target); const redo = await shift.history.redo({ windowId: 7 }); let error = null; try { await shift.pages.delete({ windowId: 7, pageId: 'node-page' }); } catch (caught) { error = caught.name; } return { pages: created.value.pages, undo: undo.value, redo: redo.value, error }; }",
+    );
+
+    expect(result).toEqual({
+      pages: [
+        { id: "node-page", name: "Page 1" },
+        { id: "node-page-2", name: "Proofs" },
+      ],
+      undo: { undone: true, location: HISTORY_LOCATION },
+      redo: { redone: false, location: null },
+      error: "LastPageError",
+    });
+    const target = { windowId: 7, ifFontRevision: FONT_REVISION };
+    expect(seen).toEqual([
+      { ...target, name: "Proofs" },
+      { ...target, pageId: "node-page-2", name: "Spacing" },
+      { windowId: 7, pageId: "node-page-2" },
+      target,
+      { windowId: 7 },
+      { windowId: 7, pageId: "node-page" },
+    ]);
+  });
+
+  it("rejects page names that are blank and history inputs with fields, before they reach the host", async () => {
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.pages.rename({ windowId: 7, pageId: 'node-page', name: '   ' })",
+      ),
+    ).rejects.toThrow("A page name needs a character that is not a space");
+    await expect(
+      executeShiftCode(capabilities, "async () => shift.pages.create({ windowId: 7, name: '' })"),
+    ).rejects.toThrow();
+    await expect(
+      executeShiftCode(capabilities, "async () => shift.pages.delete({ windowId: 7 })"),
+    ).rejects.toThrow();
+    await expect(
+      executeShiftCode(capabilities, "async () => shift.history.undo({ windowId: 7, steps: 2 })"),
+    ).rejects.toThrow();
   });
 
   it("rejects proof-text inputs that are not text runs' shapes before they reach the host", async () => {

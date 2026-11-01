@@ -60,7 +60,7 @@ async () => {
 ```
 
 - `commands.list({ windowId })` lists the app commands you may run, `{ id, title, shortcut, enabled }`: only those that change the view or session state (`view.zoomIn`, `view.zoomOut`, `ui.increaseSize`, `ui.decreaseSize`, `ui.resetSize`, `edit.selectAll`, `edit.deselect`, `tab.close`, `app.showSettings`). `commands.run({ windowId, command })` runs one as its menu item does. `tab.close` closes the shown tab; with only the glyph overview left it fails with `LastTabError` and the window stays open.
-- Commands that edit the font (Undo and Redo too), touch files (Save, Export, Open) or act outside the window (Copy, help links) are not listed; running one fails with `CommandNotRunnableError`. A listed command that cannot run now (`enabled: false`) fails with `CommandDisabledError`.
+- Commands that edit the font (Undo and Redo too; use `shift.history` below), touch files (Save, Export, Open) or act outside the window (Copy, help links) are not listed; running one fails with `CommandNotRunnableError`. A listed command that cannot run now (`enabled: false`) fails with `CommandDisabledError`.
 - `editor.setTool({ tool })` takes a tool id as `editor.inspect` reports it (`select`, `pen`, `hand`, `text`, `spacing`, `kerning`, `shape`); a preview disables `pen` and `shape`. `editor.showPage({ pageId })` takes a page from `editor.inspect`'s `pages`. `editor.openGlyph({ glyph })` opens a glyph (`{ name }` or `{ glyphId }`) in its tab. `editor.select({ ids })` replaces the selection with point, contour, anchor and component ids from `layers.get` (an empty list clears it).
 - `editor.setView({ zoom?, center? })` zooms (clamped to 0.01–32) and centres the canvas. `editor.inspect`'s `viewport` gives `{ zoom, center }`; `center` is in the open glyph's units (font units, y up, as `layers.get` gives points) while a glyph is open, and in the page's units otherwise, and null before the canvas is shown.
 - Every editor call answers with the inspection afterwards. Pass `ifFontRevision` to act only if the font is still the one you read; otherwise the call fails with `FontChangedError` and does nothing. Other failures are typed: `CommandNotFoundError`, `ToolNotFoundError`, `PageNotFoundError`, `GlyphNotFoundError`, `ObjectNotFoundError`, `CanvasHiddenError`, `LastTabError`.
@@ -98,7 +98,7 @@ async () => {
 
 ## Write proof text
 
-Proof text (the text runs on the canvas) and the Text mode caret are the only things MCP can write. They are view state beside the font, so writing them never changes the font or its `fontRevision`.
+Proof text (the text runs on the canvas), the Text mode caret and the document's pages are what MCP can write, and `shift.history` undoes and redoes the window's steps. Proof text and pages are view state beside the font, so writing them never changes the font or its `fontRevision`.
 
 ```js
 async () => {
@@ -130,6 +130,20 @@ async () => {
 - Inside `shift.read`, `read.text.runs()` and `read.text.get()` read at the bound revision; writes are not part of a read scope.
 - `text.setOptions({ runId, options })` changes a run's options as the Text section does, in one undo step: `shaping`, `features` (`{ liga: false, ss01: true }`; `null` returns a tag to the font's default), `language` (BCP 47, such as `tr`), `script` (ISO 15924, such as `Arab`), `lineHeight` (ems; `null` for the font's spacing) and `align` (`start`, `end`, `left`, `center`, `right`, or `null`). Fields left out keep their values. Options the engine cannot read fail with `TextRunOptionsError` and change nothing. Every run read returns its current `options`; read `glyphs` and `baselines` again to see the effect.
 - On a glyph tab's own page, runs are navigation: writing them never marks the document unsaved. On the user's pages, it does.
+
+## Edit pages
+
+- `pages.create({ windowId, name? })` adds an empty page after the last one (default name: the first unused "Page N"); it does not show it, so call `editor.showPage` with the new `page.id` to switch. `pages.rename({ windowId, pageId, name })` renames one; `pages.delete({ windowId, pageId })` deletes one and everything on it (deleting the shown page shows its neighbour).
+- Each answers `{ page, pages }`: the page it touched (a deleted page as it was) and every page in order, as `editor.inspect`'s `pages` lists them.
+- Each is one undo step and marks the document unsaved; tell the user they can undo it. Pages are not font data, so `fontRevision` does not move; `ifFontRevision` still guards the call (`FontChangedError`, nothing changed).
+- A page id the document's pages do not have (a glyph tab's page included) fails with `PageNotFoundError`; deleting the only page fails with `LastPageError`. Blank names are refused; surrounding spaces are dropped.
+
+## Undo and redo
+
+- `history.undo({ windowId })` and `history.redo({ windowId })` are Edit › Undo and Edit › Redo: they replay the window's latest step whoever made it, the user's font edits included, and show the page it was made on. Undo only what you did, and only right after you did it, unless the user asks.
+- They answer `{ undone, location }` / `{ redone, location }`. `undone: false` means there was nothing to undo, not an error. `location` is `{ pageId, glyphIds, nodeIds }`, where the step was made, or null.
+- Undoing a font edit changes the font and moves `fontRevision`: read again before writing. Pass `ifFontRevision` to undo only if nothing changed since you read.
+- A font file open as a preview has no undo history: both fail with `HistoryUnavailableError`. `commands.run("edit.undo")` stays refused; use `history.undo`.
 
 ## Interpret what you read
 

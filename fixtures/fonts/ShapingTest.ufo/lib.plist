@@ -22,6 +22,7 @@
 		<string>one</string>
 		<string>one.arab</string>
 		<string>i.loclTRK</string>
+		<string>hamzabelow-ar</string>
 	</array>
 	<key>public.openTypeCategories</key>
 	<dict>
@@ -36,6 +37,8 @@
 		<key>beh-ar.medi</key>
 		<string>base</string>
 		<key>dotabove-ar</key>
+		<string>mark</string>
+		<key>hamzabelow-ar</key>
 		<string>mark</string>
 		<key>f_i</key>
 		<string>ligature</string>

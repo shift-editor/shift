@@ -23,6 +23,7 @@ import type { GlyphId, NamedInstance, Source } from "@shift/types";
 import type { MessagePortMain } from "electron";
 import type {
   EditorControlOperation,
+  DocumentOperation,
   AgentCallMap,
   AgentE2ECallMap,
   AgentEventMap,
@@ -177,6 +178,14 @@ export class AgentClient {
 
   /** Calls one of the window's proof-text capabilities, as `text.<operation>`. */
   text<K extends TextOperation>(
+    operation: K,
+    input: AgentCallMap[K]["request"],
+  ): Promise<AgentCallMap[K]["response"]> {
+    return this.#call(operation, input);
+  }
+
+  /** Edits the window's document as its pages list and Edit menu do, as `pages.*` or `history.*`. */
+  edit<K extends DocumentOperation>(
     operation: K,
     input: AgentCallMap[K]["request"],
   ): Promise<AgentCallMap[K]["response"]> {

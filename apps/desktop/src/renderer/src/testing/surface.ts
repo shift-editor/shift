@@ -25,7 +25,7 @@ import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import type { Bounds, Point2D, Rect2D } from "@shift/geo";
 import type { LocalPoint, ScreenPoint, ScreenVector } from "@shift/editor/spaces";
 import type { EditorTool, KerningToolView, ResolvedGlyph } from "@shift/runtime";
-import type { AgentCallMap, TextOperation } from "@shared/agent/protocol";
+import type { AgentCallMap, DocumentOperation, TextOperation } from "@shared/agent/protocol";
 import type {
   AnchorId,
   ComponentId,
@@ -650,6 +650,15 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
     operation: K,
     input: AgentCallMap[K]["request"],
   ): Promise<AgentCallMap[K]["response"]>;
+  /**
+   * Makes one page edit or undo/redo as an agent does over MCP
+   * (`shift.pages.*`, `shift.history.*`), on this editor and behind the same
+   * font-revision guard; only the window id is left out.
+   */
+  agentDocument<K extends DocumentOperation>(
+    operation: K,
+    input: AgentCallMap[K]["request"],
+  ): Promise<AgentCallMap[K]["response"]>;
 
   /** The document's pages in list order, as agents read them (`EditorView.pages`). */
   pageList(): readonly PageEntry[];
@@ -676,8 +685,10 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
 
   /** Adds a glyph to the font and loads it. */
   addGlyph(name: string, unicode: number | null): Promise<void>;
-  undo(): Promise<void>;
-  redo(): Promise<void>;
+  /** Edit › Undo; false when there was nothing to undo. */
+  undo(): Promise<boolean>;
+  /** Edit › Redo; false when there was nothing to redo. */
+  redo(): Promise<boolean>;
   /** Waits for every pending edit to be confirmed. */
   settle(): Promise<void>;
   /** Makes the workspace refuse the next edit it is sent, as a failed write does. Test-only. */

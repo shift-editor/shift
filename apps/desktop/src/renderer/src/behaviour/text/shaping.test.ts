@@ -67,6 +67,22 @@ describe("typed text is shaped with the font's feature code", () => {
     });
   });
 
+  it.each([
+    ["a mark of no width", "بٕب", "hamzabelow-ar"],
+    ["a mark that draws 300 wide", "بٰب", "alefabove-ar"],
+  ])("sets %s that nothing attaches at no advance, as export does", async (_case, typed, mark) => {
+    editor.typeText(typed);
+    await editor.settle();
+
+    expect(editor.canvasText()).toMatchObject({
+      glyphs: [
+        { name: "beh-ar.fina", left: 0 },
+        { name: mark, advance: 0 },
+        { name: "beh-ar.init", left: 450 },
+      ],
+    });
+  });
+
   it("shapes new text at once when typed after the shaper is ready", async () => {
     editor.typeText("fi");
     await editor.settle();
