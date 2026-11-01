@@ -51,11 +51,11 @@ workspaceTest(
 
     try {
       await expect.poll(() => browserWindow.evaluate((window) => window.isMaximized())).toBe(true);
-      await runCommand(page, electronApp, "window.maximise");
+      await runCommand(page, "window.maximise");
       await expect.poll(() => browserWindow.evaluate((window) => window.isMaximized())).toBe(false);
       await expect(page.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
 
-      await runCommand(page, electronApp, "window.maximise");
+      await runCommand(page, "window.maximise");
       await expect.poll(() => browserWindow.evaluate((window) => window.isMaximized())).toBe(true);
       await expect(page.getByLabel("Glyph catalog", { exact: true })).toBeVisible();
     } finally {

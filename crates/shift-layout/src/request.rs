@@ -78,3 +78,48 @@ pub struct LayoutRequest {
     pub units: Vec<LayoutUnit>,
     pub options: TextOptions,
 }
+
+/// A font's vertical metrics at the location text is laid out at.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct LineMetrics {
+    pub units_per_em: f64,
+    pub ascender: f64,
+    /// Below the baseline, so usually negative.
+    pub descender: f64,
+    pub line_gap: f64,
+    /// The cap height, where a mark laid out as typed sits; the ascender
+    /// stands in when the font has none.
+    pub cap_height: Option<f64>,
+}
+
+/// What a window knows of a font it has no live font for, such as a
+/// preview's, enough to lay text out as typed over it: the glyph each of
+/// the text's characters maps to, the advance and mark class of each glyph
+/// the text shows, and the line metrics, all at the location shown.
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct TypedFont {
+    pub characters: Vec<CharacterGlyph>,
+    pub glyphs: Vec<TypedGlyph>,
+    pub metrics: LineMetrics,
+}
+
+/// The glyph a character maps to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct CharacterGlyph {
+    pub codepoint: u32,
+    pub glyph_id: GlyphId,
+}
+
+/// One glyph as text laid out as typed reads it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct TypedGlyph {
+    pub glyph_id: GlyphId,
+    /// Its advance at the location, in font units.
+    pub advance: f64,
+    /// Whether the font classes it a mark, as export resolves its category.
+    pub is_mark: bool,
+}

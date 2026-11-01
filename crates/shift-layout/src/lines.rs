@@ -5,9 +5,9 @@ use std::ops::Range;
 
 use shift_shape::{line_breaks, visual_order};
 
-use crate::font::{LayoutFont, LineMetrics};
+use crate::font::LayoutFont;
 use crate::paragraph::{Paragraph, ShapedText};
-use crate::request::{LineHeight, TextAlign, TextOptions};
+use crate::request::{LineHeight, LineMetrics, TextAlign, TextOptions};
 use crate::{Direction, LayoutLine, LineRun, PlacedGlyph, TextLayout};
 
 /// How lines are spaced and aligned.
@@ -219,12 +219,24 @@ impl<'o> Placement<'o> {
                 TextAlign::Center => room / 2.0,
                 _ => 0.0,
             };
-            let first = line.runs.first().map_or(0, |run| run.glyph_start);
-            let last = line.runs.last().map_or(0, |run| run.glyph_end);
-            let glyphs = usize::try_from(first).unwrap_or(0)..usize::try_from(last).unwrap_or(0);
-            for glyph in layout.glyphs.get_mut(glyphs).into_iter().flatten() {
+            for glyph in layout
+                .glyphs
+                .get_mut(line.glyph_range())
+                .into_iter()
+                .flatten()
+            {
                 glyph.left += line.left;
             }
         }
+    }
+}
+
+impl LayoutLine {
+    /// Its glyphs' indices in [`TextLayout::glyphs`]: from its first run's
+    /// first glyph up to its last run's end, empty for a line with no runs.
+    fn glyph_range(&self) -> Range<usize> {
+        let first = self.runs.first().map_or(0, |run| run.glyph_start);
+        let last = self.runs.last().map_or(0, |run| run.glyph_end);
+        crate::slice_index(first)..crate::slice_index(last)
     }
 }

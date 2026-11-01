@@ -1,17 +1,18 @@
-import type { RunId } from "@shift/types";
+import type { GlyphId, RunId } from "@shift/types";
 import type {
-  LayoutLine,
+  CharacterGlyph,
   LayoutRequest,
   LayoutUnit,
-  CaretStop,
-  PlacedGlyph,
+  PlacedText,
   TextLayout as LaidOutText,
+  TypedFont,
+  TypedGlyph,
 } from "@shift/wasm/protocol";
 import { computed, effect, track } from "../signals";
 import type { ComputedSignal, Effect, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
-import type { TextRunRecord } from "../../types/text";
-import { displayAdvance } from "../utils/displayAdvance";
+import type { TextPlace, TextRunRecord } from "../../types/text";
+import { engineModuleCell, loadEngine } from "../wasm/engine";
 import { glyphIdForItem, TextLayout, type TextItem } from "./layout";
 
 /** What a run's text reads from the {@link Text} that owns it. */
@@ -31,16 +32,22 @@ export interface RunTextOwner {
  * Layout runs synchronously in the window's engine (`Font.layoutText`,
  * shift-layout over the engine's font): shaping, kerning, marks, cursive
  * joins, lines, bidi order and caret stops, so the run lays out again as
- * soon as its text changes or an edit changes what layout reads. A preview,
- * which has no engine, lays its text out as typed. Construct outside any
- * reactive reader: the effect that reports layouts starts at once.
+ * soon as its text changes or an edit changes what layout reads. A window
+ * without an engine, such as a preview's, has shift-layout lay the text out
+ * as typed from its glyphs' advances, once the engine module has loaded.
+ * Construct outside any reactive reader: the effect that reports layouts,
+ * and loads what they lack, starts at once.
  */
 export class RunText {
-  readonly #laidOutCell: ComputedSignal<LaidOutText | null>;
+  readonly #editor: Editor;
+  readonly #laidOutCell: ComputedSignal<PlacedText | null>;
   readonly #reports: Effect;
   readonly #layoutCell: ComputedSignal<TextLayout | null>;
+  // non-reactive: glyphs already asked of the engine, read only by the reporting effect
+  readonly #preloaded = new Set<GlyphId>();
 
   constructor(editor: Editor, runIdCell: Signal<RunId>, owner: RunTextOwner) {
+    this.#editor = editor;
     this.#laidOutCell = computed(
       () => {
         const record = owner.run(runIdCell.value);
@@ -52,17 +59,28 @@ export class RunText {
         // A glyph the text shows finished loading into the engine.
         track(owner.glyphsLoadedCell);
         const request = layoutRequest(record);
-        return editor.font.layoutText(request, location, sourceId) ?? typed(editor, record.items);
+        return (
+          editor.font.layoutText(request, location, sourceId) ??
+          this.#laidOutAsTyped(record.items, request, { location, sourceId })
+        );
       },
       // An edit that leaves the text where it was, such as dragging an anchor
       // no mark uses, keeps the layout and everything drawn from it.
       { name: "text.laidOut", equals: samePlacement },
     );
 
+    // Loading happens here, not in the layout computed: a load changes what
+    // layout reads, and the computed then lays the text out again.
     this.#reports = effect(
       () => {
-        const laidOut = this.#laidOutCell.value;
-        if (laidOut) owner.onLaidOut(laidOut);
+        const placed = this.#laidOutCell.value;
+        if (!placed) {
+          // No engine to lay out with: the module that lays out as typed.
+          if (owner.run(runIdCell.value)) void loadTypedLayout();
+          return;
+        }
+        owner.onLaidOut(placed.layout);
+        this.#preload(placed.unloaded);
       },
       { name: "text.reportLaidOut" },
     );
@@ -70,7 +88,7 @@ export class RunText {
     this.#layoutCell = computed(
       () => {
         const record = owner.run(runIdCell.value);
-        const laidOut = this.#laidOutCell.value;
+        const laidOut = this.#laidOutCell.value?.layout;
         if (!record || !laidOut) return null;
         const activeSourceId = editor.activeSourceIdCell.value;
         // Glyphs are listed by name, which a rename changes without moving them.
@@ -95,6 +113,88 @@ export class RunText {
   /** The run's layout; invalidates on content, location, source, glyph loads, and edits layout reads. */
   get layoutCell(): ComputedSignal<TextLayout | null> {
     return this.#layoutCell;
+  }
+
+  /**
+   * Loads into the engine the glyphs a layout showed from placeholders, once
+   * each: the layout then runs again with them. A glyph still unloaded after
+   * that, or a failed load, is not asked for again until a layout shows
+   * every glyph loaded, so layout cannot loop.
+   */
+  #preload(unloaded: readonly GlyphId[]): void {
+    if (unloaded.length === 0) {
+      this.#preloaded.clear();
+      return;
+    }
+    const wanted = unloaded.filter((glyphId) => !this.#preloaded.has(glyphId));
+    if (wanted.length === 0) return;
+    for (const glyphId of wanted) this.#preloaded.add(glyphId);
+    try {
+      this.#editor.font.preloadLaidOut(wanted);
+    } catch (error) {
+      console.warn("loading the glyphs text shows failed", error);
+    }
+  }
+
+  /**
+   * The text laid out as typed by shift-layout, for a window without an engine:
+   * null until the engine module, which holds the layout, has loaded.
+   */
+  #laidOutAsTyped(
+    items: readonly TextItem[],
+    request: LayoutRequest,
+    place: TextPlace,
+  ): PlacedText | null {
+    // Called from the layout computed, which lays out again once the module loads.
+    track(engineModuleCell);
+    const engine = engineModuleCell.peek();
+    if (!engine) return null;
+    const layout = engine.typedText.layoutTyped(request, this.#typedFont(items, place));
+    return { layout, unloaded: [] };
+  }
+
+  /**
+   * What layout as typed reads of the font: the glyph each of the text's
+   * characters maps to, and each glyph's advance and mark class, at `place`.
+   */
+  #typedFont(items: readonly TextItem[], place: TextPlace): TypedFont {
+    const editor = this.#editor;
+    const { font } = editor;
+    const metrics = place.sourceId
+      ? font.metricsForSource(place.sourceId)
+      : font.metricsAtLocation(place.location);
+    const characters = new Map<number, CharacterGlyph>();
+    const glyphs = new Map<GlyphId, TypedGlyph>();
+    for (const item of items) {
+      if (item.kind === "linebreak") continue;
+      const glyphId = glyphIdForItem(item, font);
+      if (!glyphId) continue;
+      if (item.kind === "character") {
+        characters.set(item.codepoint, { codepoint: item.codepoint, glyphId });
+      }
+      if (glyphs.has(glyphId)) continue;
+      const model = editor
+        .glyphForId(glyphId)
+        ?.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
+      if (model) track(model.xAdvanceCell);
+      const name = font.glyphName(glyphId);
+      glyphs.set(glyphId, {
+        glyphId,
+        advance: model?.xAdvance ?? 0,
+        isMark: name !== null && font.isNonspacingMark(name),
+      });
+    }
+    return {
+      characters: characters.values().toArray(),
+      glyphs: glyphs.values().toArray(),
+      metrics: {
+        unitsPerEm: metrics.unitsPerEm,
+        ascender: metrics.ascender,
+        descender: metrics.descender,
+        lineGap: metrics.lineGap ?? 0,
+        capHeight: metrics.capHeight ?? null,
+      },
+    };
   }
 
   dispose(): void {
@@ -131,91 +231,13 @@ function layoutUnit(item: TextItem): LayoutUnit {
   }
 }
 
-/**
- * A preview's text as typed, without the engine that lays text out: one
- * glyph per item at its drawn advance, one line per paragraph.
- */
-function typed(editor: Editor, items: readonly TextItem[]): LaidOutText {
-  // Called from the layout computed, which tracks the location.
-  const metrics = editor.font.metricsAtLocation(editor.externalLocationCell.peek());
-  const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
-  const glyphs: PlacedGlyph[] = [];
-  const lines: LayoutLine[] = [];
-  const carets: CaretStop[] = [];
-  let start = 0;
-  let pen = 0;
-  const endLine = (end: number, withBreak: boolean) => {
-    const first = glyphs.findIndex((glyph) => glyph.line === lines.length);
-    // WORKAROUND (Needs from PR 1): a preview has no engine to place caret
-    // stops, so its typed text stands one at each glyph's left and one at
-    // the line's end, left to right, as the engine places them for
-    // unshaped text.
-    for (const glyph of glyphs.slice(first < 0 ? glyphs.length : first)) {
-      carets.push(typedStop(glyph.start, lines.length, glyph.left));
-    }
-    carets.push(typedStop(end, lines.length, pen));
-    lines.push({
-      paragraph: lines.length,
-      start,
-      end: end + (withBreak ? 1 : 0),
-      baseline: -lineHeight * lines.length,
-      ascent: metrics.ascender,
-      descent: metrics.descender,
-      left: 0,
-      advance: pen,
-      direction: "ltr",
-      runs: [
-        {
-          start,
-          end,
-          level: 0,
-          direction: "ltr",
-          script: null,
-          glyphStart: first < 0 ? glyphs.length : first,
-          glyphEnd: glyphs.length,
-        },
-      ],
-    });
-  };
-  for (const [index, item] of items.entries()) {
-    if (item.kind === "linebreak") {
-      endLine(index, true);
-      start = index + 1;
-      pen = 0;
-      continue;
-    }
-    const glyphId = glyphIdForItem(item, editor.font);
-    const glyph = glyphId ? editor.glyphForId(glyphId) : null;
-    const model = glyph?.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
-    if (model) track(model.xAdvanceCell);
-    const name = glyphId ? editor.font.glyphName(glyphId) : null;
-    const advance = displayAdvance(
-      model?.xAdvance ?? 0,
-      name !== null && editor.font.isNonspacingMark(name),
-    );
-    glyphs.push({
-      glyphId: glyphId ?? null,
-      start: index,
-      end: index + 1,
-      line: lines.length,
-      left: pen,
-      baseline: -lineHeight * lines.length,
-      xOffset: 0,
-      yOffset: 0,
-      advance,
-      kern: 0,
-      direction: "ltr",
-      isMark: false,
-      bounds: null,
-    });
-    pen += advance;
+/** Loads the engine module, which lays text out as typed; a failure is logged. */
+async function loadTypedLayout(): Promise<void> {
+  try {
+    await loadEngine();
+  } catch (error) {
+    console.error("the module that lays text out did not load", error);
   }
-  if (items.length > 0) endLine(items.length, false);
-  return { lines, glyphs, unitGlyphs: [], carets, width: 0, unshaped: null };
-}
-
-function typedStop(unit: number, line: number, x: number): CaretStop {
-  return { unit, line, x, direction: "ltr", secondary: null };
 }
 
 /**
@@ -223,7 +245,7 @@ function typedStop(unit: number, line: number, x: number): CaretStop {
  * which the editor's {@link TextLayout} does not keep, are left out, so an
  * outline edit that moves nothing keeps the layout.
  */
-function samePlacement(previous: LaidOutText | null, next: LaidOutText | null): boolean {
+function samePlacement(previous: PlacedText | null, next: PlacedText | null): boolean {
   return equalValues(previous, next);
 }
 

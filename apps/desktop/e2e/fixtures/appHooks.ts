@@ -1,6 +1,7 @@
 import { expect, type ElectronApplication, type Page } from "@playwright/test";
 import type { AppReaders } from "@/agent/AppReaders";
 import type { E2EHooks } from "@/testing/e2e/hooks";
+import type { CommandId } from "../../src/shared/commands";
 import type {} from "../../src/main/agent/e2eHooks";
 
 // The one file where the test process reaches into the running app, through
@@ -31,17 +32,22 @@ export function appFor(page: Page): ElectronApplication {
   return app;
 }
 
-/** The id main gives the window that owns `page`, once its agent lane is connected. */
-async function connectedWindowId(page: Page): Promise<number> {
-  const app = appFor(page);
+/** The id main gives the window that owns `page`. */
+function windowIdOf(page: Page): Promise<number> {
   let windowId = windowIds.get(page);
   if (!windowId) {
-    windowId = app
+    windowId = appFor(page)
       .browserWindow(page)
       .then((window) => window.evaluate((browserWindow) => browserWindow.id));
     windowIds.set(page, windowId);
   }
-  const id = await windowId;
+  return windowId;
+}
+
+/** The id main gives the window that owns `page`, once its agent lane is connected. */
+async function connectedWindowId(page: Page): Promise<number> {
+  const app = appFor(page);
+  const id = await windowIdOf(page);
   // A window that just opened or reloaded answers once its renderer connects the agent lane.
   await expect
     .poll(() =>
@@ -100,6 +106,25 @@ export function hooksOf(page: Page): Remote<E2EHooks> {
       },
       { windowId, hook, method, args },
     ),
+  );
+}
+
+/**
+ * Runs `command` for `page`'s window in main, as the window's own command request does. Main
+ * names the window, so the command needs no OS focus and works in any window, the launcher
+ * included; it resolves once main has run the command, even one that reloads the window.
+ *
+ * @throws {Error} when the app was not launched for E2E or the command fails.
+ */
+export async function runCommand(page: Page, command: CommandId): Promise<void> {
+  const windowId = await windowIdOf(page);
+  await appFor(page).evaluate(
+    async (_electron, call) => {
+      const hooks = globalThis.shiftE2EHooks;
+      if (!hooks) throw new Error("The app has no E2E hooks; is NODE_ENV test?");
+      await hooks.runCommand(call.windowId, call.command);
+    },
+    { windowId, command },
   );
 }
 

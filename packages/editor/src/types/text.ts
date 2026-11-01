@@ -1,5 +1,12 @@
-import type { NodeId, RunId, TextItemId } from "@shift/types";
+import type { NodeId, RunId, SourceId, TextItemId } from "@shift/types";
 import type { TextItem } from "../lib/text/layout/types";
+import type { ExternalAxisLocation } from "./variation";
+
+/** Where text is laid out: the location shown, and the source edited, which takes precedence. */
+export interface TextPlace {
+  readonly location: ExternalAxisLocation;
+  readonly sourceId: SourceId | null;
+}
 
 /** Caret immediately after an item; null denotes the start of a run. */
 export type TextCaret = TextItemId | null;

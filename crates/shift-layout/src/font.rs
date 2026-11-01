@@ -1,4 +1,5 @@
-//! The live font at the location text is laid out at.
+//! The font at the location text is laid out at: the live font, or what a
+//! window without one knows of each glyph.
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -17,19 +18,7 @@ use shift_shape::{GlyphPosition, Tag, TextDirection};
 use shift_shaper_font::{GeneratedPositioning, LiveAdvances, LiveShaper, PositioningGlyphs};
 
 use crate::GlyphBounds;
-
-/// A font's vertical metrics at the location text is laid out at.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct LineMetrics {
-    pub units_per_em: f64,
-    pub ascender: f64,
-    /// Below the baseline, so usually negative.
-    pub descender: f64,
-    pub line_gap: f64,
-    /// The cap height, where a mark laid out as typed sits; the ascender
-    /// stands in when the font has none.
-    pub cap_height: Option<f64>,
-}
+use crate::request::{LineMetrics, TypedFont, TypedGlyph};
 
 impl LineMetrics {
     /// The font's metrics at `design`: its sources' ascender, descender,
@@ -61,20 +50,44 @@ impl LineMetrics {
     }
 }
 
-/// The live font as layout reads it: glyphs, anchors and kerning at one
-/// location, the shaper over its feature code, and each glyph's `GDEF`
-/// class. Each glyph is resolved once per layout.
+/// The font as layout reads it: glyph advances, bounds, anchors and kerning
+/// at one location, the shaper, and each glyph's `GDEF` class. Each glyph is
+/// resolved once per layout.
+///
+/// Over the live font ([`Self::new`]) text shapes with the font's feature
+/// code; over a [`TypedFont`] ([`Self::typed`]), which has neither outlines
+/// nor feature code, it lays out as typed.
 pub struct LayoutFont<'a> {
+    glyphs: Glyphs<'a>,
+    metrics: LineMetrics,
+    // non-reactive: memoized reads for one layout
+    resolved: RefCell<HashMap<GlyphId, Option<Resolved>>>,
+}
+
+/// Where a [`LayoutFont`] reads its glyphs.
+enum Glyphs<'a> {
+    Live(Box<LiveGlyphs<'a>>),
+    Typed(TypedGlyphs),
+}
+
+/// The live font at one location.
+struct LiveGlyphs<'a> {
     font: &'a Font,
     external: ExternalLocation,
     projection: RefCell<FontProjection<'a>>,
     kerning: KerningBlend,
     shaper: Result<&'a LiveShaper, String>,
     classes: &'a dyn Fn(GlyphId) -> Option<OpenTypeCategory>,
-    metrics: LineMetrics,
-    // non-reactive: memoized reads for one layout
-    resolved: RefCell<HashMap<GlyphId, Option<Resolved>>>,
 }
+
+/// A [`TypedFont`], indexed by character and glyph.
+struct TypedGlyphs {
+    characters: HashMap<u32, GlyphId>,
+    glyphs: HashMap<GlyphId, TypedGlyph>,
+}
+
+/// Why text over a [`TypedFont`] lays out as typed.
+const NO_FEATURE_CODE: &str = "the font has no feature code to shape with here";
 
 /// What layout reads of one glyph at the location.
 #[derive(Clone, Copy)]
@@ -97,25 +110,52 @@ impl<'a> LayoutFont<'a> {
         metrics: LineMetrics,
     ) -> Self {
         Self {
-            font,
-            external,
-            projection: RefCell::new(font.projection(design)),
-            kerning,
-            shaper,
-            classes,
+            glyphs: Glyphs::Live(Box::new(LiveGlyphs {
+                font,
+                external,
+                projection: RefCell::new(font.projection(design)),
+                kerning,
+                shaper,
+                classes,
+            })),
             metrics,
             resolved: RefCell::new(HashMap::new()),
         }
     }
 
-    pub(crate) fn external(&self) -> &ExternalLocation {
-        &self.external
+    /// A font known only by what `font` says of each glyph, such as a
+    /// preview's, whose live font is in another process: text over it lays
+    /// out as typed, unkerned, saying why it was not shaped. A character
+    /// `font` maps to no glyph shows none, and a glyph it does not list has
+    /// no advance.
+    pub fn typed(font: &TypedFont) -> Self {
+        Self {
+            glyphs: Glyphs::Typed(TypedGlyphs {
+                characters: font
+                    .characters
+                    .iter()
+                    .map(|mapped| (mapped.codepoint, mapped.glyph_id))
+                    .collect(),
+                glyphs: font
+                    .glyphs
+                    .iter()
+                    .map(|glyph| (glyph.glyph_id, *glyph))
+                    .collect(),
+            }),
+            metrics: font.metrics,
+            resolved: RefCell::new(HashMap::new()),
+        }
     }
 
-    pub(crate) fn shaper(&self) -> Result<&'a LiveShaper, &str> {
-        match &self.shaper {
-            Ok(shaper) => Ok(*shaper),
-            Err(reason) => Err(reason),
+    /// The shaper and the user-space location it shapes at, or why text
+    /// lays out as typed.
+    pub(crate) fn shaper(&self) -> Result<(&'a LiveShaper, &ExternalLocation), &str> {
+        match &self.glyphs {
+            Glyphs::Live(live) => match &live.shaper {
+                Ok(shaper) => Ok((*shaper, &live.external)),
+                Err(reason) => Err(reason),
+            },
+            Glyphs::Typed(_) => Err(NO_FEATURE_CODE),
         }
     }
 
@@ -124,15 +164,26 @@ impl<'a> LayoutFont<'a> {
     }
 
     pub(crate) fn class(&self, glyph: GlyphId) -> Option<OpenTypeCategory> {
-        (self.classes)(glyph)
+        match &self.glyphs {
+            Glyphs::Live(live) => (live.classes)(glyph),
+            Glyphs::Typed(typed) => typed
+                .glyphs
+                .get(&glyph)
+                .filter(|typed| typed.is_mark)
+                .map(|_| OpenTypeCategory::Mark),
+        }
     }
 
     /// The glyph a character maps to, as shaping maps it.
     pub(crate) fn character_glyph(&self, codepoint: u32) -> Option<GlyphId> {
-        if let Ok(shaper) = &self.shaper {
+        let live = match &self.glyphs {
+            Glyphs::Live(live) => live,
+            Glyphs::Typed(typed) => return typed.characters.get(&codepoint).copied(),
+        };
+        if let Ok(shaper) = &live.shaper {
             return shaper.character_glyph(codepoint);
         }
-        self.font
+        live.font
             .character_map()
             .find(|(mapped, _)| *mapped == codepoint)
             .map(|(_, glyph)| glyph)
@@ -148,22 +199,50 @@ impl<'a> LayoutFont<'a> {
         self.resolve(glyph)?.bounds
     }
 
-    /// The glyph's anchors as export compiles them, at the location.
+    /// The glyph's anchors as export compiles them, at the location; none
+    /// over a [`TypedFont`].
     pub(crate) fn anchors(&self, glyph: GlyphId) -> Option<Arc<PropagatedAnchors>> {
+        let Glyphs::Live(live) = &self.glyphs else {
+            return None;
+        };
         let class = |glyph| self.class(glyph);
-        self.projection
+        live.projection
             .borrow_mut()
             .compiled_anchors(glyph, &class)
             .ok()
             .flatten()
     }
 
+    /// The kerning between each pair at the location; none over a
+    /// [`TypedFont`].
+    fn kerning(&self, pairs: &[(GlyphId, GlyphId)]) -> Vec<f64> {
+        match &self.glyphs {
+            Glyphs::Live(live) => live
+                .kerning
+                .values(live.font.kerning(), pairs.iter().copied()),
+            Glyphs::Typed(_) => vec![0.0; pairs.len()],
+        }
+    }
+
     fn resolve(&self, glyph: GlyphId) -> Option<Resolved> {
         if let Some(resolved) = self.resolved.borrow().get(&glyph) {
             return *resolved;
         }
-        let resolved = self
-            .projection
+        let resolved = match &self.glyphs {
+            Glyphs::Live(live) => live.resolve(glyph),
+            Glyphs::Typed(typed) => typed.glyphs.get(&glyph).map(|typed| Resolved {
+                advance: typed.advance,
+                bounds: None,
+            }),
+        };
+        self.resolved.borrow_mut().insert(glyph, resolved);
+        resolved
+    }
+}
+
+impl LiveGlyphs<'_> {
+    fn resolve(&self, glyph: GlyphId) -> Option<Resolved> {
+        self.projection
             .borrow_mut()
             .glyph(glyph)
             .ok()
@@ -178,9 +257,7 @@ impl<'a> LayoutFont<'a> {
                         y_max,
                     },
                 ),
-            });
-        self.resolved.borrow_mut().insert(glyph, resolved);
-        resolved
+            })
     }
 }
 
@@ -273,9 +350,7 @@ impl PositioningFont for FontReads<'_, '_> {
     }
 
     fn kerning(&mut self, pairs: &[(GlyphId, GlyphId)]) -> Vec<f64> {
-        self.0
-            .kerning
-            .values(self.0.font.kerning(), pairs.iter().copied())
+        self.0.kerning(pairs)
     }
 }
 
