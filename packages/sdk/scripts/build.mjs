@@ -1,17 +1,20 @@
 import { spawnSync } from "node:child_process";
-import { access, copyFile, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const declarations = join(packageRoot, ".dts-build");
 const dist = join(packageRoot, "dist");
+const engineModule = resolve(packageRoot, "../wasm/src/generated-engine/shift_wasm_bg.wasm");
 // Without --update-api, a changed public surface fails the build until the report is updated.
 const apiExtractorMode = process.argv.includes("--update-api") ? ["--local"] : [];
 
 try {
   run("pnpm", ["exec", "tsdown"]);
   await checkRuntimeGraph();
+  await copyEngineModule();
+  await checkModuleAssets();
   run("pnpm", ["exec", "tsdown", "--config", "tsdown.dts.config.ts"]);
 
   for (const name of await readdir(declarations)) {
@@ -68,6 +71,35 @@ async function checkRuntimeGraph() {
   const ui = sources.get("ui.js");
   if (ui.includes("node_modules/react/cjs") || ui.includes('__require("react")')) {
     throw new Error("SDK UI must use the consumer's React instance");
+  }
+}
+
+/**
+ * Ships the editing engine's `.wasm` beside the chunk that loads it.
+ *
+ * @remarks
+ * The chunk keeps `@shift/wasm/engine`'s `new URL("./generated-engine/…",
+ * import.meta.url)`, which tsdown does not emit as an asset; the consumer's
+ * bundler resolves it against this copy.
+ */
+async function copyEngineModule() {
+  const target = join(dist, "generated-engine", "shift_wasm_bg.wasm");
+  await mkdir(dirname(target), { recursive: true });
+  await copyFile(engineModule, target);
+}
+
+/** Fails when a chunk loads a relative `new URL(…, import.meta.url)` the package does not ship. */
+async function checkModuleAssets() {
+  const files = (await readdir(dist)).filter((name) => name.endsWith(".js"));
+  for (const name of files) {
+    const source = await readFile(join(dist, name), "utf8");
+    for (const match of source.matchAll(/new URL\("(\.{1,2}\/[^"]+)", import\.meta\.url\)/g)) {
+      try {
+        await access(resolve(dist, match[1]));
+      } catch {
+        throw new Error(`${name} loads ${match[1]}, which the SDK does not ship`);
+      }
+    }
   }
 }
 
