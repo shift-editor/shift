@@ -407,7 +407,12 @@ test.describe("Editor view", () => {
   test("full editor matches snapshot", { tag: "@golden" }, async ({ page, editor }) => {
     await editor.waitForCanvasRender();
     await page.mouse.move(0, 0);
-    await expectPageSnapshot(page, "editor-glyph-A.png", [editorToolbar(page)]);
+    // The kerning group fields' rounded corners antialias a few pixels differently from run to
+    // run on the CI runners; the sidebar goldens cover the fields themselves.
+    await expectPageSnapshot(page, "editor-glyph-A.png", [
+      editorToolbar(page),
+      page.getByLabel(/kerning group of/),
+    ]);
   });
 
   test("resets sidebars to their default width on divider double-click", async ({ page }) => {
