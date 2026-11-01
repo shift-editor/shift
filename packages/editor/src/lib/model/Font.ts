@@ -1516,19 +1516,15 @@ export class Font {
    * brings in and what each replaces. Tracks what the shaper font reads, as
    * {@link fontFeatures} does.
    *
-   * @returns empty without an open engine or a shaper, or, logged, when the
-   * shaper font's `GSUB` cannot be read.
+   * @returns empty without an open engine, as in a preview.
+   * @throws When `tag` is no feature tag, the engine has no shaper font, or
+   * its `GSUB` cannot be read.
    */
   featureSubstitutions(tag: string): readonly FeatureSubstitution[] {
     const engine = this.#store.engine;
     if (!engine) return [];
     for (const flag of engine.shaperInputs()) track(engine.revision(flag));
-    try {
-      return engine.featureSubstitutions(tag) ?? [];
-    } catch (error) {
-      console.warn("listing a feature's substitutions failed", error);
-      return [];
-    }
+    return engine.featureSubstitutions(tag) ?? [];
   }
 
   /**
@@ -1538,6 +1534,7 @@ export class Font {
    * {@link fontFeatures} does.
    *
    * @returns false without an open engine, or for a tag the font does not define.
+   * @throws When the engine has no shaper font, or it cannot be read.
    */
   featureApplies(tag: string, setting: number | null): boolean {
     const engine = this.#store.engine;

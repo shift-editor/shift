@@ -1,5 +1,5 @@
 import type { GlyphId, NodeId, RunId, SourceId, TextItemId } from "@shift/types";
-import type { FontFeature, PlacedText, TextAlign } from "@shift/wasm/protocol";
+import type { FeatureSubstitution, FontFeature, PlacedText, TextAlign } from "@shift/wasm/protocol";
 import type { CaretEdge, Direction, TextItem } from "../lib/text/layout/types";
 import type { ExternalAxisLocation } from "./variation";
 
@@ -25,6 +25,14 @@ export type RunLaidOut =
  */
 export type FeatureListing =
   | { readonly kind: "listed"; readonly features: readonly FontFeature[] }
+  | { readonly kind: "failed"; readonly error: unknown };
+
+/**
+ * The substitutions a feature can make, as Rust reads them from the shaper
+ * font, or why they could not be read.
+ */
+export type SubstitutionListing =
+  | { readonly kind: "listed"; readonly substitutions: readonly FeatureSubstitution[] }
   | { readonly kind: "failed"; readonly error: unknown };
 
 /** Where text is laid out: the location shown, and the source edited, which takes precedence. */

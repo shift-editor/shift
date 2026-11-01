@@ -18,7 +18,13 @@ import {
 import HorizontalEllipsis from "@/assets/general/horizontal-ellipsis.svg";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { FeaturePreviewPopover, TAG_PILL } from "./FeaturePreviewPopover";
-import { featureSetting, FontFeatures, onByDefault, settingStep } from "./fontFeatures";
+import {
+  errorMessage,
+  featureSetting,
+  FontFeatures,
+  onByDefault,
+  settingStep,
+} from "./fontFeatures";
 import { useSidebarBlock } from "./SidebarGroup";
 import { SidebarSection } from "./SidebarSection";
 import { useTextSettingsRun } from "./TextSection";
@@ -33,15 +39,28 @@ import { useTextSettingsRun } from "./TextSection";
 export const FeaturesSection = () => {
   const editor = useEditor();
   const target = useTextSettingsRun();
-  const fontFeatures = useSignalState(editor.text.featuresCell);
-  const features = useMemo(() => FontFeatures.switchable(fontFeatures), [fontFeatures]);
+  const listing = useSignalState(editor.text.featuresCell);
+  const features = useMemo(
+    () => FontFeatures.switchable(listing.kind === "listed" ? listing.features : []),
+    [listing],
+  );
   const block = useSidebarBlock();
   const [previewed, setPreviewed] = useState<FontFeature | null>(null);
   // null while the search field is closed.
   const [query, setQuery] = useState<string | null>(null);
   // Hover highlights end with the section, so none outlives it.
   useEffect(() => () => editor.text.setFeatureHighlight(null), [editor]);
-  if (!target || features.isEmpty) return null;
+  if (!target) return null;
+  if (listing.kind === "failed") {
+    return (
+      <SidebarSection title="Features">
+        <p role="alert" className="text-ui text-error">
+          The font's features could not be read: {errorMessage(listing.error)}
+        </p>
+      </SidebarSection>
+    );
+  }
+  if (features.isEmpty) return null;
 
   const { run } = target;
   const groups = features.matching(query ?? "").grouped();

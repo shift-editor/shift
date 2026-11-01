@@ -8,7 +8,7 @@ import {
   type TextRunRecord,
 } from "@shift/editor/text";
 import type { GlyphId } from "@shift/types";
-import type { FeatureGlyph } from "@/types/features";
+import type { FeatureGlyph, FeatureGlyphs } from "@/types/features";
 import { useEditor } from "@/workspace/WorkspaceContext";
 
 /** How many of a feature's glyphs the preview draws; a large set shows its first ones. */
@@ -18,12 +18,16 @@ const SPACE = 0x20;
 
 /**
  * The glyphs a feature brings in, with what each replaces, read from the
- * shaper the editor shapes with; loads the ones the preview draws.
+ * shaper the editor shapes with, or why they could not be read; loads the
+ * ones the preview draws.
  */
-export function useFeatureGlyphs(tag: string): readonly FeatureGlyph[] {
+export function useFeatureGlyphs(tag: string): FeatureGlyphs {
   const editor = useEditor();
-  const substitutions = useSignalState(editor.text.featureSubstitutionsCell(tag));
-  const glyphs = useMemo(() => groupByOutput(substitutions), [substitutions]);
+  const listing = useSignalState(editor.text.featureSubstitutionsCell(tag));
+  const glyphs = useMemo(
+    () => groupByOutput(listing.kind === "listed" ? listing.substitutions : []),
+    [listing],
+  );
 
   useEffect(() => {
     const shown = glyphs.slice(0, MAX_PREVIEW_GLYPHS).map(({ glyph }) => glyph);
@@ -37,7 +41,7 @@ export function useFeatureGlyphs(tag: string): readonly FeatureGlyph[] {
     void load();
   }, [editor, glyphs]);
 
-  return glyphs;
+  return { glyphs, error: listing.kind === "failed" ? listing.error : null };
 }
 
 /** One entry per output glyph, in the substitutions' order. */

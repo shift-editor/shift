@@ -184,55 +184,62 @@ mod exports {
 
         /// Every substitution feature `tag` can make in the shaper font, with
         /// the shaper brought up to date first as for [`Self::layout_text`];
-        /// empty for an invalid tag or no shaper, and `None` when the shaper
-        /// font's `GSUB` cannot be read.
+        /// empty for a feature that substitutes nothing.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`FeatureListError`] for a tag that is not four
+        /// characters, when there is no shaper font, saying why, or when its
+        /// `GSUB` cannot be read.
         pub(crate) fn feature_substitutions<E: std::fmt::Display>(
             &self,
             font: &Font,
             source: impl FnOnce() -> Result<ShaperFontSource, E>,
             tag: &str,
-        ) -> Option<Vec<FeatureSubstitution>> {
-            let Ok(tag) = shift_shape::Tag::new_checked(tag.as_bytes()) else {
-                return Some(Vec::new());
-            };
+        ) -> Result<Vec<FeatureSubstitution>, FeatureListError> {
+            let tag = shift_shape::Tag::new_checked(tag.as_bytes()).map_err(|_| {
+                FeatureListError::InvalidTag {
+                    tag: tag.to_string(),
+                }
+            })?;
             let state = self.current(font, source);
-            let Ok(shaper) = state.shaper() else {
-                return Some(Vec::new());
-            };
-            let rules = shaper.feature_substitutions(tag).ok()?;
-            Some(
-                rules
-                    .into_iter()
-                    .map(|rule| FeatureSubstitution {
-                        input: rule.input,
-                        output: rule.output,
-                    })
-                    .collect(),
-            )
+            let shaper = state
+                .shaper()
+                .map_err(|reason| FeatureListError::NoShaper { reason })?;
+            let rules = shaper
+                .feature_substitutions(tag)
+                .map_err(FeatureListError::unreadable)?;
+            Ok(rules
+                .into_iter()
+                .map(|rule| FeatureSubstitution {
+                    input: rule.input,
+                    output: rule.output,
+                })
+                .collect())
         }
 
         /// Whether shaping applies feature `tag` when text sets it to
         /// `setting`, as `FeatureDefault::applies` decides for the shaper
         /// font's feature, with the shaper brought up to date first as for
         /// [`Self::layout_text`]; false for a tag the shaper font does not
-        /// define, an unreadable font, or no shaper.
+        /// define.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`FeatureListError`] when there is no shaper font, saying
+        /// why, or it cannot be read.
         pub(crate) fn feature_applies<E: std::fmt::Display>(
             &self,
             font: &Font,
             source: impl FnOnce() -> Result<ShaperFontSource, E>,
             tag: &str,
             setting: Option<u32>,
-        ) -> bool {
-            let state = self.current(font, source);
-            let Ok(shaper) = state.shaper() else {
-                return false;
-            };
-            shaper
-                .features()
-                .unwrap_or_default()
+        ) -> Result<bool, FeatureListError> {
+            let features = self.features(font, source)?;
+            Ok(features
                 .iter()
                 .find(|feature| feature.tag == tag)
-                .is_some_and(|feature| feature.default.applies(setting))
+                .is_some_and(|feature| feature.default.applies(setting)))
         }
 
         /// The shaper state, brought up to date with `font` when an edit may
@@ -464,12 +471,16 @@ mod exports {
 
             assert_eq!(
                 read("liga"),
-                Some(vec![FeatureSubstitution {
+                Ok(vec![FeatureSubstitution {
                     input: vec![id("f"), id("i")],
                     output: id("f_i"),
                 }])
             );
-            assert_eq!(read("li"), Some(Vec::new()));
+            assert_eq!(read("ss01"), Ok(Vec::new()));
+            assert!(matches!(
+                read("ligatures"),
+                Err(FeatureListError::InvalidTag { .. })
+            ));
         }
 
         #[test]
@@ -480,10 +491,10 @@ mod exports {
                 shaping.feature_applies(&font, || Ok::<_, Infallible>(source(&font)), tag, setting)
             };
 
-            assert!(applies("liga", None));
-            assert!(!applies("liga", Some(0)));
+            assert_eq!(applies("liga", None), Ok(true));
+            assert_eq!(applies("liga", Some(0)), Ok(false));
             // A tag the font does not define never applies.
-            assert!(!applies("ss01", Some(1)));
+            assert_eq!(applies("ss01", Some(1)), Ok(false));
         }
 
         #[test]

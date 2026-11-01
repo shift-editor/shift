@@ -107,3 +107,8 @@ function matchesNeedle(feature: FontFeature, needle: string): boolean {
   const name = feature.name?.toLowerCase() ?? "";
   return feature.tag.toLowerCase().includes(needle) || name.includes(needle);
 }
+
+/** What a failed read of the font's features says, for the sidebar. */
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

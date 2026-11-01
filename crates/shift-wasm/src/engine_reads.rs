@@ -125,17 +125,29 @@ pub trait EngineReads {
     /// font, ordered by output glyph then input, as
     /// `shift_shape::Shaper::feature_substitutions` reads them from its
     /// `GSUB`: lookups that contextual rules call included, glyphs no
-    /// character reaches included. Empty for a positioning feature, a tag the
-    /// font does not define, an invalid tag, or no shaper; null when the
-    /// shaper font's `GSUB` cannot be read. Changes when a flag in
+    /// character reaches included. Empty for a positioning feature or a tag
+    /// the font does not define. Changes when a flag in
     /// [`Self::shaper_inputs`] does.
-    fn feature_substitutions(&self, tag: String) -> Option<Vec<FeatureSubstitution>>;
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FeatureListError`] for an invalid tag, when there is no
+    /// shaper font, saying why, or when its `GSUB` cannot be read.
+    fn feature_substitutions(
+        &self,
+        tag: String,
+    ) -> Result<Vec<FeatureSubstitution>, FeatureListError>;
     /// Whether shaping text applies feature `tag` when the text sets it to
     /// `setting` (null when it leaves it): `FeatureDefault::applies` for the
     /// session's shaper font's feature: the setting wins, else its default.
-    /// False for a tag the shaper font does not define, or no shaper.
-    /// Changes when a flag in [`Self::shaper_inputs`] does.
-    fn feature_applies(&self, tag: String, setting: Option<u32>) -> bool;
+    /// False for a tag the shaper font does not define. Changes when a flag
+    /// in [`Self::shaper_inputs`] does.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FeatureListError`] when there is no shaper font, saying
+    /// why, or it cannot be read.
+    fn feature_applies(&self, tag: String, setting: Option<u32>) -> Result<bool, FeatureListError>;
     /// Every interned source set's weights at a design location, as the
     /// basis the session's font gives each set evaluates them
     /// (`InterpolationBasis::weights_at`): the weights of the sets a frame
@@ -179,6 +191,9 @@ pub enum FeatureListError {
     /// The shaper font could not be read.
     #[error("the shaper font could not be read: {detail}")]
     Unreadable { detail: String },
+    /// A feature was asked for by a tag that is not four characters.
+    #[error("`{tag}` is not a feature tag")]
+    InvalidTag { tag: String },
 }
 
 impl FeatureListError {
@@ -267,9 +282,8 @@ mod exports {
 
     use super::{
         Axis, EditablePair, EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag,
-        FontFeature,
-        InterpolatedMetrics, KerningSnapshot, LayoutError, PlacedText, Source, SourceSetWeights,
-        TextLayoutRequest, engine_reads_request,
+        FontFeature, InterpolatedMetrics, KerningSnapshot, LayoutError, PlacedText, Source,
+        SourceSetWeights, TextLayoutRequest, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::shaping::{TextPlace, TextShaping};
@@ -644,7 +658,10 @@ mod exports {
             FontChangeFlag::of(TextShaping::INPUTS).collect()
         }
 
-        fn feature_substitutions(&self, tag: String) -> Option<Vec<FeatureSubstitution>> {
+        fn feature_substitutions(
+            &self,
+            tag: String,
+        ) -> Result<Vec<FeatureSubstitution>, FeatureListError> {
             self.shaping.feature_substitutions(
                 self.session.font(),
                 || self.shaper_font_source(),
@@ -652,7 +669,11 @@ mod exports {
             )
         }
 
-        fn feature_applies(&self, tag: String, setting: Option<u32>) -> bool {
+        fn feature_applies(
+            &self,
+            tag: String,
+            setting: Option<u32>,
+        ) -> Result<bool, FeatureListError> {
             self.shaping.feature_applies(
                 self.session.font(),
                 || self.shaper_font_source(),

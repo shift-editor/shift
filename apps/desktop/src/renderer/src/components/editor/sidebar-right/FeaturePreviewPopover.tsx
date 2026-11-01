@@ -25,6 +25,7 @@ import { useGlyphSelection } from "../../glyph-grid/useGlyphSelection";
 import { GlyphThumbnail } from "../../kerning/groups/GlyphThumbnail";
 import { glyphName } from "../../kerning/groups/previewGlyphs";
 import { MAX_PREVIEW_GLYPHS, inputItems, insertIntoRun, useFeatureGlyphs } from "./featureGlyphs";
+import { errorMessage } from "./fontFeatures";
 
 /** How a feature tag is shown wherever features are listed; callers add its colour. */
 export const TAG_PILL = "shrink-0 rounded bg-input px-1.5 py-0.5 font-mono text-ui font-normal";
@@ -120,7 +121,7 @@ interface FeaturePreviewProps {
  */
 const FeaturePreview = ({ run, tag }: FeaturePreviewProps) => {
   const editor = useEditor();
-  const glyphs = useFeatureGlyphs(tag);
+  const { glyphs, error } = useFeatureGlyphs(tag);
   const shown = useMemo(
     () => glyphs.slice(0, MAX_PREVIEW_GLYPHS).map(({ glyph }) => glyph),
     [glyphs],
@@ -147,6 +148,19 @@ const FeaturePreview = ({ run, tag }: FeaturePreviewProps) => {
     glyphAt,
     onCopy: copy,
   });
+
+  if (error !== null) {
+    return (
+      <div className="p-2">
+        <p
+          role="alert"
+          className="flex h-32 items-center justify-center rounded-md bg-input px-3 text-center text-ui text-error"
+        >
+          The feature's substitutions could not be read: {errorMessage(error)}
+        </p>
+      </div>
+    );
+  }
 
   if (shown.length === 0) {
     return (

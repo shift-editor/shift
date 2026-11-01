@@ -10,6 +10,7 @@ import type {
   FeatureHighlight,
   FeatureListing,
   StoredTextRunRecord,
+  SubstitutionListing,
   TextHighlight,
   TextLayoutFailure,
   TextRunRecord,
@@ -23,7 +24,6 @@ import {
   type TextLayout,
 } from "./layout";
 import type {
-  FeatureSubstitution,
   FontFeature,
   Direction,
   TextAlign,
@@ -139,12 +139,20 @@ export class Text {
   readonly #substitutions = keyedCache({
     name: "text.featureSubstitutions",
     key: (tag: string) => tag,
-    dispose: (substitutionsCell: ComputedSignal<readonly FeatureSubstitution[]>) =>
+    dispose: (substitutionsCell: ComputedSignal<SubstitutionListing>) =>
       substitutionsCell.dispose(),
     create: (tagCell: Signal<string>) =>
-      computed(() => this.#editor.font.featureSubstitutions(tagCell.value), {
-        name: "text.featureSubstitutions",
-      }),
+      computed(
+        (): SubstitutionListing => {
+          try {
+            const substitutions = this.#editor.font.featureSubstitutions(tagCell.value);
+            return { kind: "listed", substitutions };
+          } catch (error) {
+            return { kind: "failed", error };
+          }
+        },
+        { name: "text.featureSubstitutions" },
+      ),
   });
 
   readonly #featureHighlightCell = signal<FeatureHighlight | null>(null, {
@@ -156,9 +164,11 @@ export class Text {
    * text while it applies there, what it would replace while it does not.
    *
    * @remarks
-   * Null while no feature is highlighted. Follows the run's setting, the
-   * font's default and the shaper font, so turning the feature on or off
-   * while it is highlighted moves the highlight.
+   * Null while no feature is highlighted, and while its substitutions or
+   * whether it applies cannot be read: the Features section and the preview
+   * say why. Follows the run's setting, the font's default and the shaper
+   * font, so turning the feature on or off while it is highlighted moves the
+   * highlight.
    */
   readonly highlightCell: Signal<TextHighlight | null> = computed(
     () => {
@@ -166,14 +176,16 @@ export class Text {
       const run = highlight ? this.run(highlight.runId) : null;
       if (!highlight || !run) return null;
 
+      const listing = this.featureSubstitutionsCell(highlight.tag).value;
+      if (listing.kind === "failed") return null;
       const setting = run.features[highlight.tag];
-      const applies = this.#editor.font.featureApplies(
+      const applies = this.#featureApplies(
         highlight.tag,
         setting === undefined ? null : featureValue(setting),
       );
-      const substitutions = this.featureSubstitutionsCell(highlight.tag).value;
+      if (applies === null) return null;
       const glyphs = new Set(
-        substitutions.flatMap(({ input, output }) => (applies ? [output] : input)),
+        listing.substitutions.flatMap(({ input, output }) => (applies ? [output] : input)),
       );
       return { runId: run.id, glyphs };
     },
@@ -406,10 +418,24 @@ export class Text {
    *
    * @remarks
    * Follows edits to what the shaper font compiles from. Empty for a
-   * positioning feature, a tag the font does not define, and in a preview.
+   * positioning feature, a tag the font does not define, and in a preview;
+   * `failed`, with why, when they cannot be read.
    */
-  featureSubstitutionsCell(tag: string): ComputedSignal<readonly FeatureSubstitution[]> {
+  featureSubstitutionsCell(tag: string): ComputedSignal<SubstitutionListing> {
     return this.#substitutions.get(tag);
+  }
+
+  /**
+   * Whether shaping applies a feature at `setting`, as Rust decides; null
+   * when that cannot be read, which the feature listing reports
+   * ({@link featuresCell}).
+   */
+  #featureApplies(tag: string, setting: number | null): boolean | null {
+    try {
+      return this.#editor.font.featureApplies(tag, setting);
+    } catch {
+      return null;
+    }
   }
 
   /**

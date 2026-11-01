@@ -941,10 +941,12 @@ export class TestEditor extends Editor implements EditorTestSurface {
     tag: string,
   ): readonly { readonly input: readonly string[]; readonly output: string }[] {
     const name = (id: GlyphId) => this.font.glyphName(id) ?? id;
-    return this.text
-      .featureSubstitutionsCell(tag)
-      .peek()
-      .map(({ input, output }) => ({ input: input.map(name), output: name(output) }));
+    const listing = this.text.featureSubstitutionsCell(tag).peek();
+    if (listing.kind === "failed") throw listing.error;
+    return listing.substitutions.map(({ input, output }) => ({
+      input: input.map(name),
+      output: name(output),
+    }));
   }
 
   highlightFeature(tag: string | null): void {

@@ -232,7 +232,8 @@ export interface FontEngine {
    * ordered by output glyph then input.
    *
    * @returns null only while the engine is not open; empty for a feature that substitutes nothing.
-   * @throws When the shaper font's `GSUB` cannot be read.
+   * @throws When `tag` is no feature tag, the engine has no shaper font, or
+   * its `GSUB` cannot be read.
    */
   featureSubstitutions(tag: string): readonly FeatureSubstitution[] | null;
 
@@ -242,6 +243,7 @@ export interface FontEngine {
    * feature's default.
    *
    * @returns false while the engine is not open, or for a tag its shaper font does not define.
+   * @throws When the engine has no shaper font, or it cannot be read.
    */
   featureApplies(tag: string, setting: number | null): boolean;
 }

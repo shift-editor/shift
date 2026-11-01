@@ -29,3 +29,9 @@ export interface FeatureSettingStep {
   /** The dot's colour class, given whether the font turns the feature on by default. */
   readonly dot: (onByDefault: boolean) => string;
 }
+
+/** A feature's glyphs, or why its substitutions could not be read (`error`, null when they were). */
+export interface FeatureGlyphs {
+  readonly glyphs: readonly FeatureGlyph[];
+  readonly error: unknown;
+}
