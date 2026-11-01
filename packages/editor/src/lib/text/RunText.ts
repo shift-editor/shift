@@ -306,8 +306,9 @@ function layoutUnit(item: TextItem): LayoutUnit {
 
 /**
  * Whether two layouts place every glyph, line and caret alike, by the key
- * Rust gives each (`placement`), and show the same glyphs unloaded, so an
- * edit that moves nothing in the text keeps the layout.
+ * Rust gives each (`placement`, which Rust confirms by comparing layouts
+ * whose hashes match), and show the same glyphs unloaded, so an edit that
+ * moves nothing in the text keeps the layout.
  */
 function samePlacement(previous: RunLaidOut | null, next: RunLaidOut | null): boolean {
   if (previous?.kind !== "placed" || next?.kind !== "placed") return previous === next;

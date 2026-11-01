@@ -11,6 +11,7 @@ import { InteractiveScene } from "./InteractiveScene";
 import { StaticScene } from "./StaticScene";
 import { DebugPanel } from "../debug/DebugPanel";
 import { TextInput } from "../text/HiddenTextInput";
+import { TextLayoutFailureNotice } from "../text/TextLayoutFailureNotice";
 import { KerningValuePopover } from "../kerning/KerningValuePopover";
 import { SpacingValuePopover } from "../spacing/SpacingValuePopover";
 import { Vec2 } from "@shift/geo";
@@ -96,6 +97,7 @@ export const Canvas: FC = () => {
         <InteractiveScene />
       </CanvasContextProvider>
       <TextInput />
+      <TextLayoutFailureNotice />
       <SpacingValuePopover container={containerRef} />
       <KerningValuePopover container={containerRef} />
       {debug?.debugPanelOpen && <DebugPanel />}
