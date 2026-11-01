@@ -43,6 +43,9 @@ export class SessionScene implements SceneDocument {
 
   followShownPage(): void {}
 
+  /** A session scene has no undo history, so nothing replays. */
+  followReplays(): void {}
+
   /** Releases the scene; reads afterwards find no nodes. */
   dispose(): void {
     released.unregister(this);

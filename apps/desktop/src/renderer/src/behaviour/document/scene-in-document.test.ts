@@ -43,17 +43,20 @@ describe("the scene is part of the document", () => {
     const { corner } = await editor.draw({
       contours: [{ closed: true, points: [{ x: 0, y: 0, name: "corner" }, [100, 0], [100, 100]] }],
     });
+    const glyphPage = editor.shownPageId()!;
     const page = editor.addPage("Proofs");
     await editor.settle();
     await editor.dragPoint(corner, { x: 10, y: 0 });
     editor.renamePage(page.id, "Specimen");
     await editor.settle();
 
+    // Each undo shows the page its edit changed: the renamed page, then the glyph's.
     await undo(editor);
     expect(pageNames(editor)).toEqual(["Page 1", "Proofs"]);
-    expect(await editor.point(corner)).toMatchObject({ x: 10, y: 0 });
+    expect(editor.shownPageId()).toBe(page.id);
 
     await undo(editor);
+    expect(editor.shownPageId()).toBe(glyphPage);
     expect(await editor.point(corner)).toMatchObject({ x: 0, y: 0 });
     expect(pageNames(editor)).toEqual(["Page 1", "Proofs"]);
 
@@ -65,6 +68,7 @@ describe("the scene is part of the document", () => {
     await editor.redo();
     await editor.settle();
     expect(pageNames(editor)).toEqual(["Page 1", "Specimen"]);
+    editor.showPage(glyphPage);
     expect(await editor.point(corner)).toMatchObject({ x: 10, y: 0 });
   });
 

@@ -161,7 +161,7 @@ describe("pages hold the scene, one page shown at a time", () => {
     expect(editor.canvasText()).toBeNull();
   });
 
-  it("remembers each page's camera for the session", () => {
+  it("remembers each page's camera", () => {
     const page = firstPage(editor);
     editor.showPage(page.id);
     const second = editor.addPage();
@@ -175,6 +175,35 @@ describe("pages hold the scene, one page shown at a time", () => {
     editor.showPage(page.id);
 
     expect({ zoom: editor.zoomLevel(), offset: editor.canvasOffset() }).toEqual(shown);
+  });
+
+  it("undoing a page's delete shows the page again with its camera", async () => {
+    const page = editor.addPage("Proofs");
+    editor.showPage(page.id);
+    editor.setZoom(2);
+    editor.panBy(screenVector(40, 60));
+    const camera = { zoom: editor.zoomLevel(), offset: editor.canvasOffset() };
+
+    editor.deletePage(page.id);
+    editor.setZoom(3);
+    await editor.undo();
+
+    expect(editor.shownPageId()).toBe(page.id);
+    expect({ zoom: editor.zoomLevel(), offset: editor.canvasOffset() }).toEqual(camera);
+  });
+
+  it("undo and redo show the page an edit was made on", async () => {
+    const page = firstPage(editor);
+    const glyphPageId = editor.shownPageId()!;
+    await editor.draw({ contours: [line({ x: 100, y: 100 }, { x: 300, y: 100 })] });
+    editor.showPage(page.id);
+
+    await editor.undo();
+    expect(editor.shownPageId()).toBe(glyphPageId);
+
+    editor.showPage(page.id);
+    await editor.redo();
+    expect(editor.shownPageId()).toBe(glyphPageId);
   });
 });
 

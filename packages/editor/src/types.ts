@@ -32,6 +32,7 @@ export type {
 export type { GlyphOutlineControls, GlyphOutlineTarget } from "./types/glyphOutline";
 export type { RenderGlyph } from "./types/glyphRender";
 export type { CanvasRef } from "./types/graphics";
+export type { PageCamera } from "./types/page";
 export type { CubicHandle } from "./types/handle";
 export type {
   GlyphNode,

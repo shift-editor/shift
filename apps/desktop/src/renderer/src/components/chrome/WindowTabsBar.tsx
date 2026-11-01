@@ -15,7 +15,7 @@ import type { GlyphId } from "@shift/types";
 import GridIcon from "@/assets/toolbar/grid.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 import { useShownPageId } from "@/hooks/usePages";
-import { useWindowTabs } from "@/hooks/useWindowTabs";
+import { useShowReplayedPages, useWindowTabs } from "@/hooks/useWindowTabs";
 import {
   isMovableTab,
   windowLocation,
@@ -31,6 +31,7 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 export const WindowTabsBar = () => {
   const editor = useEditor();
   const { tabs, show, showPage, close } = useWindowTabs();
+  useShowReplayedPages();
   const openTabs = useSignalState(tabs.tabsCell);
   const pages = useSignalState(editor.scene.pagesCell);
   const shownPageId = useShownPageId();
