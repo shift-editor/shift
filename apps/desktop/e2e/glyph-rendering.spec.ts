@@ -96,8 +96,6 @@ test.describe("Glyph rendering — S (quadratic curves)", () => {
 });
 
 test.describe("Glyph rendering — zoom", () => {
-  test.use({ sharedWorkspace: true });
-
   test(
     "handles and control lines stay crisp at high zoom",
     { tag: "@golden" },
