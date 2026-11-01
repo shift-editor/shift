@@ -373,6 +373,11 @@ export class Scene {
     return this.#documentCell.peek().tree.children(nodeId);
   }
 
+  /** Returns a node's children of `kind` on any page, ordered by `index`. */
+  childrenOfKind<K extends NodeKind>(nodeId: NodeId, kind: K): readonly NodeOfKind<K>[] {
+    return this.children(nodeId).filter((child): child is NodeOfKind<K> => child.kind === kind);
+  }
+
   /** Returns a node's descendants on any page, parents before children. */
   descendants(nodeId: NodeId): readonly ShiftNode[] {
     return [...this.#documentCell.peek().tree.descendants(nodeId)];

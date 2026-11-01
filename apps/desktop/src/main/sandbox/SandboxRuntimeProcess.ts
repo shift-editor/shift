@@ -74,6 +74,12 @@ export class SandboxRuntimeProcess {
       "shift.layers.get": (input) => this.#capabilities.layers.get(input),
       "shift.layers.resolve": (input) => this.#capabilities.layers.resolve(input),
       "shift.layers.render": (input) => this.#capabilities.layers.render(input),
+      "shift.text.runs": (input) => this.#capabilities.text.runs(input),
+      "shift.text.get": (input) => this.#capabilities.text.get(input),
+      "shift.text.create": (input) => this.#capabilities.text.create(input),
+      "shift.text.setText": (input) => this.#capabilities.text.setText(input),
+      "shift.text.setCaret": (input) => this.#capabilities.text.setCaret(input),
+      "shift.text.delete": (input) => this.#capabilities.text.delete(input),
     });
 
     this.#process = proc;

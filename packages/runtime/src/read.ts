@@ -31,6 +31,10 @@ import type {
   ShiftReadState,
   ShiftTarget,
   SourceGetInput,
+  TextRunGetInput,
+  TextRunsInput,
+  TextRunSummary,
+  TextRunView,
 } from "./capabilities";
 import type { NamedInstance, Source } from "@shift/types";
 
@@ -91,6 +95,10 @@ export class ShiftReadScope implements ShiftRead {
     resolve(input: ShiftReadInput<KerningResolveInput>): Promise<ResolvedKerningPairs>;
     at(input: ShiftReadInput<KerningAtInput>): Promise<KerningMasterValue>;
   };
+  readonly text: {
+    runs(input?: ShiftReadInput<TextRunsInput>): Promise<TextRunSummary[]>;
+    get(input: ShiftReadInput<TextRunGetInput>): Promise<TextRunView>;
+  };
 
   readonly #capabilities: ShiftCapabilities;
   readonly #windowId: number;
@@ -114,6 +122,7 @@ export class ShiftReadScope implements ShiftRead {
     const instances = capabilities.instances;
     const glyphs = capabilities.glyphs;
     const kerning = capabilities.kerning;
+    const text = capabilities.text;
     this.font = Object.freeze({
       get: async () => {
         this.#assertActive();
@@ -157,6 +166,12 @@ export class ShiftReadScope implements ShiftRead {
         this.#guard(input, (bound) => kerning.resolve(bound)),
       at: (input: ShiftReadInput<KerningAtInput>) =>
         this.#guard(input, (bound) => kerning.at(bound)),
+    });
+    this.text = Object.freeze({
+      runs: (input: ShiftReadInput<TextRunsInput> = {}) =>
+        this.#guard(input, (bound) => text.runs(bound)),
+      get: (input: ShiftReadInput<TextRunGetInput>) =>
+        this.#guard(input, (bound) => text.get(bound)),
     });
   }
 

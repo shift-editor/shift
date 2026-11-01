@@ -96,9 +96,43 @@ async () => {
 - Every resolution lists each master: `origin` is `authored` (a pair applies there), `unkerned` (the master kerns other pairs but not this one, so 0), or `interpolated` (the master authors no kerning and takes the blend of those that do). `rule` is `glyph` (glyph against glyph), `exception` (a glyph against a group, overriding the group pair), `group` (group against group), or `none`.
 - Useful audits: glyphs missing from the group their base glyph is in; pairs authored at some masters and not others; exceptions whose value equals their group pair; a sign that flips between masters.
 
+## Write proof text
+
+Proof text (the text runs on the canvas) and the Text mode caret are the only things MCP can write. They are view state beside the font, so writing them never changes the font or its `fontRevision`.
+
+```js
+async () => {
+  const [session] = await shift.sessions.list();
+  const windowId = session.windowId;
+  const { value: run } = await shift.text.create({
+    windowId,
+    text: "Hamburgefonstiv\n/a.alt /g.ss01 1//2",
+  });
+  await shift.text.setCaret({
+    windowId,
+    runId: run.id,
+    position: 0,
+    selection: { start: 0, end: 7 },
+  });
+  return (await shift.text.runs({ windowId })).value.map(({ id, text }) => ({ id, text }));
+};
+```
+
+- `text.runs({ pageId? })` lists a page's runs (`{ id, pageId, text, at }`); the shown page when `pageId` is omitted. Pages come from `editor.inspect`'s `pages`.
+- `text.get({ runId })` returns the run as it shows: `items` (`text` is a character, `"\n"`, or `/name`), the laid-out `glyphs`, `baselines`, and the `caret` while Text mode shows one there.
+- `text.create({ text, pageId?, at? })` adds a run; `at` is in the page's space, y down, and defaults to one line below the page's last run. `text.setText({ runId, text })` replaces a run's text, and `text.delete({ runId })` removes it.
+- Text is proof text, as pasted into the Text tool and as Glyphs writes it. `/` starts a glyph name, which runs to the next space, the next `/`, or the end of the text. A space that ends a name is not text, so `"/a b"` is glyph `a` then `b`, and `"/a  b"` is `a`, a space, then `b`; a `/` that ends one starts the next, so `"/a/b"` is glyphs `a` and `b`. `//` is a slash (`"1//2"` is 1/2, `"/a//b"` is `a`, a slash, `b`) and `"\n"` a line break. A `/` that names nothing fails with `ProofTextError`, and a name the font lacks with `UnknownGlyphNameError`. Nothing changes on either error; check names with `glyphs.list`.
+  - `"/a.alt/g.ss01"` and `"/a.alt /g.ss01"`: two glyphs, nothing between them. `"/a.alt  b"`: the glyph, a space, `b`. `"1//2"`: 1/2. `"/a.alt//b"`: the glyph, a slash, `b`.
+- `text.runs` returns each run's `text` in the same syntax, and it always reads back as the same items: `"1//2 /a.alt b"` creates a run that lists as `"1//2 /a.alt b"`.
+- `text.setCaret({ runId, position, selection? })` puts the Text mode caret in a run, positions between items (0 is before the first). With `selection`, `position` must be its `start` or `end`. It shows the run's page and switches to the Text tool, as the user would.
+- `create`, `setText`, and `delete` are one undo step each and mark the document unsaved, as typing does; tell the user they can undo them. `setCaret` is neither.
+- Pass `ifFontRevision` to write only if the font is still the one you read: otherwise the call fails with `FontChangedError` and changes nothing. Other failures are typed: `TextRunNotFoundError`, `PageNotFoundError`, `ProofTextError`, `TextCaretError`.
+- Inside `shift.read`, `read.text.runs()` and `read.text.get()` read at the bound revision; writes are not part of a read scope.
+- Run options (OpenType features, language, script, line height, alignment) cannot be written yet.
+
 ## Interpret what you read
 
 - `editor.inspect` reports the selection, tool, and location in one window. `dragging: true` or an `applyStatus` other than `"idle"` means the view is mid-change.
-- A font revision covers authored font data only, not selection, viewport, or focus.
+- A font revision covers authored font data only, not selection, viewport, focus, or proof text.
 - Rendered SVG and captures are point-in-time proofs, not live views. Render again after changes.
 - Coordinates are font units with **Y pointing up**; SVG output flips Y for display.

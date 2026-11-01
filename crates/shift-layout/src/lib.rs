@@ -96,6 +96,9 @@ pub struct TextLayout {
     pub words: Vec<LayoutWord>,
     /// The width lines align in: the request's width, or the widest line.
     pub width: f64,
+    /// How far apart baselines are: where a line after the last would sit,
+    /// one line height below it.
+    pub line_height: f64,
     /// Why some text was laid out as typed instead of shaped, when it was.
     pub unshaped: Option<String>,
     /// A key that two layouts share exactly when they place every line,

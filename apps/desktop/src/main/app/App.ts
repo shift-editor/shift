@@ -1189,6 +1189,20 @@ export class App {
         at: ({ windowId, ...input }) =>
           this.#windowForAgentRequest(windowId).agent.kerningAt(input),
       },
+      text: {
+        runs: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.text("text.runs", input),
+        get: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.text("text.get", input),
+        create: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.text("text.create", input),
+        setText: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.text("text.setText", input),
+        setCaret: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.text("text.setCaret", input),
+        delete: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.text("text.delete", input),
+      },
     });
     this.#sandbox = sandbox;
     try {

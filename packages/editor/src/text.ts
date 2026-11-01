@@ -1,12 +1,12 @@
 export { TextEditing, type ShownCaret } from "./lib/text/TextEditing";
 export { TextBuffer } from "./lib/text/TextBuffer";
+export type { ParsedText } from "./types/text";
 export {
-  GlyphNameParser,
-  PlainTextParser,
-  type TextParseContext,
-  type TextParser,
-} from "./lib/text/parsing";
-export { characterTextItem, glyphTextItem, lineBreakTextItem } from "./lib/text/layout/types";
+  characterTextItem,
+  glyphTextItem,
+  lineBreakTextItem,
+  typedTextItems,
+} from "./lib/text/layout/types";
 export type {
   CharacterTextItem,
   ParagraphItem,

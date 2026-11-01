@@ -102,6 +102,26 @@ const capabilities: ShiftCapabilities = {
       throw new Error("No open Shift window");
     },
   },
+  text: {
+    async runs() {
+      throw new Error("No open Shift window");
+    },
+    async get() {
+      throw new Error("No open Shift window");
+    },
+    async create() {
+      throw new Error("No open Shift window");
+    },
+    async setText() {
+      throw new Error("No open Shift window");
+    },
+    async setCaret() {
+      throw new Error("No open Shift window");
+    },
+    async delete() {
+      throw new Error("No open Shift window");
+    },
+  },
 };
 
 const execute = (code: string) => executeShiftCode(capabilities, code);
@@ -229,6 +249,29 @@ describe("Shift MCP local connection", () => {
           { type: "image", mimeType: "image/png", data: "cG5n" },
           { type: "text", text: expect.stringContaining('"fontRevision": "revision-a"') },
         ],
+      },
+    });
+  });
+
+  it("tells agents that canvas proof text is all they can write", async () => {
+    const connection = await startServer().start();
+
+    const initialized = await mcpRequest(connection, "initialize", {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: { name: "shift-test", version: "1.0.0" },
+    });
+    const described = await mcpRequest(connection, "tools/call", {
+      name: "shift.describe",
+      arguments: {},
+    });
+
+    expect(initialized).toMatchObject({
+      result: { instructions: expect.stringContaining("cannot change a font") },
+    });
+    expect(described).toMatchObject({
+      result: {
+        content: [{ text: expect.stringContaining("setCaret(input: TextRunSetCaretInput)") }],
       },
     });
   });

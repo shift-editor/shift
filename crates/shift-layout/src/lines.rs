@@ -45,7 +45,10 @@ impl<'o> Placement<'o> {
         paragraphs: &[Paragraph],
         shaped: &[ShapedText],
     ) -> Result<TextLayout, LayoutError> {
-        let mut layout = TextLayout::default();
+        let mut layout = TextLayout {
+            line_height: self.line_height(),
+            ..TextLayout::default()
+        };
         for (number, (paragraph, text)) in (0u32..).zip(paragraphs.iter().zip(shaped)) {
             let ranges = self.break_lines(paragraph, text);
             let last = ranges.len().saturating_sub(1);

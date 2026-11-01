@@ -1359,6 +1359,14 @@ export interface ShiftCapabilities {
     sources: {
         get(input: SourceGetInput): Promise<ShiftObservation<Source>>;
     };
+    text: {
+        runs(input: TextRunsInput): Promise<ShiftObservation<TextRunSummary[]>>;
+        get(input: TextRunGetInput): Promise<ShiftObservation<TextRunView>>;
+        create(input: TextRunCreateInput): Promise<ShiftObservation<TextRunView>>;
+        setText(input: TextRunSetTextInput): Promise<ShiftObservation<TextRunView>>;
+        setCaret(input: TextRunSetCaretInput): Promise<ShiftObservation<TextRunView>>;
+        delete(input: TextRunDeleteInput): Promise<ShiftObservation<null>>;
+    };
 }
 
 // @public
@@ -1444,6 +1452,10 @@ export interface ShiftRead {
     };
     // (undocumented)
     readonly state: ShiftReadState;
+    text: {
+        runs(input?: ShiftReadInput<TextRunsInput>): Promise<TextRunSummary[]>;
+        get(input: ShiftReadInput<TextRunGetInput>): Promise<TextRunView>;
+    };
 }
 
 // @public

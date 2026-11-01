@@ -400,6 +400,19 @@ fn lines_break_at_spaces_to_fit_the_width_and_follow_the_alignment() {
 }
 
 #[test]
+fn reports_the_line_height_its_baselines_step_by() {
+    let fixture = Fixture::open("ShapingTest.ufo");
+
+    let layout = fixture.lay_out("f\nf", shaped());
+
+    assert!(layout.line_height > 0.0);
+    assert_eq!(
+        layout.lines[0].baseline - layout.lines[1].baseline,
+        layout.line_height
+    );
+}
+
+#[test]
 fn a_paragraph_after_a_line_break_is_its_own_line() {
     let fixture = Fixture::open("ShapingTest.ufo");
 

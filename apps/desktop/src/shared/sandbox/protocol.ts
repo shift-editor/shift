@@ -39,6 +39,14 @@ import type {
   ShiftTarget,
   SourceGetInput,
   InstanceGetInput,
+  TextRunCreateInput,
+  TextRunDeleteInput,
+  TextRunGetInput,
+  TextRunSetCaretInput,
+  TextRunSetTextInput,
+  TextRunsInput,
+  TextRunSummary,
+  TextRunView,
 } from "@shift/runtime";
 import type { NamedInstance, Source } from "@shift/types";
 
@@ -149,6 +157,30 @@ export type SandboxHostCallMap = {
   "shift.layers.render": {
     request: LayerRenderInput;
     response: ShiftObservation<LayerSvg>;
+  };
+  "shift.text.runs": {
+    request: TextRunsInput;
+    response: ShiftObservation<TextRunSummary[]>;
+  };
+  "shift.text.get": {
+    request: TextRunGetInput;
+    response: ShiftObservation<TextRunView>;
+  };
+  "shift.text.create": {
+    request: TextRunCreateInput;
+    response: ShiftObservation<TextRunView>;
+  };
+  "shift.text.setText": {
+    request: TextRunSetTextInput;
+    response: ShiftObservation<TextRunView>;
+  };
+  "shift.text.setCaret": {
+    request: TextRunSetCaretInput;
+    response: ShiftObservation<TextRunView>;
+  };
+  "shift.text.delete": {
+    request: TextRunDeleteInput;
+    response: ShiftObservation<null>;
   };
 };
 

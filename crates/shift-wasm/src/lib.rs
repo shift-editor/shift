@@ -38,6 +38,7 @@ pub mod geometry;
 pub mod index_keys;
 pub mod names;
 mod numbers;
+pub mod proof_text;
 pub mod scene;
 pub mod shaping;
 pub mod svg;

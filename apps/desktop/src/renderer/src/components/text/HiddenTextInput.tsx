@@ -1,9 +1,8 @@
 import { useCallback, useRef } from "react";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { useToolIf } from "@/hooks/useToolIf";
-import type { Editor } from "@shift/editor";
 import { useSignalState } from "@shift/editor/signals";
-import { lineBreakTextItem, type TextItem } from "@shift/editor/text";
+import { lineBreakTextItem } from "@shift/editor/text";
 
 /** Receives native text, clipboard, and IME events while a text node is active. */
 export function TextInput() {
@@ -102,10 +101,8 @@ export function TextInput() {
         break;
       case "c":
         if (e.metaKey || e.ctrlKey) {
-          const text = textEditing.selectedItems
-            .map((item) => clipboardText(item, editor))
-            .join("");
           try {
+            const text = editor.text.formatItems(textEditing.selectedItems);
             if (text) await navigator.clipboard?.writeText(text);
           } catch (error) {
             console.error("writing text clipboard failed", error);
@@ -159,12 +156,4 @@ function horizontalGranularity(e: React.KeyboardEvent): "character" | "word" | "
   if (e.altKey) return "word";
   if (e.metaKey) return "line";
   return "character";
-}
-
-/** Copies a picked glyph as `/name`, which pasting reads back as the same glyph. */
-function clipboardText(item: TextItem, editor: Editor): string {
-  if (item.kind === "linebreak") return "\n";
-  if (item.kind === "character") return String.fromCodePoint(item.codepoint);
-  const name = editor.font.glyphName(item.glyphId);
-  return name ? `/${name}` : "";
 }

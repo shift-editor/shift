@@ -1,11 +1,21 @@
-import { mintRunId, type GlyphId, type NodeId, type RunId, type TextItemId } from "@shift/types";
+import {
+  mintRunId,
+  type GlyphId,
+  type GlyphName,
+  type NodeId,
+  type RunId,
+  type TextItemId,
+} from "@shift/types";
 import { computed, effect, keyedCache, signal, track, untracked } from "../signals";
 import type { ComputedSignal, Effect, Signal } from "../signals";
+import type { Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
-import type { TextRunNode } from "../../types/node";
+import type { PageNode, TextRunNode } from "../../types/node";
 import type {
   FeatureHighlight,
   FeatureListing,
+  ParsedText,
+  RunContent,
   RunPlacement,
   SubstitutionListing,
   TextHighlight,
@@ -17,6 +27,8 @@ import {
   characterTextItem,
   glyphTextItem,
   glyphIdForItem,
+  lineBreakTextItem,
+  typedTextItems,
   type TextItem,
   type TextLayout,
 } from "./layout";
@@ -24,11 +36,12 @@ import type {
   FontFeature,
   Direction,
   TextAlign,
+  ProofTextItem,
   TextLayout as LaidOutText,
 } from "@shift/wasm/protocol";
+import { proofTexts } from "@shift/wasm";
 import { RunText } from "./RunText";
 import { runSettingsOf } from "../editor/sceneNodes";
-import { GlyphNameParser, type TextParseContext, type TextParser } from "./parsing";
 
 /** The smallest size a run node sets its text at: one scene unit to the em. */
 const MIN_TEXT_SIZE = 1;
@@ -49,13 +62,6 @@ export class Text {
   // read only when editing ends.
   readonly #provisionalRuns = new Set<NodeId>();
   readonly #acquiring: Effect;
-  readonly #parseContext: TextParseContext = {
-    glyphNamed: (name) => {
-      const entry = this.#editor.font.entryForName(name);
-      return entry ? this.glyphItem(entry.id) : null;
-    },
-  };
-  #parser: TextParser = new GlyphNameParser();
   /** The last reason text could not be shaped, so each is said once. */
   #lastUnshapable: string | null = null;
   readonly #runs = keyedCache({
@@ -464,20 +470,34 @@ export class Text {
    */
   placeRun({ page, at, glyphs }: RunPlacement): TextRunNode {
     const items = glyphs.flatMap((glyphId) => this.glyphItem(glyphId) ?? []);
-    const node = this.#editor.history.withoutRecording(() =>
-      this.#editor.scene.createNode<TextRunNode>(
-        {
-          kind: "textRun",
-          parentId: page.id,
-          runId: mintRunId(),
-          size: this.#editor.font.metricsCell.peek().unitsPerEm,
-          position: { x: at.x, y: at.y },
-        },
-        items,
-      ),
-    );
+    const node = this.#editor.history.withoutRecording(() => this.#createRun(page, at, items));
     if (items.length === 0) this.#provisionalRuns.add(node.id);
     return node;
+  }
+
+  /**
+   * Places a new run holding `items` on a page as one undo step, as typing
+   * into a placed run is one; the run is never provisional.
+   *
+   * @returns the run node.
+   * @throws When another history capture is open, or the document refuses the node.
+   */
+  addRun({ page, at, items }: RunContent): TextRunNode {
+    return this.#editor.history.capture("Add text", () => this.#createRun(page, at, items));
+  }
+
+  /** Builds a run node set at the font's units per em: {@link placeRun} and {@link addRun} only. */
+  #createRun(page: PageNode, at: Point2D, items: readonly TextItem[]): TextRunNode {
+    return this.#editor.scene.createNode<TextRunNode>(
+      {
+        kind: "textRun",
+        parentId: page.id,
+        runId: mintRunId(),
+        size: this.#editor.font.metricsCell.peek().unitsPerEm,
+        position: { x: at.x, y: at.y },
+      },
+      items,
+    );
   }
 
   /**
@@ -516,18 +536,85 @@ export class Text {
     return this.layoutCell(id).peek();
   }
 
-  /** The parser for typed and pasted text; replace it to change the input syntax for every run. */
-  get parser(): TextParser {
-    return this.#parser;
-  }
-
-  set parser(parser: TextParser) {
-    this.#parser = parser;
-  }
-
-  /** Parses typed, pasted, or imported text with {@link parser}. */
+  /**
+   * Reads pasted or imported proof text into items, as shift-font's
+   * `ProofText` parses it: `/name` picks the glyph named `name` (the name
+   * ends at a space, which it consumes, or at the next `/`), `//` is a slash and `\n` a line
+   * break.
+   *
+   * @remarks
+   * Lenient, as pasting must be: a `/name` the font lacks stays as its
+   * characters, and text that is not proof text (a `/` naming nothing) is
+   * taken character by character.
+   */
   itemsFromText(text: string): TextItem[] {
-    return this.#parser.parse(text, this.#parseContext);
+    let parsed: readonly ProofTextItem[];
+    try {
+      parsed = proofTexts.parse(text);
+    } catch {
+      return typedTextItems(text);
+    }
+    return parsed.flatMap(
+      (item) => this.#textItems(item) ?? typedTextItems(proofTexts.format([item])),
+    );
+  }
+
+  /**
+   * Reads proof text as {@link itemsFromText} does, strictly: each `/name`
+   * the font lacks is reported rather than kept as text.
+   *
+   * @throws {PackError} carrying a `ProofTextFailure` for text that is not
+   * proof text, such as a `/` naming nothing.
+   */
+  parseText(text: string): ParsedText {
+    const unknownGlyphNames: GlyphName[] = [];
+    const items = proofTexts.parse(text).flatMap((item) => {
+      const items = this.#textItems(item);
+      if (!items && item.kind === "glyph") unknownGlyphNames.push(item.name);
+      return items ?? [];
+    });
+    return { items, unknownGlyphNames };
+  }
+
+  /**
+   * Writes items as proof text, as shift-font's `ProofText` formats it, so
+   * {@link parseText} reads them back as the same items. A picked glyph the
+   * font no longer has is left out.
+   *
+   * @throws {PackError} carrying a `ProofTextFailure` for a glyph name that
+   * cannot be written as `/name` (one with a space in it).
+   */
+  formatItems(items: readonly TextItem[]): string {
+    const font = this.#editor.font;
+    return proofTexts.format(
+      items.flatMap((item): ProofTextItem[] => {
+        switch (item.kind) {
+          case "character":
+            return [{ kind: "character", codepoint: item.codepoint }];
+          case "linebreak":
+            return [{ kind: "lineBreak" }];
+          case "glyph": {
+            const name = font.glyphName(item.glyphId);
+            return name ? [{ kind: "glyph", name }] : [];
+          }
+        }
+      }),
+    );
+  }
+
+  /** The editor items for one parsed item; null for a glyph name the font lacks. */
+  #textItems(item: ProofTextItem): TextItem[] | null {
+    switch (item.kind) {
+      case "character":
+        return [characterTextItem(item.codepoint)];
+      case "lineBreak":
+        return [lineBreakTextItem()];
+      case "glyph": {
+        const entry = this.#editor.font.entryForName(item.name);
+        const picked = entry ? this.glyphItem(entry.id) : null;
+        return picked ? [picked] : null;
+      }
+    }
   }
 
   /**

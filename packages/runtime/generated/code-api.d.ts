@@ -880,6 +880,74 @@ export interface KerningAtInput extends ShiftTarget {
   second: GlyphSelector;
   source?: SourceSelector;
 }
+/** A point in a page's space, as a text run's position is given. */
+export interface PagePoint {
+  x: number;
+  y: number;
+}
+/** The canvas text runs on one page; the page the canvas shows when `pageId` is omitted. */
+export interface TextRunsInput extends ShiftTarget {
+  pageId?: NodeId;
+}
+/** One canvas text run, by the id of its text run node. */
+export interface TextRunGetInput extends ShiftTarget {
+  runId: NodeId;
+}
+/**
+ * A new canvas text run.
+ *
+ * `text` is proof text, as the Text tool reads pasted text and Glyphs writes
+ * it: `/` starts a glyph name, which runs to the next space, the next `/`, or
+ * the end of the text. A space that ends a name is not text, so `"/a b"` is
+ * glyph `a` then `b`, and `"/a  b"` is `a`, a space, then `b`; a `/` that ends
+ * one starts the next, so `"/a/b"` is glyphs `a` and `b`. `//` is a slash
+ * (`"1//2"` is 1/2, `"/a//b"` is `a`, a slash, `b`) and `"\n"` a line break. A `/` that names nothing fails
+ * with `ProofTextError`, and a name the font has no glyph for with
+ * `UnknownGlyphNameError`.
+ */
+export interface TextRunCreateInput extends ShiftTarget {
+  /** The page to put it on; the page the canvas shows when omitted. */
+  pageId?: NodeId;
+  text: string;
+  /** Its origin in the page's space, y down; below the page's last run when omitted. */
+  at?: PagePoint;
+}
+/** Replaces a run's text, read as {@link TextRunCreateInput.text} is. */
+export interface TextRunSetTextInput extends ShiftTarget {
+  runId: NodeId;
+  text: string;
+}
+/**
+ * Puts the Text mode caret in a run, in positions between items as
+ * {@link TextRunCaret} gives them: 0 is before the first item.
+ */
+export interface TextRunSetCaretInput extends ShiftTarget {
+  runId: NodeId;
+  /** Where the caret is: `selection.start` or `selection.end` when a selection is given. */
+  position: number;
+  /** The positions to select, `start` to `end`; a collapsed caret at `position` when omitted. */
+  selection?: {
+    start: number;
+    end: number;
+  };
+}
+/** Removes a canvas text run. */
+export interface TextRunDeleteInput extends ShiftTarget {
+  runId: NodeId;
+}
+/** One canvas text run, as a page's list of runs shows it. */
+export interface TextRunSummary {
+  /** The id of its text run node. */
+  id: NodeId;
+  pageId: NodeId;
+  /**
+   * Its items as proof text, read as {@link TextRunCreateInput.text} is, so
+   * creating a run from it gives the same items.
+   */
+  text: string;
+  /** Its origin in the page's space, y down. */
+  at: PagePoint;
+}
 /** Live application capabilities shared by protocol and plugin hosts. */
 export interface ShiftCapabilities {
   capture(input: ShiftCaptureInput): Promise<ShiftObservation<ShiftCapture>>;
@@ -939,6 +1007,29 @@ export interface ShiftCapabilities {
     resolve(input: KerningResolveInput): Promise<ShiftObservation<ResolvedKerningPairs>>;
     at(input: KerningAtInput): Promise<ShiftObservation<KerningMasterValue>>;
   };
+  /**
+   * The canvas text runs (proof text) and the Text mode caret: view state
+   * beside the font, never font data.
+   *
+   * @remarks
+   * Each write is one edit through the path the Text tool uses: `create`,
+   * `setText` and `delete` are one undo step each and mark the document
+   * unsaved, as typing does. `setCaret` is session state: no undo step, no
+   * unsaved change. No write changes the font, so none advances
+   * `fontRevision`; with `ifFontRevision`, a write fails with
+   * `FontChangedError` before changing anything when the font has moved on.
+   * A run or page that is not there fails with `TextRunNotFoundError` or
+   * `PageNotFoundError`, and a caret outside the run with `TextCaretError`.
+   */
+  text: {
+    runs(input: TextRunsInput): Promise<ShiftObservation<TextRunSummary[]>>;
+    get(input: TextRunGetInput): Promise<ShiftObservation<TextRunView>>;
+    create(input: TextRunCreateInput): Promise<ShiftObservation<TextRunView>>;
+    setText(input: TextRunSetTextInput): Promise<ShiftObservation<TextRunView>>;
+    /** Shows the caret in Text mode, switching to the run's page and to the Text tool when needed. */
+    setCaret(input: TextRunSetCaretInput): Promise<ShiftObservation<TextRunView>>;
+    delete(input: TextRunDeleteInput): Promise<ShiftObservation<null>>;
+  };
 }
 /** A capability input without the window and revision a read scope binds. */
 export type ShiftReadInput<Input> = Input extends unknown ? Omit<Input, keyof ShiftTarget> : never;
@@ -986,6 +1077,11 @@ export interface ShiftRead {
     pairs(input: ShiftReadInput<KerningPairsInput>): Promise<KerningPairPage>;
     resolve(input: ShiftReadInput<KerningResolveInput>): Promise<ResolvedKerningPairs>;
     at(input: ShiftReadInput<KerningAtInput>): Promise<KerningMasterValue>;
+  };
+  /** The canvas text runs, read at the bound revision; writes are not part of a read scope. */
+  text: {
+    runs(input?: ShiftReadInput<TextRunsInput>): Promise<TextRunSummary[]>;
+    get(input: ShiftReadInput<TextRunGetInput>): Promise<TextRunView>;
   };
 }
 /** The `shift` global in scripts: raw capabilities plus revision-bound reads. */
@@ -1042,6 +1138,11 @@ export interface TextRunCaret {
 }
 /** The canvas text run as it shows now. */
 export interface TextRunView {
+  /** The id of its text run node. */
+  id: NodeId;
+  pageId: NodeId;
+  /** Its origin in the page's space, y down. */
+  at: PagePoint;
   items: TextRunItem[];
   glyphs: TextRunGlyph[];
   /** The run's total advance, in its units. */
