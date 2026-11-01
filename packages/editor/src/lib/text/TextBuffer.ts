@@ -1,5 +1,5 @@
 import type { Direction, TextItem } from "./layout";
-import { graphemeSegments, wordSegments, type ItemSegment } from "./layout/segmentation";
+import { wordSegments, type ItemSegment } from "./layout/segmentation";
 import type { TextCaret, TextSelectionRange } from "../../types/text";
 
 /**
@@ -15,7 +15,6 @@ export class TextBuffer {
   readonly items: readonly TextItem[];
   readonly anchor: TextCaret;
   readonly focus: TextCaret;
-  #graphemes: readonly ItemSegment[] | null = null;
   #words: readonly ItemSegment[] | null = null;
 
   /** @param anchor - Selection anchor; defaults to `focus`, a collapsed caret. */
@@ -65,33 +64,23 @@ export class TextBuffer {
    *
    * @remarks
    * Backward removes one code point, so a combining mark goes before its base;
-   * forward removes a whole grapheme cluster.
+   * forward removes a whole grapheme cluster, up to the boundary `graphemeEnd`
+   * gives after a cluster (the layout's, from Rust).
    *
+   * @param graphemeEnd - defaults to one item on, for text not laid out.
    * @returns null when there is nothing to delete.
    */
-  delete(direction: -1 | 1): TextBuffer | null {
+  delete(
+    direction: -1 | 1,
+    graphemeEnd: (cluster: number) => number = (cluster) => cluster + 1,
+  ): TextBuffer | null {
     let { start, end } = this.selection;
     if (start === end) {
       if (direction === -1) start = Math.max(0, start - 1);
-      else end = this.graphemeStep(end, 1);
+      else end = graphemeEnd(end);
     }
     if (start === end) return null;
     return collapsed([...this.items.slice(0, start), ...this.items.slice(end)], start);
-  }
-
-  /**
-   * Returns the cluster one user-perceived character away.
-   *
-   * @remarks
-   * Steps over a whole grapheme cluster, so a base and its combining marks, or
-   * an emoji sequence, move as one.
-   */
-  graphemeStep(cluster: number, direction: -1 | 1): number {
-    this.#graphemes ??= graphemeSegments(this.items);
-    if (direction === 1) {
-      return this.#graphemes.find((segment) => segment.end > cluster)?.end ?? cluster;
-    }
-    return this.#graphemes.findLast((segment) => segment.start < cluster)?.start ?? cluster;
   }
 
   /** The word-like segments of the items, such as words and numbers, not spaces or punctuation. */

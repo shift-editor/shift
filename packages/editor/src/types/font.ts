@@ -31,12 +31,7 @@ import type {
   MissingKerningOrigin,
   SourceSetWeights,
 } from "../lib/wasm/engine";
-import type {
-  FontChangeFlag,
-  FontFeature,
-  LayoutRequest,
-  TextLayout as LaidOutText,
-} from "@shift/wasm/protocol";
+import type { FontChangeFlag, FontFeature, LayoutRequest, PlacedText } from "@shift/wasm/protocol";
 import type { PendingEditId } from "./editing";
 import type { WorkspaceEditListener } from "./history";
 import type { GlyphReader } from "./glyph";
@@ -201,11 +196,21 @@ export interface FontEngine {
    * with its shaper, positioned with live kerning, marks and cursive joins,
    * broken into lines and given caret stops, at a source or a design
    * location. Text that cannot be shaped is laid out as typed, with the
-   * reason.
+   * reason. A pure read: glyphs whose layers the engine has not loaded lay
+   * out from placeholders and are listed in `unloaded`, for
+   * {@link preload}.
    *
    * @returns null only while the engine is not open.
    */
-  layoutText(text: LayoutRequest, place: KerningPlace): LaidOutText | null;
+  layoutText(text: LayoutRequest, place: KerningPlace): PlacedText | null;
+
+  /**
+   * Loads the layers of glyphs a layout listed as unloaded, then bumps the
+   * revisions layout reads, so readers lay the text out again.
+   *
+   * @throws When the store's reader cannot answer.
+   */
+  preload(glyphIds: readonly GlyphId[]): void;
 
   /**
    * The features the engine's shaper font defines, in tag order, each with

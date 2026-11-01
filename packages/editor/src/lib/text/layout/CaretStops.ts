@@ -1,8 +1,5 @@
-import { ascending, comparing, EntityMap, type ReadonlyEntityMap } from "@shift/types";
+import { EntityMap, type ReadonlyEntityMap } from "@shift/types";
 import type { CaretStop } from "@shift/wasm/protocol";
-
-/** Stops left to right by where they draw. */
-const byX = comparing((stop: CaretStop) => stop.x, ascending);
 
 /**
  * An index over one line's caret stops, for moves and hit tests.
@@ -10,8 +7,9 @@ const byX = comparing((stop: CaretStop) => stop.x, ascending);
  * @remarks
  * Rust's layout computes every stop and where it draws: the leading edge of
  * right-to-left text, the second edge where directions meet, and the carets
- * inside a ligature. This only finds the stops by unit, by x, and by their
- * neighbours on screen, so arrow keys follow the screen.
+ * inside a ligature, and their order on screen (`screen`). This only finds
+ * the stops by unit, by x, and by their neighbours on screen, so arrow keys
+ * follow the screen.
  */
 export class CaretStops {
   /** The line's stops, left to right on screen. */
@@ -24,11 +22,9 @@ export class CaretStops {
       "caret stop",
       stops.map((stop) => [stop.unit, stop] as const),
     );
-    // WORKAROUND (Needs from PR 1): the layout returns stops in logical order;
-    // until it also gives their screen order, order them by where they draw.
-    // Stops never share an x on one line except at zero-width glyphs, which
-    // keep their logical order.
-    this.#onScreen = stops.toSorted(byX);
+    const onScreen: CaretStop[] = [];
+    for (const stop of stops) onScreen[stop.screen] = stop;
+    this.#onScreen = onScreen;
   }
 
   /** Returns the stop at `unit`, or null for a unit that is not a boundary on the line. */

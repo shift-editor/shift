@@ -1,7 +1,7 @@
 import type { ElectronApplication, Page } from "@playwright/test";
 import { EditorDriver } from "./fixtures/EditorDriver";
 import { waitForEditorReady } from "./fixtures/appLocators";
-import { createGlyphNamed, runWindowCommand } from "./fixtures/documentLifecycle";
+import { createGlyphNamed, runCommand } from "./fixtures/documentLifecycle";
 import { expect, recoveryTest as test } from "./fixtures/electronApp";
 
 test.setTimeout(90_000);
@@ -19,7 +19,7 @@ test(
 
     await expectGlyphsAndState(restarted, recoveryApp.app, [glyphName], true, true);
     expect(recoveryApp.canonicalGlyphNames()).not.toContain(glyphName);
-    await runWindowCommand(restarted, "file.save");
+    await runCommand(restarted, "file.save");
     await expectGlyphsAndState(restarted, recoveryApp.app, [glyphName], true, false);
     expect(recoveryApp.canonicalGlyphNames()).toContain(glyphName);
   },
@@ -31,18 +31,18 @@ test("recovers undo past the last save as a dirty document that saves explicitly
   const glyphName = "recoveryUndone";
   await createGlyphNamed(recoveryApp.page, glyphName);
   await expectGlyphsAndState(recoveryApp.page, recoveryApp.app, [glyphName], true, true);
-  await runWindowCommand(recoveryApp.page, "file.save");
+  await runCommand(recoveryApp.page, "file.save");
   await expectGlyphsAndState(recoveryApp.page, recoveryApp.app, [glyphName], true, false);
   expect(recoveryApp.canonicalGlyphNames()).toContain(glyphName);
 
-  await runWindowCommand(recoveryApp.page, "edit.undo");
+  await runCommand(recoveryApp.page, "edit.undo");
   await expectGlyphsAndState(recoveryApp.page, recoveryApp.app, [glyphName], false, true);
 
   const recovered = await recoveryApp.crashAndRecover();
   await expectGlyphsAndState(recovered, recoveryApp.app, [glyphName], false, true);
   expect(recoveryApp.canonicalGlyphNames()).toContain(glyphName);
 
-  await runWindowCommand(recovered, "file.save");
+  await runCommand(recovered, "file.save");
   await expectGlyphsAndState(recovered, recoveryApp.app, [glyphName], false, false);
   expect(recoveryApp.canonicalGlyphNames()).not.toContain(glyphName);
 });

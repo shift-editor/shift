@@ -81,8 +81,8 @@ impl Paragraph {
         if !options.shaping {
             return (self.typed(font), None);
         }
-        let shaper = match font.shaper() {
-            Ok(shaper) => shaper,
+        let (shaper, location) = match font.shaper() {
+            Ok(shaping) => shaping,
             Err(reason) => return (self.typed(font), Some(reason.to_string())),
         };
         let features: Vec<shift_shape::FeatureSetting> = options
@@ -97,7 +97,7 @@ impl Paragraph {
             .collect();
         let request = ParagraphRequest {
             units: &self.units,
-            location: font.external(),
+            location,
             script: options.script.as_deref(),
             language: options.language.as_deref(),
             features: &features,

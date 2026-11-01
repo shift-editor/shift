@@ -1,6 +1,6 @@
 import type { Axis, NamedInstance, Source, SourceId } from "@shift/types";
 import { expect, recoveryTest as test, type RecoveryApp } from "./fixtures/electronApp";
-import { runWindowCommand } from "./fixtures/documentLifecycle";
+import { runCommand } from "./fixtures/documentLifecycle";
 import { WEIGHT } from "@/testing/fonts";
 
 interface ObservedVariableFont {
@@ -174,7 +174,7 @@ async function expectCanonicalFont(
 /** Saves through File › Save, as its menu item does, and waits until the document is clean. */
 async function save(recoveryApp: RecoveryApp): Promise<void> {
   const editor = recoveryApp.editor;
-  await runWindowCommand(editor.page, "file.save");
+  await runCommand(editor.page, "file.save");
   await expect
     .poll(() => editor.documentState(), { timeout: 20_000 })
     .toMatchObject({ dirty: false });

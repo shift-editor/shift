@@ -26,7 +26,7 @@ import {
   type FontChangeFlag,
   type FontFeature,
   type LayoutRequest,
-  type TextLayout as LaidOutText,
+  type PlacedText,
 } from "@shift/wasm/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
 import type { EngineVariation, FontEngine, KerningPlace } from "@shift/editor/types";
@@ -356,20 +356,21 @@ export class WindowEngine implements FontEngine {
     return this.#require().nextGlyphName(name);
   }
 
-  layoutText(text: LayoutRequest, place: KerningPlace): LaidOutText | null {
+  layoutText(text: LayoutRequest, place: KerningPlace): PlacedText | null {
+    return this.#opened?.session.layoutText(text, place) ?? null;
+  }
+
+  /**
+   * Loads the layers of glyphs a layout showed unloaded, as an edit would,
+   * then tells layout readers, which lay the text out again from them.
+   *
+   * @throws When the store's reader cannot answer; nothing is told then.
+   */
+  preload(glyphIds: readonly GlyphId[]): void {
     const session = this.#opened?.session;
-    if (!session) return null;
-    const placed = session.layoutText(text, place);
-    if (placed.unloaded.length === 0) return placed.layout;
-    // Glyphs the text shows that the engine has not loaded laid out from
-    // placeholders: load them, as an edit would, and lay out again.
-    try {
-      session.preload(placed.unloaded);
-    } catch (error) {
-      console.warn("loading the glyphs text shows failed", error);
-      return placed.layout;
-    }
-    return session.layoutText(text, place).layout;
+    if (!session || glyphIds.length === 0) return;
+    session.preload(glyphIds);
+    this.#changed(LAYERS_CHANGE);
   }
 
   newAnchorName(layerIds: readonly LayerId[]): string {

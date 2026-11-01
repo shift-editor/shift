@@ -65,7 +65,7 @@ import type {
   WorkspaceEditCoordinator,
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
-import type { FontFeature, LayoutRequest, TextLayout as LaidOutText } from "@shift/wasm/protocol";
+import type { FontFeature, LayoutRequest, PlacedText } from "@shift/wasm/protocol";
 import { EngineVariationReader, StatelessVariationReader, locationValues } from "../wasm/variation";
 import type { GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
@@ -1452,6 +1452,9 @@ export class Font {
    * so a computed that lays text out does again after any edit that may
    * change the result.
    *
+   * A pure read: glyphs the engine has not loaded lay out from placeholders
+   * and are listed in `unloaded`, for {@link preloadLaidOut}.
+   *
    * @param location - External location displayed by editor controls.
    * @param sourceId - Source being edited, which takes precedence over `location`.
    * @returns null without an open engine.
@@ -1460,7 +1463,7 @@ export class Font {
     text: LayoutRequest,
     location: ExternalAxisLocation,
     sourceId: SourceId | null,
-  ): LaidOutText | null {
+  ): PlacedText | null {
     const engine = this.#store.engine;
     if (!engine) return null;
     for (const flag of engine.layoutInputs()) track(engine.revision(flag));
@@ -1472,6 +1475,17 @@ export class Font {
       };
     });
     return engine.layoutText(text, place);
+  }
+
+  /**
+   * Loads into the window's engine the glyphs a layout listed as unloaded;
+   * readers of {@link layoutText} then lay out again. Nothing without an
+   * engine.
+   *
+   * @throws When the engine's store cannot answer.
+   */
+  preloadLaidOut(glyphIds: readonly GlyphId[]): void {
+    this.#store.engine?.preload(glyphIds);
   }
 
   /**
