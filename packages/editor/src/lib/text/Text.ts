@@ -1,5 +1,5 @@
 import { mintRunId, type GlyphId, type RunId, type TextItemId } from "@shift/types";
-import { keyedCache, signal, untracked } from "../signals";
+import { computed, keyedCache, signal, untracked } from "../signals";
 import type { ComputedSignal, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
 import type { ShiftStore } from "../store/ShiftStore";
@@ -51,6 +51,22 @@ export class Text {
           }),
       ),
   });
+
+  /**
+   * The first run whose text has no layout, or whose layout could not load
+   * what it shows, with why; null while every run lays out. The editor
+   * shows it, so a failed layout is never just an empty run.
+   */
+  readonly layoutFailureCell: ComputedSignal<TextLayoutFailure | null> = computed(
+    () => {
+      for (const run of this.#store.recordsOfType("textrun")) {
+        const failure = this.#runs.get(run.id).failureCell.value;
+        if (failure) return failure;
+      }
+      return null;
+    },
+    { name: "text.layoutFailure" },
+  );
 
   constructor(store: ShiftStore<ShiftEditorRecord>, editor: Editor) {
     this.#store = store;
@@ -177,7 +193,7 @@ export class Text {
    * (glyphs into the engine, or a preview's layout module); null while it
    * lays out and loads what it shows.
    */
-  layoutFailureCell(id: RunId): Signal<TextLayoutFailure | null> {
+  runLayoutFailureCell(id: RunId): Signal<TextLayoutFailure | null> {
     return this.#runs.get(id).failureCell;
   }
 
@@ -220,6 +236,7 @@ export class Text {
   }
 
   dispose(): void {
+    this.layoutFailureCell.dispose();
     this.#unsubscribeStore();
     this.#runsByItem.dispose();
     this.#runs.clear();
