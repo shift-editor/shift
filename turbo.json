@@ -80,11 +80,7 @@
         "$TURBO_ROOT$/crates/*/src/**",
         "$TURBO_ROOT$/packages/pack/src/**"
       ],
-      "outputs": [
-        "src/generated/**",
-        "src/generated-engine/**",
-        "src/generated-protocol/**"
-      ],
+      "outputs": ["src/generated/**", "src/generated-engine/**", "src/generated-protocol/**"],
       "env": ["SHIFT_WASM_OPT"]
     },
     "@shift/wasm#build:debug": {
@@ -99,11 +95,7 @@
         "$TURBO_ROOT$/crates/*/src/**",
         "$TURBO_ROOT$/packages/pack/src/**"
       ],
-      "outputs": [
-        "src/generated/**",
-        "src/generated-engine/**",
-        "src/generated-protocol/**"
-      ],
+      "outputs": ["src/generated/**", "src/generated-engine/**", "src/generated-protocol/**"],
       "env": ["SHIFT_WASM_OPT"]
     },
     "@shift/wasm#build:e2e": {
@@ -118,11 +110,7 @@
         "$TURBO_ROOT$/crates/*/src/**",
         "$TURBO_ROOT$/packages/pack/src/**"
       ],
-      "outputs": [
-        "src/generated/**",
-        "src/generated-engine/**",
-        "src/generated-protocol/**"
-      ],
+      "outputs": ["src/generated/**", "src/generated-engine/**", "src/generated-protocol/**"],
       "env": ["SHIFT_WASM_OPT"]
     },
     "@shift/wasm#types": {
@@ -213,6 +201,27 @@
     },
     "@shift/desktop#build:e2e": {
       "dependsOn": [
+        "shift-bridge#build:e2e",
+        "@shift/types#generate:bridge-types",
+        "@shift/glyph-info#generate",
+        "@shift/wasm#build:e2e"
+      ],
+      "outputs": [".vite/**"],
+      "inputs": [
+        "src/**",
+        "build.ts",
+        "package.json",
+        "tsconfig*.json",
+        "vite*.config.ts",
+        "electron-builder.config.ts",
+        "resources/**",
+        "$TURBO_ROOT$/icons/**",
+        "$TURBO_ROOT$/packages/*/src/**",
+        "$TURBO_ROOT$/packages/*/package.json"
+      ]
+    },
+    "@shift/desktop#build:perf": {
+      "dependsOn": [
         "shift-bridge#build",
         "@shift/types#generate:bridge-types",
         "@shift/glyph-info#generate",
@@ -282,7 +291,7 @@
       "inputs": ["e2e/**", "playwright.config.ts", "src/**", "*.config.ts", "package.json"]
     },
     "@shift/desktop#test:e2e:perf": {
-      "dependsOn": ["build:e2e"],
+      "dependsOn": ["build:perf"],
       "cache": false,
       "outputs": [],
       "inputs": ["e2e/**", "playwright.config.ts", "src/**", "*.config.ts", "package.json"]
@@ -298,20 +307,12 @@
     "test": {
       "outputs": [],
       "inputs": ["src/**", "*.config.ts"],
-      "dependsOn": [
-        "^generate:bridge-types",
-        "generate:bridge-types",
-        "@shift/wasm#build"
-      ]
+      "dependsOn": ["^generate:bridge-types", "generate:bridge-types", "@shift/wasm#build"]
     },
     "@shift/editor#test": {
       "outputs": [],
       "inputs": ["src/**", "*.config.ts", "$TURBO_ROOT$/packages/*/src/**"],
-      "dependsOn": [
-        "^generate:bridge-types",
-        "generate:bridge-types",
-        "@shift/wasm#build"
-      ]
+      "dependsOn": ["^generate:bridge-types", "generate:bridge-types", "@shift/wasm#build"]
     },
     "@shift/glyph-info#test": {
       "dependsOn": ["^generate:bridge-types", "generate"],
@@ -341,11 +342,7 @@
     "test:watch": {
       "cache": false,
       "persistent": true,
-      "dependsOn": [
-        "^generate:bridge-types",
-        "generate:bridge-types",
-        "@shift/wasm#build"
-      ]
+      "dependsOn": ["^generate:bridge-types", "generate:bridge-types", "@shift/wasm#build"]
     },
     "@shift/glyph-info#test:watch": {
       "dependsOn": ["^generate:bridge-types", "generate"],
