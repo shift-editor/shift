@@ -4,7 +4,7 @@ import { electronSystemClipboard } from "@/lib/clipboard/electronSystemClipboard
 import { AuthoredGlyphAtlasSource } from "@/lib/graphics/backends/AuthoredGlyphAtlasSource";
 import { ImportedGlyphAtlasSource } from "@/lib/graphics/backends/ImportedGlyphAtlasSource";
 import { Editor } from "@shift/editor";
-import { Font, FontStore } from "@shift/editor/model";
+import { Font, FontStore, loadEngine } from "@shift/editor/model";
 import { GlyphCatalog } from "@/lib/catalog/GlyphCatalog";
 import { registerBuiltInTools } from "@/lib/tools/tools";
 import { locationFromDesignAxisLocation } from "@shift/editor/variation";
@@ -63,7 +63,10 @@ async function createFontSession(
       return createWorkspaceFontSession(catalog, workspace, client);
     }
     case "preview": {
-      await client.connect();
+      // A preview has no engine session, but its text lays out in the
+      // engine module (shift-layout, as typed): load it before anything
+      // asks for a layout, so the open glyph's run lays out at once.
+      await Promise.all([client.connect(), loadEngine()]);
       const source = client.sourceCell.peek();
       if (!source) throw new Error("font source connected without a snapshot");
 
