@@ -1,7 +1,7 @@
 //! What a font's shaper font is compiled from, as plain data.
 //!
 //! A shaper font holds only what authored feature code compiles to (see the
-//! shift-shaper-font crate), so it depends on little of the font: units per
+//! `shaper_font` module of shift-text), so it depends on little of the font: units per
 //! em, the glyph order, the feature source, the axes with their mappings, and
 //! each glyph's `GDEF` class. A source is read from the font wherever the font
 //! lives and compiled wherever the compiler is linked; equal sources compile to

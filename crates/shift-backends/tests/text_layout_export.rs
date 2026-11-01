@@ -1,4 +1,4 @@
-//! The editor lays proof text out as the exported font sets it: shift-layout,
+//! The editor lays proof text out as the exported font sets it: shift-text's layout,
 //! over the shaper font and the live font's advances, kerning and anchors,
 //! places every glyph where HarfRust places it in the font fontc exports,
 //! whose generated kern, mark, mkmk and curs lookups do the same work.
@@ -11,9 +11,11 @@ use shift_backends::font_loader::FontLoader;
 use shift_backends::{FontExporter, GlyphCategories};
 use shift_font::test_support::fixtures;
 use shift_font::{DesignLocation, ExternalLocation, Font, GlyphId, OpenTypeCategory};
-use shift_layout::{LayoutFont, LayoutRequest, LayoutUnit, LineMetrics, TextLayout, TextOptions};
-use shift_shape::{FontGlyphs, Shaper, Unit, visual_order};
-use shift_shaper_font::{LiveShaper, ShaperFont, ShaperFontRequest};
+use shift_text::layout::{
+    LayoutFont, LayoutRequest, LayoutUnit, LineMetrics, TextLayout, TextOptions,
+};
+use shift_text::shape::{FontGlyphs, Shaper, Unit, visual_order};
+use shift_text::shaper_font::{LiveShaper, ShaperFont, ShaperFontRequest};
 
 /// A glyph where it is drawn, and how far it advances, in font units.
 #[derive(Debug, PartialEq)]
@@ -44,9 +46,10 @@ fn exported(font: &Font, text: &str) -> Vec<Placed> {
     let paragraph = shaper
         .shape_paragraph(
             &FontGlyphs,
-            &shift_shape::ParagraphRequest {
+            &shift_text::shape::ParagraphRequest {
                 units: &units,
                 location: &[],
+                direction: None,
                 script: None,
                 language: None,
                 features: &[],

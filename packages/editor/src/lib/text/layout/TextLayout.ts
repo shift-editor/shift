@@ -1,5 +1,5 @@
 /**
- * TextLayout — a run's text as Rust laid it out (`shift_layout::TextLayout`
+ * TextLayout — a run's text as Rust laid it out (`shift_text::layout::TextLayout`
  * through the window's engine), indexed for drawing, hit testing, carets and
  * selection. It applies no layout rule: lines, glyph positions, kerning,
  * marks, cursive joins, bidi order and caret stops all come from Rust.

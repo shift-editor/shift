@@ -64,7 +64,7 @@ async function createFontSession(
     }
     case "preview": {
       // A preview has no engine session, but its text lays out in the
-      // engine module (shift-layout, as typed): load it before anything
+      // engine module (shift-text's layout, as typed): load it before anything
       // asks for a layout, so the open glyph's run lays out at once.
       await Promise.all([client.connect(), loadEngine()]);
       const source = client.sourceCell.peek();

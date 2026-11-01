@@ -9,7 +9,8 @@ use crate::label::{label_height, label_width};
 use crate::numeric::ceil_pixels;
 use crate::palette::Rgb;
 use crate::shape::ShapedRun;
-use crate::{ProofFont, ProofMetrics, ShapingOptions, TextDirection};
+use crate::text::break_offsets;
+use crate::{ProofError, ProofFont, ProofMetrics, ShapingOptions, TextDirection};
 
 /// Space around the content, in pixels.
 pub(crate) const MARGIN: f32 = 24.0;
@@ -143,7 +144,8 @@ pub struct TextLayout<'l> {
     pub lines: &'l [String],
     /// Pixels per em.
     pub sizes: &'l [f32],
-    /// Fixed page width in pixels; horizontal lines wrap at spaces to fit.
+    /// Fixed page width in pixels; horizontal lines wrap at line break
+    /// opportunities to fit.
     pub width: Option<u32>,
     /// Draw metric guides behind the horizontal rows at the largest size.
     pub guides: bool,
@@ -154,9 +156,15 @@ pub struct TextLayout<'l> {
 /// the same text at different locations stacks for comparison.
 ///
 /// Each row is labelled with its size, and with its location when there is
-/// more than one. Right-to-left rows are right-aligned. Vertical text is set
-/// in columns from left to right, never wrapped and without guides.
-pub fn layout_text(fonts: &[LocatedFont], options: &TextLayout) -> Page {
+/// more than one. Right-to-left rows are right-aligned. With a width,
+/// horizontal lines wrap at shift-text's line break opportunities. Vertical
+/// text is set in columns from left to right, never wrapped and without
+/// guides.
+///
+/// # Errors
+///
+/// Returns [`ProofError::Shape`] when a line is too long to shape.
+pub fn layout_text(fonts: &[LocatedFont], options: &TextLayout) -> Result<Page, ProofError> {
     if options
         .shaping
         .direction
@@ -197,7 +205,7 @@ pub fn layout_text(fonts: &[LocatedFont], options: &TextLayout) -> Page {
                 let metrics = located.font.metrics();
                 let scale = size / f32::from(metrics.units_per_em);
                 let limit = available.map(|width| width / scale);
-                let parts = wrap(&located.font, line, limit, options.shaping);
+                let parts = wrap(&located.font, line, limit, options.shaping)?;
                 for (part, (text, run)) in parts.into_iter().enumerate() {
                     let baseline = cursor + metrics.ascender * scale;
                     cursor = baseline - metrics.descender * scale + size * ROW_GAP_EM;
@@ -254,17 +262,17 @@ pub fn layout_text(fonts: &[LocatedFont], options: &TextLayout) -> Page {
         })
         .collect();
     let last_gap = ROW_GAP_EM * options.sizes.last().copied().unwrap_or(0.0);
-    Page {
+    Ok(Page {
         width: ceil_pixels(page_width),
         height: ceil_pixels(cursor - last_gap + MARGIN),
         rows,
         guides,
         labels,
-    }
+    })
 }
 
 // Sets each line as a column whose pen starts at the top centre.
-fn layout_columns(fonts: &[LocatedFont], options: &TextLayout) -> Page {
+fn layout_columns(fonts: &[LocatedFont], options: &TextLayout) -> Result<Page, ProofError> {
     let top = MARGIN + label_height(ROW_LABEL_PIXEL) + LABEL_GAP / 2.0;
     let mut rows = Vec::new();
     let mut labels = Vec::new();
@@ -275,7 +283,7 @@ fn layout_columns(fonts: &[LocatedFont], options: &TextLayout) -> Page {
             for (location, located) in fonts.iter().enumerate() {
                 let label = row_label(*size, &located.label, fonts.len());
                 let scale = size / f32::from(located.font.units_per_em());
-                let run = located.font.set_line(line, options.shaping);
+                let run = located.font.set_line(line, options.shaping)?;
                 let column = size.max(label_width(&label, ROW_LABEL_PIXEL));
                 labels.push(Label {
                     text: label,
@@ -298,13 +306,13 @@ fn layout_columns(fonts: &[LocatedFont], options: &TextLayout) -> Page {
             }
         }
     }
-    Page {
+    Ok(Page {
         width: ceil_pixels((cursor + MARGIN).max(MIN_WIDTH)),
         height: ceil_pixels(bottom + MARGIN),
         rows,
         guides: Vec::new(),
         labels,
-    }
+    })
 }
 
 fn row_label(size: f32, location: &str, locations: usize) -> String {
@@ -320,39 +328,56 @@ fn row_label(size: f32, location: &str, locations: usize) -> String {
     }
 }
 
-// Splits `line` greedily at spaces so each part fits `max_advance` font
-// units; a single word wider than the limit keeps its own row. Each part is
-// set whole, so kerning across the kept spaces is preserved.
+// Splits `line` greedily at shift-text's line break opportunities so each
+// part fits `max_advance` font units; a part wider than the limit on its own
+// keeps its own row. The spaces a part ends with at a break are dropped. Each
+// part is set whole, so kerning across the spaces it keeps is preserved.
 fn wrap(
     font: &ProofFont,
     line: &str,
     max_advance: Option<f32>,
     options: &ShapingOptions,
-) -> Vec<(String, ShapedRun)> {
+) -> Result<Vec<(String, ShapedRun)>, ProofError> {
     let Some(max_advance) = max_advance else {
-        return vec![(line.to_string(), font.set_line(line, options))];
+        return Ok(vec![(line.to_string(), font.set_line(line, options)?)]);
     };
 
     let mut parts = Vec::new();
-    let mut current: Option<(String, ShapedRun)> = None;
-    for word in line.split(' ') {
-        let candidate = match &current {
-            Some((text, _)) => format!("{text} {word}"),
-            None => word.to_string(),
-        };
-        let run = font.set_line(&candidate, options);
+    // The part being filled: where it starts, and the longest stretch from
+    // there that fits, with where that stretch ends.
+    let mut start = 0;
+    let mut current: Option<(usize, String, ShapedRun)> = None;
+    for end in break_offsets(line).into_iter().chain([line.len()]) {
+        let candidate = part_text(line, start..end);
+        let run = font.set_line(&candidate, options)?;
         if run.advance <= max_advance {
-            current = Some((candidate, run));
+            current = Some((end, candidate, run));
             continue;
         }
         match current.take() {
-            Some(fitted) => {
-                parts.push(fitted);
-                current = Some((word.to_string(), font.set_line(word, options)));
+            Some((fitted_end, text, fitted)) => {
+                parts.push((text, fitted));
+                start = fitted_end;
+                let rest = part_text(line, start..end);
+                let run = font.set_line(&rest, options)?;
+                current = Some((end, rest, run));
             }
-            None => parts.push((candidate, run)),
+            None => {
+                parts.push((candidate, run));
+                start = end;
+            }
         }
     }
-    parts.extend(current);
-    parts
+    parts.extend(current.map(|(_, text, run)| (text, run)));
+    Ok(parts)
+}
+
+// The text of `line[range]` as a wrapped part: without the spaces it ends
+// with, unless it ends the line.
+fn part_text(line: &str, range: std::ops::Range<usize>) -> String {
+    let text = &line[range.clone()];
+    if range.end == line.len() {
+        return text.to_string();
+    }
+    text.trim_end_matches(' ').to_string()
 }

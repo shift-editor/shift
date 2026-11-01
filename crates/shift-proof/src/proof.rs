@@ -67,7 +67,7 @@ pub struct ProofRequest {
     /// Pixels per em. Empty uses 72 for text and 48 for a grid, which takes
     /// exactly one size.
     pub sizes: Vec<f32>,
-    /// Fixed image width in pixels: text wraps at spaces, grids wrap cells.
+    /// Fixed image width in pixels: text wraps at line break opportunities, grids wrap cells.
     /// A grid defaults to [`DEFAULT_GRID_WIDTH`].
     pub width: Option<u32>,
     /// Draw ascender, cap-height, x-height, baseline, and descender guides
@@ -86,7 +86,7 @@ pub struct Proof {
 
 /// Shapes, lays out, and renders `request` against compiled font bytes.
 ///
-/// Every line is shaped with HarfRust at each location, so kerning and
+/// Every line is shaped with shift-text (HarfRust) at each location, so kerning and
 /// features apply exactly as compiled. Characters the font does not map and
 /// glyph names it lacks are drawn as red placeholders and listed in the
 /// report.
@@ -132,7 +132,7 @@ pub fn render_proof(font_data: &[u8], request: &ProofRequest) -> Result<Proof, P
                 guides: request.guides,
                 shaping: &request.shaping,
             };
-            layout_text(&fonts, &options)
+            layout_text(&fonts, &options)?
         }
         ProofMode::Grid => {
             let options = GridLayout {

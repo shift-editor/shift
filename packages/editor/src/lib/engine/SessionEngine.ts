@@ -10,6 +10,7 @@ import type {
 } from "@shift/types";
 import {
   FontChangeFlagSchema,
+  type Counterparts,
   type FeatureSubstitution,
   type FontChangeFlag,
   type FontFeature,
@@ -360,6 +361,18 @@ export class SessionEngine implements FontEngine {
     if (!session || glyphIds.length === 0) return;
     session.preload(glyphIds);
     this.#changed(LAYERS_CHANGE);
+  }
+
+  counterparts(
+    glyphId: GlyphId,
+    reference: LayerId,
+    target: LayerId,
+    ids: Counterparts,
+  ): Counterparts | null {
+    const session = this.#require();
+    // Loading a glyph changes nothing a reader holds, so no revision changes.
+    session.preload([glyphId]);
+    return session.counterparts(reference, target, ids);
   }
 
   newAnchorName(layerIds: readonly LayerId[]): string {

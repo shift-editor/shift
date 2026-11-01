@@ -142,7 +142,7 @@ An edit should cost what the edited thing costs, not what the font costs. A `Fon
 
 ## Rules the editor needs
 
-When the editor needs a shift-font rule synchronously, write it as a plain-data function in shift-font that native callers use, and export that function from `crates/shift-wasm`. Don't write a second Rust version for WebAssembly, and don't re-declare its types there: a `FontFeature` or `FeatureGroup` copied into `shift-wasm` beside `shift-shape`'s is two enums to keep in sync. Derive the wire format on the original type, or convert with one `From`. The export only converts numbers to and from shift-font types; "Choosing a route" in `crates/shift-wasm/docs/DOCS.md` says what belongs there and what may stay in TypeScript.
+When the editor needs a shift-font rule synchronously, write it as a plain-data function in shift-font that native callers use, and export that function from `crates/shift-wasm`. Don't write a second Rust version for WebAssembly, and don't re-declare its types there: a `FontFeature` or `FeatureGroup` copied into `shift-wasm` beside `shift-text`'s is two enums to keep in sync. Derive the wire format on the original type, or convert with one `From`. The export only converts numbers to and from shift-font types; "Choosing a route" in `crates/shift-wasm/docs/DOCS.md` says what belongs there and what may stay in TypeScript.
 
 ## Review checklist
 
@@ -158,6 +158,6 @@ When the editor needs a shift-font rule synchronously, write it as a plain-data 
 - [ ] No `unwrap_or_default()`, `unwrap_or(…)` or `.ok()` that turns an error into an empty answer.
 - [ ] No signature nesting three or more generic layers; no `filter_map` closure doing two `?`s into a tuple.
 - [ ] No `Option`/`bool` fields standing in for phases; no derived `PartialEq` deciding what a change costs; events and change kinds are enums or flag sets.
-- [ ] No type re-declared in `shift-wasm` that `shift-font` or `shift-shape` already defines.
+- [ ] No type re-declared in `shift-wasm` that `shift-font` or `shift-text` already defines.
 - [ ] No scan of the whole font for a query an edit repeats; indexes that must agree are declared on one type and updated through a copy; no `imbl` outside `ir/persistent.rs`.
 - [ ] `cargo fmt`, `cargo clippy` for the affected crates, and their tests pass.

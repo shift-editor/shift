@@ -27,7 +27,6 @@ import type {
   AnchorId,
   ContourId,
   LayerId,
-  LayerMatch,
   LayerRead,
   Location,
   PointId,
@@ -66,6 +65,7 @@ import type {
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
 import type {
+  Counterparts,
   FeatureSubstitution,
   FontFeature,
   GlyphIdentityChange,
@@ -1266,13 +1266,26 @@ export class Font {
   }
 
   /**
-   * Derives Rust-owned entity mappings between two authored layers.
+   * The `target` layer's points, anchors and components for `ids` in
+   * `reference`, each in the order given, as the window's engine matches the
+   * two layers (shift-font's `LayerMatch::counterparts`), unsaved edits
+   * included. A synchronous read: the engine loads the glyph first if it has
+   * not yet.
    *
-   * Incomplete results contain structural diagnostics but no partial entity
-   * mappings. The layers must belong to the same glyph.
+   * @returns null when the layers don't match completely, or there is no
+   * engine, as in a preview.
+   * @throws When no glyph owns `reference`, the engine's store cannot answer,
+   * or the engine cannot match the layers (layers of two glyphs, an id
+   * `reference` lacks).
    */
-  matchLayers(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch> {
-    return this.editCoordinator.matchLayers(referenceLayerId, targetLayerId);
+  counterparts(reference: LayerId, target: LayerId, ids: Counterparts): Counterparts | null {
+    const engine = this.#store.engine;
+    if (!engine) return null;
+
+    const glyphId = this.#store.glyphIdForLayer(reference);
+    if (!glyphId) throw new Error(`no glyph owns layer ${reference}`);
+
+    return engine.counterparts(glyphId, reference, target, ids);
   }
 
   /**

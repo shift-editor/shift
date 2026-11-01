@@ -129,7 +129,7 @@ shift proof Lab.shift --output proof.svg --width 1200 --json
 - Horizontal lines follow the Unicode bidirectional algorithm, with `--direction` as the paragraph direction (the first strong character otherwise), and are split into runs of one script before shaping. Right-to-left lines are right-aligned. Vertical text (`ttb`, `btt`) is set in columns, never wrapped and without guides.
 - `--metrics` draws ascender (purple), cap-height (teal), x-height (green), baseline (blue), and descender (orange) guides behind the rows at the largest size. The ascender and descender are the authored `OS/2` typo values, not the padded `hhea` line height.
 - `--grid` sets the glyphs of `--text` (characters and `/name` tokens; spaces only separate them), or every glyph in glyph order when there is no text, unshaped in cells with each glyph's name underneath, one grid per location. It takes one size (default `48`) and wraps at `--width` (default `1200`).
-- `--width` fixes the image width and wraps text at spaces; without it the image grows to fit the longest row.
+- `--width` fixes the image width and wraps text at line break opportunities (UAX #14: after spaces and hyphens, between ideographs, around `/name` glyphs); without it the image grows to fit the longest row.
 - `--format png|svg` picks the encoding; by default an `.svg` output is SVG and anything else is PNG.
 
 Text is black on white. Characters the font does not map shape to `.notdef` and are drawn in red (an inkless `.notdef` becomes a hollow red box); they are listed under `missing` in the human output and in `missingCharacters`, overall and per line, in the `--json` report. A text proof of a font that maps no characters is an error and writes nothing.

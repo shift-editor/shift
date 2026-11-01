@@ -22,12 +22,12 @@ import {
   type Axis,
   type GlyphId,
   type GlyphName,
-  type LayerMatch,
   type NamedInstance,
   type Source,
   type Unicode,
 } from "@shift/types";
 import type { Font } from "@shift/editor/model";
+import type { Counterparts } from "@shift/wasm/protocol";
 import { ShiftLayer } from "./ShiftLayer";
 import { ShiftSelectors } from "./ShiftSelectors";
 
@@ -223,13 +223,22 @@ export class ShiftFontReader {
   }
 
   /**
-   * How the `target` layer's contours, points, anchors and components
-   * correspond to the `reference` layer's, as the engine matches them.
+   * The `target` layer's points, anchors and components for `ids` in the
+   * `reference` layer, as the window's engine matches the two layers.
    *
-   * @throws {Error} as {@link getLayer} does, for either layer.
+   * @returns null when the layers don't match completely.
+   * @throws {Error} as {@link getLayer} does, for either layer, and as `Font.counterparts` does.
    */
-  async matchLayers(reference: LayerSelector, target: LayerSelector): Promise<LayerMatch> {
-    return this.#font.matchLayers(this.#select.layerId(reference), this.#select.layerId(target));
+  counterparts(
+    reference: LayerSelector,
+    target: LayerSelector,
+    ids: Counterparts,
+  ): Counterparts | null {
+    return this.#font.counterparts(
+      this.#select.layerId(reference),
+      this.#select.layerId(target),
+      ids,
+    );
   }
 
   /** @throws {Error} as {@link getLayer} does, or when a component cannot resolve. */

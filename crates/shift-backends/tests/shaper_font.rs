@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use shift_backends::GlyphCategories;
 use shift_backends::font_loader::FontLoader;
-use shift_shaper_font::{ShaperFont, ShaperFontRequest};
+use shift_text::shaper_font::{ShaperFont, ShaperFontRequest};
 
 #[test]
 fn imported_glyphs_features_compile_into_a_shaper_font() {

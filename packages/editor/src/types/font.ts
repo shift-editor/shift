@@ -11,7 +11,6 @@ import type {
   GlyphSnapshot,
   GlyphSnapshotRequest,
   LayerId,
-  LayerMatch,
   LayerRead,
   Location,
   WorkspaceDocumentState,
@@ -33,6 +32,7 @@ import type {
   SourceSetWeights,
 } from "../lib/wasm/engine";
 import type {
+  Counterparts,
   FeatureSubstitution,
   EditLocation,
   FontChangeFlag,
@@ -237,6 +237,24 @@ export interface FontEngine {
   preload(glyphIds: readonly GlyphId[]): void;
 
   /**
+   * The `target` layer's ids for `ids` in `reference`, two layers of
+   * `glyphId`, as shift-font matches them (`LayerMatch::counterparts`),
+   * unsaved edits included. Loads the glyph first if the engine has not:
+   * loading changes no answer a reader holds, so it bumps no revision.
+   *
+   * @returns null when the layers don't match completely.
+   * @throws When the engine is not open, the store's reader cannot answer, or
+   * the engine cannot match the layers (`CounterpartsReadError`: an unknown
+   * layer, layers of two glyphs, or an id `reference` lacks).
+   */
+  counterparts(
+    glyphId: GlyphId,
+    reference: LayerId,
+    target: LayerId,
+    ids: Counterparts,
+  ): Counterparts | null;
+
+  /**
    * The features the engine's shaper font defines, in tag order, each with
    * the name it is shown by, its default and its group.
    *
@@ -355,7 +373,6 @@ export interface WorkspaceEditCoordinator {
   readGlyphPreviews(glyphIds: readonly GlyphId[], location: Location): Promise<GlyphPreview[]>;
   readLayers(layerIds: readonly LayerId[]): Promise<readonly GlyphLayerSnapshot[]>;
   resolveLayers(layerIds: readonly LayerId[]): Promise<LayerRead[]>;
-  matchLayers(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch>;
   mapLocation(location: Location): Promise<Location>;
   settled(): Promise<void>;
   undo(): Promise<ReplayedChange | null>;

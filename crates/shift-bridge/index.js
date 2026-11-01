@@ -587,5 +587,4 @@ module.exports.NapiThemeAppearance = nativeBinding.NapiThemeAppearance
 module.exports.NapiThemeMode = nativeBinding.NapiThemeMode
 module.exports.themeRead = nativeBinding.themeRead
 module.exports.NapiComponentTransformKind = nativeBinding.NapiComponentTransformKind
-module.exports.NapiLayerDifferenceKind = nativeBinding.NapiLayerDifferenceKind
 module.exports.PointType = nativeBinding.PointType
