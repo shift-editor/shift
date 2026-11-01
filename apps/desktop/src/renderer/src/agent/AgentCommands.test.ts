@@ -165,6 +165,9 @@ describe("agents run the view commands the window's menu runs, and nothing else"
         command,
       ).rejects.toMatchObject({ name: "CommandNotRunnableError", command });
     }
+    await expect(agentCommands.run({ windowId: WINDOW_ID, command: "edit.undo" })).rejects.toThrow(
+      "shift.history.undo",
+    );
 
     expect(await editor.documentState()).toMatchObject({ dirty: true });
     expect(await editor.outline()).toEqual(outline);
