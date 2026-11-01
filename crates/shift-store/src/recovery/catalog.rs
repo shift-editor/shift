@@ -141,6 +141,9 @@ pub(super) const GLYPH_COMPONENTS: RecoveryTable =
     RecoveryTable::replace_collection("glyph_components", Some("layer_id"), false);
 pub(super) const DOCUMENT_METADATA: RecoveryTable =
     RecoveryTable::canonical_only("document_metadata");
+/// The scene: one whole row per node, removed by tombstone.
+pub(super) const SCENE_NODES: RecoveryTable =
+    RecoveryTable::overlay_rows("scene_nodes", Some("scene_node"), NO_BASE_FALLBACK_COLUMNS);
 
 const RECOVERY_TABLES: &[RecoveryTable] = &[
     FONT_INFO,
@@ -167,6 +170,7 @@ const RECOVERY_TABLES: &[RecoveryTable] = &[
     GLYPH_LAYER_PAYLOADS,
     GLYPH_COMPONENTS,
     DOCUMENT_METADATA,
+    SCENE_NODES,
 ];
 
 #[derive(Clone, Debug, Eq, PartialEq)]

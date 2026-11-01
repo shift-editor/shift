@@ -96,8 +96,6 @@ test.describe("Glyph rendering — S (quadratic curves)", () => {
 });
 
 test.describe("Glyph rendering — zoom", () => {
-  test.use({ sharedWorkspace: true });
-
   test(
     "handles and control lines stay crisp at high zoom",
     { tag: "@golden" },
@@ -274,8 +272,6 @@ test.describe("Segment selection rendering", () => {
 });
 
 test.describe("Glyph rendering — multiple glyphs", () => {
-  test.use({ sharedWorkspace: true });
-
   test("B glyph — mixed curves and straights", { tag: "@golden" }, async ({ editor }) => {
     await editor.openGlyphByUnicode(GLYPH_B);
     await expectCanvasSnapshot(editor, "canvas-B-composited.png");

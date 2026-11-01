@@ -20,6 +20,7 @@ import {
   initSync,
   internName,
   nameOf,
+  scenesRequest,
   takeReplyBlobs,
   variationRequest,
   type InitOutput,
@@ -33,6 +34,7 @@ import {
   Drag,
   Geometry,
   IndexKeys,
+  Scenes,
   Variation,
 } from "./generated-protocol";
 import { moduleNames } from "./names";
@@ -56,6 +58,11 @@ export const drag = new Drag(syncTransport(dragRequest, names, takeReplyBlobs));
 export const geometry = new Geometry(syncTransport(geometryRequest, names, takeReplyBlobs));
 /** The keys that order a scene node among its siblings, as shift-font makes and compares them. */
 export const indexKeys = new IndexKeys(syncTransport(indexKeysRequest, names, takeReplyBlobs));
+/**
+ * Scenes held apart from any editing engine, for a session that has none:
+ * shift-engine's scene, with nothing persisted.
+ */
+export const scenes = new Scenes(syncTransport(scenesRequest, names, takeReplyBlobs));
 /**
  * Axis mapping, interpolation weights and compiled deltas for a font without
  * an editing engine, each call carrying the axes and bases it evaluates.

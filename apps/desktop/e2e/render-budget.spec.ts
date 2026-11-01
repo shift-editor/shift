@@ -34,6 +34,8 @@ const BUDGET = { scrub: 70, marquee: 135 };
 test.describe("render budget", () => {
   test.beforeEach(async ({ page, editor }) => {
     await editor.openGlyphByName("A");
+    // Opening the glyph places it, a document edit: let it settle before counting.
+    await editor.waitForIdle();
     await installRenderCounter(page, () => expect(editorShell(page)).toBeVisible());
   });
 

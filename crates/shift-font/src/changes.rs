@@ -39,11 +39,14 @@ pub enum FontChangeFlag {
     /// A glyph layer's outline, advance, components or anchors: what text
     /// lays out from.
     Layers,
+    /// The canvas the font is shown on: its pages, text runs and placed
+    /// glyphs. A font change never sets it; a scene edit does.
+    Scene,
 }
 
 impl FontChangeFlag {
     /// Every flag, in bit order.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Metadata,
         Self::Languages,
         Self::Glyphs,
@@ -56,6 +59,7 @@ impl FontChangeFlag {
         Self::Sources,
         Self::Kerning,
         Self::Layers,
+        Self::Scene,
     ];
 
     /// The flag's bit in a [`FontChangeImpact`].
@@ -91,6 +95,8 @@ bitflags! {
         const KERNING = FontChangeFlag::Kerning.bit();
         /// A glyph layer's outline, advance, components or anchors.
         const LAYERS = FontChangeFlag::Layers.bit();
+        /// The canvas the font is shown on, which only scene edits change.
+        const SCENE = FontChangeFlag::Scene.bit();
     }
 }
 

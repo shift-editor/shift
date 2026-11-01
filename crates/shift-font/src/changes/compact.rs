@@ -69,6 +69,11 @@ impl FontChangeSet {
 }
 
 impl CompactChangeSet {
+    /// Whether the set changes nothing.
+    pub fn is_empty(&self) -> bool {
+        self.changes.is_empty()
+    }
+
     /// The layers a receiver must have loaded before
     /// [`CompactChangeSet::expand`]: those sent as values.
     pub fn value_layer_ids(&self) -> impl Iterator<Item = LayerId> + '_ {

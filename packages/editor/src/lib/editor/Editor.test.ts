@@ -1,7 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { asGlyphId, asPointId, mintContourId, mintNodeId, mintPointId } from "@shift/types";
+import {
+  asGlyphId,
+  asPointId,
+  mintContourId,
+  mintNodeId,
+  mintPointId,
+  mintRunId,
+} from "@shift/types";
 import { startEmptyMemorySession } from "../../testing/emptyMemorySession";
 import type { MemoryFontSession } from "../../types/fontSession";
+import { IndexKey } from "../../types/indexKey";
 import type { GlyphNode, TextRunNode } from "../../types/node";
 import { effect } from "../signals";
 import type { Editor } from "./Editor";
@@ -20,7 +28,7 @@ describe("Editor scene", () => {
     editor = session.editor;
     run = editor.scene.createNode<TextRunNode>({
       kind: "textRun",
-      runId: editor.text.createRun([]).id,
+      runId: mintRunId(),
       size: 1000,
       position: { x: 0, y: 0 },
     });
@@ -59,6 +67,14 @@ describe("Editor scene", () => {
     editor.scene.updateNode({ id: node!.id, position: { x: 40, y: 0 } });
     expect(editor.scene.cell.peek()).not.toBe(scene);
     expect(editor.scene.nodes()[0]?.position).toEqual({ x: 40, y: 0 });
+  });
+
+  it("leaves the scene as it is when a glyph node is shown in the source it already shows", () => {
+    const scene = editor.scene.cell.peek();
+
+    editor.scene.updateNode({ id: child.id, sourceId: child.sourceId });
+
+    expect(editor.scene.cell.peek()).toBe(scene);
   });
 
   it("names the one glyph node only while the scene shows exactly one", () => {
@@ -106,6 +122,7 @@ describe("Editor scene", () => {
   it("can place the same glyph id twice with distinct node ids", () => {
     const left = mintNodeId();
     const right = mintNodeId();
+    const leftIndex = IndexKey.between(null, null);
 
     editor.scene.setNodes([
       {
@@ -113,7 +130,7 @@ describe("Editor scene", () => {
         type: "node",
         kind: "glyph",
         parentId: null,
-        index: "a0",
+        index: leftIndex,
         glyphId,
         sourceId: editor.font.defaultSource.id,
         position: { x: 0, y: 0 },
@@ -123,7 +140,7 @@ describe("Editor scene", () => {
         type: "node",
         kind: "glyph",
         parentId: null,
-        index: "a1",
+        index: IndexKey.between(leftIndex, null),
         glyphId,
         sourceId: editor.font.defaultSource.id,
         position: { x: 700, y: 0 },
