@@ -33,6 +33,9 @@ test.describe("Home view", () => {
       .getByRole("button")
       .filter({ has: page.getByText("English", { exact: true }) });
     await expect(english).toContainText(/\d+\/\d+/);
+    // The sidebar scrolls to the expanded language or not depending on timing; show it either way.
+    await english.scrollIntoViewIfNeeded();
+    await page.mouse.move(0, 0);
     await expectPanelSnapshot(fontNavigation(page), "home-language-coverage.png");
 
     const presentCount = (await english.textContent())?.match(/(\d+)\/\d+/)?.[1];
