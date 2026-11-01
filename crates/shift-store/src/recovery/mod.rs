@@ -126,6 +126,7 @@ impl ShiftStore {
         if self.recovery.is_none() {
             return Err(StoreError::DocumentRequiresRecoveryOverlay);
         }
+        self.list_navigation_nodes()?;
         for table in catalog::load_recovery_table_shapes(&self.conn)? {
             let Some(differs) = views::differs_from_saved_sql(&table) else {
                 continue;
@@ -138,6 +139,44 @@ impl ShiftStore {
             }
         }
         Ok(true)
+    }
+
+    /// Lists the glyph pages' nodes, which are navigation, where the saved
+    /// comparison passes over them.
+    fn list_navigation_nodes(&self) -> Result<(), StoreError> {
+        let table = views::NAVIGATION_NODES;
+        self.conn.execute_batch(&format!(
+            "CREATE TEMP TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY);
+             DELETE FROM temp.{table};"
+        ))?;
+        let mut insert = self
+            .conn
+            .prepare(&format!("INSERT INTO temp.{table} (id) VALUES (?1)"))?;
+        for id in self.load_scene()?.glyph_page_nodes() {
+            insert.execute([id.as_str()])?;
+        }
+        Ok(())
+    }
+
+    /// Settles a document whose unsaved changes [`Self::recovery_matches_saved`]
+    /// found equal to the save: drops them, or, when the overlay holds glyph
+    /// pages, which are navigation and would be lost, keeps it marked clean.
+    pub(crate) fn settle_matching_recovery(&mut self) -> Result<(), StoreError> {
+        let holds_navigation: bool = self.conn.query_row(
+            "SELECT EXISTS (SELECT 1 FROM recovery.scene_nodes)
+                 OR EXISTS (SELECT 1 FROM recovery.recovery_tombstones WHERE entity_kind = ?1)",
+            [catalog::SCENE_NODES
+                .tombstone_kind()
+                .expect("scene nodes support tombstones")],
+            |row| row.get(0),
+        )?;
+        if !holds_navigation {
+            return self.discard_recovery();
+        }
+        self.recovery
+            .as_mut()
+            .ok_or(StoreError::DocumentRequiresRecoveryOverlay)?
+            .mark_clean()
     }
 
     /// Applies sparse unsaved changes to the canonical document and acknowledges the commit.

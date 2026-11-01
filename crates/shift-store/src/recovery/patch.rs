@@ -15,7 +15,7 @@ use super::{
     },
 };
 use crate::{
-    FontInfo, StoreError, change_set::StoreWriter, layer::write_layer_in_tx,
+    FontInfo, SaveState, StoreError, change_set::StoreWriter, layer::write_layer_in_tx,
     scene::write_scene_changes_in_tx, workspace_state::Revision, write_mode::WriteMode,
 };
 use shift_engine::scene::SceneChangeSet;
@@ -29,6 +29,7 @@ impl RecoveryOverlay {
         post_font: &font::Font,
         scene: &SceneChangeSet,
         preserved_font_info: Option<&FontInfo>,
+        save_state: SaveState,
     ) -> Result<(), StoreError> {
         if change_set.is_empty() && scene.is_empty() {
             return Ok(());
@@ -223,7 +224,10 @@ impl RecoveryOverlay {
             |tx, id| mark_tombstone(tx, SCENE_NODES, id),
             |tx, id| clear_tombstone(tx, SCENE_NODES, id),
         )?;
-        mark_dirty(&tx, Revision::of(change_set))?;
+        // Navigation keeps its rows but leaves a clean overlay clean.
+        if save_state != SaveState::Unchanged {
+            mark_dirty(&tx, Revision::of(change_set))?;
+        }
         tx.commit()?;
         Ok(())
     }

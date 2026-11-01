@@ -6,7 +6,7 @@ use pack::Pack;
 use serde::{Deserialize, Serialize};
 use shift_font::{CompactChangeSet, FontChangeImpact, FontChangeSet, GlyphId, NodeId};
 
-use crate::scene::SceneChangeSet;
+use crate::scene::{Scene, SceneChangeSet};
 
 /// One edit's changes to the font and to the scene, made, undone and
 /// persisted as one.
@@ -19,6 +19,14 @@ pub struct DocumentChangeSet {
 impl DocumentChangeSet {
     pub fn is_empty(&self) -> bool {
         self.font.is_empty() && self.scene.is_empty()
+    }
+
+    /// Whether this is navigation rather than an edit: it changes no font
+    /// and only glyph pages and what is on them, as opening a glyph tab does.
+    /// It is still persisted, so the page survives reopening, but leaves the
+    /// document as saved. `scene` is the scene after the change.
+    pub fn is_navigation(&self, scene: &Scene) -> bool {
+        self.font.is_empty() && scene.changes_only_glyph_pages(&self.scene)
     }
 
     /// The change set that takes this one back.

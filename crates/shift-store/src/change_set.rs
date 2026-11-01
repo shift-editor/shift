@@ -114,11 +114,12 @@ impl ShiftStore {
                 post_font,
                 scene,
                 preserved_font_info.as_ref(),
+                save_state,
             )?;
             // A claim to match the saved document is checked, never trusted:
             // discarding on a wrong claim would lose every unsaved edit.
             if save_state == SaveState::MatchesSaved && self.recovery_matches_saved()? {
-                self.discard_recovery()?;
+                self.settle_matching_recovery()?;
             }
             return Ok(());
         }

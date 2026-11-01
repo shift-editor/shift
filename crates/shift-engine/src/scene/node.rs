@@ -209,6 +209,18 @@ impl SceneNode {
         matches!(self.content, NodeContent::Page { .. })
     }
 
+    /// Whether the node is a glyph page, which shows one glyph outside the
+    /// user's pages, as a glyph tab does.
+    pub fn is_glyph_page(&self) -> bool {
+        matches!(
+            self.content,
+            NodeContent::Page {
+                role: Some(PageRole::Glyph),
+                ..
+            }
+        )
+    }
+
     /// Gives a text run `current`'s items and settings in place of its own,
     /// as an update, which never changes them, does; other kinds are
     /// unchanged.

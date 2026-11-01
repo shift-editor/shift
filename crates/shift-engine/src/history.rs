@@ -159,6 +159,9 @@ impl EditHistory {
                     change_set: change_set.clone(),
                 });
             }
+            // Navigation leaves the document as saved, so the history still
+            // reaches the save by undo or redo.
+            Recording::Unrecorded if change_set.is_navigation(scene) => {}
             Recording::Unrecorded => self.saved = None,
         }
         Ok(Some(change_set))
