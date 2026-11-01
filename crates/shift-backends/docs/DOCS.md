@@ -58,6 +58,7 @@ src/
   import_report.rs   -- source-to-Shift fidelity losses
   font_source/
     mod.rs            -- FontSource/FontImporter split and OpenedFont dispatch
+    authored.rs       -- AuthoredSource: a UFO, designspace or Glyphs file read glyph by glyph with import's conversion
     error.rs          -- FontReadError classification for retained-source reads
     types.rs          -- source-local indexes, directories, shapes, deltas, and projections
     projection.rs     -- shared master-model compilation and exact-source handling
@@ -91,6 +92,7 @@ src/
 - `SourceAtlasDescriptor` -- small mapping and weight evaluator retained after `SourceAtlasPage::into_parts` separates disposable CPU geometry
 - `SourceAtlasError` -- direct atlas read, format-capability, and Slug construction failures
 - `OpenTypeFont` / `UfoFont` / `DesignspaceFont` / `GlyphsFont` -- concrete retained source generations
+- `AuthoredSource` -- a UFO, designspace or Glyphs file read glyph by glyph: `open` returns it with its directory (every layer a placeholder that keeps its advance), reading each glyph's identity, advances, component bases and anchor names without converting outlines; `glyph` and `layers` convert on request through the import stream's own conversion, with the layer ids the directory gave them, and the component and attaching-anchor queries answer from indexes built at open. shift-bridge's `SourceReader` answers the engine's `StoreReader` from it
 - `FontImport` -- top-level authored header, an immediately publishable stable-ID/name directory, `ImportReport`, and layer-aware `next_batch(limit)`, with no glyphs stored in the header
 - `ImportReport` / `ImportLoss` -- source concepts converted, approximated, or omitted because Shift cannot represent identical semantics; never malformed-data diagnostics
 - `GlyphDirectoryEntry` -- cheap source glyph ID and name used before geometry batches are parsed
@@ -110,7 +112,7 @@ src/
 
 ## How it works
 
-**Loading a font:** `FontLoader::open_source` dispatches TTF/OTF, UFO/Designspace, and Glyphs/Glyphspackage into immutable retained handles. Opening constructs the complete directory and retains source bytes or a parsed source model, but creates no authored `Font`, layer, point identity, or workspace. `FontSource::glyph` lazily parses/projects only the requested root and every transitive component dependency, with no location argument. `FontLoader::read_font` and `stream_font` remain separate explicit authored-conversion APIs.
+**Loading a font:** `FontLoader::open_source` dispatches TTF/OTF, UFO/Designspace, and Glyphs/Glyphspackage into immutable retained handles. Opening constructs the complete directory and retains source bytes or a parsed source model, but creates no authored `Font`, layer, point identity, or workspace. `FontSource::glyph` lazily parses/projects only the requested root and every transitive component dependency, with no location argument. `FontLoader::read_font` and `stream_font` remain separate explicit authored-conversion APIs. `AuthoredSource::open` sits between them: it opens the same import stream, so its header, glyph ids and glyph order are import's, but converts each glyph only when asked, so a glyph read alone equals the glyph a full import produces.
 
 **Point type mapping (read):** norad uses separate `Move`, `Line`, `Curve`, `OffCurve`, `QCurve` types. The IR collapses `Move`/`Line`/`Curve` into `OnCurve` and keeps `OffCurve` and `QCurve` distinct. On write, context (position in contour, open/closed, preceding point type) is used to reconstruct the correct norad variant.
 

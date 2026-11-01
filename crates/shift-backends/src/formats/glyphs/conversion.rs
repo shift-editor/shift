@@ -434,19 +434,26 @@ pub(super) fn add_intermediate_sources(
     }
 }
 
-pub(super) fn imported_layer_count(glyph: &GlyphsGlyph, sources: &GlyphsLayerSources) -> usize {
-    glyph
-        .layers
-        .iter()
-        .filter(|layer| sources.source_id(layer).is_some())
-        .count()
+impl GlyphsLayerSources {
+    /// The layers of `glyph` that import converts, each with its source, in
+    /// the file's order: master and intermediate layers.
+    pub(super) fn imported<'a>(
+        &'a self,
+        glyph: &'a GlyphsGlyph,
+    ) -> impl Iterator<Item = (&'a GlyphsLayer, SourceId)> + 'a {
+        glyph
+            .layers
+            .iter()
+            .filter_map(|layer| Some((layer, self.source_id(layer)?)))
+    }
 }
 
-pub(super) fn convert_glyph(
-    glyph: &GlyphsGlyph,
-    glyph_ids: &HashMap<String, GlyphId>,
-    sources: &GlyphsLayerSources,
-) -> FormatBackendResult<Glyph> {
+pub(super) fn imported_layer_count(glyph: &GlyphsGlyph, sources: &GlyphsLayerSources) -> usize {
+    sources.imported(glyph).count()
+}
+
+/// `glyph`'s id, name, codepoints and the categories it sets, with no layers.
+pub(super) fn glyph_identity(glyph: &GlyphsGlyph, glyph_ids: &HashMap<String, GlyphId>) -> Glyph {
     let glyph_id = *glyph_ids
         .get(glyph.name.as_str())
         .expect("every Glyphs glyph should have a published identity");
@@ -468,14 +475,36 @@ pub(super) fn convert_glyph(
     );
     result.set_category(overrides.category);
     result.set_sub_category(overrides.sub_category);
+    result
+}
 
-    for layer in &glyph.layers {
-        let Some(source_id) = sources.source_id(layer) else {
-            continue;
-        };
+/// The id of the glyph named `name`, which a component uses as its base.
+///
+/// # Errors
+///
+/// Returns [`FormatBackendError::Glyphs`] when the file has no glyph `name`.
+pub(super) fn component_base_id(
+    glyph_ids: &HashMap<String, GlyphId>,
+    name: &str,
+) -> FormatBackendResult<GlyphId> {
+    glyph_ids
+        .get(name)
+        .copied()
+        .ok_or_else(|| FormatBackendError::Glyphs(missing_component_details(name)))
+}
 
+/// Converts `glyph`, giving its imported layers (see
+/// [`GlyphsLayerSources::imported`]) the ids `layer_ids` yields, in order.
+pub(super) fn convert_glyph(
+    glyph: &GlyphsGlyph,
+    glyph_ids: &HashMap<String, GlyphId>,
+    sources: &GlyphsLayerSources,
+    layer_ids: impl IntoIterator<Item = LayerId>,
+) -> FormatBackendResult<Glyph> {
+    let mut result = glyph_identity(glyph, glyph_ids);
+    for ((layer, source_id), layer_id) in sources.imported(glyph).zip(layer_ids) {
         let mut result_layer =
-            GlyphLayer::with_width(LayerId::new(), source_id, layer.width.into_inner());
+            GlyphLayer::with_width(layer_id, source_id, layer.width.into_inner());
         for shape in &layer.shapes {
             match shape {
                 Shape::Path(path) => {
@@ -491,14 +520,9 @@ pub(super) fn convert_glyph(
                     result_layer.add_contour(contour);
                 }
                 Shape::Component(component) => {
-                    let base_glyph_id =
-                        glyph_ids.get(component.name.as_str()).ok_or_else(|| {
-                            FormatBackendError::Glyphs(missing_component_details(
-                                component.name.as_str(),
-                            ))
-                        })?;
+                    let base_glyph_id = component_base_id(glyph_ids, component.name.as_str())?;
                     result_layer.add_component(Component::with_matrix(
-                        *base_glyph_id,
+                        base_glyph_id,
                         component.name.to_string(),
                         &Transform::from_values(component.transform.as_coeffs()),
                     ));
@@ -649,8 +673,20 @@ mod tests {
             ("b".to_string(), GlyphId::new()),
         ]);
 
-        let a = convert_glyph(&glyphs_font.glyphs["a"], &glyph_ids, &sources).unwrap();
-        let b = convert_glyph(&glyphs_font.glyphs["b"], &glyph_ids, &sources).unwrap();
+        let a = convert_glyph(
+            &glyphs_font.glyphs["a"],
+            &glyph_ids,
+            &sources,
+            std::iter::repeat_with(LayerId::new),
+        )
+        .unwrap();
+        let b = convert_glyph(
+            &glyphs_font.glyphs["b"],
+            &glyph_ids,
+            &sources,
+            std::iter::repeat_with(LayerId::new),
+        )
+        .unwrap();
 
         let brace = font
             .sources()

@@ -9,7 +9,7 @@ pub(crate) use conversion::{
     GlyphsAnchorExt, GlyphsFontExt, GlyphsMasterExt, font_header, missing_component_details,
 };
 pub(crate) use families::InstanceFamilies;
-pub(crate) use import::{stream_font, stream_retained};
+pub(crate) use import::{GlyphsAuthoredGlyphs, stream_font, stream_retained};
 pub use reader::GlyphsReader;
 pub use source::GlyphsFont;
 

@@ -5,7 +5,7 @@ use crate::import::collect_streamed_font;
 use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
 use shift_font::{
-    Anchor, Component, Contour, FeatureData, Font, GlyphId, GlyphLayer, Guideline, LayerId,
+    Anchor, Component, Contour, FeatureData, Font, Glyph, GlyphId, GlyphLayer, Guideline, LayerId,
     LibData, LibValue, PointType, SourceId, StandardMetrics, Transform,
 };
 use std::collections::{BTreeMap, HashMap};
@@ -183,11 +183,8 @@ impl UfoReader {
         layer_id: LayerId,
         source_id: SourceId,
     ) -> (GlyphLayer, Vec<PendingComponent>) {
-        let mut glyph_layer = GlyphLayer::with_width(layer_id, source_id, norad_glyph.width);
+        let mut glyph_layer = Self::placeholder_layer(norad_glyph, layer_id, source_id);
         let mut pending_components = Vec::new();
-        if norad_glyph.height != 0.0 {
-            glyph_layer.set_height(Some(norad_glyph.height));
-        }
 
         for contour in &norad_glyph.contours {
             glyph_layer.add_contour(Self::convert_contour(contour));
@@ -212,6 +209,44 @@ impl UfoReader {
         (glyph_layer, pending_components)
     }
 
+    /// Gives `glyph` the codepoints and lib of `first`, the GLIF of its first
+    /// layer: a UFO keeps them per layer, and import reads the default
+    /// layer's.
+    pub(crate) fn set_glyph_identity(glyph: &mut Glyph, first: &norad::Glyph) {
+        glyph.set_unicodes(first.codepoints.iter().map(u32::from).collect());
+        if !first.lib.is_empty() {
+            *glyph.lib_mut() = Self::convert_lib(&first.lib);
+        }
+    }
+
+    /// `norad_glyph`'s advance as a layer with no content: what a directory
+    /// holds for the layer before it is loaded. A GLIF height of 0 is no height.
+    pub(crate) fn placeholder_layer(
+        norad_glyph: &norad::Glyph,
+        layer_id: LayerId,
+        source_id: SourceId,
+    ) -> GlyphLayer {
+        let mut layer = GlyphLayer::with_width(layer_id, source_id, norad_glyph.width);
+        if norad_glyph.height != 0.0 {
+            layer.set_height(Some(norad_glyph.height));
+        }
+        layer
+    }
+
+    /// The id of the glyph named `name`, which a component uses as its base.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FormatBackendError::Ufo`] when the font has no glyph `name`.
+    pub(crate) fn component_base_id(
+        glyph_ids: &HashMap<String, GlyphId>,
+        name: &str,
+    ) -> FormatBackendResult<GlyphId> {
+        glyph_ids.get(name).copied().ok_or_else(|| {
+            FormatBackendError::Ufo(format!("component base glyph {name:?} does not exist"))
+        })
+    }
+
     pub(crate) fn convert_stream_layer(
         norad_glyph: &norad::Glyph,
         layer_id: LayerId,
@@ -221,14 +256,9 @@ impl UfoReader {
         let (mut layer, pending_components) =
             Self::convert_layer_geometry(norad_glyph, layer_id, source_id);
         for pending in pending_components {
-            let base_glyph_id = glyph_ids.get(&pending.base_glyph_name).ok_or_else(|| {
-                FormatBackendError::Ufo(format!(
-                    "component base glyph {:?} does not exist",
-                    pending.base_glyph_name
-                ))
-            })?;
+            let base_glyph_id = Self::component_base_id(glyph_ids, &pending.base_glyph_name)?;
             layer.add_component(Component::with_matrix(
-                *base_glyph_id,
+                base_glyph_id,
                 pending.base_glyph_name,
                 &pending.matrix,
             ));

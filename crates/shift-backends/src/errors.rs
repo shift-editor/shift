@@ -23,6 +23,9 @@ pub enum BackendError {
     #[error("streaming import is not supported for {} fonts", format.name())]
     StreamingUnsupported { format: FontFormat },
 
+    #[error("{} fonts cannot be read glyph by glyph as an authored source", format.name())]
+    AuthoredUnsupported { format: FontFormat },
+
     #[error("font format adaptor is not registered: {}", format.name())]
     MissingAdaptor { format: FontFormat },
 
