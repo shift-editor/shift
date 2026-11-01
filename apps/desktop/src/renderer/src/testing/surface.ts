@@ -623,10 +623,12 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   /** Makes the window's engine fail its next glyph preload with `message`. Test-only. */
   failNextGlyphPreload(message: string): void;
   /**
-   * Makes the window's engine fail to list the font's features with
-   * `message`, as a shaper font that cannot be read would. Test-only.
+   * Makes the window's engine fail to list the font's features as it does
+   * for a font with no shaper font, for `reason`. Test-only.
    */
-  failFeatureLists(message: string): void;
+  failFeatureLists(reason: string): void;
+  /** What the Features section says when the font's features cannot be listed; null when they can. */
+  featureListFailure(): string | null;
   /**
    * Saves the document, as File › Save does. A document never saved yet is
    * saved to a temporary file, as if Save As chose one; {@link close} removes it.

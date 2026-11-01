@@ -13,9 +13,15 @@ export class FailingWindowEngine extends WindowEngine {
   #preloadFailure: Error | null = null;
   #featureListFailure: Error | null = null;
 
-  /** Makes every feature list read throw `error`, as a shaper font that cannot be read would. */
-  failFeatureLists(error: Error): void {
-    this.#featureListFailure = error;
+  /**
+   * Makes every feature list read fail as the engine does when the font has
+   * no shaper font: with a `FeatureListError` saying why.
+   */
+  failFeatureLists(reason: string): void {
+    this.#featureListFailure = Object.assign(new Error("FeatureListError.noShaper"), {
+      type: "FeatureListError",
+      error: { kind: "noShaper", reason },
+    });
   }
 
   /** Makes the next layout read throw `error`. */

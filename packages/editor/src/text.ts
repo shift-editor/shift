@@ -21,3 +21,4 @@ export type {
   TextRunRecord,
   TextRunSettings,
 } from "./types/text";
+export { featureReadMessage } from "./lib/text/featureErrors";
