@@ -8,6 +8,7 @@ import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunNode } from "../../types/node";
 import type {
   FeatureHighlight,
+  FeatureListing,
   StoredTextRunRecord,
   TextHighlight,
   TextLayoutFailure,
@@ -104,11 +105,35 @@ export class Text {
    *
    * @remarks
    * Follows the shaper font: editing what it compiles from lists the new
-   * features once it recompiles. Empty in a preview, which has no engine.
+   * features once it recompiles. Empty in a preview, which has no engine;
+   * `failed`, with why, when the font has no shaper font or it cannot be
+   * read, so a list that could not be read is never shown as empty.
    */
-  readonly featuresCell: Signal<readonly FontFeature[]> = computed(
-    () => this.#editor.font.fontFeatures(),
-    { name: "text.features", equals: sameFeatures },
+  readonly featuresCell: Signal<FeatureListing> = computed(
+    (): FeatureListing => {
+      try {
+        return { kind: "listed", features: this.#editor.font.fontFeatures() };
+      } catch (error) {
+        return { kind: "failed", error };
+      }
+    },
+    { name: "text.features", equals: sameListing },
+  );
+
+  /**
+   * The first run whose text has no layout, or whose layout could not load
+   * what it shows, with why; null while every run lays out. The editor
+   * shows it, so a failed layout is never just an empty run.
+   */
+  readonly layoutFailureCell: ComputedSignal<TextLayoutFailure | null> = computed(
+    () => {
+      for (const run of this.#store.recordsOfType("textrun")) {
+        const failure = this.#runs.get(run.id).failureCell.value;
+        if (failure) return failure;
+      }
+      return null;
+    },
+    { name: "text.layoutFailure" },
   );
 
   readonly #substitutions = keyedCache({
@@ -415,7 +440,7 @@ export class Text {
    * (glyphs into the engine, or a preview's layout module); null while it
    * lays out and loads what it shows.
    */
-  layoutFailureCell(id: RunId): Signal<TextLayoutFailure | null> {
+  runLayoutFailureCell(id: RunId): Signal<TextLayoutFailure | null> {
     return this.#runs.get(id).failureCell;
   }
 
@@ -458,6 +483,7 @@ export class Text {
   }
 
   dispose(): void {
+    this.layoutFailureCell.dispose();
     this.#unsubscribeStore();
     this.#runsByItem.dispose();
     this.#runs.clear();
@@ -508,6 +534,12 @@ export class Text {
       this.#loading.delete(id);
     }
   }
+}
+
+/** Whether two listings list the same features, or are the same failure. */
+function sameListing(a: FeatureListing, b: FeatureListing): boolean {
+  if (a.kind === "listed" && b.kind === "listed") return sameFeatures(a.features, b.features);
+  return a === b;
 }
 
 /** Whether two feature lists list the same features, every field alike, in the same order. */

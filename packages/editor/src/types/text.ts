@@ -1,5 +1,5 @@
 import type { GlyphId, NodeId, RunId, SourceId, TextItemId } from "@shift/types";
-import type { PlacedText, TextAlign } from "@shift/wasm/protocol";
+import type { FontFeature, PlacedText, TextAlign } from "@shift/wasm/protocol";
 import type { CaretEdge, Direction, TextItem } from "../lib/text/layout/types";
 import type { ExternalAxisLocation } from "./variation";
 
@@ -18,6 +18,14 @@ export interface TextLayoutFailure {
 export type RunLaidOut =
   | { readonly kind: "placed"; readonly placed: PlacedText }
   | { readonly kind: "failed"; readonly failure: TextLayoutFailure };
+
+/**
+ * The features a font's shaper font defines, as Rust lists them, or why
+ * they could not be listed.
+ */
+export type FeatureListing =
+  | { readonly kind: "listed"; readonly features: readonly FontFeature[] }
+  | { readonly kind: "failed"; readonly error: unknown };
 
 /** Where text is laid out: the location shown, and the source edited, which takes precedence. */
 export interface TextPlace {

@@ -28,12 +28,14 @@ mod exports {
 
     use shift_font::interpolation::KerningBlend;
     use shift_font::{DesignLocation, ExternalLocation, Font, FontChangeImpact, ShaperFontSource};
-    use shift_layout::{LayoutError, LayoutFont, LayoutRequest, LineMetrics, TextLayout};
+    use shift_layout::{
+        LayoutError, LayoutFont, LayoutRequest, LineMetrics, PlacementKeys, TextLayout,
+    };
     use shift_shape::ShapeError;
     use shift_shaper_font::{LiveShaper, ShaperFontError, ShaperFontRequest, ShaperFontState};
 
     use super::ShapingFailure;
-    use crate::engine_reads::{FeatureSubstitution, FontFeature};
+    use crate::engine_reads::{FeatureListError, FeatureSubstitution, FontFeature};
 
     /// A session's shaper: the shaper font compiled from the session's font,
     /// and a shaper over it that maps characters through the font's Unicode
@@ -44,6 +46,8 @@ mod exports {
     /// bring it up to date.
     pub(crate) struct TextShaping {
         state: RefCell<ShaperState>,
+        /// The placement keys this session's layouts carry.
+        placements: RefCell<PlacementKeys>,
     }
 
     struct ShaperState {
@@ -67,6 +71,7 @@ mod exports {
                     failure: None,
                     stale: true,
                 }),
+                placements: RefCell::default(),
             }
         }
     }
@@ -152,22 +157,29 @@ mod exports {
                 &class,
                 LineMetrics::at(font, &place.design),
             );
-            TextLayout::new(&layout_font, request)
+            let mut layout = TextLayout::new(&layout_font, request)?;
+            self.placements.borrow_mut().assign(&mut layout);
+            Ok(layout)
         }
 
         /// The features the shaper font defines, in tag order, with the
-        /// shaper brought up to date first as for [`Self::layout_text`];
-        /// empty when there is no shaper or its font cannot be read.
+        /// shaper brought up to date first as for [`Self::layout_text`].
+        ///
+        /// # Errors
+        ///
+        /// Returns [`FeatureListError::NoShaper`] when no shaper could be
+        /// made, with why, and [`FeatureListError::Unreadable`] when its
+        /// font cannot be read.
         pub(crate) fn features<E: std::fmt::Display>(
             &self,
             font: &Font,
             source: impl FnOnce() -> Result<ShaperFontSource, E>,
-        ) -> Vec<FontFeature> {
+        ) -> Result<Vec<FontFeature>, FeatureListError> {
             let state = self.current(font, source);
-            let Ok(shaper) = state.shaper() else {
-                return Vec::new();
-            };
-            shaper.features().unwrap_or_default()
+            let shaper = state
+                .shaper()
+                .map_err(|reason| FeatureListError::NoShaper { reason })?;
+            shaper.features().map_err(FeatureListError::unreadable)
         }
 
         /// Every substitution feature `tag` can make in the shaper font, with
@@ -298,7 +310,9 @@ mod exports {
         use shift_layout::{LayoutRequest, LayoutUnit, TextLayout, TextOptions};
 
         use super::{TextPlace, TextShaping};
-        use crate::engine_reads::{FeatureDefault, FeatureGroup, FeatureSubstitution, FontFeature};
+        use crate::engine_reads::{
+            FeatureDefault, FeatureGroup, FeatureListError, FeatureSubstitution, FontFeature,
+        };
 
         const LIGATURE: &str = "feature liga { sub f i by f_i; } liga;";
 
@@ -410,11 +424,23 @@ mod exports {
         }
 
         #[test]
+        fn features_say_why_when_there_is_no_shaper_font() {
+            let font = font_with(&[("f", Some('f'))]);
+            let shaping = TextShaping::default();
+
+            let features = shaping.features(&font, || Err::<ShaperFontSource, _>("closed"));
+
+            assert!(matches!(features, Err(FeatureListError::NoShaper { .. })));
+        }
+
+        #[test]
         fn features_list_the_shaper_font_s_with_their_names_and_defaults() {
             let font = font_with(&[("f", Some('f')), ("i", Some('i')), ("f_i", None)]);
             let shaping = TextShaping::default();
 
-            let features = shaping.features(&font, || Ok::<_, Infallible>(source(&font)));
+            let features = shaping
+                .features(&font, || Ok::<_, Infallible>(source(&font)))
+                .unwrap();
 
             assert_eq!(
                 features,

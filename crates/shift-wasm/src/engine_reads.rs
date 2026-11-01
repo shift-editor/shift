@@ -111,8 +111,13 @@ pub trait EngineReads {
     /// order, each with the name it is shown by, what it does when text does
     /// not set it, and its group, as `shift_shape::Shaper::features` lists
     /// them. The shaper is brought up to date first, as for
-    /// [`Self::layout_text`]; empty when there is none.
-    fn font_features(&self) -> Vec<FontFeature>;
+    /// [`Self::layout_text`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FeatureListError`] when there is no shaper font, saying
+    /// why, or it cannot be read.
+    fn font_features(&self) -> Result<Vec<FontFeature>, FeatureListError>;
     /// The flags whose change may change the session's shaper font, and so
     /// what [`Self::font_features`] returns.
     fn shaper_inputs(&self) -> Vec<FontChangeFlag>;
@@ -161,6 +166,28 @@ pub struct TextLayoutRequest {
     /// A source, by the number the session interned, to lay out at instead,
     /// as its own layers draw.
     pub source: Option<usize>,
+}
+
+/// Why [`EngineReads::font_features`] could not list the features. Its
+/// details are text: the shaper's errors cannot cross to the editor.
+#[derive(Clone, Debug, PartialEq, Eq, Pack, thiserror::Error)]
+pub enum FeatureListError {
+    /// No shaper font could be made from the font, so text lays out as
+    /// typed; `reason` is why.
+    #[error("the font has no shaper font: {reason}")]
+    NoShaper { reason: String },
+    /// The shaper font could not be read.
+    #[error("the shaper font could not be read: {detail}")]
+    Unreadable { detail: String },
+}
+
+impl FeatureListError {
+    /// The shaper font could not be read, for `error`.
+    pub(crate) fn unreadable(error: impl std::fmt::Display) -> Self {
+        Self::Unreadable {
+            detail: error.to_string(),
+        }
+    }
 }
 
 /// Text as [`EngineReads::layout_text`] laid it out.
@@ -239,7 +266,8 @@ mod exports {
     use wasm_bindgen::prelude::*;
 
     use super::{
-        Axis, EditablePair, EngineReads, FeatureSubstitution, FontChangeFlag, FontFeature,
+        Axis, EditablePair, EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag,
+        FontFeature,
         InterpolatedMetrics, KerningSnapshot, LayoutError, PlacedText, Source, SourceSetWeights,
         TextLayoutRequest, engine_reads_request,
     };
@@ -607,7 +635,7 @@ mod exports {
             FontChangeFlag::of(TextShaping::LAYOUT_INPUTS).collect()
         }
 
-        fn font_features(&self) -> Vec<FontFeature> {
+        fn font_features(&self) -> Result<Vec<FontFeature>, FeatureListError> {
             self.shaping
                 .features(self.session.font(), || self.shaper_font_source())
         }
