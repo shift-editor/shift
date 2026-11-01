@@ -591,9 +591,10 @@ pub(super) fn convert_kerning(
     font: &GlyphsFont,
     glyph_ids: &HashMap<String, GlyphId>,
     source_ids_by_master_id: &HashMap<String, SourceId>,
+    ids: &SourceIds,
     report: &mut ImportReport,
 ) -> Kerning {
-    let mut import = KerningImport::new(glyph_ids);
+    let mut import = KerningImport::new(glyph_ids, ids);
     for glyph in font.glyphs.values() {
         if let Some(group) = glyph.right_kern.as_deref() {
             import.add_group(KerningPosition::First, group, [glyph.name.as_str()]);

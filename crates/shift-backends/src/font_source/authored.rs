@@ -351,8 +351,7 @@ mod tests {
         let imported = import(path);
         let OpenedAuthoredSource { directory, source } = open(path);
 
-        assert_eq!(directory.sources(), imported.sources());
-        assert_eq!(directory.axes(), imported.axes());
+        assert_same_header(&directory, &imported);
         let order = |font: &Font| font.glyphs().map(Glyph::id).collect::<Vec<_>>();
         assert_eq!(order(&directory), order(&imported));
         for expected in imported.glyphs() {
@@ -371,13 +370,22 @@ mod tests {
         }
     }
 
+    /// Both fonts hold the same top-level items under the same ids.
+    fn assert_same_header(left: &Font, right: &Font) {
+        assert_eq!(left.sources(), right.sources());
+        assert_eq!(left.axes(), right.axes());
+        assert_eq!(left.axis_mappings(), right.axis_mappings());
+        assert_eq!(left.named_instances(), right.named_instances());
+        assert_eq!(left.metric_definitions(), right.metric_definitions());
+        assert_eq!(left.kerning(), right.kerning());
+    }
+
     /// Two imports of one file give every source, axis, layer and entity in
     /// a layer the same id.
     fn assert_imports_alike(path: &Path) {
         let (first, second) = (import(path), import(path));
 
-        assert_eq!(first.sources(), second.sources());
-        assert_eq!(first.axes(), second.axes());
+        assert_same_header(&first, &second);
         assert!(first.glyphs().eq(second.glyphs()));
     }
 
@@ -386,6 +394,8 @@ mod tests {
         assert_imports_alike(&fixtures::mutatorsans_ufo());
         assert_imports_alike(&fixtures::mutatorsans_designspace());
         assert_imports_alike(&fixtures::font("MutatorSansVariable.glyphs"));
+        assert_imports_alike(&fixtures::font("MultiFamily.glyphs"));
+        assert_imports_alike(&fixtures::font("MappedWeight.glyphs"));
     }
 
     #[test]
@@ -402,6 +412,34 @@ mod tests {
     fn a_glyphs_glyph_read_alone_is_the_imported_glyph() {
         assert_reads_as_imported(&fixtures::font("MutatorSansVariable.glyphs"));
         assert_reads_as_imported(&fixtures::font("AnchorPropagation.glyphs"));
+    }
+
+    #[test]
+    fn every_import_names_axis_labels_alike() {
+        let temporary = tempfile::tempdir().unwrap();
+        let directory = temporary.path().join("MutatorSans");
+        copy_directory(
+            fixtures::mutatorsans_designspace().parent().unwrap(),
+            &directory,
+        );
+        let path = directory.join("MutatorSans.designspace");
+        let text = std::fs::read_to_string(&path).unwrap();
+        let labelled = text.replace(
+            r#"<axis tag="wght" name="weight" minimum="0" maximum="1000" default="0"/>"#,
+            r#"<axis tag="wght" name="weight" minimum="0" maximum="1000" default="0"><labels><label uservalue="0" name="Light"/><label uservalue="1000" name="Bold"/></labels></axis>"#,
+        );
+        std::fs::write(&path, labelled).unwrap();
+
+        let font = import(&path);
+        let labels = |font: &Font| {
+            font.axes()
+                .iter()
+                .flat_map(|axis| axis.labels().to_vec())
+                .collect::<Vec<_>>()
+        };
+
+        assert_eq!(labels(&font).len(), 2);
+        assert_eq!(labels(&font), labels(&import(&path)));
     }
 
     #[test]

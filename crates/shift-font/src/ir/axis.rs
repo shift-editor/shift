@@ -196,6 +196,13 @@ impl AxisLabel {
         )
     }
 
+    /// The label with `id` as its id, as a reader that derives ids gives it one.
+    #[must_use]
+    pub fn identified_as(mut self, id: AxisLabelId) -> Self {
+        self.id = id;
+        self
+    }
+
     /// Rebuilds an axis label while preserving source-format identity.
     pub fn with_id(
         id: AxisLabelId,
@@ -556,6 +563,13 @@ impl AxisMapping {
         points: Vec<AxisMappingPoint>,
     ) -> Self {
         Self::with_id(AxisMappingId::new(), name, inputs, outputs, points)
+    }
+
+    /// The mapping with `id` as its id, as a reader that derives ids gives it one.
+    #[must_use]
+    pub fn identified_as(mut self, id: AxisMappingId) -> Self {
+        self.id = id;
+        self
     }
 
     pub fn with_id(

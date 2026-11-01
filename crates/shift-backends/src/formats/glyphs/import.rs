@@ -170,9 +170,15 @@ pub(crate) fn stream_retained(
         .iter()
         .map(|name| (name.clone(), ids.glyph_id(name)))
         .collect();
-    *header.kerning_mut() =
-        convert_kerning(&source, &glyph_ids, &source_ids_by_master_id, &mut report);
+    *header.kerning_mut() = convert_kerning(
+        &source,
+        &glyph_ids,
+        &source_ids_by_master_id,
+        &ids,
+        &mut report,
+    );
     let sources = add_intermediate_sources(&mut header, &source, source_ids_by_master_id, &ids);
+    ids.identify(&mut header)?;
 
     Ok((
         header,

@@ -194,7 +194,14 @@ fn stream_designspace(
     );
 
     let (glyph_ids, glyphs) = build_glyph_directory(&ids, &directories);
-    let mut report = import_kerning(&mut header, &default_kerning, &directories, &glyph_ids);
+    let mut report = import_kerning(
+        &mut header,
+        &default_kerning,
+        &directories,
+        &glyph_ids,
+        &ids,
+    );
+    ids.identify(&mut header)?;
     report.losses.extend(instance_loss);
     Ok((header, GlifGlyphStream::new(glyph_ids, glyphs), report))
 }
@@ -299,7 +306,14 @@ fn stream_axisless_designspace(
     );
 
     let (glyph_ids, glyphs) = build_glyph_directory(&ids, &directories);
-    let report = import_kerning(&mut header, &default_kerning, &directories, &glyph_ids);
+    let report = import_kerning(
+        &mut header,
+        &default_kerning,
+        &directories,
+        &glyph_ids,
+        &ids,
+    );
+    ids.identify(&mut header)?;
     Ok((header, GlifGlyphStream::new(glyph_ids, glyphs), report))
 }
 
@@ -349,9 +363,10 @@ fn import_kerning(
     default_kerning: &UfoKerning,
     directories: &[SourceDirectory],
     glyph_ids: &HashMap<String, GlyphId>,
+    ids: &SourceIds,
 ) -> ImportReport {
     let mut report = ImportReport::default();
-    let mut import = KerningImport::new(glyph_ids);
+    let mut import = KerningImport::new(glyph_ids, ids);
     default_kerning.add_groups(&mut import);
     for directory in directories {
         if let Some(kerning) = &directory.kerning {

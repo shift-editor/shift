@@ -3,11 +3,10 @@
 use std::collections::HashMap;
 
 use shift_font::{
-    GlyphId, Kerning, KerningGroup, KerningGroupId, KerningPair, KerningPosition, KerningSide,
-    SourceId,
+    GlyphId, Kerning, KerningGroup, KerningPair, KerningPosition, KerningSide, SourceId,
 };
 
-use crate::{ImportLoss, ImportLossKind, ImportReport};
+use crate::{ImportLoss, ImportLossKind, ImportReport, SourceIds};
 
 /// One side of a source-format kerning pair, still named by glyph name.
 #[derive(Clone, Copy)]
@@ -18,24 +17,26 @@ pub(crate) enum NamedKerningSide<'a> {
 
 /// Resolves glyph and group names in imported kerning to ids.
 ///
-/// Glyph names resolve to the ids the import assigned, and each group gets a
-/// new [`KerningGroupId`] the first time its name is added. Group members and
+/// Glyph names resolve to the ids the import assigned, and each group gets
+/// the [`KerningGroupId`] [`SourceIds`] derives from its position and name. Group members and
 /// pairs that name a glyph outside the import, pairs that name a group never
 /// added, and members listed in more than one group for the same position are
 /// dropped and counted. [`Self::finish`] reports the counts.
 pub(crate) struct KerningImport<'a> {
     kerning: Kerning,
     glyph_ids: &'a HashMap<String, GlyphId>,
+    ids: &'a SourceIds,
     unresolved_members: usize,
     unresolved_pairs: usize,
     duplicate_members: usize,
 }
 
 impl<'a> KerningImport<'a> {
-    pub(crate) fn new(glyph_ids: &'a HashMap<String, GlyphId>) -> Self {
+    pub(crate) fn new(glyph_ids: &'a HashMap<String, GlyphId>, ids: &'a SourceIds) -> Self {
         Self {
             kerning: Kerning::new(),
             glyph_ids,
+            ids,
             unresolved_members: 0,
             unresolved_pairs: 0,
             duplicate_members: 0,
@@ -57,7 +58,7 @@ impl<'a> KerningImport<'a> {
             .kerning
             .group_id(position, name)
             .copied()
-            .unwrap_or_else(KerningGroupId::new);
+            .unwrap_or_else(|| self.ids.kerning_group_id(position, name));
         let mut resolved = self
             .kerning
             .group(group_id)
@@ -168,7 +169,8 @@ mod tests {
     fn references_to_missing_glyphs_and_groups_are_dropped_and_reported() {
         let glyph_ids = ids(&["A", "V"]);
         let source_id = SourceId::from_raw("regular");
-        let mut import = KerningImport::new(&glyph_ids);
+        let source_ids = SourceIds::for_path(std::path::Path::new("Test.ufo"));
+        let mut import = KerningImport::new(&glyph_ids, &source_ids);
         import.add_group(KerningPosition::First, "A", ["A", "Agrave"]);
         import.add_pair(
             source_id,
@@ -210,7 +212,8 @@ mod tests {
     #[test]
     fn a_glyph_keeps_its_first_group_per_position() {
         let glyph_ids = ids(&["A"]);
-        let mut import = KerningImport::new(&glyph_ids);
+        let source_ids = SourceIds::for_path(std::path::Path::new("Test.ufo"));
+        let mut import = KerningImport::new(&glyph_ids, &source_ids);
         import.add_group(KerningPosition::First, "A", ["A"]);
         import.add_group(KerningPosition::First, "B", ["A"]);
         import.add_group(KerningPosition::Second, "A", ["A"]);

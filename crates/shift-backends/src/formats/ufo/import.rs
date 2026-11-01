@@ -52,10 +52,11 @@ pub(crate) fn stream_retained(
     let (glyph_ids, glyphs) = build_glyph_directory(&ids, &layers);
 
     let mut report = ImportReport::default();
-    let mut import = KerningImport::new(&glyph_ids);
+    let mut import = KerningImport::new(&glyph_ids, &ids);
     kerning.add_groups(&mut import);
     kerning.add_pairs(&mut import, default_source_id);
     *header.kerning_mut() = import.finish(&mut report);
+    ids.identify(&mut header)?;
 
     Ok((header, GlifGlyphStream::new(glyph_ids, glyphs), report))
 }
