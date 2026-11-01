@@ -87,6 +87,25 @@ describe("window tabs reopen with the window", () => {
     expect({ zoom: editor.zoomLevel(), offset: editor.canvasOffset() }).toEqual(pageCamera);
   });
 
+  it("saves a camera change on its own, after the quiet period", async () => {
+    const views = new DocumentViews(memoryStorage());
+    const tabs = new WindowTabs(editor.asEditor());
+    const memory = new WindowViewMemory(editor.asEditor(), tabs, {
+      keyCell: signal<string | null>(DOCUMENT),
+      views,
+      delayMs: 10,
+    });
+    memory.restore();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const shown = asNodeId(editor.shownPageId()!);
+
+    editor.setZoom(2.5);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    expect(views.read(DOCUMENT)?.cameras?.[shown]?.zoom).toBe(2.5);
+    memory.dispose();
+  });
+
   it("drops the camera of a page that no longer exists", () => {
     const views = new DocumentViews(memoryStorage());
     const page = asNodeId(editor.addPage().id);

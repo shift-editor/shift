@@ -121,14 +121,31 @@ describe("window tabs", () => {
     expect(editor.pageExists(glyphTab.pageId)).toBe(false);
   });
 
-  it("finds the tab holding a page, reopening a closed page's or glyph page's tab", () => {
+  it("finds the tab holding a page, and reopens a closed page's tab for an undo", () => {
     const second = addPageId();
     tabs.openGlyph(glyphA);
     const glyphPage = glyphTabs()[0]!.pageId;
 
     expect(tabs.tabHolding(glyphPage)).toEqual(glyphTabs()[0]);
+    expect(tabs.tabHolding(second)).toBeNull();
+    expect(tabs.reopenTabFor({ pageId: second, glyphIds: [], nodeIds: [] })).toMatchObject({
+      kind: "page",
+      pageId: second,
+    });
     expect(tabs.tabHolding(second)).toMatchObject({ kind: "page", pageId: second });
-    expect(tabs.tabHolding(asNodeId("node_gone"))).toBeNull();
+    expect(
+      tabs.reopenTabFor({ pageId: asNodeId("node_gone"), glyphIds: [], nodeIds: [] }),
+    ).toBeNull();
+  });
+
+  it("reopens a closed glyph tab for an undo of an edit on its glyph", () => {
+    tabs.openGlyph(glyphA);
+    const glyphPage = glyphTabs()[0]!.pageId;
+    tabs.close(glyphTabs()[0]!.id);
+
+    const tab = tabs.reopenTabFor({ pageId: glyphPage, glyphIds: [glyphA], nodeIds: [] });
+
+    expect(tab).toMatchObject({ kind: "glyph", glyphId: glyphA });
   });
 
   it("closes a page's tab when the page is deleted, and never the overview", () => {

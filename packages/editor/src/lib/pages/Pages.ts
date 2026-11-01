@@ -22,9 +22,10 @@ import type { PageCamera } from "../../types/page";
  */
 export class Pages {
   readonly #editor: Editor;
-  // non-reactive: camera memory, read when a page is activated and when the window saves its view
-  #cameras = new Map<NodeId, PageCamera>();
-  readonly #revealedCell: WritableSignal<EditLocation | null>;
+  /** Each page's camera as last left; the shown page's moves with the view until it is left. */
+  readonly #camerasCell: WritableSignal<ReadonlyMap<NodeId, PageCamera>>;
+  // non-reactive: listeners for replayed edits, called imperatively by reveal
+  readonly #revealListeners = new Set<(location: EditLocation) => void>();
 
   readonly #listCell: Signal<readonly PageNode[]>;
 
@@ -33,7 +34,9 @@ export class Pages {
    */
   constructor(editor: Editor) {
     this.#editor = editor;
-    this.#revealedCell = signal<EditLocation | null>(null, { name: "editor.pages.revealed" });
+    this.#camerasCell = signal<ReadonlyMap<NodeId, PageCamera>>(new Map(), {
+      name: "editor.pages.cameras",
+    });
     this.#listCell = computed(
       () => editor.scene.pagesCell.value.filter((page) => page.role !== "glyph"),
       { name: "editor.pages.list", equals: sameNodeList },
@@ -88,7 +91,7 @@ export class Pages {
       if (fallback) this.activate(fallback.id);
     }
     this.#editor.history.withoutRecording(() => this.#removePage(pageId));
-    this.#cameras.delete(pageId);
+    this.#forgetCamera(pageId);
   }
 
   /**
@@ -187,11 +190,14 @@ export class Pages {
   }
 
   /**
-   * Where each undo or redo was made, a new value each time, for the window
-   * to show the tab that holds it; null before the first.
+   * Calls `listener` with where each undo or redo was made, after its page
+   * is shown, so the window can show the tab that holds it.
+   *
+   * @returns a function that stops the calls.
    */
-  get revealedCell(): Signal<EditLocation | null> {
-    return this.#revealedCell;
+  onReveal(listener: (location: EditLocation) => void): () => void {
+    this.#revealListeners.add(listener);
+    return () => this.#revealListeners.delete(listener);
   }
 
   /**
@@ -199,13 +205,22 @@ export class Pages {
    *
    * @remarks
    * Called by the document as it replays a step. Leaves the canvas alone
-   * when the page is gone, as after undoing its creation, but still
-   * announces the location on {@link revealedCell}, whose glyphs can reopen
-   * a closed glyph tab.
+   * when the page is gone, as after undoing its creation, but still tells
+   * the {@link onReveal} listeners, since the location's glyphs can reopen a
+   * closed glyph tab.
    */
   reveal(location: EditLocation): void {
     if (location.pageId) this.activate(location.pageId);
-    this.#revealedCell.set(location);
+    for (const listener of this.#revealListeners) listener(location);
+  }
+
+  /**
+   * The cameras pages were left with, changing when a page is left or the
+   * window restores them; with the view's pan and zoom, what {@link cameras}
+   * answers.
+   */
+  get camerasCell(): Signal<ReadonlyMap<NodeId, PageCamera>> {
+    return this.#camerasCell;
   }
 
   /**
@@ -215,7 +230,7 @@ export class Pages {
   cameras(): ReadonlyMap<NodeId, PageCamera> {
     const scene = this.#editor.scene;
     const cameras = new Map<NodeId, PageCamera>();
-    for (const [pageId, camera] of this.#cameras) {
+    for (const [pageId, camera] of this.#camerasCell.peek()) {
       if (scene.nodeOfKind(pageId, "page")) cameras.set(pageId, camera);
     }
     const shown = scene.shownPageIdCell.peek();
@@ -229,17 +244,18 @@ export class Pages {
    */
   restoreCameras(cameras: ReadonlyMap<NodeId, PageCamera>): void {
     const scene = this.#editor.scene;
-    this.#cameras = new Map(
+    const kept = new Map(
       [...cameras].filter(([pageId]) => scene.nodeOfKind(pageId, "page") !== null),
     );
+    this.#camerasCell.set(kept);
     const shown = scene.shownPageIdCell.peek();
-    const camera = shown ? this.#cameras.get(shown) : undefined;
+    const camera = shown ? kept.get(shown) : undefined;
     if (camera) this.#apply(camera);
   }
 
   /** Whether `pageId` has a camera to show it with, so showing it should not refit the view. */
   remembersCamera(pageId: NodeId): boolean {
-    return this.#cameras.has(pageId);
+    return this.#camerasCell.peek().has(pageId);
   }
 
   /**
@@ -254,13 +270,22 @@ export class Pages {
     const current = scene.shownPageIdCell.peek();
     if (current === pageId || !scene.nodeOfKind(pageId, "page")) return;
 
-    if (current) this.#cameras.set(current, this.#camera());
+    if (current) this.#rememberCamera(current, this.#camera());
     this.#editor.history.withoutRecording(() => this.#editor.exitNodes());
     scene.showPage(pageId);
     this.#editor.toolManager.reset();
 
-    const camera = this.#cameras.get(pageId);
+    const camera = this.#camerasCell.peek().get(pageId);
     if (camera) this.#apply(camera);
+  }
+
+  #rememberCamera(pageId: NodeId, camera: PageCamera): void {
+    this.#camerasCell.set(new Map(this.#camerasCell.peek()).set(pageId, camera));
+  }
+
+  #forgetCamera(pageId: NodeId): void {
+    const cameras = new Map(this.#camerasCell.peek());
+    if (cameras.delete(pageId)) this.#camerasCell.set(cameras);
   }
 
   #apply(camera: PageCamera): void {

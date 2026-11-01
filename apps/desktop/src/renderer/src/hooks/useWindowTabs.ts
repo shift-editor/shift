@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { NodeId } from "@shift/types";
-import { useSignalState } from "@shift/editor/signals";
 import { CANVAS_PATH, editorPath } from "@/lib/editorRoute";
 import { windowLocation, type WindowTab, type WindowTabs } from "@/lib/tabs/WindowTabs";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
@@ -88,30 +87,21 @@ export const useWindowTabs = (): WindowTabNavigation => {
 };
 
 /**
- * Shows the tab that holds the page each undo or redo changed, reopening it
- * when it was closed, unless that tab is already shown.
- *
- * @remarks
- * The page itself is shown as the step replays (`Pages.reveal`); this follows
- * with the tab and route. Mount once per window.
+ * Lets undo and redo show the tab of the page they change, through the
+ * window's navigation; a tab already shown is left alone. Mount once per
+ * window.
  */
 export const useShowReplayedPages = (): void => {
   const editor = useEditor();
   const { tabs, show } = useWindowTabs();
-  const revealed = useSignalState(editor.pages.revealedCell);
   const { pathname } = useLocation();
-  // Only a new reveal shows a tab; navigating afterwards must not repeat it.
-  const handledRef = useRef(revealed);
 
-  useEffect(() => {
-    if (!revealed || handledRef.current === revealed) return;
-
-    handledRef.current = revealed;
-
-    const tab = tabs.tabShowing(revealed);
-    if (!tab) return;
-
-    const shown = tabs.activeTab(windowLocation(pathname, editor.scene.shownPageIdCell.peek()));
-    if (shown?.id !== tab.id) show(tab);
-  }, [editor, pathname, revealed, show, tabs]);
+  useEffect(
+    () =>
+      tabs.followReveals((tab) => {
+        const shown = tabs.activeTab(windowLocation(pathname, editor.scene.shownPageIdCell.peek()));
+        if (shown?.id !== tab.id) show(tab);
+      }),
+    [editor, pathname, show, tabs],
+  );
 };

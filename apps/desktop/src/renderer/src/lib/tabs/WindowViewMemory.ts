@@ -50,6 +50,7 @@ export class WindowViewMemory {
       track(tabs.tabsCell);
       track(tabs.selectionPageIdCell);
       track(editor.scene.shownPageIdCell);
+      track(editor.pages.camerasCell);
       track(editor.panCell);
       track(editor.zoomCell);
       track(this.#keyCell);

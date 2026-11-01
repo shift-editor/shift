@@ -154,44 +154,43 @@ export class WindowTabs {
   }
 
   /**
-   * Returns the tab that holds `pageId`, reopening it when it was closed: the
-   * overview for its selection page, the page's own tab, or a glyph tab for a
-   * glyph page. Null when the page is gone.
-   *
-   * @remarks
-   * For showing the page an undo or redo changed.
+   * Returns the tab that holds `pageId`: the overview for its selection
+   * page, or the page or glyph tab open on it; null when none does.
    */
   tabHolding(pageId: NodeId): WindowTab | null {
-    const page = this.#editor.scene.nodeOfKind(pageId, "page");
-    if (!page) return null;
     if (pageId === this.#selectionPageIdCell.peek()) return GLYPHS_TAB;
 
-    const open = this.#movable().find((tab) => tab.pageId === pageId);
-    if (open) return open;
-    if (page.role !== "glyph") return this.openPage(pageId);
-
-    const glyph = this.#glyphOn(pageId);
-    if (!glyph) return null;
-
-    const tab: MovableTab = { kind: "glyph", id: this.#mintId(), pageId, glyphId: glyph.glyphId };
-    this.#openedCell.set([...this.#movable(), tab]);
-    return tab;
+    return this.#movable().find((tab) => tab.pageId === pageId) ?? null;
   }
 
   /**
-   * Returns the tab to show where an undo or redo was made: the one holding
-   * its page, or, when closing a glyph tab took the page with it, the
-   * glyph's tab again. Null when neither is left.
+   * Opens the tab for where an undo or redo was made when it is closed, and
+   * returns it: the tab holding its page, else a new page tab, or a glyph tab
+   * for a glyph page; when closing a glyph tab took the page with it, the
+   * glyph's tab again. Null when neither page nor glyph is left.
    */
-  tabShowing(location: EditLocation): WindowTab | null {
-    const held = location.pageId ? this.tabHolding(location.pageId) : null;
-    if (held) return held;
+  reopenTabFor(location: EditLocation): WindowTab | null {
+    const page = this.#editor.scene.nodeOfKind(location.pageId ?? null, "page");
+    if (page) return this.tabHolding(page.id) ?? this.#reopenPageTab(page);
 
     const [glyphId] = location.glyphIds;
     if (!glyphId) return null;
 
     this.openGlyph(glyphId);
     return this.glyphTab(glyphId);
+  }
+
+  /**
+   * Has `show` show the tab for each undo or redo's page, as the window's
+   * navigation shows any tab.
+   *
+   * @returns a function that stops following.
+   */
+  followReveals(show: (tab: WindowTab) => void): () => void {
+    return this.#editor.pages.onReveal((location) => {
+      const tab = this.reopenTabFor(location);
+      if (tab) show(tab);
+    });
   }
 
   /** Returns the page's tab, opening one after the last tab when it has none. */
@@ -411,6 +410,23 @@ export class WindowTabs {
       if (node?.glyphId === glyphId) return { page, node };
     }
     return null;
+  }
+
+  /** A new tab for `page`: its page tab, or a glyph tab for a glyph page. */
+  #reopenPageTab(page: PageNode): WindowTab | null {
+    if (page.role !== "glyph") return this.openPage(page.id);
+
+    const glyph = this.#glyphOn(page.id);
+    if (!glyph) return null;
+
+    const tab: MovableTab = {
+      kind: "glyph",
+      id: this.#mintId(),
+      pageId: page.id,
+      glyphId: glyph.glyphId,
+    };
+    this.#openedCell.set([...this.#movable(), tab]);
+    return tab;
   }
 
   /** The glyph node a glyph page shows, in its one text run. */
