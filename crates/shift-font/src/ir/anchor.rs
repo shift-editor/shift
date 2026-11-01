@@ -43,7 +43,14 @@ impl Anchor {
     /// An anchor whose name starts with `_` is a mark's own attachment point;
     /// every other anchor, named or not, is one marks attach to.
     pub fn attaches_marks(&self) -> bool {
-        !self.name().is_some_and(|name| name.starts_with('_'))
+        Self::name_attaches_marks(self.name())
+    }
+
+    /// Whether marks attach to an anchor named `name`, as
+    /// [`Self::attaches_marks`] decides it: for a reader that has the name
+    /// before it builds the anchor.
+    pub fn name_attaches_marks(name: Option<&str>) -> bool {
+        !name.is_some_and(|name| name.starts_with('_'))
     }
 
     pub fn x(&self) -> f64 {

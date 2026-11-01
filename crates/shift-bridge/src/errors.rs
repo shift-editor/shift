@@ -51,6 +51,10 @@ pub enum BridgeError {
 
   #[error(transparent)]
   Slug(#[from] SlugError),
+
+  /// A preload reader could not answer, as when it is closed.
+  #[error(transparent)]
+  StoreRead(#[from] shift_engine::StoreReadError),
 }
 
 pub(crate) fn to_napi_error(error: BridgeError) -> Error {
@@ -64,7 +68,8 @@ pub(crate) fn to_napi_error(error: BridgeError) -> Error {
       | BackendError::InvalidPathUtf8 { .. }
       | BackendError::InvalidExtensionUtf8 { .. }
       | BackendError::UnsupportedFormat { .. }
-      | BackendError::UnsupportedWriteFormat { .. },
+      | BackendError::UnsupportedWriteFormat { .. }
+      | BackendError::AuthoredUnsupported { .. },
     ) => Status::InvalidArg,
     BridgeError::Core(_)
     | BridgeError::Backend(_)
@@ -75,7 +80,8 @@ pub(crate) fn to_napi_error(error: BridgeError) -> Error {
     | BridgeError::Encoding(_)
     | BridgeError::Decoding(_)
     | BridgeError::AuthoredSlug(_)
-    | BridgeError::Slug(_) => Status::GenericFailure,
+    | BridgeError::Slug(_)
+    | BridgeError::StoreRead(_) => Status::GenericFailure,
   };
 
   Error::new(status, error.to_string())

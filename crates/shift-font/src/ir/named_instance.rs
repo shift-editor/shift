@@ -25,6 +25,13 @@ impl NamedInstance {
         Self::with_id(NamedInstanceId::new(), name, location, postscript_name)
     }
 
+    /// The instance with `id` as its id, as a reader that derives ids gives it one.
+    #[must_use]
+    pub fn identified_as(mut self, id: NamedInstanceId) -> Self {
+        self.id = id;
+        self
+    }
+
     /// Rebuilds a named instance while preserving source-format identity.
     pub fn with_id(
         id: NamedInstanceId,

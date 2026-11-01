@@ -3,7 +3,8 @@ use crate::collection::{EntityList, Identified};
 use crate::component::Component;
 use crate::contour::Contour;
 use crate::entity::{
-    AnchorId, ComponentId, ContourId, GlyphEntityId, GlyphId, GuidelineId, LayerId, SourceId,
+    AnchorId, ComponentId, ContourId, GlyphEntityId, GlyphId, GuidelineId, LayerId, PointId,
+    SourceId,
 };
 use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
@@ -153,6 +154,67 @@ impl GlyphLayer {
             ));
         }
 
+        layer
+    }
+
+    /// The layer with every contour, point, component, anchor and guideline
+    /// id derived from the layer's id and the entity's place in it
+    /// ([`PointId::derived`] and the like): what a reader of a font file
+    /// gives a layer it converts, so every read of the same file names the
+    /// layer's entities alike. Content, order and component alignment are
+    /// unchanged.
+    #[must_use]
+    pub fn with_derived_entity_ids(&self) -> Self {
+        let namespace = self.id.as_str();
+        let mut layer = Self::with_width(self.id, self.source_id, self.width);
+        layer.height = self.height;
+        layer.lib = self.lib.clone();
+        for (contour_index, contour) in self.contours_iter().enumerate() {
+            let place = format!("contour {contour_index}");
+            let mut derived = Contour::with_id(ContourId::derived(namespace, &place));
+            if contour.is_closed() {
+                derived.close();
+            }
+            for (point_index, point) in contour.points().iter().enumerate() {
+                let id = PointId::derived(namespace, &format!("{place} point {point_index}"));
+                derived.push_point(Point::new(
+                    id,
+                    point.x(),
+                    point.y(),
+                    point.point_type(),
+                    point.is_smooth(),
+                ));
+            }
+            layer.add_contour(derived);
+        }
+        for (index, component) in self.components_iter().enumerate() {
+            let mut derived = Component::with_id(
+                ComponentId::derived(namespace, &format!("component {index}")),
+                component.base_glyph_id(),
+                component.base_glyph_name().clone(),
+                *component.transform(),
+            );
+            derived.set_alignment(component.alignment());
+            layer.add_component(derived);
+        }
+        for (index, anchor) in self.anchors_iter().enumerate() {
+            layer.add_anchor(Anchor::with_id(
+                AnchorId::derived(namespace, &format!("anchor {index}")),
+                anchor.name().map(ToOwned::to_owned),
+                anchor.x(),
+                anchor.y(),
+            ));
+        }
+        for (index, guideline) in self.guidelines().iter().enumerate() {
+            layer.add_guideline(Guideline::with_id(
+                GuidelineId::derived(namespace, &format!("guideline {index}")),
+                guideline.x(),
+                guideline.y(),
+                guideline.angle(),
+                guideline.name().map(ToOwned::to_owned),
+                guideline.color().map(ToOwned::to_owned),
+            ));
+        }
         layer
     }
 
@@ -605,6 +667,50 @@ mod tests {
     use super::*;
     use crate::Anchor;
     use std::sync::Arc;
+
+    /// A layer as a reader converts one: fresh entity ids on every call.
+    fn converted(id: LayerId, source_id: SourceId) -> GlyphLayer {
+        let mut layer = GlyphLayer::with_width(id, source_id, 500.0);
+        layer.add_contour(crate::contour![(0.0, 0.0), (100.0, 200.0), (200.0, 0.0)]);
+        layer.add_component(Component::new(GlyphId::new(), "base"));
+        layer.add_anchor(Anchor::new(Some("top".to_string()), 100.0, 700.0));
+        layer.add_guideline(Guideline::with_id(
+            GuidelineId::new(),
+            Some(10.0),
+            None,
+            None,
+            None,
+            None,
+        ));
+        layer
+    }
+
+    #[test]
+    fn derived_entity_ids_name_two_conversions_of_a_layer_alike() {
+        let (id, source_id) = (LayerId::new(), SourceId::new());
+        let first = converted(id, source_id);
+        let second = GlyphLayer {
+            components: first.components.clone(),
+            ..converted(id, source_id)
+        };
+        assert_ne!(first, second);
+
+        let derived = first.with_derived_entity_ids();
+
+        assert_eq!(derived, second.with_derived_entity_ids());
+        let ids: HashSet<GlyphEntityId> = derived.entity_ids().collect();
+        assert_eq!(ids.len(), first.entity_ids().count());
+    }
+
+    #[test]
+    fn derived_entity_ids_differ_between_layers() {
+        let source_id = SourceId::new();
+        let first = converted(LayerId::new(), source_id).with_derived_entity_ids();
+        let second = converted(LayerId::new(), source_id).with_derived_entity_ids();
+
+        let first_ids: HashSet<GlyphEntityId> = first.entity_ids().collect();
+        assert!(second.entity_ids().all(|id| !first_ids.contains(&id)));
+    }
 
     #[test]
     fn a_glyph_has_an_outline_when_a_layer_draws_a_contour() {

@@ -2600,12 +2600,12 @@ fn failed_redo_replay_hands_the_entry_back_for_retry() {
         .unwrap();
     workspace.undo().unwrap().expect("deleteSource should undo");
 
-    // Wipe the store's font rows so the redo's SourceDeleted change has no
-    // row to delete and the replay fails at the persistence step.
-    workspace
-        .store_mut()
-        .replace_font_state(&Font::new())
-        .unwrap();
+    // Wipe the store's font rows, metric definitions included, so the
+    // redo's SourceDeleted change has no row to delete and the replay fails
+    // at the persistence step.
+    let mut wiped = Font::new();
+    wiped.set_metric_definitions(Vec::new()).unwrap();
+    workspace.store_mut().replace_font_state(&wiped).unwrap();
 
     let Err(error) = workspace.redo() else {
         panic!("redo should fail when the store rejects the replay");

@@ -107,14 +107,14 @@ fn extension_from_path(path: &Path) -> BackendResult<&str> {
         })
 }
 
-struct ResolvedPath<'a> {
-    format: FontFormat,
-    path: &'a str,
-    path_buf: std::path::PathBuf,
+pub(crate) struct ResolvedPath<'a> {
+    pub(crate) format: FontFormat,
+    pub(crate) path: &'a str,
+    pub(crate) path_buf: std::path::PathBuf,
     extension: &'a str,
 }
 
-fn resolve(path: &str) -> BackendResult<ResolvedPath<'_>> {
+pub(crate) fn resolve(path: &str) -> BackendResult<ResolvedPath<'_>> {
     let parsed = Path::new(path);
     let extension = extension_from_path(parsed)?;
     Ok(ResolvedPath {
