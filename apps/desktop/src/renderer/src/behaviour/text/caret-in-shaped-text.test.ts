@@ -82,19 +82,20 @@ describe("carets in mixed-direction text", () => {
     expect(editor.canvasText()).toMatchObject({ advance: 1650, caret: { position: 0, x: 1650 } });
   });
 
-  it("moves only ever left on screen with Option-left through Arabic words inside English", async () => {
+  it("lands on each word's left edge with Option-left through Arabic words inside English", async () => {
     editor.typeText("fi بب بب fi");
     await editor.settle();
-    const start = editor.canvasText()!.caret!.x;
+    expect(editor.canvasText()).toMatchObject({ caret: { position: 11, x: 3550 } });
 
     const wordLeft = () => editor.moveCaret(-1, "word");
-    const carets = caretAfterEach([wordLeft, wordLeft, wordLeft, wordLeft]);
 
-    const xs = carets.map(({ x }) => x);
-    expect(xs.every((x, press) => x < (xs[press - 1] ?? start))).toBe(true);
-    // The first press lands on the left edge of the last "fi", the last on the first's.
-    expect([carets[0], carets.at(-1)]).toEqual([
+    // The boundary before unit 8 shows twice: at the space after the Arabic
+    // (2750) and at the second Arabic word's left edge, after "fi " (800).
+    // Option-left stands at the word's edge.
+    expect(caretAfterEach([wordLeft, wordLeft, wordLeft, wordLeft])).toEqual([
       { position: 9, x: 3000 },
+      { position: 5, x: 1900 },
+      { position: 8, x: 800 },
       { position: 0, x: 0 },
     ]);
   });

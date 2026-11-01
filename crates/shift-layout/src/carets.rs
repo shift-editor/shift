@@ -60,9 +60,12 @@ impl<'f, 'l, 'a> Carets<'f, 'l, 'a> {
         stops
     }
 
-    /// Numbers one line's stops left to right ([`CaretStop::screen`]): by
-    /// `x`, then by where the glyph after each is drawn, the line's end
-    /// last left to right and first right to left, then in logical order.
+    /// Numbers one line's caret places left to right: each stop's
+    /// ([`CaretStop::screen`]) and, at a direction boundary, its second
+    /// place's ([`SecondaryCaret::screen`]), in one sequence. By `x`, then by
+    /// where the glyph the place is an edge of is drawn (the glyph after a
+    /// stop, the one before a second place; the line's end last left to
+    /// right and first right to left), then in logical order.
     fn order_on_screen(
         &self,
         stops: &mut [CaretStop],
@@ -74,25 +77,42 @@ impl<'f, 'l, 'a> Carets<'f, 'l, 'a> {
             Direction::Ltr => i64::MAX,
             Direction::Rtl => -1,
         };
-        let drawn = |stop: &CaretStop| {
-            (stop.unit < text_end)
-                .then(|| self.glyph_index_for(number, stop.unit))
-                .flatten()
+        let drawn = |unit: Option<u32>| {
+            unit.and_then(|unit| self.glyph_index_for(number, unit))
                 .map_or(line_end, i64::from)
         };
-        let drawn: Vec<i64> = stops.iter().map(drawn).collect();
-        let mut order: Vec<usize> = (0..stops.len()).collect();
-        // A stable sort: stops that also meet in drawing order keep their
+        let mut places: Vec<ScreenPlace> = Vec::new();
+        for (index, stop) in stops.iter().enumerate() {
+            places.push(ScreenPlace {
+                x: stop.x,
+                drawn: drawn((stop.unit < text_end).then_some(stop.unit)),
+                stop: index,
+                edge: PlaceEdge::Stop,
+            });
+            if let Some(secondary) = &stop.secondary {
+                places.push(ScreenPlace {
+                    x: secondary.x,
+                    drawn: drawn(stop.unit.checked_sub(1)),
+                    stop: index,
+                    edge: PlaceEdge::Second,
+                });
+            }
+        }
+        // A stable sort: places that also meet in drawing order keep their
         // logical order.
-        order.sort_by(|&first, &second| {
-            stops[first]
+        places.sort_by(|first, second| {
+            first
                 .x
-                .total_cmp(&stops[second].x)
-                .then(drawn[first].cmp(&drawn[second]))
+                .total_cmp(&second.x)
+                .then(first.drawn.cmp(&second.drawn))
         });
-        for (screen, index) in (0u32..).zip(order) {
-            if let Some(stop) = stops.get_mut(index) {
-                stop.screen = screen;
+        for (screen, place) in (0u32..).zip(places) {
+            let Some(stop) = stops.get_mut(place.stop) else {
+                continue;
+            };
+            match (&mut stop.secondary, place.edge) {
+                (Some(secondary), PlaceEdge::Second) => secondary.screen = screen,
+                _ => stop.screen = screen,
             }
         }
     }
@@ -115,6 +135,7 @@ impl<'f, 'l, 'a> Carets<'f, 'l, 'a> {
         let trailing = before.map(|glyph| SecondaryCaret {
             x: self.edge(glyph, boundary, boundaries),
             direction: glyph.direction,
+            screen: 0,
         });
         let (x, direction) = match (after, trailing) {
             (Some(glyph), _) => (self.edge(glyph, boundary, boundaries), glyph.direction),
@@ -247,4 +268,24 @@ impl Paragraph {
         boundaries.insert(self.end());
         boundaries
     }
+}
+
+/// One caret place on a line, as [`Carets::order_on_screen`] sorts them.
+struct ScreenPlace {
+    x: f64,
+    /// Where the glyph it is an edge of is drawn, by index in
+    /// [`TextLayout::glyphs`].
+    drawn: i64,
+    /// Its stop, by index among the line's stops.
+    stop: usize,
+    edge: PlaceEdge,
+}
+
+/// Which of a stop's places a [`ScreenPlace`] is.
+#[derive(Clone, Copy)]
+enum PlaceEdge {
+    /// The stop's own `x`.
+    Stop,
+    /// Its second place, at a direction boundary.
+    Second,
 }
