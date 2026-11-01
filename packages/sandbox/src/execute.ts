@@ -100,7 +100,7 @@ export async function executeShiftCode(
   installAsyncJsonFunction(vm, "__shiftKerningAt", deadline, (input) =>
     validated.kerning.at(input as never),
   );
-  const textCalls = {
+  const documentCalls = {
     __shiftTextRuns: validated.text.runs,
     __shiftTextGet: validated.text.get,
     __shiftTextCreate: validated.text.create,
@@ -108,8 +108,13 @@ export async function executeShiftCode(
     __shiftTextSetCaret: validated.text.setCaret,
     __shiftTextSetOptions: validated.text.setOptions,
     __shiftTextDelete: validated.text.delete,
+    __shiftPagesCreate: validated.pages.create,
+    __shiftPagesRename: validated.pages.rename,
+    __shiftPagesDelete: validated.pages.delete,
+    __shiftHistoryUndo: validated.history.undo,
+    __shiftHistoryRedo: validated.history.redo,
   } satisfies Record<string, (input: never) => Promise<unknown>>;
-  for (const [name, call] of Object.entries(textCalls)) {
+  for (const [name, call] of Object.entries(documentCalls)) {
     installAsyncJsonFunction(vm, name, deadline, (input) => call(input as never));
   }
   installAsyncJsonFunction(vm, "__shiftReadOpen", deadline, async (target) => {
@@ -182,6 +187,15 @@ export async function executeShiftCode(
         setCaret: async (input) => JSON.parse(await __shiftTextSetCaret(input)),
         setOptions: async (input) => JSON.parse(await __shiftTextSetOptions(input)),
         delete: async (input) => JSON.parse(await __shiftTextDelete(input)),
+      }),
+      pages: Object.freeze({
+        create: async (input) => JSON.parse(await __shiftPagesCreate(input)),
+        rename: async (input) => JSON.parse(await __shiftPagesRename(input)),
+        delete: async (input) => JSON.parse(await __shiftPagesDelete(input)),
+      }),
+      history: Object.freeze({
+        undo: async (input) => JSON.parse(await __shiftHistoryUndo(input)),
+        redo: async (input) => JSON.parse(await __shiftHistoryRedo(input)),
       }),
       read: async (target, callback) => {
         if (typeof callback !== "function") throw new TypeError("shift.read requires a callback");
@@ -333,6 +347,15 @@ function validatedCapabilities(capabilities: ShiftCapabilities): ShiftCapabiliti
       setOptions: (input) =>
         capabilities.text.setOptions(shiftInputSchemas["text.setOptions"].parse(input)),
       delete: (input) => capabilities.text.delete(shiftInputSchemas["text.delete"].parse(input)),
+    },
+    pages: {
+      create: (input) => capabilities.pages.create(shiftInputSchemas["pages.create"].parse(input)),
+      rename: (input) => capabilities.pages.rename(shiftInputSchemas["pages.rename"].parse(input)),
+      delete: (input) => capabilities.pages.delete(shiftInputSchemas["pages.delete"].parse(input)),
+    },
+    history: {
+      undo: (input) => capabilities.history.undo(shiftInputSchemas["history.undo"].parse(input)),
+      redo: (input) => capabilities.history.redo(shiftInputSchemas["history.redo"].parse(input)),
     },
   };
 }

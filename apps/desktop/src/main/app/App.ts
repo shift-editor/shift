@@ -1209,6 +1209,20 @@ export class App {
         delete: ({ windowId, ...input }) =>
           this.#windowForAgentRequest(windowId).agent.text("text.delete", input),
       },
+      pages: {
+        create: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.edit("pages.create", input),
+        rename: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.edit("pages.rename", input),
+        delete: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.edit("pages.delete", input),
+      },
+      history: {
+        undo: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.edit("history.undo", input),
+        redo: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.edit("history.redo", input),
+      },
     });
     this.#sandbox = sandbox;
     try {

@@ -11,6 +11,12 @@ export class CommandNotFoundError extends Error {
   }
 }
 
+/** Where an agent undoes and redoes instead of running Edit › Undo and Redo as commands. */
+const HISTORY_HINTS: Readonly<Record<string, string>> = {
+  "edit.undo": "; shift.history.undo undoes as Edit › Undo does",
+  "edit.redo": "; shift.history.redo redoes as Edit › Redo does",
+};
+
 /**
  * Thrown when a command changes more than what a window shows: font data,
  * files, or anything outside the window. Agents may not run it.
@@ -23,7 +29,7 @@ export class CommandNotRunnableError extends Error {
 
   constructor(command: string, effect: string) {
     super(
-      `Agents can run only commands that change the view; ${command} changes ${effectNoun(effect)}`,
+      `Agents can run only commands that change the view; ${command} changes ${effectNoun(effect)}${HISTORY_HINTS[command] ?? ""}`,
     );
     this.command = command;
     this.effect = effect;

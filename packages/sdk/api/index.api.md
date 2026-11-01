@@ -340,8 +340,7 @@ export class Editor {
     // (undocumented)
     get pointerCoords(): Signal<Coordinates | null>;
     positionSelection(ids: readonly SelectableId[]): PositionSelection | null;
-    // (undocumented)
-    redo(): Promise<void>;
+    redo(): Promise<boolean>;
     registerTool(manifest: ToolManifest): ToolRegistration;
     renameAnchor(anchorId: AnchorId, name: string): boolean;
     // (undocumented)
@@ -421,8 +420,7 @@ export class Editor {
     toSceneVector(vector: ScreenVector): SceneVector;
     transaction<TResult>(label: string, body: () => TResult): TResult;
     transformTarget(ids?: readonly SelectableId[]): TransformTarget | null;
-    // (undocumented)
-    undo(): Promise<void>;
+    undo(): Promise<boolean>;
     // (undocumented)
     updateMousePosition(clientX: number, clientY: number): void;
     visibleLocalBounds(node: ShiftNode): LocalBounds | null;
@@ -1330,6 +1328,10 @@ export interface ShiftCapabilities {
         get(input: GlyphGetInput): Promise<ShiftObservation<GlyphSummary>>;
         resolve(input: GlyphResolveInput): Promise<ShiftObservation<ResolvedGlyphs>>;
     };
+    history: {
+        undo(input: HistoryInput): Promise<ShiftObservation<HistoryUndo>>;
+        redo(input: HistoryInput): Promise<ShiftObservation<HistoryRedo>>;
+    };
     // (undocumented)
     instances: {
         get(input: InstanceGetInput): Promise<ShiftObservation<NamedInstance>>;
@@ -1350,6 +1352,11 @@ export interface ShiftCapabilities {
     // (undocumented)
     locations: {
         resolve(input: LocationResolveInput): Promise<ShiftObservation<ResolvedLocation>>;
+    };
+    pages: {
+        create(input: PageCreateInput): Promise<ShiftObservation<PageChange>>;
+        rename(input: PageRenameInput): Promise<ShiftObservation<PageChange>>;
+        delete(input: PageDeleteInput): Promise<ShiftObservation<PageChange>>;
     };
     // (undocumented)
     sessions: {

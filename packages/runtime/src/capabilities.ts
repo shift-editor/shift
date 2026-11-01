@@ -689,6 +689,71 @@ export interface TextRunSummary {
   options: TextRunOptions;
 }
 
+/**
+ * Adds an empty page after the last one, as the pages list's add button
+ * does. The shown page stays shown; `editor.showPage` shows the new one.
+ */
+export interface PageCreateInput extends ShiftTarget {
+  /** Shown in the pages list; defaults to the first unused "Page N". Surrounding spaces are dropped. */
+  name?: string;
+}
+
+/**
+ * Renames a page, as renaming it in the pages list does. Surrounding spaces
+ * are dropped; the page's own name changes nothing and records no undo step.
+ */
+export interface PageRenameInput extends ShiftTarget {
+  /** A page id from `EditorView.pages`. */
+  pageId: NodeId;
+  name: string;
+}
+
+/**
+ * Deletes a page and everything on it, as the pages list does. Deleting the
+ * shown page first shows its neighbour; the last page cannot be deleted.
+ */
+export interface PageDeleteInput extends ShiftTarget {
+  /** A page id from `EditorView.pages`. */
+  pageId: NodeId;
+}
+
+/** A page edit's answer: the page it touched, and the document's pages after it. */
+export interface PageChange {
+  /** The page created, renamed or deleted, as it is now (a deleted page as it was). */
+  page: EditorPage;
+  /** The document's pages in list order, as `EditorView.pages` gives them. */
+  pages: EditorPage[];
+}
+
+/**
+ * Where an undone or redone step was made, as the window shows it: the page
+ * Shift showed for it, the glyphs it changed and the scene nodes it changed.
+ */
+export interface HistoryLocation {
+  /** The page of the first node it changed, or the page shown when it was made; null when there was none. */
+  pageId: NodeId | null;
+  /** The glyphs whose records or layers it changed, in id order. */
+  glyphIds: GlyphId[];
+  /** The scene nodes (pages, text runs, glyph nodes) it created, changed or removed. */
+  nodeIds: NodeId[];
+}
+
+/** What `history.undo` did. */
+export interface HistoryUndo {
+  /** False when there was nothing to undo; nothing changed. */
+  undone: boolean;
+  /** Where the step was made; null when nothing was undone or the step changed no document data, as a selection change. */
+  location: HistoryLocation | null;
+}
+
+/** What `history.redo` did. */
+export interface HistoryRedo {
+  /** False when there was nothing to redo; nothing changed. */
+  redone: boolean;
+  /** Where the step was made; null when nothing was redone or the step changed no document data, as a selection change. */
+  location: HistoryLocation | null;
+}
+
 /** Live application capabilities shared by protocol and plugin hosts. */
 export interface ShiftCapabilities {
   capture(input: ShiftCaptureInput): Promise<ShiftObservation<ShiftCapture>>;
@@ -773,7 +838,42 @@ export interface ShiftCapabilities {
     setOptions(input: TextRunSetOptionsInput): Promise<ShiftObservation<TextRunView>>;
     delete(input: TextRunDeleteInput): Promise<ShiftObservation<null>>;
   };
+  /**
+   * The document's pages, edited as the pages list edits them.
+   *
+   * @remarks
+   * `create`, `rename` and `delete` are one undo step each and mark the
+   * document unsaved; none shows a page (`editor.showPage` does), except that
+   * deleting the shown page shows its neighbour. Pages are scene data, not
+   * font data, so none advances `fontRevision`; with `ifFontRevision`, an edit
+   * fails with `FontChangedError` before changing anything when the font has
+   * moved on. An unknown page fails with `PageNotFoundError`, and deleting the
+   * last page with `LastPageError`.
+   */
+  pages: {
+    create(input: PageCreateInput): Promise<ShiftObservation<PageChange>>;
+    rename(input: PageRenameInput): Promise<ShiftObservation<PageChange>>;
+    delete(input: PageDeleteInput): Promise<ShiftObservation<PageChange>>;
+  };
+  /**
+   * The window's undo and redo, as Edit › Undo and Edit › Redo run them.
+   *
+   * @remarks
+   * Each reverses or reapplies one step of the window's history, whoever made
+   * it (the user or an agent): font edits, page edits and proof text alike,
+   * showing the page the step was made on as the menu items do. A step that
+   * changed the font moves `fontRevision`. Nothing to undo or redo answers
+   * false, not an error. A preview of a font file has no undo history, and
+   * both fail with `HistoryUnavailableError`.
+   */
+  history: {
+    undo(input: HistoryInput): Promise<ShiftObservation<HistoryUndo>>;
+    redo(input: HistoryInput): Promise<ShiftObservation<HistoryRedo>>;
+  };
 }
+
+/** Undoes or redoes the window's latest step. */
+export type HistoryInput = ShiftTarget;
 
 /** A capability input without the window and revision a read scope binds. */
 export type ShiftReadInput<Input> = Input extends unknown ? Omit<Input, keyof ShiftTarget> : never;

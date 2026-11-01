@@ -1839,12 +1839,24 @@ export class Editor {
     return this.#camera;
   }
 
-  public async undo(): Promise<void> {
-    await this.history.undo();
+  /**
+   * Reverses the latest step of the window's history, as Edit › Undo does,
+   * showing the page it was made on.
+   *
+   * @returns false when there was nothing to undo.
+   */
+  public async undo(): Promise<boolean> {
+    return this.history.undo();
   }
 
-  public async redo(): Promise<void> {
-    await this.history.redo();
+  /**
+   * Reapplies the latest undone step, as Edit › Redo does, showing the page
+   * it was made on.
+   *
+   * @returns false when there was nothing to redo.
+   */
+  public async redo(): Promise<boolean> {
+    return this.history.redo();
   }
 
   /**

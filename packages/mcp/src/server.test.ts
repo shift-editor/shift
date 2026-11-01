@@ -125,6 +125,25 @@ const capabilities: ShiftCapabilities = {
       throw new Error("No open Shift window");
     },
   },
+  pages: {
+    async create() {
+      throw new Error("No open Shift window");
+    },
+    async rename() {
+      throw new Error("No open Shift window");
+    },
+    async delete() {
+      throw new Error("No open Shift window");
+    },
+  },
+  history: {
+    async undo() {
+      throw new Error("No open Shift window");
+    },
+    async redo() {
+      throw new Error("No open Shift window");
+    },
+  },
 };
 
 const execute = (code: string) => executeShiftCode(capabilities, code);
@@ -256,7 +275,7 @@ describe("Shift MCP local connection", () => {
     });
   });
 
-  it("tells agents that canvas proof text is all they can write", async () => {
+  it("tells agents they write proof text and pages, and undo the window's own steps", async () => {
     const connection = await startServer().start();
 
     const initialized = await mcpRequest(connection, "initialize", {
@@ -270,13 +289,15 @@ describe("Shift MCP local connection", () => {
     });
 
     expect(initialized).toMatchObject({
-      result: { instructions: expect.stringContaining("cannot change a font") },
-    });
-    expect(described).toMatchObject({
       result: {
-        content: [{ text: expect.stringContaining("setCaret(input: TextRunSetCaretInput)") }],
+        instructions: expect.stringMatching(/does not edit a font.*shift\.pages.*shift\.history/),
       },
     });
+    const [{ text }] = (described as { result: { content: [{ text: string }] } }).result.content;
+    expect(text).toContain("setCaret(input: TextRunSetCaretInput)");
+    expect(text).toContain("create(input: PageCreateInput): Promise<ShiftObservation<PageChange>>");
+    expect(text).toContain("undo(input: HistoryInput): Promise<ShiftObservation<HistoryUndo>>");
+    expect(text).toContain("redo(input: HistoryInput): Promise<ShiftObservation<HistoryRedo>>");
   });
 
   it("names a non-release build's command-line tool in the guide", async () => {
@@ -311,7 +332,9 @@ describe("Shift MCP local connection", () => {
 
     expect(initialized).toMatchObject({
       result: {
-        instructions: expect.stringMatching(/cannot change a font or a file.*shift\.commands/),
+        instructions: expect.stringMatching(
+          /does not edit a font or a file directly.*shift\.commands/,
+        ),
       },
     });
     expect(described).toMatchObject({
