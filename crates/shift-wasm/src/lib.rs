@@ -39,4 +39,6 @@ pub mod names;
 mod numbers;
 pub mod shaping;
 pub mod svg;
+#[cfg(feature = "engine-protocol")]
+pub mod typed_text;
 pub mod variation;

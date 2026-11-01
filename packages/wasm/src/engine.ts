@@ -20,8 +20,9 @@ import {
   nameOf,
   svgPathsRequest,
   takeReplyBlobs,
+  typedTextRequest,
 } from "./generated-engine/shift_wasm.js";
-import { EngineEdits, EngineReads, SvgPaths } from "./generated-protocol";
+import { EngineEdits, EngineReads, SvgPaths, TypedText } from "./generated-protocol";
 import { moduleNames } from "./names";
 
 /** The parts of Node's `process` this module reads, where it runs under Node. */
@@ -51,6 +52,9 @@ const names = moduleNames(internName, nameOf);
 
 /** Contours from SVG path data, as shift-font parses them. */
 export const svgPaths = new SvgPaths(syncTransport(svgPathsRequest, names, takeReplyBlobs));
+
+/** Text laid out as typed, by shift-layout, over a font the window has no engine for. */
+export const typedText = new TypedText(syncTransport(typedTextRequest, names, takeReplyBlobs));
 
 /** What the editor reads from the engine session `handle`'s font. */
 export function engineReads(handle: number): EngineReads {

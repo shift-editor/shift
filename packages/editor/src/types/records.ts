@@ -2,7 +2,7 @@ import type { GlyphId, NodeId, RunId, SelectableId, ShiftId } from "@shift/types
 import type { EditingId } from "./editing";
 import type { GlyphNode, TextRunNode } from "./node";
 import type { SelectionId } from "./object";
-import type { TextEditingId, TextEditingRecord, TextRunRecord } from "./text";
+import type { StoredTextRunRecord, TextEditingId, TextEditingRecord } from "./text";
 
 export type ShiftRecordId = ShiftId | SelectionId | EditingId | TextEditingId | RunId;
 
@@ -38,4 +38,4 @@ export type ShiftEditorRecord =
   | SelectionRecord
   | EditingRecord
   | TextEditingRecord
-  | TextRunRecord;
+  | StoredTextRunRecord;

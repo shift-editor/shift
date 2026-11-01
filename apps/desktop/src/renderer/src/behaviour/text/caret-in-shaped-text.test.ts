@@ -88,9 +88,15 @@ describe("carets in mixed-direction text", () => {
     const start = editor.canvasText()!.caret!.x;
 
     const wordLeft = () => editor.moveCaret(-1, "word");
-    const xs = caretAfterEach([wordLeft, wordLeft, wordLeft, wordLeft]).map(({ x }) => x);
+    const carets = caretAfterEach([wordLeft, wordLeft, wordLeft, wordLeft]);
 
+    const xs = carets.map(({ x }) => x);
     expect(xs.every((x, press) => x < (xs[press - 1] ?? start))).toBe(true);
+    // The first press lands on the left edge of the last "fi", the last on the first's.
+    expect([carets[0], carets.at(-1)]).toEqual([
+      { position: 9, x: 3000 },
+      { position: 0, x: 0 },
+    ]);
   });
 });
 
