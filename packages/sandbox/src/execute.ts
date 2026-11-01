@@ -106,6 +106,7 @@ export async function executeShiftCode(
     __shiftTextCreate: validated.text.create,
     __shiftTextSetText: validated.text.setText,
     __shiftTextSetCaret: validated.text.setCaret,
+    __shiftTextSetOptions: validated.text.setOptions,
     __shiftTextDelete: validated.text.delete,
   } satisfies Record<string, (input: never) => Promise<unknown>>;
   for (const [name, call] of Object.entries(textCalls)) {
@@ -179,6 +180,7 @@ export async function executeShiftCode(
         create: async (input) => JSON.parse(await __shiftTextCreate(input)),
         setText: async (input) => JSON.parse(await __shiftTextSetText(input)),
         setCaret: async (input) => JSON.parse(await __shiftTextSetCaret(input)),
+        setOptions: async (input) => JSON.parse(await __shiftTextSetOptions(input)),
         delete: async (input) => JSON.parse(await __shiftTextDelete(input)),
       }),
       read: async (target, callback) => {
@@ -328,6 +330,8 @@ function validatedCapabilities(capabilities: ShiftCapabilities): ShiftCapabiliti
       setText: (input) => capabilities.text.setText(shiftInputSchemas["text.setText"].parse(input)),
       setCaret: (input) =>
         capabilities.text.setCaret(shiftInputSchemas["text.setCaret"].parse(input)),
+      setOptions: (input) =>
+        capabilities.text.setOptions(shiftInputSchemas["text.setOptions"].parse(input)),
       delete: (input) => capabilities.text.delete(shiftInputSchemas["text.delete"].parse(input)),
     },
   };

@@ -1365,6 +1365,7 @@ export interface ShiftCapabilities {
         create(input: TextRunCreateInput): Promise<ShiftObservation<TextRunView>>;
         setText(input: TextRunSetTextInput): Promise<ShiftObservation<TextRunView>>;
         setCaret(input: TextRunSetCaretInput): Promise<ShiftObservation<TextRunView>>;
+        setOptions(input: TextRunSetOptionsInput): Promise<ShiftObservation<TextRunView>>;
         delete(input: TextRunDeleteInput): Promise<ShiftObservation<null>>;
     };
 }

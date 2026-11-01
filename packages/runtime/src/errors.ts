@@ -35,6 +35,15 @@ export class ProofTextError extends Error {
   override readonly name = "ProofTextError";
 }
 
+/**
+ * Thrown when a run's options cannot be set: a feature tag, language or
+ * script shaping cannot read, or a line height that is not positive. The
+ * message is Rust's (`RunSettingsError`).
+ */
+export class TextRunOptionsError extends Error {
+  override readonly name = "TextRunOptionsError";
+}
+
 /** Thrown when a caret position or selection falls outside its run, or the position is not at one end of the selection. */
 export class TextCaretError extends Error {
   override readonly name = "TextCaretError";

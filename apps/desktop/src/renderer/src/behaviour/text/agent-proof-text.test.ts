@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { asNodeId } from "@shift/types";
-import { useTestEditor } from "@/testing/fontFixture";
+import { FONTS, useTestEditor } from "@/testing/fontFixture";
 
 // The canvas shows one run, "A", the open glyph, at the page's origin.
 describe("agents write proof text through the Text tool's edit path", () => {
@@ -154,5 +154,83 @@ describe("agents write proof text through the Text tool's edit path", () => {
     ).rejects.toMatchObject({ name: "TextCaretError" });
 
     expect(await runs()).toMatchObject([{ id: run!.id, text: "A" }]);
+  });
+});
+
+describe("agents set a run's options as the Text section does", () => {
+  const editor = useTestEditor({ file: FONTS.shapingTest, glyph: "f" });
+
+  async function fiRun() {
+    const { value } = await editor.agentText("text.create", { text: "fi\nfi" });
+    return value;
+  }
+
+  it("turns a feature off in one undo step, and undo turns it back on", async () => {
+    const run = await fiRun();
+    expect(run).toMatchObject({ glyphs: [{ name: "f_i" }, { name: "f_i" }] });
+
+    const { value: off } = await editor.agentText("text.setOptions", {
+      runId: run.id,
+      options: { features: { liga: false } },
+    });
+
+    expect(off).toMatchObject({
+      options: { features: { liga: false } },
+      glyphs: [{ name: "f" }, { name: "i" }, { name: "f" }, { name: "i" }],
+    });
+    await editor.undo();
+    expect(await editor.agentText("text.get", { runId: run.id })).toMatchObject({
+      value: { options: { features: {} }, glyphs: [{ name: "f_i" }, { name: "f_i" }] },
+    });
+  });
+
+  it("sets the line height, keeping the options it is not given, and the font revision", async () => {
+    const run = await fiRun();
+    const { fontRevision } = await editor.agentText("text.setOptions", {
+      runId: run.id,
+      options: { features: { liga: false } },
+    });
+
+    const spaced = await editor.agentText("text.setOptions", {
+      runId: run.id,
+      options: { lineHeight: 2 },
+      ifFontRevision: fontRevision,
+    });
+
+    const { unitsPerEm } = editor.fontOverview().metrics;
+    expect(spaced).toMatchObject({
+      fontRevision,
+      value: {
+        options: { features: { liga: false }, lineHeight: 2, shaping: true },
+        baselines: [0, -2 * unitsPerEm],
+      },
+    });
+  });
+
+  it("refuses a stale font revision and options shaping cannot read, changing nothing", async () => {
+    const run = await fiRun();
+    const { fontRevision } = await editor.agentText("text.runs", {});
+    await editor.addGlyph("B", 66);
+
+    await expect(
+      editor.agentText("text.setOptions", {
+        runId: run.id,
+        options: { lineHeight: 2 },
+        ifFontRevision: fontRevision,
+      }),
+    ).rejects.toMatchObject({ name: "FontChangedError" });
+    await expect(
+      editor.agentText("text.setOptions", {
+        runId: run.id,
+        options: { features: { "no tag": true } },
+      }),
+    ).rejects.toMatchObject({ name: "TextRunOptionsError" });
+    await expect(
+      editor.agentText("text.setOptions", { runId: run.id, options: { script: "Ara" } }),
+    ).rejects.toMatchObject({ name: "TextRunOptionsError" });
+
+    expect(await editor.agentText("text.get", { runId: run.id })).toMatchObject({
+      value: { options: { features: {}, script: null, lineHeight: null } },
+    });
   });
 });

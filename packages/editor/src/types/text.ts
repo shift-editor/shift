@@ -164,3 +164,17 @@ export type TextRunSettings = Pick<
   TextRunRecord,
   "shaping" | "features" | "language" | "script" | "lineHeight" | "align"
 >;
+
+/**
+ * Some of a run's settings, to change together (`Text.setSettings`): a field
+ * left out keeps its value, and in `features` a tag left out keeps its
+ * setting while `null` returns it to the font's default.
+ */
+export interface TextRunSettingsChange {
+  readonly shaping?: boolean;
+  readonly features?: Readonly<Record<string, boolean | null>>;
+  readonly language?: string | null;
+  readonly script?: string | null;
+  readonly lineHeight?: number | null;
+  readonly align?: TextAlign | null;
+}

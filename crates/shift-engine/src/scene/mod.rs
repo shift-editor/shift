@@ -28,7 +28,8 @@ use shift_font::{NodeId, PersistentMap, Replacement};
 pub use changes::{SceneChange, SceneChangeSet};
 pub use intents::{CreateRun, DeleteNode, MoveNode, SceneIntent, SetRunItems, SetRunSettings};
 pub use node::{
-    DEFAULT_PAGE_NAME, NodeContent, NodeKind, PageRole, RunSettings, SceneNode, TextItem, TextRun,
+    DEFAULT_PAGE_NAME, NodeContent, NodeKind, PageRole, RunSettings, RunSettingsError, SceneNode,
+    TextItem, TextRun,
 };
 
 /// Why a scene edit was refused. The scene is unchanged.
@@ -58,6 +59,13 @@ pub enum SceneError {
 
     #[error("scene node {0} is not a text run")]
     NotATextRun(NodeId),
+
+    #[error("text run {id}'s settings: {source}")]
+    RunSettings {
+        id: NodeId,
+        #[source]
+        source: RunSettingsError,
+    },
 
     #[error("scene node {0} has an empty index")]
     EmptyIndex(NodeId),
@@ -446,6 +454,10 @@ impl Scene {
                 else {
                     return Err(SceneError::NotATextRun(id.clone()));
                 };
+                settings.check().map_err(|source| SceneError::RunSettings {
+                    id: id.clone(),
+                    source,
+                })?;
                 current.clone_from(settings);
                 // A run's record holds its settings, so it is new too.
                 self.record(node, Items::Changed, journal);

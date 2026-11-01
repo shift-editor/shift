@@ -485,3 +485,76 @@ fn a_run_lays_out_one_unit_per_item() {
         ]
     );
 }
+
+#[test]
+fn refuses_run_settings_shaping_cannot_read() {
+    let mut scene = Scene::default();
+    scene
+        .apply_intents(&[
+            SceneIntent::CreateNode(page("page", 0)),
+            SceneIntent::CreateNode(run("run", "page", 0)),
+        ])
+        .unwrap();
+    let set = |settings: RunSettings| {
+        scene
+            .clone()
+            .apply_intents(&[SceneIntent::SetRunSettings(SetRunSettings {
+                id: NodeId::from_raw("run"),
+                settings,
+            })])
+    };
+
+    let tag = RunSettings {
+        features: [("liga!x".to_owned(), false)].into(),
+        ..RunSettings::default()
+    };
+    let language = RunSettings {
+        language: Some("not a language".to_owned()),
+        ..RunSettings::default()
+    };
+    let script = RunSettings {
+        script: Some("Ara".to_owned()),
+        ..RunSettings::default()
+    };
+    let line_height = RunSettings {
+        line_height: Some(0.0),
+        ..RunSettings::default()
+    };
+    let fine = RunSettings {
+        features: [("liga".to_owned(), false), ("ss01".to_owned(), true)].into(),
+        language: Some("sr-Latn".to_owned()),
+        script: Some("Arab".to_owned()),
+        line_height: Some(1.5),
+        ..RunSettings::default()
+    };
+
+    assert!(matches!(
+        set(tag),
+        Err(SceneError::RunSettings {
+            source: RunSettingsError::FeatureTag(_),
+            ..
+        })
+    ));
+    assert!(matches!(
+        set(language),
+        Err(SceneError::RunSettings {
+            source: RunSettingsError::Language(_),
+            ..
+        })
+    ));
+    assert!(matches!(
+        set(script),
+        Err(SceneError::RunSettings {
+            source: RunSettingsError::Script(_),
+            ..
+        })
+    ));
+    assert!(matches!(
+        set(line_height),
+        Err(SceneError::RunSettings {
+            source: RunSettingsError::LineHeight(_),
+            ..
+        })
+    ));
+    assert!(set(fine).is_ok());
+}

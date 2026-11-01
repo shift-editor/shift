@@ -33,6 +33,7 @@ import type {
   TextRunDeleteInput,
   TextRunGetInput,
   TextRunSetCaretInput,
+  TextRunSetOptionsInput,
   TextRunSetTextInput,
   TextRunsInput,
   TextRunSummary,
@@ -189,6 +190,10 @@ export type AgentCallMap = {
   };
   "text.setCaret": {
     request: ShiftReadInput<TextRunSetCaretInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<TextRunView>;
+  };
+  "text.setOptions": {
+    request: ShiftReadInput<TextRunSetOptionsInput> & { ifFontRevision?: FontRevision };
     response: ShiftObservation<TextRunView>;
   };
   "text.delete": {

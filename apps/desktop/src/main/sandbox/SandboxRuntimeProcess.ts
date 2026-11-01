@@ -79,6 +79,7 @@ export class SandboxRuntimeProcess {
       "shift.text.create": (input) => this.#capabilities.text.create(input),
       "shift.text.setText": (input) => this.#capabilities.text.setText(input),
       "shift.text.setCaret": (input) => this.#capabilities.text.setCaret(input),
+      "shift.text.setOptions": (input) => this.#capabilities.text.setOptions(input),
       "shift.text.delete": (input) => this.#capabilities.text.delete(input),
     });
 

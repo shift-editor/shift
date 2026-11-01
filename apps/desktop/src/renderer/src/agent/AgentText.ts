@@ -35,6 +35,8 @@ export class AgentText {
         revisions.write(ifFontRevision, () => text.setText(input)),
       "text.setCaret": ({ ifFontRevision, ...input }) =>
         revisions.write(ifFontRevision, () => text.setCaret(input)),
+      "text.setOptions": ({ ifFontRevision, ...input }) =>
+        revisions.write(ifFontRevision, () => text.setOptions(input)),
       "text.delete": ({ ifFontRevision, ...input }) =>
         revisions.write(ifFontRevision, async () => text.delete(input)),
     };

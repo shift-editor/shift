@@ -3,6 +3,7 @@ export { FontChangedError, ShiftReadScope } from "./read";
 export {
   ProofTextError,
   TextCaretError,
+  TextRunOptionsError,
   TextRunNotFoundError,
   UnknownGlyphNameError,
 } from "./errors";
@@ -102,6 +103,9 @@ export type {
   TextRunGetInput,
   TextRunGlyph,
   TextRunItem,
+  TextRunAlign,
+  TextRunOptions,
+  TextRunSetOptionsInput,
   TextRunSetCaretInput,
   TextRunSetTextInput,
   TextRunsInput,

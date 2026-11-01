@@ -11,6 +11,7 @@ import type {
   SpacingToolView,
   TextRunGlyph,
   TextRunItem,
+  TextRunOptions,
   TextRunView,
 } from "@shift/runtime";
 import type { Editor } from "@shift/editor";
@@ -27,7 +28,7 @@ import {
   type Source,
   type SourceId,
 } from "@shift/types";
-import type { TextItem } from "@shift/editor/text";
+import type { TextItem, TextRunRecord } from "@shift/editor/text";
 import type { KerningPair, SpacingTool } from "@shift/editor/tools";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 import { ShiftViewport } from "./ShiftViewport";
@@ -344,6 +345,7 @@ export class ShiftEditorReader {
       id: node.id,
       pageId: page.id,
       at: { x: node.position.x, y: node.position.y },
+      options: this.textRunOptions(run),
       items: run.items.map((item) => this.textRunItem(item)),
       glyphs: layout.placedGlyphs.map(
         (placed): TextRunGlyph => ({
@@ -418,6 +420,12 @@ export class ShiftEditorReader {
         ? tool.runs.samePairs(hovered).map((pair) => this.#kerningGap(pair))
         : [],
     };
+  }
+
+  /** A run's options as agents read them: its settings, as the Text section shows them. */
+  textRunOptions(run: TextRunRecord): TextRunOptions {
+    const { shaping, features, language, script, lineHeight, align } = run;
+    return { shaping, features: { ...features }, language, script, lineHeight, align };
   }
 
   /** An item's text: the character, `"\n"` for a line break, or `/name` for a glyph picked by name. */
