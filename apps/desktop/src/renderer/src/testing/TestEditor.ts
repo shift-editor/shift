@@ -107,6 +107,7 @@ import type {
   DrawnOutlineIds,
   DrawOptions,
   EditorTestSurface,
+  TextLayoutFailureRead,
   Modifiers,
   TextFeature,
   ToolbarButton,
@@ -313,6 +314,21 @@ export class TestEditor extends Editor implements EditorTestSurface {
   /** Makes the workspace fail the next edit it is sent, as a refused write would. */
   failNextWorkspaceApply(): void {
     this.#stack.failNextPersist();
+  }
+
+  failNextTextLayout(message: string): void {
+    this.#stack.engine.failNextLayout(new Error(message));
+  }
+
+  failNextGlyphPreload(message: string): void {
+    this.#stack.engine.failNextPreload(new Error(message));
+  }
+
+  textLayoutFailure(): TextLayoutFailureRead | null {
+    const failure = this.text.layoutFailureCell.peek();
+    if (!failure) return null;
+    const message = failure.error instanceof Error ? failure.error.message : String(failure.error);
+    return { stage: failure.stage, message };
   }
 
   /**
