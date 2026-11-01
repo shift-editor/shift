@@ -6,7 +6,7 @@ import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunNode } from "../../types/node";
-import type { TextLayoutFailure, TextRunRecord } from "../../types/text";
+import type { StoredTextRunRecord, TextLayoutFailure, TextRunRecord } from "../../types/text";
 import {
   characterTextItem,
   glyphTextItem,
@@ -16,6 +16,7 @@ import {
 } from "./layout";
 import type { TextLayout as LaidOutText } from "@shift/wasm/protocol";
 import { RunText } from "./RunText";
+import { DEFAULT_TEXT_RUN_SETTINGS, textRunWithDefaults } from "./runSettings";
 import { GlyphNameParser, type TextParseContext, type TextParser } from "./parsing";
 
 /** Owns proof text records and one reactive layout per run identity. */
@@ -25,7 +26,7 @@ export class Text {
   readonly #glyphsLoadedCell = signal(0);
   // non-reactive: dedupes in-flight glyph loads; only read by the imperative load path
   readonly #loading = new Map<GlyphId, Promise<void>>();
-  readonly #runsByItem: StoreIndex<TextItemId, TextRunRecord>;
+  readonly #runsByItem: StoreIndex<TextItemId, StoredTextRunRecord>;
   readonly #unsubscribeStore: () => void;
   readonly #parseContext: TextParseContext = {
     glyphNamed: (name) => {
@@ -125,7 +126,7 @@ export class Text {
       type: "textrun",
       scope: "document",
       items: [...items],
-      shaping: true,
+      ...DEFAULT_TEXT_RUN_SETTINGS,
     };
     this.#store.put(record);
     return record;
@@ -140,7 +141,7 @@ export class Text {
   run(id: RunId | null): TextRunRecord | null {
     if (!id) return null;
     const record = this.#store.record(id);
-    return record?.type === "textrun" ? record : null;
+    return record?.type === "textrun" ? textRunWithDefaults(record) : null;
   }
 
   /**
@@ -160,7 +161,8 @@ export class Text {
    * Reactive: the reader reruns when the item is added to or removed from a run.
    */
   runForItem(id: TextItemId): TextRunRecord | null {
-    return this.#runsByItem.get(id)[0] ?? null;
+    const [stored] = this.#runsByItem.get(id);
+    return stored ? textRunWithDefaults(stored) : null;
   }
 
   /** Replaces a run's items; the run's definition removes a child whose item went (`onContentChange`). */
