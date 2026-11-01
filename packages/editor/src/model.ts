@@ -36,6 +36,7 @@ export {
   type EngineStage,
   type InterpolatedMetrics,
 } from "./lib/wasm/engine";
+export { SessionEngine } from "./lib/engine/SessionEngine";
 export { GlyphLayerState } from "./lib/model/GlyphLayerState";
 export { RenderGlyph } from "./lib/model/RenderGlyph";
 export { OutlineTargets } from "./lib/nodes/OutlineTargets";
