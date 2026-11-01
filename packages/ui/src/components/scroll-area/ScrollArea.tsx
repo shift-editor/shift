@@ -43,6 +43,7 @@ export function ScrollArea({
       </BaseScrollArea.Viewport>
       <BaseScrollArea.Scrollbar
         orientation="vertical"
+        data-scroll-area-scrollbar=""
         className="absolute top-0.5 right-0.5 bottom-0.5 z-20 hidden w-1.5 justify-center opacity-0 transition-opacity duration-150 hover:opacity-100 data-[has-overflow-y]:flex data-[scrolling]:opacity-100"
       >
         <BaseScrollArea.Thumb className="w-full rounded-full bg-control-muted" />
