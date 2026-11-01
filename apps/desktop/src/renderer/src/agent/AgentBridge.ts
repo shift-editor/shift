@@ -13,6 +13,9 @@ import type { AppReaders } from "./AppReaders";
 import { ShiftFontReader } from "./ShiftFontReader";
 import { ShiftEditorReader } from "./ShiftEditorReader";
 import { ShiftKerningReader } from "./ShiftKerningReader";
+import { AgentRevisions } from "./AgentRevisions";
+import { ShiftTextRuns } from "./ShiftTextRuns";
+import { AgentText } from "./AgentText";
 
 /** Serves bounded editor observations for one live renderer window. */
 export class AgentBridge {
@@ -22,7 +25,8 @@ export class AgentBridge {
   readonly #kerning: ShiftKerningReader;
   readonly #editor: ShiftEditorReader;
   readonly #readers: AppReaders;
-  readonly #revisionNamespace = crypto.randomUUID();
+  readonly #text: AgentText;
+  readonly #revisions: AgentRevisions;
   #requests: ChannelServer<AgentEventMap> | null = null;
   #e2eHooks: E2EHooks | null = null;
   #disposed = false;
@@ -37,6 +41,8 @@ export class AgentBridge {
       session.workspace?.editCoordinator ?? null,
     );
     this.#readers = { font: this.#reader, kerning: this.#kerning, editor: this.#editor };
+    this.#revisions = new AgentRevisions(session.workspace?.editCoordinator ?? null);
+    this.#text = new AgentText(new ShiftTextRuns(session.editor, this.#editor), this.#revisions);
   }
 
   /** Connects the renderer lane requested by Electron main. */
@@ -87,6 +93,7 @@ export class AgentBridge {
           this.#observe(ifFontRevision, () =>
             this.#reader.renderLayer(selector, { overlays, appearance }),
           ),
+        ...this.#text.calls,
         "agent.read": async ({ reader, method, args }) => {
           const { value } = await this.#observe(undefined, () => this.#read(reader, method, args));
           return value;
@@ -152,33 +159,11 @@ export class AgentBridge {
     return observation.fontRevision;
   }
 
-  async #observe<Value>(
+  #observe<Value>(
     ifFontRevision: FontRevision | undefined,
     read: () => Value | Promise<Value>,
   ): Promise<ShiftObservation<Value>> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await this.#session.workspace?.editCoordinator.settled();
-      const before = this.#fontRevision();
-      this.#assertRevision(ifFontRevision, before);
-
-      const value = await read();
-      await this.#session.workspace?.editCoordinator.settled();
-      const after = this.#fontRevision();
-      if (before === after) return { fontRevision: before, value };
-      if (ifFontRevision) this.#assertRevision(ifFontRevision, after);
-    }
-
-    throw new Error("The font changed while Shift was reading it; retry the observation");
-  }
-
-  #fontRevision(): FontRevision {
-    const sequence = this.#session.workspace?.editCoordinator.authoredRevisionCell.peek() ?? 0;
-    return `${this.#revisionNamespace}:${sequence}`;
-  }
-
-  #assertRevision(expected: FontRevision | undefined, current: FontRevision): void {
-    if (!expected || expected === current) return;
-    throw new Error(`Font revision mismatch: expected ${expected}, current ${current}`);
+    return this.#revisions.observe(ifFontRevision, read);
   }
 
   #editorCaptureBounds() {

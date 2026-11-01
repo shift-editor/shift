@@ -31,19 +31,29 @@ import type {
   ShiftReadState,
   ShiftTarget,
   SourceGetInput,
+  TextRunGetInput,
+  TextRunsInput,
+  TextRunSummary,
+  TextRunView,
 } from "./capabilities";
 import type { NamedInstance, Source } from "@shift/types";
 
-/** Thrown when the font changed after a read scope bound its revision. */
+/**
+ * Thrown when the font changed after a read scope bound its revision, or
+ * before a call whose `ifFontRevision` it no longer matches.
+ */
 export class FontChangedError extends Error {
   override readonly name = "FontChangedError";
   readonly expectedRevision: FontRevision;
   readonly actualRevision: FontRevision;
 
-  constructor(expectedRevision: FontRevision, actualRevision: FontRevision) {
-    super(
-      `The font changed during shift.read (expected revision ${expectedRevision}, now ${actualRevision}); start a new read`,
-    );
+  /** @param message - defaults to the message a stale `shift.read` scope gives. */
+  constructor(
+    expectedRevision: FontRevision,
+    actualRevision: FontRevision,
+    message = `The font changed during shift.read (expected revision ${expectedRevision}, now ${actualRevision}); start a new read`,
+  ) {
+    super(message);
     this.expectedRevision = expectedRevision;
     this.actualRevision = actualRevision;
   }
@@ -85,6 +95,10 @@ export class ShiftReadScope implements ShiftRead {
     resolve(input: ShiftReadInput<KerningResolveInput>): Promise<ResolvedKerningPairs>;
     at(input: ShiftReadInput<KerningAtInput>): Promise<KerningMasterValue>;
   };
+  readonly text: {
+    runs(input?: ShiftReadInput<TextRunsInput>): Promise<TextRunSummary[]>;
+    get(input: ShiftReadInput<TextRunGetInput>): Promise<TextRunView>;
+  };
 
   readonly #capabilities: ShiftCapabilities;
   readonly #windowId: number;
@@ -108,6 +122,7 @@ export class ShiftReadScope implements ShiftRead {
     const instances = capabilities.instances;
     const glyphs = capabilities.glyphs;
     const kerning = capabilities.kerning;
+    const text = capabilities.text;
     this.font = Object.freeze({
       get: async () => {
         this.#assertActive();
@@ -151,6 +166,12 @@ export class ShiftReadScope implements ShiftRead {
         this.#guard(input, (bound) => kerning.resolve(bound)),
       at: (input: ShiftReadInput<KerningAtInput>) =>
         this.#guard(input, (bound) => kerning.at(bound)),
+    });
+    this.text = Object.freeze({
+      runs: (input: ShiftReadInput<TextRunsInput> = {}) =>
+        this.#guard(input, (bound) => text.runs(bound)),
+      get: (input: ShiftReadInput<TextRunGetInput>) =>
+        this.#guard(input, (bound) => text.get(bound)),
     });
   }
 

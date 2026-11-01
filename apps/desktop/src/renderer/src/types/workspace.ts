@@ -18,4 +18,17 @@ export interface WorkspaceEdit {
   readonly relayered: readonly GlyphId[];
 }
 
+/** How the edit coordinator queues one change set; each field has the default a new edit takes. */
+export interface EditAcceptance {
+  /** Defaults to `"edit"`. */
+  readonly origin?: WorkspaceEdit["origin"];
+  /** Defaults to `"unsaved"`. */
+  readonly saveState?: SaveState;
+  /**
+   * Whether it changed the font, not only the scene; only then does the
+   * authored revision advance. Defaults to true.
+   */
+  readonly changesFont?: boolean;
+}
+
 export type WorkspaceApplyStatus = "idle" | "queued" | "applying";

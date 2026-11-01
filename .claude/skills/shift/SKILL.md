@@ -18,7 +18,7 @@ To change how Shift itself looks (its colors, a theme, or the user's rice), edit
 
 ## Rules
 
-- **The live MCP is read-only.** It inspects, resolves, renders, and captures; it cannot change a font. To change a font, save it in Shift and edit the file with `shift-cli`, or describe the change for the user to make. Never claim an edit happened through MCP.
+- **The live MCP cannot change a font.** It inspects, resolves, renders, and captures; the only things it writes are the proof text on the canvas (text runs) and the Text mode caret, which are view state, not font data. To change a font, save it in Shift and edit the file with `shift-cli`, or describe the change for the user to make. Never claim a font edit happened through MCP.
 - **A saved file does not include unsaved app edits.** Say so when the answer depends on which one you read.
 - **Check exact signatures at the source.** For the MCP API, call `shift.describe`; for the CLI, run `shift-cli --help` and `shift-cli <command> --help`. This skill describes workflows and interpretation, not every parameter.
 - **Target explicitly.** Use the `windowId` from `shift.sessions.list()`. If a window or session disappears, list sessions again and say so; never silently switch to another font.

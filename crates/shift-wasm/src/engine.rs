@@ -75,6 +75,11 @@ export interface EngineEditLayers {
   changeSet?: Uint8Array;
   /** For an undo or redo: whether it left the font as last saved. */
   matchesSaved?: boolean;
+  /**
+   * For an undo or redo: whether it changed the font, not only the scene
+   * (pages, text runs and placed glyphs).
+   */
+  changesFont?: boolean;
 }
 
 /**
@@ -695,8 +700,9 @@ pub fn engine_discard_redo(handle: u32) -> Result<(), JsError> {
     })
 }
 
-/// An undo or redo as an `EngineEdit` carrying its change set and whether it
-/// left the document as last saved, or `undefined`. Keeps where the edit was
+/// An undo or redo as an `EngineEdit` carrying its change set, whether it
+/// left the document as last saved and whether it changed the font rather
+/// than only the scene, or `undefined`. Keeps where the edit was
 /// made for `EngineEdits::replayed_location`.
 fn replayed(
     engine: &mut Engine,
@@ -716,6 +722,11 @@ fn replayed(
         &edit,
         "matchesSaved",
         &JsValue::from_bool(engine.history.matches_saved()),
+    )?;
+    set(
+        &edit,
+        "changesFont",
+        &JsValue::from_bool(!replayed.applied.changes.is_empty()),
     )?;
     Ok(edit.into())
 }

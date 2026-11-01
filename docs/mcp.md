@@ -1,6 +1,6 @@
 # Connect an AI agent to Shift
 
-Shift exposes the fonts **currently open in the desktop app** through a local, read-only [MCP](https://modelcontextprotocol.io/) server. Claude Code, Codex, and other HTTP MCP clients can connect directly; no Shift client program or project checkout is required. This is a one-time setup per Shift build and MCP client.
+Shift exposes the fonts **currently open in the desktop app** through a local [MCP](https://modelcontextprotocol.io/) server that cannot change a font. Claude Code, Codex, and other HTTP MCP clients can connect directly; no Shift client program or project checkout is required. This is a one-time setup per Shift build and MCP client.
 
 ## Turn on agent connections
 
@@ -15,7 +15,7 @@ Shift exposes the fonts **currently open in the desktop app** through a local, r
 | Shift Dev         | `shift-dev`         | `http://127.0.0.1:17463/mcp` |
 | Shift Nightly Dev | `shift-nightly-dev` | `http://127.0.0.1:17464/mcp` |
 
-There is no token. The server answers only on `127.0.0.1`, rejects requests whose `Host` is not local (DNS rebinding), and rejects browser requests from non-local origins, so a web page cannot reach it. Any program running on your computer can connect while the setting is on; turn it off when you don't need it. The server is read-only: agents can inspect, render, and capture, but not change fonts.
+There is no token. The server answers only on `127.0.0.1`, rejects requests whose `Host` is not local (DNS rebinding), and rejects browser requests from non-local origins, so a web page cannot reach it. Any program running on your computer can connect while the setting is on; turn it off when you don't need it. Agents can inspect, render, and capture fonts, but not change them: the only writes are the proof text on the canvas and its Text caret (see below).
 
 ### Claude Code
 
@@ -42,7 +42,7 @@ Add a **Streamable HTTP** server with the name and URL from the table. Configure
 
 ## What the connection can read
 
-`shift.describe` describes the typed API. `shift.execute` runs bounded, read-only code against explicit live Shift window IDs. The first-class `shift.capture` tool returns a point-in-time PNG image plus structured capture metadata for either the visible window contents or its editor canvas panel. Agents can list open sessions; read font info, metric definitions, glyph directories, nested authored source layers, conventional component transformations, and point-in-time editor observations; resolve mapped locations, source metrics, and drawable glyphs at arbitrary axis coordinates; resolve one authored layer's composited outline and component subtrees; and render that layer as portable SVG with optional points, control lines, anchors, component handles, labeled source metrics, and independent advance-width guides. Render calls can apply presentation-only `appearance` overrides and return style-independent structured `guides`. Rendered SVG is a refreshable point-in-time proof, not a live binding. Preview geometry is not authored data. An offline file that is not open in Shift should be inspected with [`shift-cli`](../crates/shift-cli/README.md), not this live server.
+`shift.describe` describes the typed API. `shift.execute` runs bounded code against explicit live Shift window IDs. The first-class `shift.capture` tool returns a point-in-time PNG image plus structured capture metadata for either the visible window contents or its editor canvas panel. Agents can list open sessions; read font info, metric definitions, glyph directories, nested authored source layers, conventional component transformations, and point-in-time editor observations; resolve mapped locations, source metrics, and drawable glyphs at arbitrary axis coordinates; resolve one authored layer's composited outline and component subtrees; and render that layer as portable SVG with optional points, control lines, anchors, component handles, labeled source metrics, and independent advance-width guides. Render calls can apply presentation-only `appearance` overrides and return style-independent structured `guides`. Rendered SVG is a refreshable point-in-time proof, not a live binding. Preview geometry is not authored data. An offline file that is not open in Shift should be inspected with [`shift-cli`](../crates/shift-cli/README.md), not this live server.
 
 Every operation targeting one font window returns `{ fontRevision, value }`. For a composed read inside `shift.execute`, use `shift.read({ windowId }, async (read) => ...)`: it binds one revision, passes it as `ifFontRevision` to every call, and returns plain values. If authored state changes mid-read, the call throws `FontChangedError`, the scope stays stale, and nothing retries; start a new read. Separate MCP requests can carry `fontRevision` into `ifFontRevision` by hand. A revision does not retrieve historical data and is not valid for another window or renderer lifetime. `captureId` still identifies one image and is distinct from the surrounding font revision. Font revisions do not version selection, viewport, focus, or other editor-only state.
 
@@ -62,5 +62,11 @@ async () => {
   });
 };
 ```
+
+## What the connection can write
+
+Agents can write the proof text on the canvas and nothing else. `shift.text.runs({ windowId, pageId? })` lists a page's text runs (the shown page by default) and `shift.text.get({ windowId, runId })` reads one as it shows, with its items, laid-out glyphs and caret. `shift.text.create({ windowId, text, pageId?, at? })` adds a run (below the page's last run by default), `shift.text.setText({ windowId, runId, text })` replaces its text, `shift.text.delete({ windowId, runId })` removes it, and `shift.text.setCaret({ windowId, runId, position, selection? })` puts the Text mode caret in it, switching to its page and the Text tool. Text is read as pasting it into the Text tool reads it: characters, `"\n"` for a line break, and `/name` for the glyph with that name; a name the font lacks fails with `UnknownGlyphNameError`.
+
+Each write is one edit through the Text tool's own path. `create`, `setText` and `delete` are one undo step each and mark the document unsaved, as typing does; `setCaret` is session state, with no undo step and no unsaved change. Proof text is view state, not font data, so no write advances `fontRevision`. With `ifFontRevision`, a write fails with `FontChangedError` and changes nothing when the font has moved on. Failures are typed errors: `TextRunNotFoundError`, `PageNotFoundError`, `UnknownGlyphNameError`, `TextCaretError`. Run options (features, language, script, line height, alignment) are not writable yet.
 
 If a connection fails, check that the build is running and that **Settings → Agents** shows it listening. Shift does **not** switch to another port when its port is occupied; the Agents panel reports the conflict. Quit the app holding the port, then turn agent connections off and on again.

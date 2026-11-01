@@ -27,7 +27,7 @@ Shift requires macOS 13 Ventura or later, Windows 10 or later, or a Linux distri
 
 ## AI agents
 
-Connect Claude Code, Codex, or another MCP client to fonts open in Shift using the [one-time MCP setup guide](docs/mcp.md). The connection is read-only; use `shift-cli` for saved files that are not open in the app.
+Connect Claude Code, Codex, or another MCP client to fonts open in Shift using the [one-time MCP setup guide](docs/mcp.md). Agents can read and render fonts but cannot change them; the only things they can write are the proof text on the canvas and its Text caret. Use `shift-cli` for saved files that are not open in the app.
 
 ## Themes
 

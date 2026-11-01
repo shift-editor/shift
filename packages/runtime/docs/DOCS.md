@@ -1,6 +1,6 @@
 # @shift/runtime
 
-<!-- reviewed: 2026-10-04 review-every: 90d -->
+<!-- reviewed: 2026-11-01 review-every: 90d -->
 
 Host-neutral capability contracts shared by Shift protocol adapters and future plugin hosts.
 
@@ -43,6 +43,8 @@ packages/runtime/
 - `LayerSvg`, `LayerOverlays`, `LayerAppearance`, and `LayerGuides` -- portable authored-layer proof output, semantic overlay selection, presentation-only overrides, and style-independent guide positions.
 - `KerningGroupSummary`, `KerningPairPage`, `AuthoredKerningPair`, and `KerningPairSide` -- font-wide kerning groups with members, and one master's authored pairs with each side tagged glyph or group.
 - `ResolvedKerningPairs`, `KerningResolution`, `KerningMasterValue`, `KerningOrigin`, and `KerningRule` -- the kerning between two glyphs at a master or location, with each master's value, how it arises, and which kind of pair applies.
+- `TextRunSummary`, `TextRunView`, and the `TextRun*Input` types -- a page's canvas text runs (proof text), one run as it shows with its items, glyphs and caret, and the inputs of the `text` capability, its only writes.
+- `TextRunNotFoundError`, `PageNotFoundError`, `UnknownGlyphNameError`, and `TextCaretError` (`src/errors.ts`) -- the typed failures of `text` calls, recognized by `name` across process boundaries like `FontChangedError`.
 - `shiftInputSchemas` -- reusable runtime validation of untrusted capability inputs before IPC.
 - `EditorView` -- renderer-owned portion of an editor observation.
 - `DocumentState` -- one window's document: where it came from, the file Save writes, and whether it is `dirty` or `needsSaveAs`. The desktop's editor reader serves it (`ShiftEditorReader.documentState`); it is not an MCP capability yet.
@@ -53,7 +55,7 @@ packages/runtime/
 
 A host implements `ShiftCapabilities` by routing each operation to the subsystem that owns the truth. The desktop host lists window/session identity in Electron main, captures pixels from the explicitly targeted window, and requests editor bounds or editor and font observations from that window's renderer.
 
-Every targeted call returns `{ fontRevision, value }`. The renderer settles pending authored operations, checks an optional `ifFontRevision`, performs the read, and verifies that the same revision still owns the result. Accepted edits advance the session-local revision immediately; undo, redo, and failed-edit recovery advance it again; save does not. The token is opaque, non-orderable, scoped to one live renderer session, and invalid after renderer replacement. Shift retains no historical state for it. A mismatch fails explicitly so a caller can restart a composed read instead of combining revisions. Font revisions cover authored font truth, not viewport, selection, focus, or other editor-only state. A `captureId` identifies one image while its surrounding `fontRevision` correlates that image with font data.
+Every targeted call returns `{ fontRevision, value }`. The renderer settles pending authored operations, checks an optional `ifFontRevision`, performs the read, and verifies that the same revision still owns the result. Accepted edits that change the font advance the session-local revision immediately (a scene-only edit, such as proof text, does not); undo, redo, and failed-edit recovery advance it again; save does not. The token is opaque, non-orderable, scoped to one live renderer session, and invalid after renderer replacement. Shift retains no historical state for it. A mismatch fails explicitly so a caller can restart a composed read instead of combining revisions. Font revisions cover authored font truth, not viewport, selection, focus, or other editor-only state. A `captureId` identifies one image while its surrounding `fontRevision` correlates that image with font data.
 
 Raw observations suit separate MCP requests and advanced clients. Scripts that compose several reads use `shift.read({ windowId }, async (read) => ...)`: the scope reads `font.get` once, caches that `FontOverview`, binds its revision, and injects `windowId` and `ifFontRevision` into every later call, returning plain values instead of observations. `ShiftReadScope` implements the scope over any `ShiftCapabilities`; the sandbox opens one per `shift.read` and closes it when the callback settles.
 
@@ -68,6 +70,8 @@ Layer reads use one native accepted-state query keyed by `LayerId`, behind pendi
 The code-API generator bundles only declarations reachable from `capabilities.ts`, including the canonical branded identifiers from `@shift/types`, then adds the code-mode global `shift: ShiftScript` (`ShiftCapabilities` plus `read`). `@shift/mcp` imports that generated file as text for `shift.describe`; it does not maintain another declaration.
 
 Kerning reads are read-only. `kerning.groups` lists font-wide groups by position, each with its member glyphs. `kerning.pairs` pages through one source's authored pairs in side-id order; a cursor names the last pair returned, so it survives that pair being removed, and the optional `glyph` filter keeps pairs naming the glyph directly or through its group at that position. Every kerning read takes its master as `source` (a `SourceSelector`), the default source when omitted. `kerning.resolve` takes pairs of glyph selectors (`{ name }` or `{ glyphId }`, as `kerning.at` and the `glyph` filter do) and answers at a `source`, an external `location`, or the default location, using the host's own kerning lookup and blending rather than re-deriving them: the most specific authored pair wins (glyph/glyph, glyph/group, group/glyph, group/group), a source that kerns other pairs but not this one is 0 there, and a source that authors no kerning takes the blend of the sources that do. Each resolution lists every source with that value, its `origin`, and the pair that applies. `kerning.at` reads one such entry: one pair, by glyph selectors, at one source.
+
+`text` is the only capability that writes, and what it writes is view state beside the font: the canvas text runs and the Text mode caret. `text.runs` lists a page's runs (the shown page by default) and `text.get` reads one; `ShiftRead` has both. `text.create`, `text.setText` and `text.delete` are one undo step each through the Text tool's edit path and mark the document unsaved; `text.setCaret` places the caret as session state. Text input is parsed by the editor's own text parser (`/name` picks a glyph), so the syntax matches pasting into the Text tool, and a name the font lacks is an `UnknownGlyphNameError` rather than literal text. No write changes the font or advances `fontRevision`; with `ifFontRevision`, a write fails with `FontChangedError` before it changes anything.
 
 ## Workflow recipes
 

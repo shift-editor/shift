@@ -10,6 +10,7 @@ import {
 import {
   FontChangedError,
   ShiftReadScope,
+  TextRunNotFoundError,
   type KerningPairQuery,
   type LayerGetInput,
   type ShiftCapabilities,
@@ -210,7 +211,50 @@ const capabilities: ShiftCapabilities = {
       return observation(kerningResolution(T_THEN_A).masters[0]!);
     },
   },
+  text: {
+    async runs({ pageId }) {
+      return observation([textRunSummary(pageId)]);
+    },
+    async get({ runId }) {
+      return observation(textRunView(runId));
+    },
+    async create() {
+      return observation(textRunView(asNodeId("run-a")));
+    },
+    async setText({ runId }) {
+      return observation(textRunView(runId));
+    },
+    async setCaret({ runId }) {
+      return observation(textRunView(runId));
+    },
+    async delete({ runId }) {
+      textRunView(runId);
+      return observation(null);
+    },
+  },
 };
+
+function textRunSummary(pageId = asNodeId("node-page")) {
+  return { id: asNodeId("run-a"), pageId, text: "Hamburg", at: { x: 0, y: 0 } };
+}
+
+function textRunView(runId: ReturnType<typeof asNodeId>) {
+  if (runId !== "run-a") throw new TextRunNotFoundError(runId);
+  return {
+    id: runId,
+    pageId: asNodeId("node-page"),
+    at: { x: 0, y: 0 },
+    items: [{ id: "item-h", text: "H" }],
+    glyphs: [],
+    advance: 0,
+    baselines: [0],
+    openItemId: null,
+    openGlyph: null,
+    editedItemId: null,
+    hoveredItemId: null,
+    caret: null,
+  };
+}
 
 function kerningGroup() {
   return {
@@ -429,6 +473,57 @@ describe("Shift sandbox executes bounded code over live capabilities", () => {
     ).rejects.toThrow();
   });
 
+  it("passes proof-text writes to the host as parsed inputs and keeps its typed errors", async () => {
+    const seen: unknown[] = [];
+    const record =
+      <Input, Value>(call: (input: Input) => Promise<Value>) =>
+      (input: Input) => {
+        seen.push(input);
+        return call(input);
+      };
+    const host: ShiftCapabilities = {
+      ...capabilities,
+      text: {
+        ...capabilities.text,
+        create: record(capabilities.text.create),
+        setText: record(capabilities.text.setText),
+        setCaret: record(capabilities.text.setCaret),
+        delete: record(capabilities.text.delete),
+      },
+    };
+
+    const result = await executeShiftCode(
+      host,
+      "async () => { const created = await shift.text.create({ windowId: 7, text: 'Hi/A', at: { x: 10, y: 20 } }); const runId = created.value.id; await shift.text.setText({ windowId: 7, runId, text: 'Hamburg' }); await shift.text.setCaret({ windowId: 7, runId, position: 2, selection: { start: 0, end: 2 } }); await shift.text.delete({ windowId: 7, runId }); try { await shift.text.get({ windowId: 7, runId: 'gone' }); } catch (error) { return error.name; } }",
+    );
+
+    expect(result).toBe("TextRunNotFoundError");
+    expect(seen).toEqual([
+      { windowId: 7, text: "Hi/A", at: { x: 10, y: 20 } },
+      { windowId: 7, runId: "run-a", text: "Hamburg" },
+      { windowId: 7, runId: "run-a", position: 2, selection: { start: 0, end: 2 } },
+      { windowId: 7, runId: "run-a" },
+    ]);
+  });
+
+  it("rejects proof-text inputs that are not text runs' shapes before they reach the host", async () => {
+    await expect(
+      executeShiftCode(capabilities, "async () => shift.text.create({ windowId: 7, text: 5 })"),
+    ).rejects.toThrow();
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.text.setCaret({ windowId: 7, runId: 'run-a', position: -1 })",
+      ),
+    ).rejects.toThrow();
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.text.delete({ windowId: 7, runId: 'run-a', text: 'x' })",
+      ),
+    ).rejects.toThrow();
+  });
+
   it("rejects an invalid glyph page before it reaches the host", async () => {
     await expect(
       executeShiftCode(capabilities, "async () => shift.glyphs.list({ windowId: 7, limit: 0 })"),
@@ -517,6 +612,11 @@ function revisionedCapabilities({ advanceAfter }: { advanceAfter?: string } = {}
       resolve: guarded("kerning.resolve", ({ pairs }) => ({ items: pairs.map(kerningResolution) })),
       at: guarded("kerning.at", () => kerningResolution(T_THEN_A).masters[0]!),
     },
+    text: {
+      ...capabilities.text,
+      runs: guarded("text.runs", ({ pageId }) => [textRunSummary(pageId)]),
+      get: guarded("text.get", ({ runId }) => textRunView(runId)),
+    },
   };
 
   return {
@@ -564,6 +664,21 @@ describe("shift.read binds one font revision for its callback", () => {
       { method: "kerning.pairs", ifFontRevision: "revision-1" },
       { method: "kerning.resolve", ifFontRevision: "revision-1" },
       { method: "kerning.at", ifFontRevision: "revision-1" },
+    ]);
+  });
+
+  it("reads the canvas text runs at the bound revision", async () => {
+    const host = revisionedCapabilities();
+
+    const result = await executeShiftCode(
+      host.capabilities,
+      "async () => shift.read({ windowId: 7 }, async (read) => { const [run] = await read.text.runs(); const view = await read.text.get({ runId: run.id }); return { text: run.text, items: view.items.length }; })",
+    );
+
+    expect(result).toEqual({ text: "Hamburg", items: 1 });
+    expect(host.calls.slice(1)).toEqual([
+      { method: "text.runs", ifFontRevision: "revision-1" },
+      { method: "text.get", ifFontRevision: "revision-1" },
     ]);
   });
 

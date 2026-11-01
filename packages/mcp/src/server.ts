@@ -173,7 +173,8 @@ export class ShiftMcpServer {
     server.registerTool(
       "shift.describe",
       {
-        description: "Describe the typed live Shift API available to shift.execute.",
+        description:
+          "Describe the typed live Shift API available to shift.execute: font reads, and writes to canvas proof text (shift.text).",
         inputSchema: z.object({}),
       },
       async () => ({

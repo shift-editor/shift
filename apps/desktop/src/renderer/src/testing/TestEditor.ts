@@ -98,6 +98,10 @@ import type {
   TextRunView,
 } from "@shift/runtime";
 import { ShiftEditorReader, type DrawnHandle } from "@/agent/ShiftEditorReader";
+import { AgentRevisions } from "@/agent/AgentRevisions";
+import { AgentText, type TextCall } from "@/agent/AgentText";
+import type { AgentCallMap, TextOperation } from "@shared/agent/protocol";
+import { ShiftTextRuns } from "@/agent/ShiftTextRuns";
 import { ShiftFontReader } from "@/agent/ShiftFontReader";
 import { ShiftKerningReader } from "@/agent/ShiftKerningReader";
 import type {
@@ -247,6 +251,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
   };
   /** The surface's actions, shared with the E2E hook. */
   readonly #actions = new SurfaceActions(this);
+  /** The proof-text calls agents make, over this editor's readers and edit coordinator. */
+  readonly #agentText: AgentText;
   /** The frames {@link recordCanvas} has recorded, each the paths it fills and strokes. */
   readonly #canvasFrames: { fills: Path2D[]; strokes: Path2D[] }[] = [];
   /** The overlay frames {@link recordCanvas} has recorded, each the lines it strokes. */
@@ -274,6 +280,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
       kerning: new ShiftKerningReader(stack.font),
       editor: new ShiftEditorReader(this, stack.editCoordinator),
     };
+    this.#agentText = new AgentText(
+      new ShiftTextRuns(this, this.#reads.editor),
+      new AgentRevisions(stack.editCoordinator),
+    );
     registerBuiltInTools(this);
     this.setActiveTool("select");
   }
@@ -1235,6 +1245,14 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   documentState(): Promise<DocumentSaveState | null> {
     return this.#reads.editor.documentState();
+  }
+
+  agentText<K extends TextOperation>(
+    operation: K,
+    input: AgentCallMap[K]["request"],
+  ): Promise<AgentCallMap[K]["response"]> {
+    const call: TextCall<K> = this.#agentText.calls[operation];
+    return call(input);
   }
   async pointAt(position: Point2D): Promise<AuthoredPoint | null> {
     const outline = await this.outline();

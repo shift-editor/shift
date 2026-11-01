@@ -64,6 +64,8 @@ export class TextLayout {
   readonly metrics: SourceMetrics;
   readonly origin: Point2D;
   readonly lines: readonly Line[];
+  /** The distance from one line's baseline to the next, in font units. */
+  readonly lineHeight: number;
   readonly totalAdvance: number;
   /** @knipclassignore — bbox union over positioned glyphs; populated when shapeHitTest lands */
   readonly bounds: BoundsType | null;
@@ -96,7 +98,13 @@ export class TextLayout {
       });
     }
 
-    const { lines, totalAdvance, bounds } = assembleLayout(paragraphs, origin, this.metrics);
+    this.lineHeight = lineHeightOf(this.metrics);
+    const { lines, totalAdvance, bounds } = assembleLayout(
+      paragraphs,
+      origin,
+      this.metrics,
+      this.lineHeight,
+    );
     this.lines = lines;
     this.totalAdvance = totalAdvance;
     this.bounds = bounds;
@@ -259,9 +267,8 @@ function assembleLayout(
   paragraphs: PositionedParagraph[],
   origin: Point2D,
   metrics: SourceMetrics,
+  lineHeight: number,
 ): AssembledLayout {
-  const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
-
   const lines: Line[] = paragraphs.map((p, i) => ({
     runs: p.runs,
     y: origin.y - lineHeight * i,
@@ -279,6 +286,11 @@ function assembleLayout(
   }
 
   return { lines, totalAdvance, bounds: null };
+}
+
+/** Baseline to baseline: the ascender, the descender and the line gap. */
+function lineHeightOf(metrics: SourceMetrics): number {
+  return metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
 }
 
 function placeGlyphs(lines: readonly Line[], origin: Point2D): PlacedGlyph[] {

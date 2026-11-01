@@ -1,9 +1,17 @@
-import { mintRunId, type GlyphId, type NodeId, type RunId, type TextItemId } from "@shift/types";
+import {
+  mintRunId,
+  type GlyphId,
+  type GlyphName,
+  type NodeId,
+  type RunId,
+  type TextItemId,
+} from "@shift/types";
 import { computed, effect, keyedCache, signal, track, untracked } from "../signals";
 import type { ComputedSignal, Effect, Signal } from "../signals";
+import type { Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
-import type { TextRunNode } from "../../types/node";
-import type { RunPlacement, TextRunRecord } from "../../types/text";
+import type { PageNode, TextRunNode } from "../../types/node";
+import type { ParsedText, RunContent, RunPlacement, TextRunRecord } from "../../types/text";
 import {
   characterTextItem,
   glyphTextItem,
@@ -178,20 +186,34 @@ export class Text {
    */
   placeRun({ page, at, glyphs }: RunPlacement): TextRunNode {
     const items = glyphs.flatMap((glyphId) => this.glyphItem(glyphId) ?? []);
-    const node = this.#editor.history.withoutRecording(() =>
-      this.#editor.scene.createNode<TextRunNode>(
-        {
-          kind: "textRun",
-          parentId: page.id,
-          runId: mintRunId(),
-          size: this.#editor.font.metricsCell.peek().unitsPerEm,
-          position: { x: at.x, y: at.y },
-        },
-        items,
-      ),
-    );
+    const node = this.#editor.history.withoutRecording(() => this.#createRun(page, at, items));
     if (items.length === 0) this.#provisionalRuns.add(node.id);
     return node;
+  }
+
+  /**
+   * Places a new run holding `items` on a page as one undo step, as typing
+   * into a placed run is one; the run is never provisional.
+   *
+   * @returns the run node.
+   * @throws When another history capture is open, or the document refuses the node.
+   */
+  addRun({ page, at, items }: RunContent): TextRunNode {
+    return this.#editor.history.capture("Add text", () => this.#createRun(page, at, items));
+  }
+
+  /** Builds a run node set at the font's units per em: {@link placeRun} and {@link addRun} only. */
+  #createRun(page: PageNode, at: Point2D, items: readonly TextItem[]): TextRunNode {
+    return this.#editor.scene.createNode<TextRunNode>(
+      {
+        kind: "textRun",
+        parentId: page.id,
+        runId: mintRunId(),
+        size: this.#editor.font.metricsCell.peek().unitsPerEm,
+        position: { x: at.x, y: at.y },
+      },
+      items,
+    );
   }
 
   /**
@@ -233,6 +255,23 @@ export class Text {
   /** Parses typed, pasted, or imported text with {@link parser}. */
   itemsFromText(text: string): TextItem[] {
     return this.#parser.parse(text, this.#parseContext);
+  }
+
+  /**
+   * Parses text as {@link itemsFromText} does, and says which glyph names the
+   * parser asked for that the font lacks, for a caller that must refuse them
+   * rather than keep them as literal text.
+   */
+  parseText(text: string): ParsedText {
+    const unknownGlyphNames: GlyphName[] = [];
+    const items = this.#parser.parse(text, {
+      glyphNamed: (name) => {
+        const item = this.#parseContext.glyphNamed(name);
+        if (!item) unknownGlyphNames.push(name);
+        return item;
+      },
+    });
+    return { items, unknownGlyphNames };
   }
 
   /**

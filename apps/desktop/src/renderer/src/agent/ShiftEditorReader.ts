@@ -19,7 +19,14 @@ import { snapFeedback } from "@shift/editor/rendering";
 import type { ScenePoint } from "@shift/editor/spaces";
 import { isGroupSide, type KerningPairPosition } from "@shift/editor/model";
 import type { GlyphOutlineTarget, PositionGuide } from "@shift/editor/types";
-import { ascending, comparing, type PointId, type Source, type SourceId } from "@shift/types";
+import {
+  ascending,
+  comparing,
+  type NodeId,
+  type PointId,
+  type Source,
+  type SourceId,
+} from "@shift/types";
 import type { TextItem } from "@shift/editor/text";
 import type { KerningPair, SpacingTool } from "@shift/editor/tools";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
@@ -305,17 +312,23 @@ export class ShiftEditorReader {
   }
 
   /**
-   * The canvas text run as it shows now: its items, the glyphs they lay out
+   * A canvas text run as it shows now: its items, the glyphs they lay out
    * to, and the caret.
    *
-   * @returns null when the canvas shows no text run.
+   * @param nodeId - The run's text run node, on any page; the shown page's
+   * first run when omitted.
+   * @returns null when there is no such run, or it cannot lay out.
    */
-  textRun(): TextRunView | null {
+  textRun(nodeId?: NodeId): TextRunView | null {
     const editor = this.#editor;
-    const node = editor.scene.first("textRun");
+    const node =
+      nodeId === undefined
+        ? editor.scene.first("textRun")
+        : editor.scene.nodeOfKind(nodeId, "textRun");
     const run = node ? editor.text.run(node.runId) : null;
     const layout = node ? editor.text.layout(node.runId) : null;
-    if (!node || !run || !layout) return null;
+    const page = node ? editor.scene.pageOf(node.id) : null;
+    if (!node || !run || !layout || !page) return null;
 
     const itemIds = new Set(run.items.map((item) => item.id));
     const open = editor.nodeDefinition("textRun").childGlyph(node);
@@ -324,7 +337,10 @@ export class ShiftEditorReader {
     const caret = editor.textEditing.caretIn(node.id);
 
     return {
-      items: run.items.map((item) => this.#textRunItem(item)),
+      id: node.id,
+      pageId: page.id,
+      at: { x: node.position.x, y: node.position.y },
+      items: run.items.map((item) => this.textRunItem(item)),
       glyphs: layout.placedGlyphs.map(
         (placed): TextRunGlyph => ({
           glyphId: placed.glyph.glyphId,
@@ -400,7 +416,8 @@ export class ShiftEditorReader {
     };
   }
 
-  #textRunItem(item: TextItem): TextRunItem {
+  /** An item's text: the character, `"\n"` for a line break, or `/name` for a glyph picked by name. */
+  textRunItem(item: TextItem): TextRunItem {
     if (item.kind === "linebreak") return { id: item.id, text: "\n" };
     if (item.kind === "character")
       return { id: item.id, text: String.fromCodePoint(item.codepoint) };
