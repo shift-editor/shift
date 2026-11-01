@@ -324,6 +324,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
     this.#stack.engine.failNextPreload(new Error(message));
   }
 
+  failFeatureLists(message: string): void {
+    this.#stack.engine.failFeatureLists(new Error(message));
+  }
+
   textLayoutFailure(): TextLayoutFailureRead | null {
     const failure = this.text.layoutFailureCell.peek();
     if (!failure) return null;
