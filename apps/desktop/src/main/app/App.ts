@@ -48,6 +48,7 @@ import type {
   ShiftSession,
 } from "@shift/runtime";
 import type { RecentDocumentVisit } from "../../shared/recents";
+import type { CommandId } from "../../shared/commands";
 import { RecentDocuments } from "../recents/RecentDocuments";
 import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
 import { AgentConnections } from "../agent/AgentConnections";
@@ -274,7 +275,10 @@ export class App {
       this.#recents.onChanged(() => this.#publishRecents());
       await this.#startSandbox();
       await this.#startAgentConnections();
-      publishE2EHooks((windowId) => this.#windowForAgentRequest(windowId).agent);
+      publishE2EHooks({
+        agentFor: (windowId) => this.#windowForAgentRequest(windowId).agent,
+        runCommand: (windowId, id) => this.#runWindowCommand(this.#requireWindow(windowId), id),
+      });
       void this.#requireCommandLineTool()
         .refresh()
         .catch((error) => {
@@ -570,12 +574,7 @@ export class App {
       return { e2eActions: process.env.NODE_ENV === "test" };
     });
     ipc.handle(ipcMain, "commands.run", async (event, id) => {
-      const window = this.#requireWindowForWebContents(event.sender);
-      try {
-        await this.#commands.run(id, this.#commandContext(window));
-      } finally {
-        this.#applicationMenu.updateCommandStates();
-      }
+      await this.#runWindowCommand(this.#requireWindowForWebContents(event.sender), id);
     });
     ipc.handle(ipcMain, "clipboard.readText", () => {
       return clipboard.readText();
@@ -1351,9 +1350,23 @@ export class App {
     };
   }
 
-  #windowForAgentRequest(windowId: number): Window {
+  /** Runs `id` for `window`, as a command the window's renderer requests, then refreshes the menu. */
+  async #runWindowCommand(window: Window, id: CommandId): Promise<void> {
+    try {
+      await this.#commands.run(id, this.#commandContext(window));
+    } finally {
+      this.#applicationMenu.updateCommandStates();
+    }
+  }
+
+  #requireWindow(windowId: number): Window {
     const window = this.#windows.windowForId(windowId);
     if (!window) throw new Error(`Shift window ${windowId} is not open`);
+    return window;
+  }
+
+  #windowForAgentRequest(windowId: number): Window {
+    const window = this.#requireWindow(windowId);
     if (!this.#workspaces.getForBrowserWindow(window.window)) {
       throw new Error(`Shift window ${windowId} has no font session`);
     }
