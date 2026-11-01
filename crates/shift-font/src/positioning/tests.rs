@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use super::*;
+use crate::anchor_propagation::PropagationAnchor;
 
 /// Anchors and kerning by glyph, for runs of glyphs numbered by test.
 #[derive(Default)]
