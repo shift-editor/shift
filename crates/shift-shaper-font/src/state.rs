@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use shift_font::GlyphId;
+use shift_font::{GlyphId, OpenTypeCategory};
+use write_fonts::tables::gdef::GlyphClassDef;
 
 use super::inputs::{CompileInput, CompiledGlyphs, FeatureSource, GlyphChange, ShaperAxes};
 use super::references::FeatureReferences;
@@ -186,6 +187,20 @@ impl ShaperFontState {
             || EMPTY.get_or_init(ShaperGlyphOrder::default),
             |compiled| &compiled.glyph_order,
         )
+    }
+
+    /// Returns `glyph`'s `GDEF` class in the active font; `None` for a glyph
+    /// it does not class, such as one added since it compiled, which the
+    /// compile would have classed only by compiling again.
+    pub fn class(&self, glyph: GlyphId) -> Option<OpenTypeCategory> {
+        let class = self.compiled.as_ref()?.inputs.glyphs.class(glyph)?;
+        match class {
+            GlyphClassDef::Base => Some(OpenTypeCategory::Base),
+            GlyphClassDef::Ligature => Some(OpenTypeCategory::Ligature),
+            GlyphClassDef::Mark => Some(OpenTypeCategory::Mark),
+            GlyphClassDef::Component => Some(OpenTypeCategory::Component),
+            _ => None,
+        }
     }
 
     /// Returns the diagnostics of the most recent request, including when its

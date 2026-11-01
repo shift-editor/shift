@@ -33,8 +33,14 @@ test.describe("Home view", () => {
       .getByRole("button")
       .filter({ has: page.getByText("English", { exact: true }) });
     await expect(english).toContainText(/\d+\/\d+/);
-    // The sidebar scrolls to the expanded language or not depending on timing; show it either way.
-    await english.scrollIntoViewIfNeeded();
+    // Expanding Latin makes the sidebar overflow, and where it is scrolled then depends on timing.
+    // Scroll it to the end, the last section in view with English, so the golden has one state.
+    const instances = fontNavigation(page).getByRole("button", { name: "Instances", exact: true });
+    await expect(async () => {
+      await instances.scrollIntoViewIfNeeded();
+      await expect(instances).toBeInViewport({ ratio: 1, timeout: 1_000 });
+      await expect(english).toBeInViewport({ ratio: 1, timeout: 1_000 });
+    }).toPass();
     await page.mouse.move(0, 0);
     await expectPanelSnapshot(fontNavigation(page), "home-language-coverage.png");
 

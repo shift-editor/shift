@@ -65,7 +65,7 @@ import type {
   WorkspaceEditCoordinator,
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
-import type { GlyphIdentityChange, ParagraphRequest, ShapedParagraph } from "@shift/wasm/protocol";
+import type { GlyphIdentityChange, LayoutRequest, PlacedText } from "@shift/wasm/protocol";
 import { EngineVariationReader, StatelessVariationReader, locationValues } from "../wasm/variation";
 import type { GlyphIdentityEdit, GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
@@ -1491,19 +1491,45 @@ export class Font {
   }
 
   /**
-   * Shapes paragraphs with the font's feature code, as the window's engine
-   * holds the font: unsaved edits included. Tracks the revision of each
-   * change flag shaping reads, so a computed that shapes reshapes after any
-   * edit that may change the result.
+   * Lays text out in the window's engine, as it holds the font: unsaved
+   * edits included. Tracks the revision of each change flag layout reads,
+   * so a computed that lays text out does again after any edit that may
+   * change the result.
    *
-   * @returns Each paragraph's runs in logical order, or why it could not be
-   * shaped; null without an open engine.
+   * A pure read: glyphs the engine has not loaded lay out from placeholders
+   * and are listed in `unloaded`, for {@link preloadLaidOut}.
+   *
+   * @param location - External location displayed by editor controls.
+   * @param sourceId - Source being edited, which takes precedence over `location`.
+   * @returns null without an open engine.
    */
-  shapeParagraphs(paragraphs: readonly ParagraphRequest[]): readonly ShapedParagraph[] | null {
+  layoutText(
+    text: LayoutRequest,
+    location: ExternalAxisLocation,
+    sourceId: SourceId | null,
+  ): PlacedText | null {
     const engine = this.#store.engine;
     if (!engine) return null;
-    for (const flag of engine.shapingInputs()) track(engine.revision(flag));
-    return engine.shapeParagraphs(paragraphs);
+    for (const flag of engine.layoutInputs()) track(engine.revision(flag));
+    const place = this.#peekDesignspace((designspace): KerningPlace => {
+      if (sourceId && designspace.source(sourceId)) return { kind: "source", sourceId };
+      return {
+        kind: "location",
+        location: locationValues(designspace.axes, designspace.toDesign(location)),
+      };
+    });
+    return engine.layoutText(text, place);
+  }
+
+  /**
+   * Loads into the window's engine the glyphs a layout listed as unloaded;
+   * readers of {@link layoutText} then lay out again. Nothing without an
+   * engine.
+   *
+   * @throws When the engine's store cannot answer.
+   */
+  preloadLaidOut(glyphIds: readonly GlyphId[]): void {
+    this.#store.engine?.preload(glyphIds);
   }
 
   /** @knipclassignore — used by VariationPanel component */
