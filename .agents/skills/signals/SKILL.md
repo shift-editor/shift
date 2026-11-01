@@ -91,8 +91,17 @@ readonly layoutCell = computed(() => {
 
 // After: the computed only reads; the owner loads what it missed (rule 4).
 readonly layoutCell = computed(() => this.#engine.layoutText(this.#request()));
-readonly #loadMissing = effect(() => void this.#font.loadGlyphs(this.missingGlyphsCell.value));
+readonly #loadMissing = effect(() => void this.#loadGlyphs(this.missingGlyphsCell.value));
+
+async #loadGlyphs(glyphIds: readonly GlyphId[]): Promise<void> {
+  try {
+    await this.#font.loadGlyphs(glyphIds);
+  } catch (error) {
+    console.error("Failed to load glyphs for layout", error);
+  }
+}
 ```
+
 - Don't write a signal an effect also reads unless the loop is intended and terminates.
 - Async work started from an effect is fire-and-forget: wrap it in an `async` method with `try`/`catch` that logs, and call it with `void` (see `Font.#loadComponentGlyphs`).
 - Render effects use `schedule` to coalesce to one frame; React uses `useSignalState(cell, { schedule: "frame" })` for high-frequency cells.

@@ -69,7 +69,8 @@ Mark the lines and say what to check. These are review comments he has made more
 - **Unexplained constants** (`0.2`, a 600-unit stand-in advance): where did the value come from?
 - **Migration or compatibility code for data that never shipped.** Flag it for removal; don't ask
   him to read it.
-- **`track(cell)` then `cell.peek()`** where the value is used: read `.value`. `signals` rule 3.
+- **`track(cell)` then `cell.peek()` in a `computed` or effect body** where the value is used: read
+  `.value`. In a callback the computed calls, `track` then `peek` is the rule. `signals` rule 3.
 - **Tests**: a new test file for one small case beside an existing behaviour file; an oracle that
   checks only a direction (`x` decreases) rather than the landing point.
 
