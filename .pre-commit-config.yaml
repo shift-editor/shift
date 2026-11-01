@@ -40,7 +40,7 @@ repos:
     hooks:
       - id: napi-dead-methods
         name: napi dead methods
-        entry: ./scripts/check-napi-dead-methods.sh
+        entry: node scripts/check-napi-dead-methods.mjs
         language: system
         types: [rust]
         pass_filenames: false
