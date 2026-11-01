@@ -493,6 +493,8 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
   // toward the text colour instead; on Shift Light's palette this reproduces its #e2e2e2 chrome.
   const darkChrome = palette.base02 === surface ? withAlpha(palette.base05, 0.08) : palette.base02;
   const chrome = dark ? darkChrome : mix(palette.base01, palette.base05, 0.07);
+  // A theme file may deepen its accent so labels on it read; the label is picked against it.
+  const accent = theme.colors?.accent ?? palette.base0D;
 
   return {
     "--color-background": palette.base00,
@@ -514,9 +516,11 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--color-secondary": secondary,
     "--color-muted": muted,
     "--color-sidebar-icon": secondary,
-    "--color-accent": palette.base0D,
-    "--color-on-accent": readableOn(palette.base0D, [
-      lightest(palette.base00, palette.base07),
+    "--color-accent": accent,
+    // The light option is the lightest of the canvas and text colours: base07 alone is a
+    // dim tint in some dark palettes, such as Rosé Pine's.
+    "--color-on-accent": readableOn(accent, [
+      [palette.base00, palette.base05, palette.base07].reduce(lightest),
       darkest(palette.base00, palette.base07),
     ]),
     "--color-error": palette.base08,
@@ -592,13 +596,19 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
 /** How close a preferred candidate's contrast must come to the best one to still win. */
 const PREFERRED_CONTRAST_MARGIN = 0.8;
 
+/** WCAG AA contrast for normal text: a preferred candidate that reaches it always wins. */
+const READABLE_CONTRAST = 4.5;
+
 /**
  * Picks the candidate with the highest WCAG contrast on `background`, except that the
- * first candidate wins whenever it comes within 20% of the best. WCAG contrast
- * over-favours dark text on saturated mid-tone accents, where light text reads better.
+ * first candidate wins whenever it reads at WCAG AA or comes within 20% of the best.
+ * WCAG contrast over-favours dark text on saturated mid-tone accents, where light text
+ * reads better.
  */
 function readableOn(background: string, [preferred, ...others]: readonly string[]): string {
   const contrast = (color: string) => contrastRatio(color, background);
+  if (contrast(preferred) >= READABLE_CONTRAST) return preferred;
+
   const best = others.reduce(
     (best, color) => (contrast(color) > contrast(best) ? color : best),
     preferred,
