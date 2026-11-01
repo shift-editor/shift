@@ -3,41 +3,20 @@
 
 use std::ops::Range;
 
-use shift_shape::Unit;
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::paragraph::Paragraph;
+use crate::paragraph::{Paragraph, ParagraphText};
 use crate::{Direction, LayoutWord, TextLayout};
-
-/// What a glyph inserted by name reads as when finding words: an inline
-/// object, which is no word.
-const OBJECT_REPLACEMENT: char = '\u{FFFC}';
 
 impl Paragraph {
     /// The paragraph's words as unit ranges in the text: UAX #29 word
     /// segments that hold a letter, digit or the like, not spaces or
     /// punctuation, in reading order.
     pub(crate) fn words(&self) -> Vec<Range<u32>> {
-        let text: String = self
-            .units
-            .iter()
-            .map(|unit| match unit {
-                Unit::Character(character) => *character,
-                Unit::Glyph(_) => OBJECT_REPLACEMENT,
-            })
-            .collect();
-        // Each unit is one char, so a char's index is its unit's.
-        let mut unit_at_byte = vec![0u32; text.len() + 1];
-        let mut count = 0u32;
-        for (unit, (byte, _)) in (0u32..).zip(text.char_indices()) {
-            unit_at_byte[byte] = unit;
-            count = unit + 1;
-        }
-        unit_at_byte[text.len()] = count;
-        text.unicode_word_indices()
-            .map(|(byte, word)| {
-                self.start + unit_at_byte[byte]..self.start + unit_at_byte[byte + word.len()]
-            })
+        let text = ParagraphText::of(self);
+        text.text
+            .unicode_word_indices()
+            .map(|(byte, word)| text.unit_at(byte)..text.unit_at(byte + word.len()))
             .collect()
     }
 }
