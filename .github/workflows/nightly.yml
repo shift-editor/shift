@@ -162,11 +162,15 @@ jobs:
       # One key per platform, so the cross-compiled macOS x64 build on the
       # arm64 runner keeps a cache of its own. Saved after a failed step too:
       # a job that compiled the dependencies before failing still saves them.
+      # Saved only on main: a branch dispatch's caches are about 4.7 GB that
+      # main can't restore, and they evict main's from the 10 GB repo cache.
+      # The release workflow restores these too.
       - name: Restore Rust build cache
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: nightly-${{ matrix.platform }}-${{ matrix.arch }}
           cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install Linux maker tools
         if: matrix.platform == 'linux'
