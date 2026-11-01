@@ -1,6 +1,13 @@
 import type { Point2D } from "@shift/geo";
 import type { GlyphId, NodeId, RunId, SourceId, TextItemId } from "@shift/types";
 import type { IndexKey } from "./indexKey";
+import type { BoxSizing, Placement } from "./sceneDocument";
+
+/** How a node lays out, as the document stores it: its size rules and whether it follows a frame's layout. */
+export interface NodeLayout {
+  readonly sizing: BoxSizing;
+  readonly placement: Placement;
+}
 
 /**
  * Describes a placed object in the editor scene.
@@ -31,6 +38,13 @@ export interface Node {
    * for a root node; Y-down, in scene units.
    */
   position: Point2D;
+
+  /**
+   * How the node lays out, as the document stores it; absent for a node not
+   * yet stored, which hugs and keeps its position. An update carries it
+   * through unchanged.
+   */
+  readonly layout?: NodeLayout;
 }
 
 /**

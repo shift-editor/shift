@@ -1,13 +1,6 @@
 import type { NodeId, RunId, SourceId } from "@shift/types";
-import type { ShiftNode } from "../../types/node";
-import type {
-  BoxSizing,
-  Placement,
-  RevisedNode,
-  RunSettings,
-  SceneIntent,
-  SceneNode,
-} from "../../types/sceneDocument";
+import type { NodeLayout, ShiftNode } from "../../types/node";
+import type { RevisedNode, RunSettings, SceneIntent, SceneNode } from "../../types/sceneDocument";
 import type { TextRunRecord, TextRunSettings } from "../../types/text";
 import type { TextItem } from "../text/layout/types";
 
@@ -21,11 +14,10 @@ interface ReadNode {
 }
 
 /**
- * The layout every node the editor writes keeps: hugging, at its own
- * position. The editor neither reads nor draws frames yet, so nothing it
- * places follows a frame's layout.
+ * The layout a node the editor places for the first time gets: hugging, at
+ * its own position.
  */
-const UNLAID_OUT: { readonly sizing: BoxSizing; readonly placement: Placement } = {
+const NEW_NODE_LAYOUT: NodeLayout = {
   sizing: { width: { kind: "hug" }, height: { kind: "hug" } },
   placement: "absolute",
 };
@@ -126,7 +118,7 @@ export class SceneNodes {
       index: node.index,
       x: node.position.x,
       y: node.position.y,
-      ...UNLAID_OUT,
+      ...(node.layout ?? NEW_NODE_LAYOUT),
     };
     switch (node.kind) {
       case "page":
@@ -199,6 +191,7 @@ function readNode(
     parentId: stored.parentId ?? null,
     index: stored.index,
     position: { x: stored.x, y: stored.y },
+    layout: { sizing: stored.sizing, placement: stored.placement },
   };
   const content = stored.content;
   switch (content.kind) {
