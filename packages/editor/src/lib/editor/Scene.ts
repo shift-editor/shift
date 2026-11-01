@@ -17,8 +17,9 @@ import {
 } from "../signals/index";
 import type { NodeReference } from "../../types/records";
 import {
-  PageNode,
+  sameNodeList,
   type CreateNode,
+  type PageNode,
   type NodeKind,
   type NodeOfKind,
   type ShiftNode,
@@ -26,12 +27,7 @@ import {
 } from "../../types/node";
 import type { TextRunRecord } from "../../types/text";
 import type { TextItem } from "../text/layout/types";
-import type {
-  SceneDocument,
-  SceneIntent,
-  SceneNode,
-  SceneRecording,
-} from "../../types/sceneDocument";
+import type { SceneDocument, SceneIntent, SceneRecording } from "../../types/sceneDocument";
 import { IndexKey } from "../../types/indexKey";
 import { SceneNodes } from "./sceneNodes";
 
@@ -52,16 +48,20 @@ interface DocumentValue {
   readonly tree: Tree<NodeId, ShiftNode>;
   /** Each text run's content, by run id. */
   readonly runs: ReadonlyMap<RunId, TextRunRecord>;
+  /** The node that holds each run. */
+  readonly runNodes: ReadonlyMap<RunId, NodeId>;
+  /** The source each glyph node was placed with, as the document stores it. */
+  readonly storedSources: ReadonlyMap<NodeId, SourceId>;
 }
 
 /** What a {@link Scene} needs from its editor. */
 export interface SceneOptions {
-  /** What a node depends on; usually its definition's `references`. */
-  readonly references?: (node: ShiftNode) => readonly NodeReference[];
+  /** What a node depends on: its definition's `references`. */
+  readonly references: (node: ShiftNode) => readonly NodeReference[];
   /** Whether a write made now is an undo step: not inside `EditorHistory.withoutRecording`. */
-  readonly recording?: () => SceneRecording;
+  readonly recording: () => SceneRecording;
   /** Told which nodes, and which runs' content, each write changed, as a history capture notes them. */
-  readonly changed?: (ids: readonly NodeReference[]) => void;
+  readonly changed: (ids: readonly NodeReference[]) => void;
 }
 
 /**
@@ -108,7 +108,7 @@ export class Scene {
     create: (idCell: Signal<NodeReference>) =>
       computed(() => this.#byReferenceCell.value.get(idCell.value) ?? NO_NODES, {
         name: "editor.scene.referencingOne",
-        equals: sameNodes,
+        equals: sameNodeList,
       }),
   });
   readonly #runCells = keyedCache({
@@ -120,15 +120,15 @@ export class Scene {
       }),
   });
 
-  constructor(document: SceneDocument, options: SceneOptions = {}) {
-    const references = options.references ?? (() => []);
+  constructor(document: SceneDocument, options: SceneOptions) {
+    const references = options.references;
     this.#document = document;
-    this.#recording = options.recording ?? (() => "undoable");
-    this.#changed = options.changed ?? (() => {});
+    this.#recording = options.recording;
+    this.#changed = options.changed;
     this.#documentCell = computed(
       () => {
         track(this.#document.revisionCell);
-        const { nodes, runs } = this.#nodes.read(
+        const { nodes, runs, runNodes, storedSources } = this.#nodes.read(
           this.#document.nodes(),
           this.#shownSourcesCell.value,
         );
@@ -137,14 +137,14 @@ export class Scene {
           id: (node) => node.id,
           parentId: (node) => node.parentId,
         });
-        return { nodes: tree.walk(), tree, runs };
+        return { nodes: tree.walk(), tree, runs, runNodes, storedSources };
       },
       { name: "editor.scene.document" },
     );
     this.#pagesCell = computed(
       () => this.#documentCell.value.tree.roots().filter((node) => node.kind === "page"),
       // Most node writes touch no page; keep the list's identity so a pages list does not rerender.
-      { name: "editor.scene.pages", equals: PageNode.sameList },
+      { name: "editor.scene.pages", equals: sameNodeList },
     );
     this.#requestedPageIdCell = signal<NodeId | null>(null, {
       name: "editor.scene.requestedPage",
@@ -483,9 +483,9 @@ export class Scene {
     if (shown) this.#showSource(node.id, shown);
     if (!stored) return;
 
+    // An update keeps a run's items, so none are sent.
     const next = { ...node, ...stored } as ShiftNode;
-    const items = node.kind === "textRun" ? (this.run(node.runId)?.items ?? []) : [];
-    this.#apply([{ kind: "updateNode", updateNode: SceneNodes.toDocument(next, items) }], [next]);
+    this.#apply([{ kind: "updateNode", updateNode: SceneNodes.toDocument(next) }], [next]);
   }
 
   /**
@@ -512,8 +512,7 @@ export class Scene {
 
   /** The source a glyph node was placed with, as the document stores it. */
   #storedSourceId(nodeId: NodeId): SourceId | null {
-    const stored = this.#document.nodes().find((node) => node.id === nodeId)?.content;
-    return stored?.kind === "glyph" ? stored.sourceId : null;
+    return this.#documentCell.peek().storedSources.get(nodeId) ?? null;
   }
 
   /** Shows `sourceId` in a glyph node for the rest of the session, writing nothing. */
@@ -535,9 +534,7 @@ export class Scene {
    * @returns false when no node places `runId`.
    */
   setRunItems(runId: RunId, items: readonly TextItem[]): boolean {
-    const node = this.#documentCell
-      .peek()
-      .nodes.find((candidate) => candidate.kind === "textRun" && candidate.runId === runId);
+    const node = this.node(this.#documentCell.peek().runNodes.get(runId) ?? null);
     if (!node) return false;
 
     this.#apply([{ kind: "setRunItems", setRunItems: { id: node.id, items: [...items] } }], [node]);
@@ -590,11 +587,6 @@ export class Scene {
 
 const NO_NODES: readonly ShiftNode[] = [];
 
-/** Whether two node lists hold the same nodes in the same order. */
-function sameNodes(a: readonly ShiftNode[], b: readonly ShiftNode[]): boolean {
-  return a.length === b.length && a.every((node, index) => node === b[index]);
-}
-
 /** `nodes` ordered so that each comes after its parent, when its parent is among them. */
 function parentsFirst(nodes: readonly ShiftNode[]): readonly ShiftNode[] {
   const tree = Tree.from<NodeId, ShiftNode>(nodes, {
@@ -603,5 +595,3 @@ function parentsFirst(nodes: readonly ShiftNode[]): readonly ShiftNode[] {
   });
   return tree.walk();
 }
-
-export type { SceneNode };

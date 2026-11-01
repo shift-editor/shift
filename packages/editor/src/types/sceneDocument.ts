@@ -1,8 +1,8 @@
 import type { NodeId } from "@shift/types";
-import type { SceneIntent, SceneNode } from "@shift/wasm/protocol";
+import type { RevisedNode, SceneIntent, SceneNode } from "@shift/wasm/protocol";
 import type { Signal } from "../lib/signals";
 
-export type { SceneIntent, SceneNode };
+export type { RevisedNode, SceneIntent, SceneNode };
 
 /**
  * Whether a scene edit is an undo step, as shift-engine's `Recording` says:
@@ -23,8 +23,11 @@ export type SceneRecording = "undoable" | "unrecorded";
 export interface SceneDocument {
   /** Changes whenever the nodes do; a reader tracks it to rerun after a scene edit, undo or redo. */
   readonly revisionCell: Signal<number>;
-  /** Every node, each root and then the nodes under it, each parent before its children, siblings in order. */
-  nodes(): readonly SceneNode[];
+  /**
+   * Every node, each root and then the nodes under it, each parent before its
+   * children, siblings in order, with when it last changed.
+   */
+  nodes(): readonly RevisedNode[];
   /**
    * Applies `intents` in order, as one edit.
    *

@@ -214,3 +214,62 @@ fn a_new_page_takes_the_first_index_key() {
         index_key::between(None, None).unwrap()
     );
 }
+
+#[test]
+fn a_node_gets_a_new_revision_when_it_changes_and_a_run_keeps_its_items_revision_when_it_moves() {
+    let mut scene = two_pages();
+    let revision_of = |scene: &Scene, id: &str| {
+        scene
+            .revised_nodes()
+            .into_iter()
+            .find(|revised| revised.node.id == NodeId::from_raw(id))
+            .map(|revised| (revised.revision, revised.items_revision))
+            .unwrap()
+    };
+    let (revision, items) = revision_of(&scene, "run");
+    let untouched = revision_of(&scene, "second");
+
+    scene
+        .apply_intents(&[SceneIntent::UpdateNode(SceneNode {
+            x: 99.0,
+            ..run("run", "first", "a0")
+        })])
+        .unwrap();
+    let (moved, moved_items) = revision_of(&scene, "run");
+    scene
+        .apply_intents(&[SceneIntent::SetRunItems(SetRunItems {
+            id: NodeId::from_raw("run"),
+            items: Vec::new(),
+        })])
+        .unwrap();
+
+    assert_ne!(moved, revision);
+    assert_eq!(moved_items, items);
+    assert_ne!(revision_of(&scene, "run").1, items);
+    assert_eq!(revision_of(&scene, "second"), untouched);
+}
+
+#[test]
+fn an_update_never_changes_a_runs_items() {
+    let mut scene = two_pages();
+    scene
+        .apply_intents(&[SceneIntent::SetRunItems(SetRunItems {
+            id: NodeId::from_raw("run"),
+            items: vec![TextItem::Linebreak {
+                id: TextItemId::from_raw("break"),
+            }],
+        })])
+        .unwrap();
+
+    scene
+        .apply_intents(&[SceneIntent::UpdateNode(run("run", "first", "a0"))])
+        .unwrap();
+
+    let Some(NodeContent::TextRun { items, .. }) = scene
+        .node(&NodeId::from_raw("run"))
+        .map(|node| &node.content)
+    else {
+        panic!("the run is still a run");
+    };
+    assert_eq!(items.len(), 1);
+}

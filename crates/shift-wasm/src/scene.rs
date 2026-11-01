@@ -4,7 +4,7 @@
 
 use std::cell::RefCell;
 
-use shift_engine::scene::{Scene, SceneIntent, SceneNode};
+use shift_engine::scene::{RevisedNode, Scene, SceneIntent};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 thread_local! {
@@ -22,7 +22,7 @@ pub trait Scenes {
     fn apply_scene(&self, handle: usize, intents: Vec<SceneIntent>) -> Option<String>;
     /// Every node, each root then the nodes under it, each parent before its
     /// children, siblings in order; empty for an unknown handle.
-    fn scene_nodes(&self, handle: usize) -> Vec<SceneNode>;
+    fn scene_nodes(&self, handle: usize) -> Vec<RevisedNode>;
 }
 
 /// The scenes [`Scenes`] calls.
@@ -48,12 +48,12 @@ impl Scenes for HeldScenes {
         })
     }
 
-    fn scene_nodes(&self, handle: usize) -> Vec<SceneNode> {
+    fn scene_nodes(&self, handle: usize) -> Vec<RevisedNode> {
         SCENES.with_borrow(|scenes| {
             scenes
                 .get(handle)
                 .and_then(Option::as_ref)
-                .map(|scene| scene.nodes().into_iter().cloned().collect())
+                .map(Scene::revised_nodes)
                 .unwrap_or_default()
         })
     }

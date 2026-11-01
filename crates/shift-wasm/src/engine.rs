@@ -327,7 +327,7 @@ impl Engine {
         let layers = engine_layers(before, &applied.layers)?;
         let edit = Object::new();
         set(&edit, "layers", &layers)?;
-        let impact = applied.changes.impact() | scene_impact(scene);
+        let impact = applied.changes.impact() | scene.impact();
         self.on(EditEvent::Applied(impact));
         set(&edit, "impact", &JsValue::from(impact.bits()))?;
         let mut replaced = FontReplacement::changed_by(
@@ -461,43 +461,28 @@ pub(crate) fn with_engine<T>(
 }
 
 /// Opens a session over a font directory, as named MessagePack from the
-/// store's reader, with every layer a placeholder and the document's scene,
-/// which it reads through `source` first; it loads layers through `source`,
-/// a `StoreRequest`, too. Returns its handle.
+/// store's reader, with every layer a placeholder; it loads layers through
+/// `source`, a `StoreRequest`. `scene` is the document's scene as the store's
+/// `scene_nodes` returns it; without one the session's scene is empty, for a
+/// reader of the font's records alone. Returns its handle.
 ///
 /// # Errors
 ///
-/// Fails when `directory` does not decode to a font, or the scene cannot be
-/// read or decoded.
+/// Fails when `directory` does not decode to a font, or `scene` to scene
+/// nodes.
 #[wasm_bindgen(js_name = engineOpen)]
 pub fn engine_open(
     directory: &[u8],
     #[wasm_bindgen(unchecked_param_type = "StoreRequest")] source: Function,
+    scene: Option<Vec<u8>>,
 ) -> Result<u32, JsError> {
     let font: Font = rmp_serde::from_slice(directory)?;
-    let nodes = HostLayers(&source)
-        .client()
-        .scene_nodes()
-        .map_err(js_error)?
-        .map_err(js_error)?;
-    let nodes: Vec<SceneNode> = rmp_serde::from_slice(&nodes.0)?;
-    let session =
-        EngineSession::open_directory(font).with_scene(nodes.into_iter().collect::<Scene>());
+    let mut session = EngineSession::open_directory(font);
+    if let Some(scene) = scene {
+        let nodes: Vec<SceneNode> = rmp_serde::from_slice(&scene)?;
+        session = session.with_scene(nodes.into_iter().collect::<Scene>());
+    }
     open(session, source)
-}
-
-/// Opens a session over a font directory, as [`engine_open`] does, with no
-/// store behind it: an empty scene, and every store read refused. For reading
-/// a directory's records, which load nothing. Returns its handle.
-///
-/// # Errors
-///
-/// Fails when `directory` does not decode to a font.
-#[wasm_bindgen(js_name = engineOpenStoreless)]
-pub fn engine_open_storeless(directory: &[u8]) -> Result<u32, JsError> {
-    let font: Font = rmp_serde::from_slice(directory)?;
-    let source = Function::new_no_args("throw new Error('this engine has no store to read');");
-    open(EngineSession::open_directory(font), source)
 }
 
 /// Keeps `session`, reading through `source`, and returns its handle.
@@ -598,7 +583,7 @@ pub fn engine_stage(handle: u32) -> Result<JsValue, JsError> {
     with_engine(handle, |engine| {
         let (applied, before, scene) = engine.apply_held()?;
         let layers = engine_layers(&before, &applied.layers)?;
-        let impact = applied.changes.impact() | scene_impact(&scene);
+        let impact = applied.changes.impact() | scene.impact();
         engine.on(EditEvent::Applied(impact));
 
         let stage = Object::new();
@@ -772,15 +757,6 @@ pub fn engine_preview(handle: u32) -> Result<Array, JsError> {
 /// A Rust error as the `Error` an engine call throws, carrying its message.
 fn js_error(error: impl std::fmt::Display) -> JsError {
     JsError::new(&error.to_string())
-}
-
-/// [`FontChangeImpact::SCENE`] when `changes` changed the scene.
-fn scene_impact(changes: &SceneChangeSet) -> FontChangeImpact {
-    if changes.is_empty() {
-        FontChangeImpact::empty()
-    } else {
-        FontChangeImpact::SCENE
-    }
 }
 
 fn apply_error(error: ApplyError<HostError>) -> JsError {

@@ -1,12 +1,12 @@
 import type { NodeId, RunId, SourceId } from "@shift/types";
 import type { ShiftNode } from "../../types/node";
-import type { SceneNode } from "../../types/sceneDocument";
+import type { RevisedNode, SceneNode } from "../../types/sceneDocument";
 import type { TextRunRecord } from "../../types/text";
 import type { TextItem } from "../text/layout/types";
 
 /** One document node as the editor reads it, and the run it holds when it is a text run. */
 interface ReadNode {
-  readonly stored: SceneNode;
+  readonly revised: RevisedNode;
   /** The source the session shows a glyph node in instead of its stored one. */
   readonly shownSource: SourceId | undefined;
   readonly node: ShiftNode;
@@ -16,7 +16,12 @@ interface ReadNode {
 /** The document's nodes as the editor reads them. */
 export interface ReadScene {
   readonly nodes: readonly ShiftNode[];
+  /** Each text run's content, by run id. */
   readonly runs: ReadonlyMap<RunId, TextRunRecord>;
+  /** The node that holds each run. */
+  readonly runNodes: ReadonlyMap<RunId, NodeId>;
+  /** The source each glyph node was placed with, as the document stores it. */
+  readonly storedSources: ReadonlyMap<NodeId, SourceId>;
 }
 
 /**
@@ -24,42 +29,52 @@ export interface ReadScene {
  * `SceneNode`) and the editor's {@link ShiftNode}s and run records.
  *
  * @remarks
- * Each read keeps the editor's object for a node, and for its run, when the
- * document's node is unchanged, so readers that compare by identity (a run's
- * layout, the pages list) rerun only for what changed.
+ * Each read keeps the editor's object for a node while the engine's revision
+ * for it is the same, and a run's record while its items revision is, so
+ * readers that compare by identity (a run's layout, the pages list) rerun only
+ * for what changed. The engine says what changed; nothing here compares nodes.
  */
 export class SceneNodes {
   // non-reactive: the previous read's objects, read and replaced only by `read` inside the scene's computed
   #previous: ReadonlyMap<NodeId, ReadNode> = new Map();
 
   /**
-   * The editor's nodes and runs for `stored`, in its order, reusing unchanged
-   * ones; a glyph node in `shownSources` shows that source.
+   * The editor's nodes and runs for `revised`, in its order, keeping
+   * unchanged ones; a glyph node in `shownSources` shows that source.
    */
-  read(stored: readonly SceneNode[], shownSources: ReadonlyMap<NodeId, SourceId>): ReadScene {
+  read(revised: readonly RevisedNode[], shownSources: ReadonlyMap<NodeId, SourceId>): ReadScene {
     const next = new Map<NodeId, ReadNode>();
     const nodes: ShiftNode[] = [];
     const runs = new Map<RunId, TextRunRecord>();
-    for (const node of stored) {
-      const previous = this.#previous.get(node.id);
-      const shownSource = shownSources.get(node.id);
+    const runNodes = new Map<RunId, NodeId>();
+    const storedSources = new Map<NodeId, SourceId>();
+    for (const entry of revised) {
+      const id = entry.node.id;
+      const previous = this.#previous.get(id);
+      const shownSource = shownSources.get(id);
       const unchanged =
-        previous && previous.shownSource === shownSource && sameStoredNode(previous.stored, node);
-      const read = unchanged ? previous : readNode(node, previous, shownSource);
-      next.set(node.id, read);
+        previous?.revised.revision === entry.revision && previous.shownSource === shownSource;
+      const read = unchanged ? previous : readNode(entry, previous, shownSource);
+      next.set(id, read);
       nodes.push(read.node);
-      if (read.run) runs.set(read.run.id, read.run);
+      if (read.run) {
+        runs.set(read.run.id, read.run);
+        runNodes.set(read.run.id, id);
+      }
+      const content = entry.node.content;
+      if (content.kind === "glyph") storedSources.set(id, content.sourceId);
     }
     this.#previous = next;
-    return { nodes, runs };
+    return { nodes, runs, runNodes, storedSources };
   }
 
   /**
-   * `node` as the document stores it; a text run carries `items`.
+   * `node` as the document stores it; a text run carries `items`, which only
+   * a new node and `setRunItems` set: an update keeps the run's own.
    *
    * @throws When `node`'s kind is not one the document stores.
    */
-  static toDocument(node: ShiftNode, items: readonly TextItem[]): SceneNode {
+  static toDocument(node: ShiftNode, items: readonly TextItem[] = []): SceneNode {
     const base = {
       id: node.id,
       parentId: node.parentId,
@@ -91,12 +106,13 @@ export class SceneNodes {
   }
 }
 
-/** The editor's node for `stored`, keeping the previous run record when its items are unchanged. */
+/** The editor's node for `revised`, keeping the previous run record while its items are unchanged. */
 function readNode(
-  stored: SceneNode,
+  revised: RevisedNode,
   previous: ReadNode | undefined,
   shownSource: SourceId | undefined,
 ): ReadNode {
+  const stored = revised.node;
   const base = {
     id: stored.id,
     type: "node" as const,
@@ -108,19 +124,21 @@ function readNode(
   switch (content.kind) {
     case "page":
       return {
-        stored,
+        revised,
         shownSource,
         node: { ...base, kind: "page", name: content.name, role: content.role ?? undefined },
         run: null,
       };
     case "textRun": {
-      const kept = previous?.run;
-      const run: TextRunRecord =
-        kept?.id === content.runId && sameItems(kept.items, content.items)
-          ? kept
-          : { id: content.runId, type: "textrun", scope: "document", items: content.items };
+      const kept = previous?.revised.itemsRevision === revised.itemsRevision ? previous.run : null;
+      const run: TextRunRecord = kept ?? {
+        id: content.runId,
+        type: "textrun",
+        scope: "document",
+        items: content.items,
+      };
       return {
-        stored,
+        revised,
         shownSource,
         node: { ...base, kind: "textRun", runId: content.runId, size: content.size },
         run,
@@ -128,7 +146,7 @@ function readNode(
     }
     case "glyph":
       return {
-        stored,
+        revised,
         shownSource,
         node: {
           ...base,
@@ -139,49 +157,5 @@ function readNode(
         },
         run: null,
       };
-  }
-}
-
-/** Whether two stored nodes are the same in every field. */
-function sameStoredNode(a: SceneNode, b: SceneNode): boolean {
-  if (a.parentId !== b.parentId || a.index !== b.index || a.x !== b.x || a.y !== b.y) return false;
-
-  const left = a.content;
-  const right = b.content;
-  switch (left.kind) {
-    case "page":
-      return right.kind === "page" && left.name === right.name && left.role === right.role;
-    case "textRun":
-      return (
-        right.kind === "textRun" &&
-        left.runId === right.runId &&
-        left.size === right.size &&
-        sameItems(left.items, right.items)
-      );
-    case "glyph":
-      return (
-        right.kind === "glyph" &&
-        left.glyphId === right.glyphId &&
-        left.sourceId === right.sourceId &&
-        left.itemId === right.itemId
-      );
-  }
-}
-
-/** Whether two item lists hold the same items in the same order. */
-function sameItems(a: readonly TextItem[], b: readonly TextItem[]): boolean {
-  return a.length === b.length && a.every((item, index) => sameItem(item, b[index]!));
-}
-
-function sameItem(a: TextItem, b: TextItem): boolean {
-  if (a.id !== b.id) return false;
-
-  switch (a.kind) {
-    case "character":
-      return b.kind === "character" && a.codepoint === b.codepoint;
-    case "glyph":
-      return b.kind === "glyph" && a.glyphId === b.glyphId;
-    case "linebreak":
-      return b.kind === "linebreak";
   }
 }

@@ -33,12 +33,7 @@ impl DocumentChangeSet {
     /// What reads this change set invalidates: the font's projections, and
     /// [`FontChangeImpact::SCENE`] when it changes the scene.
     pub fn impact(&self) -> FontChangeImpact {
-        let scene = if self.scene.is_empty() {
-            FontChangeImpact::empty()
-        } else {
-            FontChangeImpact::SCENE
-        };
-        self.font.impact() | scene
+        self.font.impact() | self.scene.impact()
     }
 
     /// The change set for sending to another process, its font part

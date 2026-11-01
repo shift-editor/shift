@@ -27,12 +27,13 @@ import {
   FontChangeFlagSchema,
   type FontChangeFlag,
   type ParagraphRequest,
+  type RevisedNode,
   type SceneIntent,
-  type SceneNode,
   type ShapedParagraph,
 } from "@shift/wasm/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
 import type { EngineVariation, FontEngine, KerningPlace } from "@shift/editor/types";
+import { storeReader } from "@shift/wasm/store-reader";
 import { engineStoreRequest } from "./engineStoreRequest";
 
 /** Every flag an edit's impact can set, in bit order: bit `i` is flag `i`, as Rust declares them. */
@@ -131,18 +132,20 @@ export class WindowEngine implements FontEngine {
 
     const reader = this.#layers.open(location);
     try {
-      // Opening reads the scene through the new reader; after that the
-      // session reads only while an edit runs, so its source can follow the
-      // current reader.
-      let opened = false;
+      // The document's scene, as the store holds it, unsaved edits included.
+      const scene = storeReader((method, numbers, blobs) =>
+        this.#layers.request(reader, method, numbers, blobs),
+      ).sceneNodes();
+      // The session reads layers only while an edit runs, after this open, so
+      // its source can follow the current reader.
       const session = EngineSession.open(
         directory,
-        engineStoreRequest(this.#layers, () => (opened ? this.#reader() : reader)),
+        engineStoreRequest(this.#layers, () => this.#reader()),
+        scene,
       );
       batch(() => {
         this.#close();
         this.#opened = { session, reader, location };
-        opened = true;
         this.#variation.set(session);
         this.#changed(EVERY_CHANGE);
       });
@@ -230,7 +233,7 @@ export class WindowEngine implements FontEngine {
   }
 
   /** Every node of the document's scene, unsaved edits included; empty before the engine opens. */
-  sceneNodes(): readonly SceneNode[] {
+  sceneNodes(): readonly RevisedNode[] {
     return this.#opened?.session.sceneNodes() ?? [];
   }
 

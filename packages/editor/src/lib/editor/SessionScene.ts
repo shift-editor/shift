@@ -3,7 +3,7 @@ import { signal, type Signal, type WritableSignal } from "../signals/index";
 import type {
   SceneDocument,
   SceneIntent,
-  SceneNode,
+  RevisedNode,
   SceneRecording,
 } from "../../types/sceneDocument";
 
@@ -30,7 +30,7 @@ export class SessionScene implements SceneDocument {
     return this.#revisionCell;
   }
 
-  nodes(): readonly SceneNode[] {
+  nodes(): readonly RevisedNode[] {
     return scenes.sceneNodes(this.#handle);
   }
 

@@ -18,6 +18,9 @@ mod node;
 mod tests;
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+
+use pack::Pack;
 
 use shift_font::{NodeId, PersistentMap, Replacement, index_key};
 
@@ -89,11 +92,48 @@ impl SiblingKey {
     }
 }
 
+/// A number no earlier change to any scene in this process has had, so a
+/// reader can tell a node it read before from one that changed, even across
+/// a scene put back where an edit began.
+fn next_revision() -> usize {
+    static NEXT: AtomicUsize = AtomicUsize::new(1);
+    NEXT.fetch_add(1, AtomicOrdering::Relaxed)
+}
+
+/// Whether a replaced node keeps the revision of a text run's items.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Items {
+    /// The node's items are the ones it had: a move, or new fields.
+    Kept,
+    /// The node may have new items.
+    Changed,
+}
+
+/// A node as the scene keeps it, with when it last changed.
+#[derive(Clone, Debug)]
+struct Entry {
+    node: Arc<SceneNode>,
+    revision: usize,
+    items_revision: usize,
+}
+
+/// A node as a reader gets it, with when it last changed: a reader keeps
+/// what it built from a node while `revision` is the same, and what it built
+/// from a text run's items while `items_revision` is.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct RevisedNode {
+    pub node: SceneNode,
+    /// Changes whenever the node does.
+    pub revision: usize,
+    /// Changes whenever a text run's items may have.
+    pub items_revision: usize,
+}
+
 /// A document's canvas: every node by id, and each parent's children in
 /// sibling order.
 #[derive(Clone, Debug, Default)]
 pub struct Scene {
-    nodes: PersistentMap<NodeId, Arc<SceneNode>>,
+    nodes: PersistentMap<NodeId, Entry>,
     /// Each parent's children in sibling order; `None` files the roots.
     children: PersistentMap<Option<NodeId>, PersistentMap<SiblingKey, NodeId>>,
 }
@@ -104,16 +144,24 @@ impl PartialEq for Scene {
             && self
                 .nodes
                 .iter()
-                .all(|(id, node)| other.nodes.get(id).is_some_and(|other| other == node))
+                .all(|(id, entry)| other.node(id) == Some(entry.node.as_ref()))
     }
 }
 
 impl FromIterator<SceneNode> for Scene {
     /// A scene of `nodes` as stored, without checking their placement.
     fn from_iter<I: IntoIterator<Item = SceneNode>>(nodes: I) -> Self {
-        let nodes: PersistentMap<NodeId, Arc<SceneNode>> = nodes
+        let nodes: PersistentMap<NodeId, Entry> = nodes
             .into_iter()
-            .map(|node| (node.id.clone(), Arc::new(node)))
+            .map(|node| {
+                let revision = next_revision();
+                let entry = Entry {
+                    node: Arc::new(node),
+                    revision,
+                    items_revision: revision,
+                };
+                (entry.node.id.clone(), entry)
+            })
             .collect();
         let mut scene = Self {
             nodes,
@@ -122,7 +170,7 @@ impl FromIterator<SceneNode> for Scene {
         let filed: Vec<(Option<NodeId>, SiblingKey)> = scene
             .nodes
             .values()
-            .map(|node| (node.parent_id.clone(), SiblingKey::of(node)))
+            .map(|entry| (entry.node.parent_id.clone(), SiblingKey::of(&entry.node)))
             .collect();
         for (parent, key) in filed {
             let id = key.id.clone();
@@ -134,7 +182,22 @@ impl FromIterator<SceneNode> for Scene {
 
 impl Scene {
     pub fn node(&self, id: &NodeId) -> Option<&SceneNode> {
-        self.nodes.get(id).map(AsRef::as_ref)
+        self.nodes.get(id).map(|entry| entry.node.as_ref())
+    }
+
+    /// Every node, in the order of [`Self::nodes`], with when it last changed.
+    pub fn revised_nodes(&self) -> Vec<RevisedNode> {
+        self.nodes()
+            .into_iter()
+            .filter_map(|node| {
+                let entry = self.nodes.get(&node.id)?;
+                Some(RevisedNode {
+                    node: node.clone(),
+                    revision: entry.revision,
+                    items_revision: entry.items_revision,
+                })
+            })
+            .collect()
     }
 
     /// The node with `id`, or [`SceneError::NodeNotFound`].
@@ -249,7 +312,7 @@ impl Scene {
             if current != change.node.before.as_ref() {
                 return Err(SceneError::ChangeOriginMismatch(change.id.clone()));
             }
-            staged.replace(&change.id, change.node.after.clone());
+            staged.replace(&change.id, change.node.after.clone(), Items::Changed);
         }
         *self = staged;
         Ok(())
@@ -266,7 +329,7 @@ impl Scene {
                     return Err(SceneError::NodeExists(node.id.clone()));
                 }
                 self.check_placement(node)?;
-                self.record(node.clone(), changes);
+                self.record(node.clone(), Items::Changed, changes);
             }
             SceneIntent::UpdateNode(node) => {
                 let current = self.require(&node.id)?;
@@ -277,8 +340,10 @@ impl Scene {
                         found: node.kind(),
                     });
                 }
-                self.check_placement(node)?;
-                self.record(node.clone(), changes);
+                let mut node = node.clone();
+                node.keep_items_of(current);
+                self.check_placement(&node)?;
+                self.record(node, Items::Kept, changes);
             }
             SceneIntent::MoveNode(MoveNode {
                 id,
@@ -289,7 +354,7 @@ impl Scene {
                 node.parent_id.clone_from(parent_id);
                 node.index.clone_from(index);
                 self.check_placement(&node)?;
-                self.record(node, changes);
+                self.record(node, Items::Kept, changes);
             }
             SceneIntent::DeleteNode(DeleteNode { id }) => {
                 self.require(id)?;
@@ -302,7 +367,7 @@ impl Scene {
                 doomed.reverse();
                 doomed.push(id.clone());
                 for id in doomed {
-                    let before = self.replace(&id, None);
+                    let before = self.replace(&id, None, Items::Changed);
                     changes.push(SceneChange {
                         id,
                         node: Replacement::new(before, None),
@@ -315,16 +380,16 @@ impl Scene {
                     return Err(SceneError::NotATextRun(id.clone()));
                 };
                 current.clone_from(items);
-                self.record(node, changes);
+                self.record(node, Items::Changed, changes);
             }
         }
         Ok(())
     }
 
     /// Puts `node` in the scene and notes the change.
-    fn record(&mut self, node: SceneNode, changes: &mut Vec<SceneChange>) {
+    fn record(&mut self, node: SceneNode, items: Items, changes: &mut Vec<SceneChange>) {
         let id = node.id.clone();
-        let before = self.replace(&id, Some(node.clone()));
+        let before = self.replace(&id, Some(node.clone()), items);
         changes.push(SceneChange {
             id,
             node: Replacement::new(before, Some(node)),
@@ -360,19 +425,33 @@ impl Scene {
     }
 
     /// Replaces the node at `id` (none for `None`) and returns what was there.
-    fn replace(&mut self, id: &NodeId, node: Option<SceneNode>) -> Option<SceneNode> {
+    /// The node gets a new revision, and a new items revision unless `items`
+    /// says they are the ones it had.
+    fn replace(&mut self, id: &NodeId, node: Option<SceneNode>, items: Items) -> Option<SceneNode> {
         let before = self.nodes.remove(id);
         if let Some(previous) = &before
-            && let Some(siblings) = self.children.get_mut(&previous.parent_id)
+            && let Some(siblings) = self.children.get_mut(&previous.node.parent_id)
         {
-            siblings.remove(&SiblingKey::of(previous));
+            siblings.remove(&SiblingKey::of(&previous.node));
         }
         if let Some(node) = node {
             self.children
                 .get_or_default(node.parent_id.clone())
                 .insert(SiblingKey::of(&node), id.clone());
-            self.nodes.insert(id.clone(), Arc::new(node));
+            let revision = next_revision();
+            let items_revision = match (items, &before) {
+                (Items::Kept, Some(previous)) => previous.items_revision,
+                _ => revision,
+            };
+            self.nodes.insert(
+                id.clone(),
+                Entry {
+                    node: Arc::new(node),
+                    revision,
+                    items_revision,
+                },
+            );
         }
-        before.map(Arc::unwrap_or_clone)
+        before.map(|entry| Arc::unwrap_or_clone(entry.node))
     }
 }

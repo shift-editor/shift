@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use shift_font::{NodeId, Replacement};
+use shift_font::{FontChangeImpact, NodeId, Replacement};
 
 use super::SceneNode;
 
@@ -25,6 +25,16 @@ pub struct SceneChangeSet {
 impl SceneChangeSet {
     pub fn is_empty(&self) -> bool {
         self.changes.is_empty()
+    }
+
+    /// What reads this change set invalidates: [`FontChangeImpact::SCENE`]
+    /// unless it changes nothing.
+    pub fn impact(&self) -> FontChangeImpact {
+        if self.is_empty() {
+            FontChangeImpact::empty()
+        } else {
+            FontChangeImpact::SCENE
+        }
     }
 
     /// The change set that takes this one back.

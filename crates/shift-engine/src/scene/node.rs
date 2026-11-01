@@ -99,6 +99,16 @@ impl SceneNode {
         matches!(self.content, NodeContent::Page { .. })
     }
 
+    /// Gives a text run `current`'s items in place of its own, as an update,
+    /// which never changes them, does; other kinds are unchanged.
+    pub(super) fn keep_items_of(&mut self, current: &Self) {
+        if let (NodeContent::TextRun { items, .. }, NodeContent::TextRun { items: kept, .. }) =
+            (&mut self.content, &current.content)
+        {
+            items.clone_from(kept);
+        }
+    }
+
     /// Whether `other` is a node of the same kind.
     pub fn same_kind(&self, other: &Self) -> bool {
         std::mem::discriminant(&self.content) == std::mem::discriminant(&other.content)

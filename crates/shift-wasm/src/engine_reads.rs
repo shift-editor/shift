@@ -25,7 +25,7 @@
 
 use pack::Pack;
 use shift_engine::StoreReadError;
-use shift_engine::scene::SceneNode;
+use shift_engine::scene::{RevisedNode, SceneNode};
 use shift_font::{
     Axis, FontChangeFlag, GlyphRecords, MetricValue, MissingKerningOrigin, NodeId, ResolvedKerning,
     Source,
@@ -116,7 +116,7 @@ pub trait EngineReads {
     /// Every node of the document's scene, each root (pages first among
     /// them by index) then the nodes under it, each parent before its
     /// children, siblings in order.
-    fn scene_nodes(&self) -> Vec<SceneNode>;
+    fn scene_nodes(&self) -> Vec<RevisedNode>;
     /// The nodes on `page`, each parent before its children, siblings in
     /// order; not the page itself. Empty for a page the scene lacks.
     fn page_nodes(&self, page: NodeId) -> Vec<SceneNode>;
@@ -190,8 +190,8 @@ mod exports {
 
     use super::{
         Axis, EditablePair, EngineReads, FontChangeFlag, InterpolatedMetrics, KerningSnapshot,
-        NodeId, ParagraphRequest, SceneNode, ShapedParagraph, Source, SourceSetWeights,
-        engine_reads_request,
+        NodeId, ParagraphRequest, RevisedNode, SceneNode, ShapedParagraph, Source,
+        SourceSetWeights, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::shaping::TextShaping;
@@ -577,8 +577,8 @@ mod exports {
             self.session.scene().pages().cloned().collect()
         }
 
-        fn scene_nodes(&self) -> Vec<SceneNode> {
-            self.session.scene().nodes().into_iter().cloned().collect()
+        fn scene_nodes(&self) -> Vec<RevisedNode> {
+            self.session.scene().revised_nodes()
         }
 
         fn page_nodes(&self, page: NodeId) -> Vec<SceneNode> {

@@ -2,7 +2,7 @@ import type { NodeId } from "@shift/types";
 import type { Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
 import { computed, type Signal } from "../signals";
-import { PageNode } from "../../types/node";
+import { sameNodeList, type PageNode } from "../../types/node";
 import { IndexKey } from "../../types/indexKey";
 import type { PageCamera } from "../../types/page";
 
@@ -31,7 +31,7 @@ export class Pages {
     this.#editor = editor;
     this.#listCell = computed(
       () => editor.scene.pagesCell.value.filter((page) => page.role !== "glyph"),
-      { name: "editor.pages.list", equals: PageNode.sameList },
+      { name: "editor.pages.list", equals: sameNodeList },
     );
   }
 

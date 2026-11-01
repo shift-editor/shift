@@ -13,7 +13,8 @@ pub enum SceneIntent {
     /// one, must exist. A page has no parent.
     CreateNode(SceneNode),
     /// Replaces a node with a new value of the same kind, under the same id:
-    /// its fields, placement or place among its siblings.
+    /// its fields, placement or place among its siblings. A text run keeps its
+    /// items; [`SceneIntent::SetRunItems`] changes them.
     UpdateNode(SceneNode),
     /// Puts a node under another parent, or at another place among its
     /// siblings, keeping everything else.

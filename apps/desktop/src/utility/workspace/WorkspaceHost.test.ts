@@ -207,6 +207,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const session = EngineSession.open(
       directory,
       engineStoreRequest(layerReaders, () => reader),
+      storedSceneNodes(reader),
     );
     engines.set(sync, { session, reader, location });
     return session;
@@ -252,6 +253,13 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     };
   }
 
+  /** The scene `reader`'s store holds, as a window's engine opens with it. */
+  function storedSceneNodes(reader: number): Uint8Array {
+    return storeReader((method, numbers, blobs) =>
+      layerReaders.request(reader, method, numbers, blobs),
+    ).sceneNodes();
+  }
+
   /** Persists `intents` as one scene edit, as a window does after applying them in its engine. */
   async function editScene(sync: SyncChannel, intents: SceneIntent[]): Promise<void> {
     const engine = await engineFor(sync);
@@ -288,9 +296,10 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const session = EngineSession.open(
       directory,
       engineStoreRequest(layerReaders, () => reader),
+      storedSceneNodes(reader),
     );
     try {
-      return describeScene(session.sceneNodes());
+      return describeScene(session.sceneNodes().map((revised) => revised.node));
     } finally {
       disposeEngine({ session, reader, location });
     }

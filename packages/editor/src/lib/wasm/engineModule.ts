@@ -24,7 +24,6 @@ import {
   engineNewAnchorName,
   engineNextGlyphName,
   engineOpen,
-  engineOpenStoreless,
   enginePreload,
   enginePreview,
   engineRedo,
@@ -50,8 +49,8 @@ import type {
   MissingKerningOrigin,
   FontChangeFlag,
   ParagraphRequest,
+  RevisedNode,
   SceneIntent,
-  SceneNode,
   ShapedParagraph,
   SourceSetWeights,
 } from "@shift/wasm/protocol";
@@ -117,23 +116,14 @@ export class EngineSession {
 
   /**
    * Opens a session over a font directory, as the workspace's `encodedDirectory`
-   * returns it.
+   * returns it, and the document's scene, as the store's `sceneNodes` returns
+   * it; with no scene the session's scene is empty, for reading the font's
+   * records alone.
    *
-   * @throws When `directory` does not decode to a font.
+   * @throws When `directory` does not decode to a font, or `scene` to scene nodes.
    */
-  static open(directory: Uint8Array, source: StoreRequest): EngineSession {
-    return new EngineSession(engineOpen(directory, source));
-  }
-
-  /**
-   * Opens a session over a font directory with no store behind it: an empty
-   * scene, and every store read refused. For reading a directory's records,
-   * which load nothing.
-   *
-   * @throws When `directory` does not decode to a font.
-   */
-  static openStoreless(directory: Uint8Array): EngineSession {
-    return new EngineSession(engineOpenStoreless(directory));
+  static open(directory: Uint8Array, source: StoreRequest, scene?: Uint8Array): EngineSession {
+    return new EngineSession(engineOpen(directory, source, scene));
   }
 
   /**
@@ -202,8 +192,11 @@ export class EngineSession {
     return engineStage(this.#handle);
   }
 
-  /** Every node of the document's scene, each parent before its children, siblings in order. */
-  sceneNodes(): readonly SceneNode[] {
+  /**
+   * Every node of the document's scene, each parent before its children,
+   * siblings in order, with when it last changed.
+   */
+  sceneNodes(): readonly RevisedNode[] {
     return this.#reads.sceneNodes();
   }
 
