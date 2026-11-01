@@ -5,8 +5,9 @@ use std::collections::BTreeSet;
 use std::convert::Infallible;
 
 use proptest::prelude::*;
-use shift_engine::{EditHistory, EngineSession, LayerSource, RecordCache, RecordSource};
+use shift_engine::{EditHistory, EngineSession, LayerSource, RecordCache, RecordSource, Recording};
 use shift_font::test_support::sample_font;
+
 use shift_font::{
     AddComponent, Anchor, AnchorId, Component, ComponentId, CreateGlyph, DecomposeComponents,
     DecomposedTransform, Font, FontIntent, FontIntentSet, Glyph, GlyphCategory, GlyphDataCategory,
@@ -519,7 +520,7 @@ fn an_edit_of_several_applies_persists_and_undoes_as_one_change_set() {
     let mut history = EditHistory::default();
 
     // Two applies to the same layer, as one transaction.
-    history.begin();
+    history.begin(None);
     for (index, base) in ["base1", "base2"].into_iter().enumerate() {
         let add = FontIntentSet::from(FontIntent::from(AddComponent {
             layer_id,
@@ -529,12 +530,12 @@ fn an_edit_of_several_applies_persists_and_undoes_as_one_change_set() {
         history.record(window.apply(&mut persisted, &add).unwrap().changes);
     }
     let edit = history
-        .end(window.font())
+        .end(window.font(), window.scene(), Recording::Undoable)
         .unwrap()
         .expect("the edit changed the layer");
 
     // Native persists the one change set the window sends.
-    native.replay(&mut persisted, edit).unwrap();
+    native.replay(&mut persisted, edit.font).unwrap();
     assert_eq!(native.font().layer(layer_id), window.font().layer(layer_id));
     let edited = window.font().layer(layer_id).cloned();
 
@@ -543,7 +544,9 @@ fn an_edit_of_several_applies_persists_and_undoes_as_one_change_set() {
         .undo(&mut window, &mut persisted)
         .unwrap()
         .expect("one edit to undo");
-    native.replay(&mut persisted, undone.changes).unwrap();
+    native
+        .replay(&mut persisted, undone.applied.changes)
+        .unwrap();
     assert_eq!(window.font().layer(layer_id), font.layer(layer_id));
     assert_eq!(native.font().layer(layer_id), font.layer(layer_id));
 
@@ -551,7 +554,9 @@ fn an_edit_of_several_applies_persists_and_undoes_as_one_change_set() {
         .redo(&mut window, &mut persisted)
         .unwrap()
         .expect("one edit to redo");
-    native.replay(&mut persisted, redone.changes).unwrap();
+    native
+        .replay(&mut persisted, redone.applied.changes)
+        .unwrap();
     assert_eq!(window.font().layer(layer_id).cloned(), edited);
     assert_eq!(native.font().layer(layer_id).cloned(), edited);
 }
@@ -564,7 +569,7 @@ fn the_history_knows_when_undo_and_redo_reach_the_saved_font() {
     let mut session = EngineSession::open_directory(placeholders(&font));
     let mut history = EditHistory::default();
     let edit = |session: &mut EngineSession, history: &mut EditHistory, name: &str| {
-        history.begin();
+        history.begin(None);
         let add = FontIntentSet::from(FontIntent::from(AddComponent {
             layer_id,
             component_id: ComponentId::from_raw(name),
@@ -572,7 +577,9 @@ fn the_history_knows_when_undo_and_redo_reach_the_saved_font() {
         }));
         let mut source = Persisted(font.clone());
         history.record(session.apply(&mut source, &add).unwrap().changes);
-        history.end(session.font()).unwrap();
+        history
+            .end(session.font(), session.scene(), Recording::Undoable)
+            .unwrap();
     };
 
     edit(&mut session, &mut history, "first");
@@ -675,25 +682,29 @@ fn glyph_records_and_the_glyph_order_follow_an_add_a_rename_and_a_remove() {
         glyphs.into_iter().map(Glyph::id).collect()
     };
 
-    history.begin();
+    history.begin(None);
     let created = session.apply(&mut persisted, &create).unwrap();
     let created_changes = session
         .glyph_record_changes(&mut persisted, &created.changes)
         .unwrap();
     history.record(created.changes);
-    history.end(session.font()).unwrap();
+    history
+        .end(session.font(), session.scene(), Recording::Undoable)
+        .unwrap();
     assert_eq!(created_changes.order, Some(order_of(&session)));
     assert_eq!(created_changes.order.as_ref().unwrap()[0], added);
     let records = session.glyph_records(&mut persisted).unwrap();
     assert_eq!(record_names(&records)[0], "0first");
 
-    history.begin();
+    history.begin(None);
     let renamed = session.apply(&mut persisted, &rename).unwrap();
     let renamed_changes = session
         .glyph_record_changes(&mut persisted, &renamed.changes)
         .unwrap();
     history.record(renamed.changes);
-    history.end(session.font()).unwrap();
+    history
+        .end(session.font(), session.scene(), Recording::Undoable)
+        .unwrap();
     assert_eq!(renamed_changes.order, Some(order_of(&session)));
     assert_eq!(renamed_changes.order.as_ref().unwrap().last(), Some(&added));
     let records = session.glyph_records(&mut persisted).unwrap();
@@ -702,7 +713,7 @@ fn glyph_records_and_the_glyph_order_follow_an_add_a_rename_and_a_remove() {
     history.undo(&mut session, &mut persisted).unwrap();
     let removed = history.undo(&mut session, &mut persisted).unwrap().unwrap();
     let removed_changes = session
-        .glyph_record_changes(&mut persisted, &removed.changes)
+        .glyph_record_changes(&mut persisted, &removed.applied.changes)
         .unwrap();
     assert_eq!(removed_changes.removed, [added]);
     assert_eq!(removed_changes.order, Some(order_of(&session)));
@@ -886,4 +897,146 @@ fn a_record_cache_asks_the_store_again_only_for_glyphs_whose_name_or_codepoints_
 
     assert_eq!(counted.categories, asked.0 + 1);
     assert_eq!(renamed, session.shaper_font_source(counted.inner).unwrap());
+}
+
+/// The sibling key at `position`: ascending keys made one after another.
+fn key(position: usize) -> String {
+    let mut key = shift_font::index_key::between(None, None).unwrap();
+    for _ in 0..position {
+        key = shift_font::index_key::between(Some(&key), None).unwrap();
+    }
+    key
+}
+
+/// A page with `id`, at the top of the scene.
+fn scene_page(id: &str) -> shift_engine::scene::SceneNode {
+    shift_engine::scene::SceneNode {
+        id: shift_font::NodeId::from_raw(id),
+        parent_id: None,
+        index: key(0),
+        x: 0.0,
+        y: 0.0,
+        content: shift_engine::scene::NodeContent::Page {
+            name: id.into(),
+            role: None,
+        },
+    }
+}
+
+#[test]
+fn scene_and_font_edits_share_one_history_and_undo_in_order() {
+    use shift_engine::scene::{NodeContent, SceneIntent, SceneNode};
+    use shift_font::{NodeId, RunId};
+
+    let font = composite_font();
+    let mut persisted = Persisted(font.clone());
+    let layer_id = LayerId::from_raw(format!("composite0@{}", font.sources()[0].id()));
+    let mut session = EngineSession::open_directory(placeholders(&font));
+    let mut history = EditHistory::default();
+    let page = NodeId::from_raw("page");
+    let run = NodeId::from_raw("run");
+
+    // The page, made with nothing shown: the entry is located on the page it made.
+    history.begin(None);
+    history.record_scene(
+        session
+            .apply_scene(&[SceneIntent::CreateNode(scene_page("page"))])
+            .unwrap(),
+    );
+    history
+        .end(session.font(), session.scene(), Recording::Undoable)
+        .unwrap();
+    history.mark_saved();
+
+    // A run placed on the page, then a font edit made while it is shown.
+    history.begin(Some(page.clone()));
+    history.record_scene(
+        session
+            .apply_scene(&[SceneIntent::CreateNode(SceneNode {
+                id: run.clone(),
+                parent_id: Some(page.clone()),
+                index: key(0),
+                x: 0.0,
+                y: 0.0,
+                content: NodeContent::TextRun {
+                    run_id: RunId::from_raw("run"),
+                    size: 1000.0,
+                    items: Vec::new(),
+                    settings: shift_engine::scene::RunSettings::default(),
+                },
+            })])
+            .unwrap(),
+    );
+    history
+        .end(session.font(), session.scene(), Recording::Undoable)
+        .unwrap();
+    assert!(
+        !history.matches_saved(),
+        "a scene edit leaves the document unsaved"
+    );
+
+    history.begin(Some(page.clone()));
+    let add = FontIntentSet::from(FontIntent::from(AddComponent {
+        layer_id,
+        component_id: ComponentId::from_raw("added"),
+        base_glyph_id: GlyphId::from_raw("base1"),
+    }));
+    history.record(session.apply(&mut persisted, &add).unwrap().changes);
+    history
+        .end(session.font(), session.scene(), Recording::Undoable)
+        .unwrap();
+
+    let font_undo = history
+        .undo(&mut session, &mut persisted)
+        .unwrap()
+        .expect("the font edit undoes first");
+    assert_eq!(font_undo.location.page_id, Some(page.clone()));
+    assert_eq!(
+        font_undo.location.glyph_ids,
+        [GlyphId::from_raw("composite0")]
+    );
+    assert!(font_undo.location.node_ids.is_empty());
+    assert!(session.scene().node(&run).is_some());
+    assert_eq!(session.font().layer(layer_id), font.layer(layer_id));
+
+    let scene_undo = history
+        .undo(&mut session, &mut persisted)
+        .unwrap()
+        .expect("then the run");
+    assert_eq!(scene_undo.location.page_id, Some(page.clone()));
+    assert_eq!(scene_undo.location.node_ids, std::slice::from_ref(&run));
+    assert!(scene_undo.location.glyph_ids.is_empty());
+    assert!(session.scene().node(&run).is_none());
+    assert!(history.matches_saved(), "undo landed on the save");
+
+    let first = history.latest().expect("the page's own entry");
+    assert_eq!(first.location.page_id, Some(page.clone()));
+    assert_eq!(first.location.node_ids, [page]);
+
+    history.redo(&mut session, &mut persisted).unwrap();
+    assert!(session.scene().node(&run).is_some());
+}
+
+#[test]
+fn an_unrecorded_scene_edit_is_kept_but_never_reaches_the_saved_position() {
+    use shift_engine::scene::SceneIntent;
+
+    let font = composite_font();
+    let mut session = EngineSession::open_directory(placeholders(&font));
+    let mut history = EditHistory::default();
+    history.mark_saved();
+
+    history.begin(None);
+    history.record_scene(
+        session
+            .apply_scene(&[SceneIntent::CreateNode(scene_page("page"))])
+            .unwrap(),
+    );
+    let kept = history
+        .end(session.font(), session.scene(), Recording::Unrecorded)
+        .unwrap();
+
+    assert!(kept.is_some_and(|change_set| !change_set.scene.is_empty()));
+    assert!(history.latest().is_none(), "no undo step");
+    assert!(!history.matches_saved());
 }

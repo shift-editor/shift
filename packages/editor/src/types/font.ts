@@ -1,3 +1,4 @@
+import type { SceneDocument, SceneIntent } from "./sceneDocument";
 import type {
   AppliedChange,
   FontIntent,
@@ -33,6 +34,7 @@ import type {
 } from "../lib/wasm/engine";
 import type {
   FeatureSubstitution,
+  EditLocation,
   FontChangeFlag,
   FontFeature,
   GlyphIdentityChange,
@@ -299,13 +301,29 @@ export interface OpenEdit {
    * @throws When the engine rejects the intents; the edit is then as it was.
    */
   stage(intents: readonly FontIntent[]): void;
+  /**
+   * Applies scene `intents` in place of what this edit applied so far, as a
+   * drag of a text run does each frame.
+   *
+   * @throws As {@link OpenEdit.stage}.
+   */
+  stageScene(intents: readonly SceneIntent[]): void;
   /** Closes the edit as one undo step and persists it; an edit that staged nothing commits nothing. */
   commit(label: string): void;
   /** Closes the edit, leaving the font as it was before it began. */
   cancel(): void;
 }
 
+/**
+ * What an undo or redo persisted, and where the edit it replayed was made:
+ * the page it was made on and what it changed, so the editor can show that
+ * page first; null when the engine kept no location.
+ */
+export type ReplayedChange = AppliedChange & { readonly location: EditLocation | null };
+
 export interface WorkspaceEditCoordinator {
+  /** The document's scene, in the window's editing engine beside the font. */
+  readonly scene: SceneDocument;
   push(intent: FontIntent): PendingEditId;
   /**
    * Applies `intents` as {@link WorkspaceEditCoordinator.push} applies one,
@@ -339,8 +357,8 @@ export interface WorkspaceEditCoordinator {
   matchLayers(referenceLayerId: LayerId, targetLayerId: LayerId): Promise<LayerMatch>;
   mapLocation(location: Location): Promise<Location>;
   settled(): Promise<void>;
-  undo(): Promise<AppliedChange | null>;
-  redo(): Promise<AppliedChange | null>;
+  undo(): Promise<ReplayedChange | null>;
+  redo(): Promise<ReplayedChange | null>;
   discardRedo(): Promise<void>;
   onEdit(listener: WorkspaceEditListener): () => void;
   state(): Promise<WorkspaceDocumentState | null>;

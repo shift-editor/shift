@@ -88,7 +88,7 @@ describe("the window's engine edits from the store", () => {
 
   /** What `intent` does in the engine, as one edit. */
   function edit(intent: FontIntent) {
-    engine.beginEdit();
+    engine.beginEdit(null);
     const done = engine.apply([intent]);
     engine.endEdit();
     return done;

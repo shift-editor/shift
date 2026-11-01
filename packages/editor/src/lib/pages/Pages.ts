@@ -2,7 +2,7 @@ import type { NodeId } from "@shift/types";
 import type { Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
 import { computed, type Signal } from "../signals";
-import { PageNode, type TextRunNode } from "../../types/node";
+import { sameNodeList, type PageNode } from "../../types/node";
 import { IndexKey } from "../../types/indexKey";
 import type { PageCamera } from "../../types/page";
 
@@ -31,7 +31,7 @@ export class Pages {
     this.#editor = editor;
     this.#listCell = computed(
       () => editor.scene.pagesCell.value.filter((page) => page.role !== "glyph"),
-      { name: "editor.pages.list", equals: PageNode.sameList },
+      { name: "editor.pages.list", equals: sameNodeList },
     );
   }
 
@@ -205,10 +205,9 @@ export class Pages {
     this.#editor.setPan(camera.pan);
   }
 
+  /** Removes a page and everything on it; text runs' content goes with their nodes. */
   #removePage(pageId: NodeId): void {
-    const deleted = this.#editor.scene.deleteSubtree(pageId);
-    const runs = deleted.filter((node): node is TextRunNode => node.kind === "textRun");
-    this.#editor.text.deleteRunsPlacedBy(runs);
+    this.#editor.scene.deleteSubtree(pageId);
   }
 
   #camera(): PageCamera {

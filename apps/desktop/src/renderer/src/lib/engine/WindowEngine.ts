@@ -6,11 +6,13 @@ import type {
   GlyphId,
   GlyphName,
   LayerId,
+  NodeId,
   SlugWeightSet,
   SourceId,
 } from "@shift/types";
 import {
   loadEngine,
+  type EditRecording,
   type EditablePair,
   type EngineEdit,
   type EngineKerningPair,
@@ -29,9 +31,12 @@ import {
   type GlyphIdentityChange,
   type LayoutRequest,
   type PlacedText,
+  type RevisedNode,
+  type SceneIntent,
 } from "@shift/wasm/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "@shift/editor/signals";
 import type { EngineVariation, FontEngine, KerningPlace } from "@shift/editor/types";
+import { storeReader } from "@shift/wasm/store-reader";
 import { engineStoreRequest } from "./engineStoreRequest";
 
 /** Every flag an edit's impact can set, in bit order: bit `i` is flag `i`, as Rust declares them. */
@@ -148,11 +153,16 @@ export class WindowEngine implements FontEngine {
 
     const reader = this.#layers.open(location);
     try {
+      // The document's scene, as the store holds it, unsaved edits included.
+      const scene = storeReader((method, numbers, blobs) =>
+        this.#layers.request(reader, method, numbers, blobs),
+      ).sceneNodes();
       // The session reads layers only while an edit runs, after this open, so
       // its source can follow the current reader.
       const session = EngineSession.open(
         directory,
         engineStoreRequest(this.#layers, () => this.#reader()),
+        scene,
       );
       batch(() => {
         this.#close();
@@ -202,10 +212,50 @@ export class WindowEngine implements FontEngine {
     opened.reader = null;
   }
 
-  /** Opens an edit: the applies until {@link endEdit} become one undo step and one change set. */
-  beginEdit(): void {
-    this.#require().beginEdit();
+  /**
+   * Opens an edit: the applies until {@link endEdit} become one undo step and
+   * one change set, recorded as made on `pageId`, the page the window shows.
+   */
+  beginEdit(pageId: NodeId | null): void {
+    this.#require().beginEdit(pageId);
     this.#inEdit = 0;
+  }
+
+  /**
+   * Applies scene `intents` within the open edit.
+   *
+   * @throws When the engine is not open, no edit is open, or an intent is refused.
+   */
+  applyScene(intents: readonly SceneIntent[]): EngineEdit {
+    const session = this.#require();
+    performance.mark("engine.applyScene.start");
+    try {
+      return this.#shown(session.applyScene(intents));
+    } finally {
+      performance.measure("engine.applyScene", "engine.applyScene.start");
+    }
+  }
+
+  /**
+   * Applies scene `intents` within the open edit as one frame of a gesture.
+   *
+   * @throws As {@link applyScene}.
+   */
+  stageScene(intents: readonly SceneIntent[]): EngineStage {
+    const session = this.#require();
+    performance.mark("engine.stageScene.start");
+    try {
+      const staged = session.stageScene(intents);
+      this.#record(staged.impact);
+      return staged;
+    } finally {
+      performance.measure("engine.stageScene", "engine.stageScene.start");
+    }
+  }
+
+  /** Every node of the document's scene, unsaved edits included; empty before the engine opens. */
+  sceneNodes(): readonly RevisedNode[] {
+    return this.#opened?.session.sceneNodes() ?? [];
   }
 
   /**
@@ -303,8 +353,8 @@ export class WindowEngine implements FontEngine {
    * @returns Its change set, as named MessagePack, to persist; `undefined`
    * when it changed nothing.
    */
-  endEdit(): Uint8Array | undefined {
-    const changeSet = this.#require().endEdit();
+  endEdit(recording: EditRecording = "undoable"): Uint8Array | undefined {
+    const changeSet = this.#require().endEdit(recording);
     this.#inEdit = 0;
     return changeSet;
   }

@@ -38,6 +38,7 @@ pub mod geometry;
 pub mod index_keys;
 pub mod names;
 mod numbers;
+pub mod scene;
 pub mod shaping;
 pub mod svg;
 #[cfg(feature = "engine-protocol")]

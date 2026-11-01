@@ -17,6 +17,7 @@ pub enum LayoutUnit {
 /// A feature to turn on, off, or to an alternate for the whole text.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FeatureSetting {
     /// A feature tag such as `liga`.
     pub tag: String,
@@ -27,6 +28,7 @@ pub struct FeatureSetting {
 /// How lines sit in the width.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TextAlign {
     /// Where the paragraph's direction starts: left for left-to-right.
     Start,

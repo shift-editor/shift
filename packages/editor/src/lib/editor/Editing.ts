@@ -4,6 +4,7 @@ import { uniqueInOrder } from "../utils/utils";
 import { currentEditingId } from "../../types/editing";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { NodeId } from "@shift/types";
+import type { Scene } from "./Scene";
 
 export interface EditingState {
   readonly nodeIds: readonly NodeId[];
@@ -22,11 +23,13 @@ function emptyEditingState(): EditingState {
  */
 export class Editing {
   readonly #store: ShiftStore<ShiftEditorRecord>;
+  readonly #scene: Scene;
   readonly #nodeIds: Signal<ReadonlySet<NodeId>>;
   readonly stateCell: Signal<EditingState>;
 
-  constructor(store: ShiftStore<ShiftEditorRecord>) {
+  constructor(store: ShiftStore<ShiftEditorRecord>, scene: Scene) {
     this.#store = store;
+    this.#scene = scene;
     this.stateCell = computed(
       () => {
         const record = this.#store.cell.value.get(currentEditingId);
@@ -86,7 +89,7 @@ export class Editing {
   suspend(): () => void {
     const nodeIds = this.nodeIds;
     this.clear();
-    return () => this.set(nodeIds.filter((id) => this.#store.get(id)?.type === "node"));
+    return () => this.set(nodeIds.filter((id) => this.#scene.node(id) !== null));
   }
 
   clear(): void {

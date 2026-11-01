@@ -1,4 +1,5 @@
-//! Shift's editing session over a partly loaded font.
+//! Shift's editing session over a partly loaded font and the scene it is
+//! shown on.
 //!
 //! A session holds the whole font directory, with layer content loaded on
 //! demand through a synchronous [`LayerSource`], and applies edits with
@@ -13,14 +14,17 @@
 // WebAssembly engine. Tests may unwrap (clippy.toml).
 #![warn(clippy::unwrap_used, clippy::print_stdout)]
 
+mod document;
 mod history;
 mod records;
 mod residency;
+pub mod scene;
 mod session;
 mod source;
 mod store_reader;
 
-pub use history::EditHistory;
+pub use document::{CompactDocumentChangeSet, DocumentChangeSet, EditLocation};
+pub use history::{EditHistory, HistoryEntry, Recording, Replayed};
 pub use records::{CachedRecords, RecordCache, RecordSource};
 pub use residency::LayerResidency;
 pub use session::{ApplyError, EngineError, EngineSession, LoadError, StagedEdit};

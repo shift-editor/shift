@@ -14,9 +14,13 @@ default = ["layout"]
 layout = ["dep:shift-shape", "dep:shift-shaper-font", "dep:unicode-segmentation"]
 # A number packing for the types the editor's WebAssembly calls carry.
 pack = ["dep:pack", "shift-font/pack"]
+# Storing the text options a document keeps with a run (alignment and
+# feature settings), as the engine's scene does.
+serde = ["dep:serde"]
 
 [dependencies]
 pack = { workspace = true, optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true }
 shift-font = { workspace = true }
 shift-shape = { workspace = true, optional = true }
 shift-shaper-font = { workspace = true, optional = true }
