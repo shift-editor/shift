@@ -2,7 +2,7 @@ import type { Point2D } from "@shift/geo";
 import type { GlyphId, NodeId, RunId, SourceId, TextItemId } from "@shift/types";
 import type { PlacedText } from "@shift/wasm/protocol";
 import type { PageNode } from "./node";
-import type { TextItem } from "../lib/text/layout/types";
+import type { CaretEdge, Direction, TextItem } from "../lib/text/layout/types";
 import type { ExternalAxisLocation } from "./variation";
 
 /**
@@ -36,6 +36,12 @@ export type TextEditingId = string & {
 };
 export const currentTextEditingId = "textEditing:current" as TextEditingId;
 
+/** A word's edge on one side on screen: the cluster there, and the direction the word reads in. */
+export interface WordEdge {
+  readonly unit: number;
+  readonly direction: Direction;
+}
+
 export interface TextSelectionRange {
   readonly start: number;
   readonly end: number;
@@ -49,6 +55,11 @@ export interface TextEditingRecord {
   readonly nodeId: NodeId;
   readonly anchor: TextCaret;
   readonly focus: TextCaret;
+  /**
+   * Which of the focus stop's places the caret shows at: `secondary` only
+   * where a move landed on the second place of a direction boundary.
+   */
+  readonly focusEdge: CaretEdge;
   /**
    * Whether Text mode is showing this caret. An inactive record keeps the
    * caret and selection for the next visit.
@@ -72,4 +83,9 @@ export interface TextRunRecord {
   readonly type: "textrun";
   readonly scope: "document";
   readonly items: readonly TextItem[];
+  /**
+   * Whether the font's feature code shapes the text; off lays out each item
+   * as typed, glyph by glyph.
+   */
+  readonly shaping: boolean;
 }

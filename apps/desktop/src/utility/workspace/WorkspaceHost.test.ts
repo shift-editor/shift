@@ -237,16 +237,16 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     };
   }
 
-  /** A text run on `page`, holding one typed character. */
-  function sceneRun(page: SceneNode, character: string): SceneNode {
+  /** Places a text run on `page`, holding one typed character, its settings the engine's defaults. */
+  function sceneRun(page: SceneNode, character: string): SceneIntent {
     return {
-      id: mintNodeId(),
-      parentId: page.id,
-      index: indexKeys.between(null, null),
-      x: 10,
-      y: 20,
-      content: {
-        kind: "textRun",
+      kind: "createRun",
+      createRun: {
+        id: mintNodeId(),
+        parentId: page.id,
+        index: indexKeys.between(null, null),
+        x: 10,
+        y: 20,
         runId: mintRunId(),
         size: 1000,
         items: [{ kind: "character", id: mintTextItemId(), codepoint: character.codePointAt(0)! }],
@@ -284,8 +284,8 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     await editScene(sync, [
       { kind: "createNode", createNode: proofs },
       { kind: "createNode", createNode: specimen },
-      { kind: "createNode", createNode: sceneRun(proofs, "A") },
-      { kind: "createNode", createNode: sceneRun(specimen, "B") },
+      sceneRun(proofs, "A"),
+      sceneRun(specimen, "B"),
     ]);
   }
 
