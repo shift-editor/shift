@@ -26,7 +26,7 @@ use pack::Pack;
 use shift_font::{NodeId, PersistentMap, Replacement};
 
 pub use changes::{SceneChange, SceneChangeSet};
-pub use intents::{DeleteNode, MoveNode, SceneIntent, SetRunItems, SetRunSettings};
+pub use intents::{CreateRun, DeleteNode, MoveNode, SceneIntent, SetRunItems, SetRunSettings};
 pub use node::{
     DEFAULT_PAGE_NAME, NodeContent, NodeKind, PageRole, RunSettings, SceneNode, TextItem,
 };
@@ -334,13 +334,8 @@ impl Scene {
         journal: &mut Journal,
     ) -> Result<(), SceneError> {
         match intent {
-            SceneIntent::CreateNode(node) => {
-                if self.node(&node.id).is_some() {
-                    return Err(SceneError::NodeExists(node.id.clone()));
-                }
-                self.check_placement(node)?;
-                self.record(node.clone(), Items::Changed, journal);
-            }
+            SceneIntent::CreateNode(node) => self.create(node.clone(), journal)?,
+            SceneIntent::CreateRun(run) => self.create(run.node(), journal)?,
             SceneIntent::UpdateNode(node) => {
                 let current = self.require(&node.id)?;
                 if !current.same_kind(node) {
@@ -401,6 +396,16 @@ impl Scene {
                 self.record(node, Items::Changed, journal);
             }
         }
+        Ok(())
+    }
+
+    /// Places a new node, its id new and its placement allowed.
+    fn create(&mut self, node: SceneNode, journal: &mut Journal) -> Result<(), SceneError> {
+        if self.node(&node.id).is_some() {
+            return Err(SceneError::NodeExists(node.id));
+        }
+        self.check_placement(&node)?;
+        self.record(node, Items::Changed, journal);
         Ok(())
     }
 
