@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import path from "path";
 
 export default defineConfig({
@@ -11,7 +11,6 @@ export default defineConfig({
     setupFiles: ["src/renderer/src/testing/setup.ts"],
     benchmark: {
       include: ["src/**/*.bench.ts"],
-      setupFiles: ["src/renderer/src/testing/setup.ts"],
     },
   },
   resolve: {

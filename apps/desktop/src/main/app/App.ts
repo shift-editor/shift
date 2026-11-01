@@ -120,9 +120,7 @@ export class App {
   #appIcon = new AppIcon();
   #applicationMenu = new ApplicationMenu(
     (id, browserWindow) => {
-      const window = browserWindow
-        ? this.#windows.windowForBrowserWindow(browserWindow)
-        : undefined;
+      const window = browserWindow ? this.#windows.windowForBrowserWindow(browserWindow) : null;
       if (browserWindow && !window) return;
 
       // Menu/accelerator commands run detached, so a failure (e.g. a save that
@@ -137,9 +135,7 @@ export class App {
         });
     },
     (id, browserWindow) => {
-      const window = browserWindow
-        ? this.#windows.windowForBrowserWindow(browserWindow)
-        : undefined;
+      const window = browserWindow ? this.#windows.windowForBrowserWindow(browserWindow) : null;
       if (browserWindow && !window) return false;
 
       return this.#commands.isEnabled(id, this.#commandContext(window));
@@ -490,7 +486,7 @@ export class App {
     }
   }
 
-  #crashedWindows(session: FontSessionHost | null, failedWindow: Window | null): Window[] {
+  #crashedWindows(session: FontSessionHost | null, failedWindow: Window | null): readonly Window[] {
     if (failedWindow) return [failedWindow];
     return session?.allWindows() ?? [];
   }
@@ -776,15 +772,15 @@ export class App {
     }
   }
 
-  #commandContext(window?: Window): CommandContext {
-    window ??= this.#windows.activeWindow() ?? undefined;
+  #commandContext(requested: Window | null): CommandContext {
+    const window = requested ?? this.#windows.activeWindow();
     const session = window ? this.#workspaces.getForBrowserWindow(window.window) : null;
     const document = session?.document ?? null;
 
     return {
       commandLineTool: {
         available: () => this.#commandLineTool?.available ?? false,
-        install: () => this.#installCommandLineTool(window ?? null),
+        install: () => this.#installCommandLineTool(window),
       },
       update: {
         checkForUpdates: async () => {
@@ -793,15 +789,15 @@ export class App {
       },
       document: {
         create: async () => {
-          await this.#createWorkspaceFromWindow(window ?? null);
+          await this.#createWorkspaceFromWindow(window);
         },
         open: async () => {
-          await this.#openWorkspaceFromWindow(window ?? null, (opener) =>
+          await this.#openWorkspaceFromWindow(window, (opener) =>
             this.#nativeDialogs.openFont(opener),
           );
         },
         openFolder: async () => {
-          await this.#openWorkspaceFromWindow(window ?? null, (opener) =>
+          await this.#openWorkspaceFromWindow(window, (opener) =>
             this.#nativeDialogs.openFontFolder(opener),
           );
         },
@@ -830,7 +826,7 @@ export class App {
         },
       },
       windows: {
-        active: () => window ?? null,
+        active: () => window,
         showAbout: () => {
           this.#aboutWindow.show();
         },

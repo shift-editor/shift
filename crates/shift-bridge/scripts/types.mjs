@@ -8,7 +8,7 @@
 // The check uses its own target directory: the macros write only when
 // NAPI_TYPE_DEF_TMP_FOLDER and PACK_TS_DIR are set, so a check without them
 // in a shared directory would leave a crate up to date with nothing written.
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { generateTypeDef } from "@napi-rs/cli";
 import { generate } from "@shift/pack/generate";
@@ -19,6 +19,8 @@ const root = resolve(crate, "../..");
 const targetDir = join(root, "target", "napi-types");
 const typeDefDir = join(targetDir, "type-defs");
 const fragments = join(targetDir, "pack-fragments");
+/** The napi config `napi build` reads, so both write the same index.d.ts. */
+const napiConfig = JSON.parse(readFileSync(join(crate, "package.json"), "utf8")).napi;
 /** Crates whose `#[napi]` items reach index.d.ts. */
 const napiCrates = ["shift-bridge", "shift-wire"];
 /** Crates whose `#[derive(Pack)]` and `#[pack::interface]` items reach protocol.ts. */
@@ -51,6 +53,7 @@ await withLock(join(root, "target"), "napi-types", async () => {
   const { dts } = await generateTypeDef({
     typeDefDir,
     configDtsHeaderFile: "dts-header.d.ts",
+    constEnum: napiConfig.constEnum,
     cwd: crate,
   });
   writeFileSync(join(crate, "index.d.ts"), dts);

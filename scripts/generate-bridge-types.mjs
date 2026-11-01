@@ -53,11 +53,6 @@ function withoutNapiPrefix(text) {
   return text.replace(/\bNapi([A-Z]\w*)\b/g, "$1");
 }
 
-function enumToUnion(name, body) {
-  const values = [...body.matchAll(/=\s*["']([^"']+)["']/g)].map((match) => `"${match[1]}"`);
-  return `export type ${withoutNapiPrefix(name)} = ${values.join(" | ")};\n`;
-}
-
 let body = source.replace(idImportMatch?.[0] ?? "", "");
 
 const classMatch = body.match(/export declare class Bridge \{([\s\S]*?)\n\}\n\n/);
@@ -74,10 +69,6 @@ const bridgeMethods = classMatch[1]
 const bridgeApi = `export interface BridgeApi {${withoutNapiPrefix(bridgeMethods)}\n}\n\n`;
 body = body.replace(classMatch[0], bridgeApi);
 
-body = body.replace(
-  /export declare const enum ([A-Za-z0-9_]+) \{([\s\S]*?)\n\}/g,
-  (_match, name, enumBody) => enumToUnion(name, enumBody),
-);
 // Free functions, such as config.toml parsing, and classes other than Bridge,
 // such as the preload's read-only LayerReader, are imported from shift-bridge
 // directly by the process that calls them; they are not part of BridgeApi.

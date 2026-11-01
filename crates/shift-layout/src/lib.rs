@@ -25,6 +25,8 @@ mod placement;
 mod request;
 #[cfg(feature = "layout")]
 mod units;
+#[cfg(feature = "layout")]
+mod words;
 
 #[cfg(feature = "layout")]
 pub use font::LayoutFont;
@@ -90,6 +92,8 @@ pub struct TextLayout {
     /// A caret stop at each grapheme boundary of each line, in logical
     /// order, line by line.
     pub carets: Vec<CaretStop>,
+    /// The words, in reading order, with their edges on screen.
+    pub words: Vec<LayoutWord>,
     /// The width lines align in: the request's width, or the widest line.
     pub width: f64,
     /// Why some text was laid out as typed instead of shaped, when it was.
@@ -187,6 +191,22 @@ pub struct GlyphBounds {
     pub y_max: f64,
 }
 
+/// A word: a UAX #29 word segment that holds a letter, digit or the like,
+/// not spaces or punctuation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct LayoutWord {
+    /// The units it covers, from `start` up to `end`.
+    pub start: u32,
+    pub end: u32,
+    /// The direction it reads in, as its first unit's glyph is laid out.
+    pub direction: Direction,
+    /// The boundaries at its left and right edges on screen: its start and
+    /// end left to right, its end and start right to left.
+    pub left: u32,
+    pub right: u32,
+}
+
 /// The glyphs one unit shows.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
@@ -209,6 +229,11 @@ pub struct CaretStop {
     /// At a direction boundary, the other place the same boundary shows:
     /// the trailing edge of the unit before it.
     pub secondary: Option<SecondaryCaret>,
+    /// Its place among its line's caret places left to right on screen,
+    /// from 0, counting each stop's and each second place's: by `x`, and
+    /// where places meet at one `x` (beside a glyph of no advance, or where
+    /// directions meet) in the order their glyphs are drawn.
+    pub screen: u32,
 }
 
 /// The second place a caret stop shows at a direction boundary.
@@ -217,6 +242,9 @@ pub struct CaretStop {
 pub struct SecondaryCaret {
     pub x: f64,
     pub direction: Direction,
+    /// Its place among its line's caret places left to right, numbered
+    /// with the stops' ([`CaretStop::screen`]).
+    pub screen: u32,
 }
 
 impl TextLayout {
@@ -254,6 +282,7 @@ impl TextLayout {
             lines::Placement::new(font, &request.options).place(&paragraphs, &shaped)?;
         layout.unit_glyphs = layout.glyphs_by_unit(request.units.len());
         layout.carets = carets::Carets::new(font, &layout).stops(&paragraphs);
+        layout.words = layout.words_of(&paragraphs);
         layout.unshaped = unshaped;
         Ok(layout)
     }

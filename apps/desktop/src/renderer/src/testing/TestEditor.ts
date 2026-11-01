@@ -687,6 +687,12 @@ export class TestEditor extends Editor implements EditorTestSurface {
     await this.clickLocal(position.x, position.y, modifiers);
   }
 
+  async clickTextAt(position: Point2D, modifiers?: Modifiers): Promise<void> {
+    const run = this.#requireTextRun();
+    const screen = this.sceneToScreen(this.toScene(run, localPoint(position.x, position.y)));
+    await this.click(screen.x, screen.y, modifiers);
+  }
+
   async clickAtScreen(position: ScreenPoint, modifiers?: Modifiers): Promise<void> {
     await this.click(position.x, position.y, modifiers);
   }
@@ -895,6 +901,13 @@ export class TestEditor extends Editor implements EditorTestSurface {
   moveText(to: Point2D): void {
     const run = this.#requireTextRun();
     this.scene.updateNode({ id: run.id, position: to });
+  }
+
+  setTextShaping(shaping: boolean): void {
+    const run = this.#requireTextRun();
+    this.history.capture(shaping ? "Turn shaping on" : "Turn shaping off", () =>
+      this.text.setShaping(run.runId, shaping),
+    );
   }
 
   #requireTextRun(): TextRunNode {

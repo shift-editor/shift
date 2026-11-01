@@ -1,6 +1,6 @@
 import type { MenuItemConstructorOptions } from "electron";
 import {
-  commandShortcuts,
+  commandShortcut,
   helpCommandGroups,
   toElectronAccelerator,
   type CommandId,
@@ -24,7 +24,7 @@ export function commandMenuItem(
   const command = commands.find((candidate) => candidate.id === id);
   if (!command) throw new Error(`Unknown menu command: ${id}`);
 
-  const shortcut = commandShortcuts[id];
+  const shortcut = commandShortcut(id);
 
   return {
     id,

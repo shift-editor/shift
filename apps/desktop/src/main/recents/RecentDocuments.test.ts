@@ -102,6 +102,7 @@ describe("RecentDocuments", () => {
     outline: "M0 0L10 0L10 -10Z",
     viewBox: [0, -10, 10, 10],
     rightToLeft: false,
+    unitsPerEm: 1000,
   };
 
   it("caches a specimen until a font file changes outside Shift", () => {
