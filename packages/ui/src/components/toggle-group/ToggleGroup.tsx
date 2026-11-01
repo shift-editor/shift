@@ -3,22 +3,50 @@ import { Toggle as BaseToggle } from "@base-ui/react/toggle";
 import { ToggleGroup as BaseToggleGroup } from "@base-ui/react/toggle-group";
 import { cn } from "../../lib/utils";
 
-export interface ToggleGroupProps extends React.ComponentProps<typeof BaseToggleGroup> {}
+/**
+ * `segmented` sets the toggles in a muted track, the pressed one raised on
+ * the page background, as a view switcher.
+ */
+export type ToggleGroupVariant = "default" | "segmented";
 
-/** Row of toggles where, unless `multiple` is set, pressing one releases the others. */
-export function ToggleGroup({ className, ...props }: ToggleGroupProps) {
-  return <BaseToggleGroup className={cn("flex items-center gap-0.5", className)} {...props} />;
+export interface ToggleGroupProps extends React.ComponentProps<typeof BaseToggleGroup> {
+  variant?: ToggleGroupVariant;
 }
 
-export interface ToggleProps extends React.ComponentProps<typeof BaseToggle> {}
+const groupVariantStyles: Record<ToggleGroupVariant, string> = {
+  default: "",
+  segmented: "h-7 rounded-lg bg-surface-muted p-0.5",
+};
 
-/** Icon-sized toggle button: muted until hovered; pressed toggles sit on a filled background. */
-export function Toggle({ className, ...props }: ToggleProps) {
+/** Row of toggles where, unless `multiple` is set, pressing one releases the others. */
+export function ToggleGroup({ className, variant = "default", ...props }: ToggleGroupProps) {
+  return (
+    <BaseToggleGroup
+      className={cn("flex items-center gap-0.5", groupVariantStyles[variant], className)}
+      {...props}
+    />
+  );
+}
+
+export interface ToggleProps extends React.ComponentProps<typeof BaseToggle> {
+  /** Match the {@link ToggleGroup}'s variant. */
+  variant?: ToggleGroupVariant;
+}
+
+const toggleVariantStyles: Record<ToggleGroupVariant, string> = {
+  default:
+    "rounded hover:bg-hover/50 hover:text-primary data-[pressed]:bg-hover data-[pressed]:text-primary",
+  segmented:
+    "rounded-md hover:text-primary data-[pressed]:bg-background data-[pressed]:text-primary data-[pressed]:shadow-xs",
+};
+
+/** Icon-sized toggle button: muted until hovered; pressed toggles stand out by variant. */
+export function Toggle({ className, variant = "default", ...props }: ToggleProps) {
   return (
     <BaseToggle
       className={cn(
-        "inline-flex size-6 cursor-pointer items-center justify-center rounded text-secondary transition-colors",
-        "hover:bg-hover/50 hover:text-primary data-[pressed]:bg-hover data-[pressed]:text-primary",
+        "inline-flex size-6 cursor-pointer items-center justify-center text-secondary transition-colors",
+        toggleVariantStyles[variant],
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
         "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
         className,

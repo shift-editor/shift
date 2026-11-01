@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { LauncherLockup } from "@/app/branding";
 import { shiftProductName } from "@/app/release";
+import { HelpMenu } from "@/components/launcher/HelpMenu";
+import { LauncherActions } from "@/components/launcher/LauncherActions";
 import { RecentFiles } from "@/components/launcher/RecentFiles";
 import { useRecentDocuments } from "@/components/launcher/useRecentDocuments";
 import { Titlebar } from "@/components/chrome/Titlebar";
@@ -41,15 +43,19 @@ export const Landing = () => {
           </div>
         </div>
       )}
-      <div className="scrollbar-hidden flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <div className="mx-auto flex w-200 max-w-full flex-col gap-20 px-6 pt-20 pb-20">
-          <header className="flex justify-center">
-            <LauncherLockup aria-hidden="true" className="h-auto w-44 text-primary" />
-            <h1 className="sr-only">{shiftProductName}</h1>
+      <div className="scrollbar-hidden flex min-h-0 flex-1 flex-col overflow-y-auto px-4">
+        <div className="mx-auto flex w-full max-w-200 flex-col pb-20">
+          <header className="flex items-center gap-2 pt-25 pb-14">
+            <div className="min-w-0 flex-1">
+              <LauncherLockup aria-hidden="true" className="h-9 w-auto text-primary" />
+              <h1 className="sr-only">{shiftProductName}</h1>
+            </div>
+            <LauncherActions />
           </header>
           {recentDocuments && <RecentFiles documents={recentDocuments} />}
         </div>
       </div>
+      <HelpMenu className="absolute right-3.5 bottom-3.5" />
     </main>
   );
 };

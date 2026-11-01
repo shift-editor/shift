@@ -47,6 +47,25 @@ export type CommandId =
   | "ui.decreaseSize"
   | "ui.resetSize";
 
+/** A command in the Help menu. */
+export type HelpCommandId = Extract<CommandId, `help.${string}`>;
+
+/** What the Help menu and the launcher's help button call each help command. */
+export const helpCommandLabels = {
+  "help.openWebsite": "Website",
+  "help.openDiscord": "Discord",
+  "help.openX": "X / Twitter",
+  "help.reportIssue": "Report a Problem…",
+  "help.showLogs": "Show Logs",
+  "help.emailFeedback": "Feedback…",
+} satisfies Record<HelpCommandId, string>;
+
+/** Help commands in menu order: the links, then ways to report a problem. */
+export const helpCommandGroups: readonly (readonly HelpCommandId[])[] = [
+  ["help.openWebsite", "help.openDiscord", "help.openX"],
+  ["help.reportIssue", "help.showLogs", "help.emailFeedback"],
+];
+
 /** Platform-neutral keyboard chord assigned to an application command. */
 export interface CommandShortcut {
   readonly key: string;
