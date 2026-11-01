@@ -379,3 +379,32 @@ fn setting_a_run_s_settings_keeps_its_items_and_an_update_keeps_both() {
     };
     assert!(!settings.shaping);
 }
+
+#[test]
+fn a_run_created_without_settings_gets_their_defaults() {
+    let mut scene = Scene::default();
+    let page = page("page", 0);
+    scene
+        .apply_intents(&[
+            SceneIntent::CreateNode(page),
+            SceneIntent::CreateRun(CreateRun {
+                id: NodeId::from_raw("run"),
+                parent_id: Some(NodeId::from_raw("page")),
+                index: key(0),
+                x: 0.0,
+                y: 0.0,
+                run_id: RunId::from_raw("run"),
+                size: 1000.0,
+                items: Vec::new(),
+            }),
+        ])
+        .unwrap();
+
+    let Some(NodeContent::TextRun { settings, .. }) = scene
+        .node(&NodeId::from_raw("run"))
+        .map(|node| node.content.clone())
+    else {
+        panic!("expected the run");
+    };
+    assert_eq!(settings, RunSettings::default());
+}
