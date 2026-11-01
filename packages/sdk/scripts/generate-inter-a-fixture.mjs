@@ -3,11 +3,12 @@ import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const INTER_COMMIT = "353b61b9f4430d5f420d56605a6e7993e0941470";
 const INTER_REPOSITORY = "https://github.com/rsms/inter.git";
-const EXPECTED_SHA256 = "48fadb16bf93ced1bc1630f2b282df3ea2c0777d5d40b141377a51bf429bf287";
+const EXPECTED_SHA256 = "a0e7f140158464ae2773da5aa181eb55fecfb2f33ba37fa66f861ebb445c57e2";
 const SOURCE_PATH = "src/Inter-Roman.glyphspackage";
 const ID_PREFIXES = new Set([
   "anchor",
@@ -51,6 +52,14 @@ try {
   const { createBridge } = await import(
     pathToFileURL(resolve(repositoryRoot, "packages/bridge/src/index.ts")).href
   );
+  // The window's editing engine, which reads the axes, sources and kerning
+  // from the workspace's store, as the desktop window does.
+  const { loadEngine } = await import(
+    pathToFileURL(resolve(repositoryRoot, "packages/editor/src/lib/wasm/engine.ts")).href
+  );
+  const { LayerReader } = createRequire(resolve(repositoryRoot, "packages/bridge/package.json"))(
+    "shift-bridge",
+  );
   const bridge = createBridge();
 
   try {
@@ -62,26 +71,28 @@ try {
     const glyph = glyphs[0];
     if (!glyph) throw new Error("Inter lowercase a snapshot is missing");
 
-    const axes = bridge.workspace.getAxes();
+    const { axes, sources } = await engineRecords({ bridge, loadEngine, LayerReader }, workspace);
     const opticalSizeAxis = axes.find((axis) => axis.tag === "opsz");
-    const namedInstances = bridge
+    const namedInstances = bridge.workspace
       .getNamedInstances()
       .filter(
         (instance) =>
           !opticalSizeAxis ||
-          instance.location.values[opticalSizeAxis.id] === opticalSizeAxis.default,
+          instance.location.values[opticalSizeAxis.id] === opticalSizeAxis.kind.default,
       );
     const font = {
       metadata: bridge.workspace.getMetadata(),
       metrics: bridge.workspace.getMetrics(),
       metricDefinitions: bridge.workspace.getMetricDefinitions(),
       sourceMetricsInterpolation: bridge.workspace.getSourceMetricsInterpolation(),
-      glyphs: [record],
-      sources: bridge.workspace.getSources(),
+      glyphs: [{ id: record.id, name: record.name, unicodes: record.unicodes }],
+      sources,
       axes,
       axisMappings: bridge.workspace.getAxisMappings(),
       axisMappingBases: bridge.workspace.getAxisMappingBases(),
       namedInstances,
+      // The fixture holds one glyph, so no kerning pair has both sides in it.
+      kerning: { groups: [], sources: [] },
     };
 
     validate({ font, record, glyph });
@@ -122,6 +133,21 @@ try {
   await rm(root, { recursive: true, force: true });
 }
 
+/** The font's axes and sources as the engine reads them from the workspace's store. */
+async function engineRecords({ bridge, loadEngine, LayerReader }, storePath) {
+  const { EngineSession } = await loadEngine();
+  const reader = LayerReader.openWorkingStore(storePath);
+  const engine = EngineSession.open(bridge.workspace.encodedDirectory(), (method, numbers, blobs) =>
+    reader.request(method, numbers, [...blobs]),
+  );
+  try {
+    return engine.fontRecords();
+  } finally {
+    engine.dispose();
+    reader.close();
+  }
+}
+
 function argument(name) {
   const index = process.argv.indexOf(name);
   return index === -1 ? null : (process.argv[index + 1] ?? null);
@@ -129,20 +155,10 @@ function argument(name) {
 
 function normalizeCollections(fixture) {
   const sourceOrder = new Map(fixture.font.sources.map((source, index) => [source.id, index]));
-  const metricOrder = new Map(
-    fixture.font.metricDefinitions.map((metric, index) => [metric.id, index]),
-  );
   const bySourceOrder = (left, right) =>
     (sourceOrder.get(left.sourceId) ?? Number.MAX_SAFE_INTEGER) -
     (sourceOrder.get(right.sourceId) ?? Number.MAX_SAFE_INTEGER);
 
-  for (const source of fixture.font.sources) {
-    source.metricValues.sort(
-      (left, right) =>
-        (metricOrder.get(left.metricId) ?? Number.MAX_SAFE_INTEGER) -
-        (metricOrder.get(right.metricId) ?? Number.MAX_SAFE_INTEGER),
-    );
-  }
   for (const record of fixture.records) record.layers.sort(bySourceOrder);
   for (const glyph of fixture.glyphs) glyph.layers.sort(bySourceOrder);
 }
