@@ -407,8 +407,8 @@ test.describe("Editor view", () => {
   test("full editor matches snapshot", { tag: "@golden" }, async ({ page, editor }) => {
     await editor.waitForCanvasRender();
     await page.mouse.move(0, 0);
-    // The kerning group fields' rounded corners antialias a few pixels differently from run to
-    // run on the CI runners; the sidebar goldens cover the fields themselves.
+    // The kerning group fields' rounded corners antialias a few pixels differently between
+    // the snapshot runner and CI's, so the capture leaves them out.
     await expectPageSnapshot(page, "editor-glyph-A.png", [
       editorToolbar(page),
       page.getByLabel(/kerning group of/),
