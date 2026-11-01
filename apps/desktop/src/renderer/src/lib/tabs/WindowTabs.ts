@@ -3,6 +3,7 @@ import { computed, signal, type Signal, type WritableSignal } from "@shift/edito
 import type { GlyphNode, PageNode } from "@shift/editor/types";
 import type { GlyphId, NodeId } from "@shift/types";
 import { CANVAS_PATH, glyphIdFromPath } from "@/lib/editorRoute";
+import type { StoredTab } from "@/lib/workspace/documentViews";
 
 /** The pinned font overview tab's id. */
 export const GLYPHS_TAB_ID = "glyphs";
@@ -36,14 +37,9 @@ export type WindowLocation =
 
 /** A window's tabs as view memory keeps them: the page and glyph tabs in order, and the overview's page. */
 export interface WindowTabsView {
-  readonly tabs: readonly StoredWindowTab[];
+  readonly tabs: readonly StoredTab[];
   readonly selectionPageId: NodeId | null;
 }
-
-/** A page or glyph tab without its session-only id. */
-export type StoredWindowTab =
-  | { readonly kind: "page"; readonly pageId: NodeId }
-  | { readonly kind: "glyph"; readonly pageId: NodeId; readonly glyphId: GlyphId };
 
 /** The result of opening a glyph in a tab. */
 export interface OpenedGlyph {
@@ -96,7 +92,7 @@ export class WindowTabs {
         resolveTabs(
           this.#openedCell.value,
           editor.scene.pagesCell.value,
-          editor.scene.shownPageIdCell.value,
+          editor.scene.shownPageCell.value,
         ),
       { name: "desktop.windowTabs" },
     );
@@ -134,6 +130,11 @@ export class WindowTabs {
       case "canvas":
         return location.pageId ? this.pageTab(location.pageId) : null;
     }
+  }
+
+  /** Returns the tab with id `tabId`, or null when no tab has it. */
+  tab(tabId: string): WindowTab | null {
+    return this.#tabsCell.peek().find((tab) => tab.id === tabId) ?? null;
   }
 
   /** Returns the tab showing page `pageId`, or null when it has none. */
@@ -277,7 +278,7 @@ export class WindowTabs {
 
   /** The tabs as view memory keeps them, in order; the pinned overview is implied. */
   view(): WindowTabsView {
-    const tabs = this.#movable().map((tab): StoredWindowTab => {
+    const tabs = this.#movable().map((tab): StoredTab => {
       switch (tab.kind) {
         case "page":
           return { kind: "page", pageId: tab.pageId };
@@ -297,11 +298,11 @@ export class WindowTabs {
    *
    * @returns the tabs dropped.
    */
-  restore(view: WindowTabsView): readonly StoredWindowTab[] {
+  restore(view: WindowTabsView): readonly StoredTab[] {
     const scene = this.#editor.scene;
     const font = this.#editor.font;
     const kept: MovableTab[] = [];
-    const dropped: StoredWindowTab[] = [];
+    const dropped: StoredTab[] = [];
     for (const stored of view.tabs) {
       const pageExists = scene.nodeOfKind(stored.pageId, "page") !== null;
       const glyphExists = stored.kind === "page" || font.recordForId(stored.glyphId) !== null;
@@ -393,10 +394,9 @@ export class WindowTabs {
 function resolveTabs(
   opened: readonly MovableTab[],
   pages: readonly PageNode[],
-  shownPageId: NodeId | null,
+  shownPage: PageNode | null,
 ): readonly WindowTab[] {
   const pageIds = new Set(pages.map((page) => page.id));
-  const shownPage = pages.find((page) => page.id === shownPageId) ?? null;
   const shownIsUntabbedUserPage =
     shownPage !== null && shownPage.role === undefined && !hasPageTab(opened, shownPage.id);
   let fallback = shownIsUntabbedUserPage ? shownPage.id : null;

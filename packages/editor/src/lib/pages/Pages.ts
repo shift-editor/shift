@@ -205,15 +205,6 @@ export class Pages {
     this.#editor.setPan(camera.pan);
   }
 
-  /**
-   * Returns the page a node is on.
-   *
-   * @returns the page itself for a page; null for an unknown node or one on no page.
-   */
-  pageOf(nodeId: NodeId): PageNode | null {
-    return this.#editor.scene.pageOf(nodeId);
-  }
-
   /** Removes a page and everything on it; text runs' content goes with their nodes. */
   #removePage(pageId: NodeId): void {
     this.#editor.scene.deleteSubtree(pageId);
