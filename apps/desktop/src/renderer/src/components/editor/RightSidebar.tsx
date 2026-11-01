@@ -59,16 +59,10 @@ export const RightSidebar = () => {
           <KerningPairSection />
         ) : (
           <TransformOriginProvider>
-            {/* Kerning | Text | Features | Handle | Transform, each a group with a divider between. */}
+            {/* Kerning | Handle | Transform | Anchor | Text | Features, each a group with a divider between. */}
             <div ref={selectionBlockRef} className="flex flex-col">
               <SidebarGroup>
                 <GlyphKerningSection anchorRef={selectionBlockRef} />
-              </SidebarGroup>
-              <SidebarGroup>
-                <TextSection />
-              </SidebarGroup>
-              <SidebarGroup>
-                <FeaturesSection />
               </SidebarGroup>
               {hasTransformSelection ? (
                 <SidebarGroup>
@@ -91,6 +85,12 @@ export const RightSidebar = () => {
                   <AnchorSection />
                 </SidebarGroup>
               ) : null}
+              <SidebarGroup>
+                <TextSection />
+              </SidebarGroup>
+              <SidebarGroup>
+                <FeaturesSection />
+              </SidebarGroup>
             </div>
           </TransformOriginProvider>
         ),
