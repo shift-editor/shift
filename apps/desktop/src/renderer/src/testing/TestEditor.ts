@@ -293,6 +293,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
     const record = this.font.recordForName(glyph.handle.name);
     if (!record) throw new Error("created glyph did not appear in the font directory");
     this.#placeGlyph(record.id);
+    // Placing the glyph is a document edit, persisted like any other.
+    await this.settle();
     return this;
   }
 
@@ -305,6 +307,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
     if (!record) throw new Error(`Opened package has no ${glyphName} glyph`);
     await this.font.loadGlyph(record.id);
     this.#placeGlyph(record.id);
+    // Placing the glyph is a document edit, persisted like any other.
+    await this.settle();
     return this;
   }
 
@@ -358,14 +362,6 @@ export class TestEditor extends Editor implements EditorTestSurface {
     const directory = mkdtempSync(join(tmpdir(), "shift-saved-"));
     this.#temporaryDirectories.push(directory);
     return this.saveAs(join(directory, "Saved.shift"));
-  }
-
-  /** Closes the clean workspace and permanently disposes this test stack. */
-  async closeSession(): Promise<void> {
-    await this.settle();
-    await this.#stack.closeWorkspace();
-    this.destroy();
-    this.#stack.dispose();
   }
 
   /** Adds another glyph to the workspace font and loads its local model. */

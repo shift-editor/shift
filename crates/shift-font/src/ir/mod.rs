@@ -33,7 +33,8 @@ pub use component::{Component, ComponentAlignment, DecomposedTransform, Transfor
 pub use contour::{Contour, Contours};
 pub use entity::{
     AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, EntityId, GlyphEntityId,
-    GlyphId, GuidelineId, KerningGroupId, LayerId, MetricId, NamedInstanceId, PointId, SourceId,
+    GlyphId, GuidelineId, KerningGroupId, LayerId, MetricId, NamedInstanceId, NodeId, PointId,
+    RunId, SourceId, TextItemId,
 };
 pub use features::FeatureData;
 pub use font::{Font, FontCopyId, FontMetadata, LANGUAGES_LIB_KEY};
@@ -53,6 +54,7 @@ pub use metrics::{
     FontMetrics, MetricDefinition, MetricDefinitionList, MetricKind, MetricValue, StandardMetrics,
 };
 pub use named_instance::NamedInstance;
+pub use persistent::PersistentMap;
 pub use point::{Point, PointType};
 pub use segment::{CurveSegment, CurveSegmentIter, PointKinds, SegmentIndexIter, SegmentIndices};
 pub use source::{Source, SourceList, SourceRole};

@@ -11,20 +11,19 @@ import {
 } from "@shift/ui";
 import { useSignalState } from "@shift/editor/signals";
 import { commandShortcuts, type CommandId } from "@shared/commands";
-import GhostIcon from "@/assets/brand/ghost.svg";
 import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 import { getShiftHost } from "@/host/shiftHost";
 import { commandShortcutLabel } from "@/lib/keyboard/commandShortcutLabel";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 
 /**
- * The left sidebar's header: Shift's mascot, and the font's name, which opens
- * the document's menu (its info, saving and exporting, and settings).
+ * The left sidebar's header: the font's name, which opens the document's menu
+ * (its info, saving and exporting, and settings).
  *
  * @remarks
  * The menu runs the same commands as the application menu, with the same shortcuts.
- * The mascot is drawn like the launcher's: in the text colour with its eyes
- * cut out to the sidebar, so every theme colours it.
+ * The header's `px-1` plus the button's own `px-2` puts the name on the sidebar's
+ * 12px content edge.
  */
 export const SidebarBrand = () => {
   const session = useFontSession();
@@ -41,8 +40,7 @@ export const SidebarBrand = () => {
     commandShortcutLabel(commandShortcuts[commandId], isMac);
 
   return (
-    <div className="flex h-10 shrink-0 items-center gap-1 border-b border-line-subtle px-3">
-      <GhostIcon aria-hidden className="h-6 w-6 shrink-0 text-primary" />
+    <div className="flex h-10 shrink-0 items-center border-b border-line-subtle px-1">
       <Menu modal={false}>
         <MenuTrigger
           render={

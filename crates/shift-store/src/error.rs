@@ -12,6 +12,23 @@ pub enum StoreError {
     #[error(transparent)]
     Font(#[from] shift_font::error::CoreError),
 
+    #[error(transparent)]
+    IndexKey(#[from] shift_font::index_key::IndexKeyError),
+
+    #[error("scene node {id} could not be encoded: {source}")]
+    SceneNodeEncoding {
+        id: String,
+        #[source]
+        source: rmp_serde::encode::Error,
+    },
+
+    #[error("scene node {id} does not decode: {source}")]
+    SceneNodeDecoding {
+        id: String,
+        #[source]
+        source: rmp_serde::decode::Error,
+    },
+
     #[error("glyph layer encoding failed: {0}")]
     LayerEncoding(#[from] rmp_serde::encode::Error),
 

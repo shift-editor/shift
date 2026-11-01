@@ -8,6 +8,7 @@ import type {
   KerningGroupId,
   KerningSide,
   LayerId,
+  NodeId,
   SlugWeightSet,
   SourceId,
 } from "@shift/types";
@@ -42,6 +43,7 @@ import {
   type EngineStage,
 } from "@shift/wasm/engine";
 import type {
+  EditLocation,
   EditablePair,
   EngineEdits,
   EngineReads,
@@ -51,6 +53,8 @@ import type {
   FontChangeFlag,
   FontFeature,
   LayoutRequest,
+  RevisedNode,
+  SceneIntent,
   SourceSetWeights,
   PlacedText,
 } from "@shift/wasm/protocol";
@@ -75,7 +79,14 @@ export interface EngineKerningPair {
  * changed, whole, as the workspace's echo carries it (`next`, absent when it
  * changed none), with the records of the glyphs it changed as they now stand.
  */
-export type EngineEdit = EngineEditLayers & { readonly next?: FontReplacement };
+export type EngineEdit = EngineEditLayers & {
+  readonly next?: FontReplacement;
+  /** For an undo or redo: where the edit it replayed was made, and what it changed. */
+  readonly location?: EditLocation;
+};
+
+/** Whether a closed edit becomes an undo step, as shift-engine's `Recording` says. */
+export type EditRecording = "undoable" | "unrecorded";
 
 /**
  * An editing session in `@shift/wasm/engine`: shift-engine over the open
@@ -109,12 +120,14 @@ export class EngineSession {
 
   /**
    * Opens a session over a font directory, as the workspace's `encodedDirectory`
-   * returns it.
+   * returns it, and the document's scene, as the store's `sceneNodes` returns
+   * it; with no scene the session's scene is empty, for reading the font's
+   * records alone.
    *
-   * @throws When `directory` does not decode to a font.
+   * @throws When `directory` does not decode to a font, or `scene` to scene nodes.
    */
-  static open(directory: Uint8Array, source: StoreRequest): EngineSession {
-    return new EngineSession(engineOpen(directory, source));
+  static open(directory: Uint8Array, source: StoreRequest, scene?: Uint8Array): EngineSession {
+    return new EngineSession(engineOpen(directory, source, scene));
   }
 
   /**
@@ -164,9 +177,42 @@ export class EngineSession {
   /**
    * Opens an edit: the applies until {@link EngineSession.endEdit} become one
    * undo step and one change set.
+   *
+   * @param pageId - The page the editor shows, which the undo step records as
+   * where the edit was made; null with no page shown.
    */
-  beginEdit(): void {
-    engineBeginEdit(this.#handle);
+  beginEdit(pageId: NodeId | null): void {
+    engineBeginEdit(this.#handle, pageId ?? undefined);
+  }
+
+  /**
+   * Applies scene `intents` within the open edit, after any font intents held
+   * with them, and returns what the edit did.
+   *
+   * @throws When an intent is refused; the scene is then unchanged.
+   */
+  applyScene(intents: readonly SceneIntent[]): EngineEdit {
+    this.#intents.holdScene(intents);
+    return this.#withReplacement(engineApply(this.#handle));
+  }
+
+  /**
+   * Applies scene `intents` within the open edit as one frame of a gesture,
+   * as {@link EngineSession.stage} does for font intents.
+   *
+   * @throws As {@link EngineSession.applyScene}.
+   */
+  stageScene(intents: readonly SceneIntent[]): EngineStage {
+    this.#intents.holdScene(intents);
+    return engineStage(this.#handle);
+  }
+
+  /**
+   * Every node of the document's scene, each parent before its children,
+   * siblings in order, with when it last changed.
+   */
+  sceneNodes(): readonly RevisedNode[] {
+    return this.#reads.sceneNodes();
   }
 
   /**
@@ -421,13 +467,14 @@ export class EngineSession {
   }
 
   /**
-   * Closes the open edit as one undo step.
+   * Closes the open edit, as one undo step unless `recording` is
+   * `"unrecorded"`.
    *
-   * @returns Its change set, as named MessagePack, to persist; `undefined`
-   * when it changed nothing.
+   * @returns Its document change set, font and scene, as named MessagePack, to
+   * persist; `undefined` when it changed nothing.
    */
-  endEdit(): Uint8Array | undefined {
-    return engineEndEdit(this.#handle);
+  endEdit(recording: EditRecording = "undoable"): Uint8Array | undefined {
+    return engineEndEdit(this.#handle, recording);
   }
 
   /** Drops the open edit; the session goes back to where it began. */
@@ -443,7 +490,7 @@ export class EngineSession {
    * @throws When the inverse no longer applies; the edit stays undoable.
    */
   undo(): EngineEdit | undefined {
-    return this.#withReplacement(engineUndo(this.#handle));
+    return this.#withLocation(this.#withReplacement(engineUndo(this.#handle)));
   }
 
   /**
@@ -453,7 +500,7 @@ export class EngineSession {
    * to redo.
    */
   redo(): EngineEdit | undefined {
-    return this.#withReplacement(engineRedo(this.#handle));
+    return this.#withLocation(this.#withReplacement(engineRedo(this.#handle)));
   }
 
   /** Forgets every undone edit. */
@@ -473,6 +520,12 @@ export class EngineSession {
   #withReplacement<E extends EngineEditLayers | undefined>(edit: E): E & EngineEdit {
     const next = edit && this.#intents.replacement();
     return next ? { ...edit, next } : (edit as E & EngineEdit);
+  }
+
+  /** An undo or redo with where its edit was made, which crosses packed beside it. */
+  #withLocation(edit: EngineEdit | undefined): EngineEdit | undefined {
+    const location = edit && this.#intents.replayedLocation();
+    return location ? { ...edit, location } : edit;
   }
 
   /** Releases the session; it applies nothing afterwards. */

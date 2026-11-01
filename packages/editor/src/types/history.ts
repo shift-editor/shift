@@ -1,6 +1,6 @@
 import type { HistoryCapture } from "../lib/editor/history/HistoryCapture";
 import type { PendingEditId } from "./editing";
-import type { ShiftEditorRecord, ShiftRecordId } from "./records";
+import type { NodeReference, ShiftEditorRecord, ShiftRecordId } from "./records";
 
 /** Reversible whole-record replacement owned by the TypeScript editor. */
 export interface RecordChange {
@@ -44,7 +44,7 @@ export interface HistoryCaptureContext {
   readonly changes: Map<ShiftRecordId, RecordChange>;
   readonly editIds: PendingEditId[];
   /** Records changed since finishing listeners last saw them. */
-  touched: Set<ShiftRecordId>;
+  touched: Set<NodeReference>;
 }
 
 export interface PendingHistoryEffect {

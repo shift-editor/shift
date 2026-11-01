@@ -111,6 +111,11 @@ impl StoreReader for LayerReader {
       .lookup_all(&glyphs)
   }
 
+  fn scene_nodes(&self) -> Result<Bytes, StoreReadError> {
+    let nodes = self.open()?.scene_nodes().map_err(unreadable)?;
+    Ok(Bytes(rmp_serde::to_vec_named(&nodes).map_err(unreadable)?))
+  }
+
   fn attaching_anchor_layers(
     &self,
     layer_ids: Vec<LayerId>,

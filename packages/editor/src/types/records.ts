@@ -1,12 +1,11 @@
 import type { GlyphId, NodeId, RunId, SelectableId, ShiftId } from "@shift/types";
 import type { EditingId } from "./editing";
-import type { GlyphNode, TextRunNode } from "./node";
 import type { SelectionId } from "./object";
-import type { StoredTextRunRecord, TextEditingId, TextEditingRecord } from "./text";
+import type { TextEditingId, TextEditingRecord } from "./text";
 
 export type ShiftRecordId = ShiftId | SelectionId | EditingId | TextEditingId | RunId;
 
-/** Something a scene node depends on: a store record, or a glyph in the font. */
+/** Something a scene node depends on: a node, a text run, or a glyph in the font. */
 export type NodeReference = ShiftRecordId | GlyphId;
 
 export interface ShiftRecord<
@@ -16,12 +15,6 @@ export interface ShiftRecord<
   readonly id: Id;
   readonly type: Type;
 }
-
-export type GlyphNodeRecord = GlyphNode & ShiftRecord<"node", NodeId>;
-
-export type TextRunNodeRecord = TextRunNode & ShiftRecord<"node", NodeId>;
-
-export type ShiftNodeRecord = GlyphNodeRecord | TextRunNodeRecord;
 
 export type SelectionRecord = ShiftRecord<"selection", SelectionId> & {
   readonly scope: "session";
@@ -33,9 +26,9 @@ export type EditingRecord = ShiftRecord<"editing", EditingId> & {
   readonly nodeIds: readonly NodeId[];
 };
 
-export type ShiftEditorRecord =
-  | ShiftNodeRecord
-  | SelectionRecord
-  | EditingRecord
-  | TextEditingRecord
-  | StoredTextRunRecord;
+/**
+ * A record of the editor's session state: selection, editing focus and the
+ * text caret. The document's content (the scene, runs included) lives in the
+ * document, not here.
+ */
+export type ShiftEditorRecord = SelectionRecord | EditingRecord | TextEditingRecord;

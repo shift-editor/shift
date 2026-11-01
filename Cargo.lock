@@ -2511,7 +2511,10 @@ version = "0.1.0"
 dependencies = [
  "pack",
  "proptest",
+ "rmp-serde",
+ "serde",
  "shift-font",
+ "shift-layout",
  "thiserror",
 ]
 
@@ -2542,6 +2545,7 @@ name = "shift-layout"
 version = "0.1.0"
 dependencies = [
  "pack",
+ "serde",
  "shift-backends",
  "shift-font",
  "shift-shape",
@@ -2634,6 +2638,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "shift-engine",
  "shift-font",
  "tempfile",
  "thiserror",

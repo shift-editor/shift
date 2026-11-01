@@ -13,6 +13,8 @@
 //! or redo changed cross packed through [`EngineEdits::replacement`], in the
 //! same shape as the native workspace's echo.
 
+use shift_engine::EditLocation;
+use shift_engine::scene::SceneIntent;
 use shift_font::FontIntent;
 use shift_wire::replacement::FontReplacement;
 
@@ -23,6 +25,14 @@ pub trait EngineEdits {
     /// Holds `intents` for the session's next `engineApply`, `engineStage` or
     /// `enginePreview`, in place of any held before.
     fn hold(&mut self, intents: Vec<FontIntent>);
+    /// Holds scene `intents` for the session's next `engineApply` or
+    /// `engineStage`, in place of any held before; they apply after the font
+    /// intents held with them.
+    fn hold_scene(&mut self, intents: Vec<SceneIntent>);
+    /// Takes where the edit the latest `engineUndo` or `engineRedo` replayed
+    /// was made: its page and what it changed, so the editor can show that
+    /// page first; null once taken.
+    fn replayed_location(&mut self) -> Option<EditLocation>;
     /// Takes the font-level records the latest `engineApply`, `engineUndo` or
     /// `engineRedo` changed, whole; null when it changed none, or once taken.
     fn replacement(&mut self) -> Option<FontReplacement>;
@@ -30,6 +40,8 @@ pub trait EngineEdits {
 
 #[cfg(feature = "engine")]
 mod exports {
+    use shift_engine::EditLocation;
+    use shift_engine::scene::SceneIntent;
     use shift_font::FontIntent;
     use shift_wire::replacement::FontReplacement;
     use wasm_bindgen::prelude::*;
@@ -59,6 +71,14 @@ mod exports {
     impl EngineEdits for Engine {
         fn hold(&mut self, intents: Vec<FontIntent>) {
             self.held = intents;
+        }
+
+        fn hold_scene(&mut self, intents: Vec<SceneIntent>) {
+            self.held_scene = intents;
+        }
+
+        fn replayed_location(&mut self) -> Option<EditLocation> {
+            self.replayed_location.take()
         }
 
         fn replacement(&mut self) -> Option<FontReplacement> {

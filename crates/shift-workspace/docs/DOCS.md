@@ -1,6 +1,6 @@
 # shift-workspace
 
-<!-- reviewed: 2026-10-24 review-every: 90d -->
+<!-- reviewed: 2026-10-31 review-every: 90d -->
 
 Backend runtime object for an open Shift font workspace.
 
@@ -17,6 +17,7 @@ Backend runtime object for an open Shift font workspace.
 - **Architecture Invariant:** The workspace is the domain object future bridge or utility-process transports should wrap.
 - **Architecture Invariant:** `slug_atlas_cache_revision()` reads a durable authored revision as an opaque string for disposable derived-cache addressing. Native documents combine canonical `saved_commit_id` with the recovery revision, so every completed unsaved mutation invalidates derived output across process restarts.
 - **Architecture Invariant:** Each ledger entry stores exactly one `shift-font::FontChangeSet`. Undo applies `change_set.inverted()` and redo reapplies the recorded changeset; the workspace owns no parallel pre-state model, inverse intents, or domain-specific replay helpers.
+- **Architecture Invariant:** The session holds the document's scene beside the font (shift-engine's `Scene`), loaded from the store's `scene_nodes` when the workspace opens; a working store whose scene has no page gets "Page 1" first. `persist_compact_change_set` takes a window's `CompactDocumentChangeSet`, checks its font and scene changes against the session (a stale scene node is `WorkspaceError::Scene`), writes both in one store transaction, and only then adopts them. A scene-only change marks the document unsaved without advancing the authored revision, so `slug_atlas_cache_revision` keys stay valid. Discard reloads the scene with the font.
 - **Architecture Invariant:** `shift-font` owns replay atomicity and coupled persisted-state validation. Every replacement must match its expected original, and the complete target is validated without rerunning intent-specific guards before the live font changes; `shift-store` persists that same accepted target in one transaction.
 - **Architecture Invariant:** Replay reacquires only layers whose lifecycle differs across the changeset. Untouched placeholders embedded in a whole-glyph replacement remain placeholders, so lazy residency cannot create a false stale-origin conflict. Values-only replacements retain their structural classification, while structural replacements invalidate glyph projections in both directions.
 - **Architecture Invariant:** Glyph creation remains append-only. Changeset inversion reverses replacement order, so batched undo pops glyphs from the directory tail and redo appends them in authored order without renumbering the existing directory.
