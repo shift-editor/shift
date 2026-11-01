@@ -104,35 +104,38 @@ impl GlyphStream for GlifGlyphStream {
         let glyph_ids = &self.glyph_ids;
         let glyphs = self.glyphs[self.next_glyph..end]
             .par_iter()
-            .map(|record| load_glif_glyph(record, glyph_ids))
+            .map(|record| record.load(glyph_ids))
             .collect::<FormatBackendResult<Vec<_>>>()?;
         self.next_glyph = end;
         Ok(glyphs)
     }
 }
 
-fn load_glif_glyph(
-    record: &GlifGlyph,
-    glyph_ids: &HashMap<String, GlyphId>,
-) -> FormatBackendResult<Glyph> {
-    let mut glyph = Glyph::with_id(record.id, record.name.clone());
-    for (index, layer_record) in record.layers.iter().enumerate() {
-        let norad_glyph = record.parse(layer_record)?;
-        if index == 0 {
-            crate::formats::ufo::UfoReader::set_glyph_identity(&mut glyph, &norad_glyph);
-        }
-        let layer = crate::formats::ufo::UfoReader::convert_stream_layer(
-            &norad_glyph,
-            layer_record.layer_id,
-            layer_record.source_id,
-            glyph_ids,
-        )?;
-        glyph.set_layer(layer);
-    }
-    Ok(glyph)
-}
-
 impl GlifGlyph {
+    /// The glyph, converted with every layer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::FormatBackendError::Ufo`] when a layer's GLIF cannot be read, parsed or
+    /// converted.
+    fn load(&self, glyph_ids: &HashMap<String, GlyphId>) -> FormatBackendResult<Glyph> {
+        let mut glyph = Glyph::with_id(self.id, self.name.clone());
+        for (index, layer_record) in self.layers.iter().enumerate() {
+            let norad_glyph = self.parse(layer_record)?;
+            if index == 0 {
+                crate::formats::ufo::UfoReader::set_glyph_identity(&mut glyph, &norad_glyph);
+            }
+            let layer = crate::formats::ufo::UfoReader::convert_stream_layer(
+                &norad_glyph,
+                layer_record.layer_id,
+                layer_record.source_id,
+                glyph_ids,
+            )?;
+            glyph.set_layer(layer);
+        }
+        Ok(glyph)
+    }
+
     /// The GLIF behind `layer`, one of this glyph's layers, parsed.
     ///
     /// # Errors
@@ -197,7 +200,7 @@ impl AuthoredGlyphs for GlifGlyphStream {
     }
 
     fn glyph(&self, index: usize) -> FormatBackendResult<Glyph> {
-        load_glif_glyph(&self.glyphs[index], &self.glyph_ids)
+        self.glyphs[index].load(&self.glyph_ids)
     }
 }
 
