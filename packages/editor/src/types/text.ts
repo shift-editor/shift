@@ -1,4 +1,4 @@
-import type { NodeId, RunId, TextItemId } from "@shift/types";
+import type { GlyphId, NodeId, RunId, TextItemId } from "@shift/types";
 import type { TextAlign } from "@shift/wasm/protocol";
 import type { TextItem } from "../lib/text/layout/types";
 
@@ -64,6 +64,18 @@ export interface TextRunRecord {
   readonly lineHeight: number | null;
   /** How lines line up; null follows each line's direction, so Arabic lines sit right. */
   readonly align: TextAlign | null;
+}
+
+/** A feature whose changes one run highlights, such as the one under the pointer. */
+export interface FeatureHighlight {
+  readonly runId: RunId;
+  readonly tag: string;
+}
+
+/** Glyphs one run draws highlighted. */
+export interface TextHighlight {
+  readonly runId: RunId;
+  readonly glyphs: ReadonlySet<GlyphId>;
 }
 
 /**

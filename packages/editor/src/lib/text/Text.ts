@@ -6,7 +6,12 @@ import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunNode } from "../../types/node";
-import type { TextRunRecord, TextRunSettings } from "../../types/text";
+import type {
+  FeatureHighlight,
+  TextHighlight,
+  TextRunRecord,
+  TextRunSettings,
+} from "../../types/text";
 import {
   characterTextItem,
   glyphTextItem,
@@ -15,6 +20,7 @@ import {
   type TextLayout,
 } from "./layout";
 import type {
+  FeatureSubstitution,
   FontFeature,
   Direction,
   TextAlign,
@@ -100,6 +106,48 @@ export class Text {
   readonly featuresCell: Signal<readonly FontFeature[]> = computed(
     () => this.#editor.font.fontFeatures(),
     { name: "text.features", equals: sameFeatures },
+  );
+
+  readonly #substitutions = keyedCache({
+    name: "text.featureSubstitutions",
+    key: (tag: string) => tag,
+    dispose: (substitutionsCell: ComputedSignal<readonly FeatureSubstitution[]>) =>
+      substitutionsCell.dispose(),
+    create: (tagCell: Signal<string>) =>
+      computed(() => this.#editor.font.featureSubstitutions(tagCell.value), {
+        name: "text.featureSubstitutions",
+      }),
+  });
+
+  readonly #featureHighlightCell = signal<FeatureHighlight | null>(null, {
+    name: "text.featureHighlight",
+  });
+
+  /**
+   * The glyphs a highlighted feature changes in its run: what it puts in the
+   * text while it applies there, what it would replace while it does not.
+   *
+   * @remarks
+   * Null while no feature is highlighted. Follows the run's setting, the
+   * font's default and the shaper font, so turning the feature on or off
+   * while it is highlighted moves the highlight.
+   */
+  readonly highlightCell: Signal<TextHighlight | null> = computed(
+    () => {
+      const highlight = this.#featureHighlightCell.value;
+      const run = highlight ? this.run(highlight.runId) : null;
+      if (!highlight || !run) return null;
+
+      const feature = this.featuresCell.value.find(({ tag }) => tag === highlight.tag);
+      const applies =
+        run.features[highlight.tag] ?? (feature !== undefined && feature.default !== "off");
+      const substitutions = this.featureSubstitutionsCell(highlight.tag).value;
+      const glyphs = new Set(
+        substitutions.flatMap(({ input, output }) => (applies ? [output] : input)),
+      );
+      return { runId: run.id, glyphs };
+    },
+    { name: "text.highlight" },
   );
 
   constructor(store: ShiftStore<ShiftEditorRecord>, editor: Editor) {
@@ -325,6 +373,27 @@ export class Text {
     this.#store.delete(id);
   }
 
+  /**
+   * Every substitution a feature can make, ordered by output glyph: the
+   * glyphs each rule replaces and the glyph it puts in their place, as Rust
+   * reads them from the shaper font's `GSUB`.
+   *
+   * @remarks
+   * Follows edits to what the shaper font compiles from. Empty for a
+   * positioning feature, a tag the font does not define, and in a preview.
+   */
+  featureSubstitutionsCell(tag: string): ComputedSignal<readonly FeatureSubstitution[]> {
+    return this.#substitutions.get(tag);
+  }
+
+  /**
+   * Highlights what a feature changes in one run's text, as
+   * {@link highlightCell} describes, or clears the highlight with null.
+   */
+  setFeatureHighlight(highlight: FeatureHighlight | null): void {
+    this.#featureHighlightCell.set(highlight);
+  }
+
   /** The ISO 15924 scripts a run's text is laid out in, as layout itemized it, in order of first use. */
   scriptsCell(id: RunId): Signal<readonly string[]> {
     return this.#runs.get(id).scriptsCell;
@@ -382,6 +451,7 @@ export class Text {
     this.#unsubscribeStore();
     this.#runsByItem.dispose();
     this.#runs.clear();
+    this.#substitutions.clear();
   }
 
   #acquireGlyphs(items: readonly TextItem[]): void {

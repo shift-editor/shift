@@ -44,6 +44,10 @@
   --color-destructive: #dc2626;
   --color-destructive-hover: #fef2f2;
 
+  /* A setting forced on or off, as against left at its default */
+  --color-state-on: #16a34a;
+  --color-state-off: #dc2626;
+
   /* Low-emphasis icon and control colors */
   --color-icon-subtle: #9f9f9f;
   --color-control-muted: #c2c2c2;

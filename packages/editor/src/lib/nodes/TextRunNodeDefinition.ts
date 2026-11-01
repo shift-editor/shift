@@ -1,5 +1,6 @@
 import { NodeDefinition, type ChildPlacement } from "./NodeDefinition";
 import { OutlineRenderer } from "../editor/rendering/Outline";
+import type { PathBatch } from "../editor/rendering/Canvas";
 import { Caret, type PlacedGlyph, type TextLayout } from "../text/layout";
 import { TextBuffer } from "../text/TextBuffer";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
@@ -492,6 +493,8 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    * One path batch for the whole run: a glyph costs one translate and one
    * fill, plus a stroke only when it has open contours. Each distinct glyph
    * subscribes and resolves its paths once per draw (see {@link distinctGlyph}).
+   * Glyphs a feature highlight names (`Text.highlightCell`) draw after the
+   * rest, in a batch of their own in the highlight colour.
    */
   #drawGlyphs(node: TextRunNode, ctx: RenderContext, layout: TextLayout): void {
     const canvas = ctx.canvas;
@@ -500,20 +503,42 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       color: canvas.theme.textRun.hoverOutline,
       widthPx: canvas.theme.textRun.hoverOutlineWidthPx,
     };
+    track(this.editor.text.highlightCell);
+    const highlight = this.editor.text.highlightCell.peek();
+    const highlighted = highlight?.runId === node.runId ? highlight.glyphs : null;
     const distinct = new Map<GlyphRenderModel, DistinctGlyph>();
+    const paint = (
+      batch: PathBatch,
+      placed: PlacedGlyph,
+      itemId: TextItemId,
+      model: GlyphRenderModel,
+    ) => {
+      let glyph = distinct.get(model);
+      if (!glyph) {
+        glyph = distinctGlyph(model);
+        distinct.set(model, glyph);
+      }
+      batch.offset(placed.origin.x, placed.origin.y);
+      batch.fill(glyph.closed);
+      if (glyph.open) batch.stroke(glyph.open);
+      if (outlined.has(itemId)) this.#outline.draw(canvas, model, { stroke: outlineStroke });
+    };
+    const later: (readonly [PlacedGlyph, TextItemId, GlyphRenderModel])[] = [];
     canvas.withPathBatch(canvas.theme.glyph, (batch) => {
       this.#forEachRunGlyph(node, layout, (placed, itemId, model) => {
-        let glyph = distinct.get(model);
-        if (!glyph) {
-          glyph = distinctGlyph(model);
-          distinct.set(model, glyph);
-        }
-        batch.offset(placed.origin.x, placed.origin.y);
-        batch.fill(glyph.closed);
-        if (glyph.open) batch.stroke(glyph.open);
-        if (outlined.has(itemId)) this.#outline.draw(canvas, model, { stroke: outlineStroke });
+        const glyphId = placed.glyph.glyphId;
+        if (glyphId && highlighted?.has(glyphId)) later.push([placed, itemId, model]);
+        else paint(batch, placed, itemId, model);
       });
     });
+    if (later.length === 0) return;
+
+    canvas.withPathBatch(
+      { ...canvas.theme.glyph, fill: canvas.theme.textRun.hoverOutline },
+      (batch) => {
+        for (const [placed, itemId, model] of later) paint(batch, placed, itemId, model);
+      },
+    );
   }
 
   #drawCaret(node: TextRunNode, ctx: RenderContext, layout: TextLayout): void {

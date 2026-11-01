@@ -332,6 +332,14 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   setTextAlign(align: "left" | "center" | "right"): void;
   /** The features the font defines, as the Features section lists them: tag, name, default and group. */
   textFeatures(): readonly TextFeature[];
+  /** Each substitution a feature can make, as glyph names, as the feature preview lists them. */
+  featureSubstitutions(
+    tag: string,
+  ): readonly { readonly input: readonly string[]; readonly output: string }[];
+  /** Highlights what a feature changes in the canvas text, as hovering its tag does; null ends it. */
+  highlightFeature(tag: string | null): void;
+  /** The names of the glyphs the canvas text draws highlighted, in no particular order. */
+  highlightedGlyphs(): readonly string[];
 
   /** Types `text` at the caret in Text mode, as the keyboard does; `"\n"` is Enter. */
   typeText(text: string): void;

@@ -935,6 +935,26 @@ export class TestEditor extends Editor implements EditorTestSurface {
     }));
   }
 
+  featureSubstitutions(
+    tag: string,
+  ): readonly { readonly input: readonly string[]; readonly output: string }[] {
+    const name = (id: GlyphId) => this.font.glyphName(id) ?? id;
+    return this.text
+      .featureSubstitutionsCell(tag)
+      .peek()
+      .map(({ input, output }) => ({ input: input.map(name), output: name(output) }));
+  }
+
+  highlightFeature(tag: string | null): void {
+    const run = this.#requireTextRun();
+    this.text.setFeatureHighlight(tag === null ? null : { runId: run.runId, tag });
+  }
+
+  highlightedGlyphs(): readonly string[] {
+    const glyphs = this.text.highlightCell.peek()?.glyphs ?? new Set<GlyphId>();
+    return [...glyphs].map((id) => this.font.glyphName(id) ?? id);
+  }
+
   #requireTextRun(): TextRunNode {
     const run = this.textRun;
     if (!run) throw new Error("The canvas has no text run");
