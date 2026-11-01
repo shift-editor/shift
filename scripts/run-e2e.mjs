@@ -16,17 +16,12 @@ try {
   const { projects, playwrightArguments } = parseArguments(process.argv.slice(2));
   console.info(`E2E projects for ${process.platform}: ${projects.join(", ")}`);
 
-  let exitCode = await runProcess(
+  const exitCode = await runProcess(
     process.execPath,
-    [turboCli, "run", "build:e2e", "--filter=@shift/desktop"],
+    [turboCli, "run", buildTask(projects), "--filter=@shift/desktop"],
     repositoryRoot,
   );
-  if (exitCode !== 0) {
-    process.exitCode = exitCode;
-  } else {
-    exitCode = await runPlaywright(projects, playwrightArguments);
-    process.exitCode = exitCode;
-  }
+  process.exitCode = exitCode === 0 ? await runProjects(projects, playwrightArguments) : exitCode;
 } catch (error) {
   console.error(`run-e2e: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = 1;
@@ -61,6 +56,31 @@ function defaultProjects(platform) {
     default:
       throw new Error(`Unsupported E2E host platform: ${platform}`);
   }
+}
+
+/**
+ * Perf measures the release addon; every other project runs the faster-to-build e2e profile.
+ */
+function buildTask(projects) {
+  return projects.includes("perf") ? "build:perf" : "build:e2e";
+}
+
+/**
+ * Runs each project as its own Playwright run, so a project's worker limit holds for the
+ * whole run: in one run, platform's single worker would share the screen with visual's
+ * parallel apps. A filter that matches none of one project's specs is not a failure when
+ * several projects run. Later projects still run after a failure; the first failing code wins.
+ */
+async function runProjects(projects, playwrightArguments) {
+  const projectArguments =
+    projects.length > 1 ? ["--pass-with-no-tests", ...playwrightArguments] : playwrightArguments;
+  let exitCode = 0;
+  for (const project of projects) {
+    const projectExitCode = await runPlaywright([project], projectArguments);
+    if (exitCode === 0) exitCode = projectExitCode;
+  }
+
+  return exitCode;
 }
 
 async function runPlaywright(projects, playwrightArguments) {
