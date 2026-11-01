@@ -1,10 +1,12 @@
 //! Proof text as people type it, with glyphs picked by name.
 //!
 //! The syntax is the one Glyphs uses for its edit view: `/` starts a glyph
-//! name, which runs to the next space or the end of the text, and that one
-//! space ends the name rather than being text (`/a b` is glyph `a`, then
-//! `b`; `/a  b` is `a`, a space, then `b`). `//` is a slash, and `\n` a
-//! line break. Every other character is itself.
+//! name, which runs to the next space, the next `/` or the end of the text.
+//! A space that ends a name is consumed rather than being text (`/a b` is
+//! glyph `a`, then `b`; `/a  b` is `a`, a space, then `b`); a `/` that ends
+//! one starts what follows (`/a/b` is glyphs `a` and `b`). `//` is a slash
+//! (`1//2`, and `/a//b` is `a`, a slash, then `b`), and `\n` a line break.
+//! Every other character is itself.
 //!
 //! [`ProofText`] parses and formats it, and formatting always parses back
 //! to the same items.
@@ -38,8 +40,8 @@ pub enum ProofTextError {
     /// space; a slash is written `//`.
     #[error("a / at byte {offset} names no glyph; write // for a slash")]
     MissingName { offset: usize },
-    /// A glyph name that cannot be written: it has a space in it, or starts
-    /// with `/`, so it would not parse back as one name.
+    /// A glyph name that cannot be written: it has a space or a `/` in it,
+    /// so it would not parse back as one name.
     #[error("the glyph name {0:?} cannot be written as /name")]
     UnwritableName(GlyphName),
     /// A [`ProofItem::Char`] holding `\n`, which is written as a line break.
@@ -53,12 +55,12 @@ impl ProofText {
     /// # Errors
     ///
     /// Returns [`ProofTextError::UnwritableName`] for a glyph name with a
-    /// space or a leading `/`, and [`ProofTextError::LineBreakChar`] for a
+    /// space or a `/` in it, and [`ProofTextError::LineBreakChar`] for a
     /// `\n` character, since neither would parse back as itself.
     pub fn new(items: Vec<ProofItem>) -> Result<Self, ProofTextError> {
         for item in &items {
             match item {
-                ProofItem::Glyph(name) if name.contains(' ') || name.starts_with('/') => {
+                ProofItem::Glyph(name) if name.contains([' ', '/']) => {
                     return Err(ProofTextError::UnwritableName(name.clone()));
                 }
                 ProofItem::Char('\n') => return Err(ProofTextError::LineBreakChar),
@@ -88,8 +90,9 @@ impl ProofText {
                     None | Some((_, ' ')) => return Err(ProofTextError::MissingName { offset }),
                     Some(_) => {
                         let mut name = String::new();
-                        // The space that ends a name is consumed with it.
-                        for (_, next) in chars.by_ref() {
+                        // A space that ends a name is consumed with it; a `/`
+                        // starts what follows.
+                        while let Some((_, next)) = chars.next_if(|(_, next)| *next != '/') {
                             if next == ' ' {
                                 break;
                             }
@@ -119,7 +122,8 @@ impl ProofText {
 
 impl fmt::Display for ProofText {
     /// Writes the text [`ProofText::parse`] reads back as these items: a
-    /// glyph's name ends with a space unless it is the last item.
+    /// glyph's name ends with a space, unless it is the last item or a `/`
+    /// follows it (another glyph, or a slash).
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (index, item) in self.items.iter().enumerate() {
             match item {
@@ -128,7 +132,11 @@ impl fmt::Display for ProofText {
                 ProofItem::LineBreak => formatter.write_str("\n")?,
                 ProofItem::Glyph(name) => {
                     write!(formatter, "/{name}")?;
-                    if index + 1 < self.items.len() {
+                    let slash_follows = matches!(
+                        self.items.get(index + 1),
+                        None | Some(ProofItem::Glyph(_) | ProofItem::Char('/'))
+                    );
+                    if !slash_follows {
                         formatter.write_str(" ")?;
                     }
                 }
@@ -162,9 +170,33 @@ mod tests {
     }
 
     #[test]
-    fn a_name_runs_to_the_end_of_the_text_through_dots_and_slashes() {
+    fn a_name_runs_through_dots_to_the_end_of_the_text() {
         assert_eq!(parsed("x/a.alt"), [ProofItem::Char('x'), glyph("a.alt")]);
-        assert_eq!(parsed("/a/b"), [glyph("a/b")]);
+    }
+
+    #[test]
+    fn a_slash_ends_a_name_and_starts_the_next() {
+        assert_eq!(parsed("/a/b"), [glyph("a"), glyph("b")]);
+        assert_eq!(
+            parsed("/a//b"),
+            [glyph("a"), ProofItem::Char('/'), ProofItem::Char('b')]
+        );
+        assert_eq!(
+            ProofText::parse("/a/").map(ProofText::into_items),
+            Err(ProofTextError::MissingName { offset: 2 })
+        );
+    }
+
+    #[test]
+    fn writes_adjacent_glyphs_and_a_slash_after_a_name_without_a_space() {
+        let text = |items: Vec<ProofItem>| ProofText::new(items).expect("writable").to_string();
+
+        assert_eq!(text(vec![glyph("a"), glyph("b")]), "/a/b");
+        assert_eq!(
+            text(vec![glyph("a"), ProofItem::Char('/'), ProofItem::Char('b')]),
+            "/a//b"
+        );
+        assert_eq!(text(vec![glyph("a"), ProofItem::Char('b')]), "/a b");
     }
 
     #[test]
@@ -204,11 +236,13 @@ mod tests {
 
     #[test]
     fn refuses_items_that_would_not_parse_back() {
-        let spaced = GlyphName::new("a b").expect("a glyph name");
-        assert_eq!(
-            ProofText::new(vec![ProofItem::Glyph(spaced.clone())]),
-            Err(ProofTextError::UnwritableName(spaced))
-        );
+        for name in ["a b", "a/b"] {
+            let name = GlyphName::new(name).expect("a glyph name");
+            assert_eq!(
+                ProofText::new(vec![ProofItem::Glyph(name.clone())]),
+                Err(ProofTextError::UnwritableName(name))
+            );
+        }
         assert_eq!(
             ProofText::new(vec![ProofItem::Char('\n')]),
             Err(ProofTextError::LineBreakChar)
@@ -221,8 +255,8 @@ mod tests {
                 .prop_filter("a line break is its own item", |char| *char != '\n')
                 .prop_map(ProofItem::Char),
             prop::sample::select(vec![' ', '/', '.', '\t']).prop_map(ProofItem::Char),
-            "[^ /][^ ]{0,8}".prop_map(|name| glyph(&name)),
-            "[a-z]{1,3}[./][a-z./]{0,4}".prop_map(|name| glyph(&name)),
+            "[^ /]{1,8}".prop_map(|name| glyph(&name)),
+            "[a-z]{1,3}[.][a-z.]{0,4}".prop_map(|name| glyph(&name)),
             Just(ProofItem::LineBreak),
         ]
     }

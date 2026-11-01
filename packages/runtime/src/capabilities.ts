@@ -516,10 +516,11 @@ export interface TextRunGetInput extends ShiftTarget {
  * A new canvas text run.
  *
  * `text` is proof text, as the Text tool reads pasted text and Glyphs writes
- * it: `/` starts a glyph name, which runs to the next space or the end of the
- * text; that one space ends the name and is not text, so `"/a b"` is glyph
- * `a` then `b`, and `"/a  b"` is `a`, a space, then `b`. `//` is a slash
- * (`"1//2"` is 1/2) and `"\n"` a line break. A `/` that names nothing fails
+ * it: `/` starts a glyph name, which runs to the next space, the next `/`, or
+ * the end of the text. A space that ends a name is not text, so `"/a b"` is
+ * glyph `a` then `b`, and `"/a  b"` is `a`, a space, then `b`; a `/` that ends
+ * one starts the next, so `"/a/b"` is glyphs `a` and `b`. `//` is a slash
+ * (`"1//2"` is 1/2, `"/a//b"` is `a`, a slash, `b`) and `"\n"` a line break. A `/` that names nothing fails
  * with `ProofTextError`, and a name the font has no glyph for with
  * `UnknownGlyphNameError`.
  */

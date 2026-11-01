@@ -273,7 +273,7 @@ export class Text {
   /**
    * Reads pasted or imported proof text into items, as shift-font's
    * `ProofText` parses it: `/name` picks the glyph named `name` (the name
-   * ends at a space, which it consumes), `//` is a slash and `\n` a line
+   * ends at a space, which it consumes, or at the next `/`), `//` is a slash and `\n` a line
    * break.
    *
    * @remarks

@@ -62,7 +62,8 @@ export const geometry = new Geometry(syncTransport(geometryRequest, names, takeR
 export const indexKeys = new IndexKeys(syncTransport(indexKeysRequest, names, takeReplyBlobs));
 /**
  * Proof text read and written as shift-font's `ProofText` does: `/name`
- * picks a glyph by name, ending at a space it consumes; `//` is a slash.
+ * picks a glyph by name, ending at a space it consumes or the next `/`; `//`
+ * is a slash.
  */
 export const proofTexts = new ProofTexts(syncTransport(proofTextsRequest, names, takeReplyBlobs));
 /**

@@ -233,7 +233,7 @@ describe("marks attach to their base's anchors", () => {
   it("attaches a mark to an anchor a composite takes from its components", async () => {
     editor.selectTool("text");
 
-    editor.pasteText("/aacute /acutecomb");
+    editor.pasteText("/aacute/acutecomb");
     await editor.settle();
 
     expect(editor.canvasText()).toMatchObject({
