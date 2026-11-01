@@ -325,11 +325,45 @@ export class WindowTabs {
       return { node, placed: false };
     }
 
+    // The document may keep a glyph page for this glyph from an earlier
+    // session, whose tabs this window does not have: show it as it was left.
+    const kept = this.#keptGlyphPage(glyphId);
+    if (kept) {
+      this.#openedCell.set([
+        ...this.#movable(),
+        { kind: "glyph", id: this.#mintId(), pageId: kept.page.id, glyphId },
+      ]);
+      this.#editor.pages.activate(kept.page.id);
+      this.#editor.enterNode(kept.node.id);
+      // Its camera was the earlier session's, so the view fits it as if newly placed.
+      return { node: kept.node, placed: true };
+    }
+
     const page = this.#editor.pages.createGlyphPage();
     const node = this.#editor.openGlyphInText(glyphId, page);
     const tab: MovableTab = { kind: "glyph", id: this.#mintId(), pageId: page.id, glyphId };
     this.#openedCell.set([...this.#movable(), tab]);
     return { node, placed: true };
+  }
+
+  /**
+   * A glyph page in the document that shows `glyphId` and no tab holds, nor
+   * the overview, with its glyph node.
+   */
+  #keptGlyphPage(glyphId: GlyphId): { readonly page: PageNode; readonly node: GlyphNode } | null {
+    const scene = this.#editor.scene;
+    const held = new Set(this.#movable().map((tab) => tab.pageId));
+    const overview = this.#selectionPageIdCell.peek();
+    if (overview) held.add(overview);
+    for (const page of scene.pages()) {
+      if (page.role !== "glyph" || held.has(page.id)) continue;
+
+      const run = scene.children(page.id).find((node) => node.kind === "textRun");
+      const node =
+        run?.kind === "textRun" ? this.#editor.nodeDefinition("textRun").childGlyph(run) : null;
+      if (node?.glyphId === glyphId) return { page, node };
+    }
+    return null;
   }
 
   /** The page and glyph tabs, as {@link tabsCell} resolves them now. */

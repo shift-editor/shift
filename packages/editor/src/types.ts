@@ -12,6 +12,7 @@ export type {
   OpenEdit,
   ReplayedChange,
 } from "./types/font";
+export type { SceneDocument, SceneIntent, SceneNode, SceneRecording } from "./types/sceneDocument";
 export type {
   MemoryFontSession,
   MemoryFontSessionOptions,

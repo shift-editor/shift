@@ -14,7 +14,7 @@ import type {
   WorkspaceEditEvent,
   WorkspaceEffect,
 } from "../../../types/history";
-import type { ShiftEditorRecord, ShiftRecordId } from "../../../types/records";
+import type { NodeReference, ShiftEditorRecord } from "../../../types/records";
 import type { StoreChange } from "../../../types/store";
 import { HistoryCapture } from "./HistoryCapture";
 import { editorRecordsEqual, recordChanges } from "./recordChanges";
@@ -40,7 +40,7 @@ export class EditorHistory {
   readonly #redoEntries: HistoryEntry[] = [];
   readonly #pending = new Map<PendingEditId, PendingHistoryEffect>();
 
-  readonly #finishingListeners = new Set<(changed: ReadonlySet<ShiftRecordId>) => void>();
+  readonly #finishingListeners = new Set<(changed: ReadonlySet<NodeReference>) => void>();
   #capture: HistoryCaptureContext | null = null;
   #recordingDepth = 0;
   #discardingRedo: Promise<void> | null = null;
@@ -68,6 +68,22 @@ export class EditorHistory {
 
   get capturing(): boolean {
     return this.#capture !== null;
+  }
+
+  /** Whether an edit made now becomes an undo step: false inside {@link withoutRecording}. */
+  get recording(): boolean {
+    return this.#recordingDepth === 0;
+  }
+
+  /**
+   * Notes that the open capture changed `ids` outside the editor store, as a
+   * scene write in the document does, so its finishing listeners see them.
+   */
+  touched(ids: Iterable<NodeReference>): void {
+    const context = this.#capture;
+    if (!context || this.#recordingDepth > 0 || this.#disposed) return;
+
+    for (const id of ids) context.touched.add(id);
   }
 
   /**
@@ -105,7 +121,7 @@ export class EditorHistory {
    *
    * @returns a function that removes the listener.
    */
-  onCaptureFinishing(listener: (changed: ReadonlySet<ShiftRecordId>) => void): () => void {
+  onCaptureFinishing(listener: (changed: ReadonlySet<NodeReference>) => void): () => void {
     this.#finishingListeners.add(listener);
     return () => this.#finishingListeners.delete(listener);
   }

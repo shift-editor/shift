@@ -1,3 +1,4 @@
+import type { SceneDocument, SceneIntent } from "./sceneDocument";
 import type {
   AppliedChange,
   FontIntent,
@@ -238,6 +239,13 @@ export interface OpenEdit {
    * @throws When the engine rejects the intents; the edit is then as it was.
    */
   stage(intents: readonly FontIntent[]): void;
+  /**
+   * Applies scene `intents` in place of what this edit applied so far, as a
+   * drag of a text run does each frame.
+   *
+   * @throws As {@link OpenEdit.stage}.
+   */
+  stageScene(intents: readonly SceneIntent[]): void;
   /** Closes the edit as one undo step and persists it; an edit that staged nothing commits nothing. */
   commit(label: string): void;
   /** Closes the edit, leaving the font as it was before it began. */
@@ -252,6 +260,8 @@ export interface OpenEdit {
 export type ReplayedChange = AppliedChange & { readonly location: EditLocation | null };
 
 export interface WorkspaceEditCoordinator {
+  /** The document's scene, in the window's editing engine beside the font. */
+  readonly scene: SceneDocument;
   push(intent: FontIntent): PendingEditId;
   /**
    * Applies `intents` as {@link WorkspaceEditCoordinator.push} applies one,

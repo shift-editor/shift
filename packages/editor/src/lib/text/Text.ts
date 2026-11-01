@@ -1,10 +1,7 @@
 import { mintRunId, type GlyphId, type NodeId, type RunId, type TextItemId } from "@shift/types";
-import { keyedCache, signal, untracked } from "../signals";
-import type { ComputedSignal, Signal } from "../signals";
+import { computed, effect, keyedCache, signal, track, untracked } from "../signals";
+import type { ComputedSignal, Effect, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
-import type { ShiftStore } from "../store/ShiftStore";
-import type { StoreIndex } from "../store/StoreIndex";
-import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunNode } from "../../types/node";
 import type { RunPlacement, TextRunRecord } from "../../types/text";
 import {
@@ -17,18 +14,20 @@ import {
 import { RunText, type ShapedText } from "./RunText";
 import { GlyphNameParser, type TextParseContext, type TextParser } from "./parsing";
 
-/** Owns proof text records and one reactive layout per run identity. */
+/**
+ * Owns proof text: each run's items, kept in the scene's text run nodes, and
+ * one reactive layout per run identity.
+ */
 export class Text {
-  readonly #store: ShiftStore<ShiftEditorRecord>;
   readonly #editor: Editor;
   readonly #glyphsLoadedCell = signal(0);
   // non-reactive: dedupes in-flight glyph loads; only read by the imperative load path
   readonly #loading = new Map<GlyphId, Promise<void>>();
-  readonly #runsByItem: StoreIndex<TextItemId, TextRunRecord>;
+  readonly #runsByItem: ComputedSignal<ReadonlyMap<TextItemId, TextRunRecord>>;
   // non-reactive: run nodes placed this session that go again if editing leaves them empty;
   // read only when editing ends.
   readonly #provisionalRuns = new Set<NodeId>();
-  readonly #unsubscribeStore: () => void;
+  readonly #acquiring: Effect;
   readonly #parseContext: TextParseContext = {
     glyphNamed: (name) => {
       const entry = this.#editor.font.entryForName(name);
@@ -54,16 +53,30 @@ export class Text {
       ),
   });
 
-  constructor(store: ShiftStore<ShiftEditorRecord>, editor: Editor) {
-    this.#store = store;
+  constructor(editor: Editor) {
     this.#editor = editor;
-    this.#runsByItem = store.index("textrun", (run) => run.items.map((item) => item.id));
-    this.#unsubscribeStore = store.onChange((change) => {
-      if (change.after?.type === "textrun") this.#acquireGlyphs(change.after.items);
-    });
-    for (const record of store.records()) {
-      if (record.type === "textrun") this.#acquireGlyphs(record.items);
-    }
+    this.#runsByItem = computed(
+      () => {
+        const runs = new Map<TextItemId, TextRunRecord>();
+        for (const run of editor.scene.runsCell.value.values()) {
+          for (const item of run.items) runs.set(item.id, run);
+        }
+        return runs;
+      },
+      { name: "text.runsByItem" },
+    );
+    // Loads the glyphs each run that arrived or changed shows.
+    let acquired: ReadonlyMap<RunId, TextRunRecord> = new Map();
+    this.#acquiring = effect(
+      () => {
+        const runs = editor.scene.runsCell.value;
+        for (const [id, run] of runs) {
+          if (acquired.get(id) !== run) untracked(() => this.#acquireGlyphs(run.items));
+        }
+        acquired = runs;
+      },
+      { name: "text.acquireGlyphs" },
+    );
   }
 
   /** Returns the run holding an item and the item itself, or null for an unknown id. */
@@ -101,28 +114,15 @@ export class Text {
     return this.layout(run.id)?.placedGlyphForItem(id)?.glyph.glyphId ?? null;
   }
 
-  /** Stores an independent proof text source. */
-  createRun(items: readonly TextItem[]): TextRunRecord {
-    const record: TextRunRecord = {
-      id: mintRunId(),
-      type: "textrun",
-      scope: "document",
-      items: [...items],
-    };
-    this.#store.put(record);
-    return record;
-  }
-
   /**
-   * Returns a run record.
+   * Returns a run's content.
    *
    * @remarks
    * Reactive: inside a computed or effect, the reader reruns only when this run changes.
    */
   run(id: RunId | null): TextRunRecord | null {
     if (!id) return null;
-    const record = this.#store.record(id);
-    return record?.type === "textrun" ? record : null;
+    return this.#editor.scene.run(id);
   }
 
   /**
@@ -142,13 +142,13 @@ export class Text {
    * Reactive: the reader reruns when the item is added to or removed from a run.
    */
   runForItem(id: TextItemId): TextRunRecord | null {
-    return this.#runsByItem.get(id)[0] ?? null;
+    track(this.#runsByItem);
+    return this.#runsByItem.peek().get(id) ?? null;
   }
 
   /** Replaces a run's items; the run's definition removes a child whose item went (`onContentChange`). */
   setItems(id: RunId, items: readonly TextItem[]): void {
-    const run = this.run(id);
-    if (run) this.#store.put({ ...run, items: [...items] });
+    this.#editor.scene.setRunItems(id, items);
   }
 
   /**
@@ -165,10 +165,6 @@ export class Text {
     return true;
   }
 
-  deleteRun(id: RunId): void {
-    this.#store.delete(id);
-  }
-
   /**
    * Places a new text run on a page: the only way a run node is made.
    *
@@ -183,13 +179,16 @@ export class Text {
   placeRun({ page, at, glyphs }: RunPlacement): TextRunNode {
     const items = glyphs.flatMap((glyphId) => this.glyphItem(glyphId) ?? []);
     const node = this.#editor.history.withoutRecording(() =>
-      this.#editor.scene.createNode<TextRunNode>({
-        kind: "textRun",
-        parentId: page.id,
-        runId: this.createRun(items).id,
-        size: this.#editor.font.metricsCell.peek().unitsPerEm,
-        position: { x: at.x, y: at.y },
-      }),
+      this.#editor.scene.createNode<TextRunNode>(
+        {
+          kind: "textRun",
+          parentId: page.id,
+          runId: mintRunId(),
+          size: this.#editor.font.metricsCell.peek().unitsPerEm,
+          position: { x: at.x, y: at.y },
+        },
+        items,
+      ),
     );
     if (items.length === 0) this.#provisionalRuns.add(node.id);
     return node;
@@ -205,21 +204,7 @@ export class Text {
     const node = this.#editor.scene.nodeOfKind(nodeId, "textRun");
     if (!node || this.items(node).length > 0) return;
 
-    this.#editor.history.withoutRecording(() => {
-      this.#editor.scene.deleteNode(node.id);
-      this.deleteRun(node.runId);
-    });
-  }
-
-  /**
-   * Deletes the runs that only `deleted` placed, as when their page goes.
-   *
-   * @param deleted - nodes already removed from the scene.
-   */
-  deleteRunsPlacedBy(deleted: readonly TextRunNode[]): void {
-    for (const node of deleted) {
-      if (this.#editor.scene.nodesReferencing(node.runId).length === 0) this.deleteRun(node.runId);
-    }
+    this.#editor.history.withoutRecording(() => this.#editor.scene.deleteNode(node.id));
   }
 
   /** Returns a stable computed whose layout invalidates on content, location, source, or glyph acquisition. */
@@ -266,7 +251,7 @@ export class Text {
   }
 
   dispose(): void {
-    this.#unsubscribeStore();
+    this.#acquiring.dispose();
     this.#runsByItem.dispose();
     this.#runs.clear();
   }
