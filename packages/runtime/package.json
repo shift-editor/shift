@@ -17,7 +17,7 @@
   "scripts": {
     "code-api:generate": "node scripts/generate-code-api.mjs",
     "code-api:check": "node scripts/generate-code-api.mjs --check",
-    "typecheck": "pnpm code-api:check && tsgo --noEmit",
+    "typecheck": "pnpm code-api:check && tsgo --noEmit && tsgo --noEmit -p tsconfig.code-api.json && tsgo --noEmit -p tsconfig.config.json",
     "lint": "oxlint --fix src/",
     "lint:check": "oxlint --deny-warnings src/"
   },

@@ -25,13 +25,14 @@
 
 use pack::Pack;
 use shift_engine::StoreReadError;
-use shift_engine::scene::{RevisedNode, SceneNode};
+use shift_engine::scene::{RevisedNode, SceneNode, TextRun};
 use shift_font::glyph_identity::GlyphIdentityChange;
 use shift_font::{
     Axis, FontChangeFlag, GlyphId, GlyphRecords, MetricValue, MissingKerningOrigin, NodeId,
     ResolvedKerning, Source,
 };
-use shift_layout::{LayoutError, LayoutRequest, TextLayout};
+use shift_layout::{LayoutError, TextLayout};
+pub use shift_shape::{FeatureDefault, FeatureGroup, FontFeature};
 use shift_wire::KerningSnapshot;
 
 /// What the editor reads from one engine session's font. Glyphs and sources
@@ -82,7 +83,9 @@ pub trait EngineReads {
     ///
     /// Returns [`StoreReadError`] when the store's reader cannot answer.
     fn glyph_records(&self) -> Result<GlyphRecords, StoreReadError>;
-    /// Lays text out over the session's font, unsaved edits included, as
+    /// Lays a run's text out over the session's font, unsaved edits
+    /// included, with the options its settings give
+    /// (`TextRun::layout_request`), as
     /// `shift_layout::TextLayout::new` does: shaped with the session's
     /// shaper (brought up to date as [`Self::shape_paragraphs`] does), with
     /// kerning, mark attachment and cursive joins at each generated feature's
@@ -108,6 +111,20 @@ pub trait EngineReads {
     /// The flags whose change may change what [`Self::layout_text`]
     /// returns.
     fn layout_inputs(&self) -> Vec<FontChangeFlag>;
+    /// The features the session's shaper font defines, once per tag in tag
+    /// order, each with the name it is shown by, what it does when text does
+    /// not set it, and its group, as `shift_shape::Shaper::features` lists
+    /// them. The shaper is brought up to date first, as for
+    /// [`Self::layout_text`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FeatureListError`] when there is no shaper font, saying
+    /// why, or it cannot be read.
+    fn font_features(&self) -> Result<Vec<FontFeature>, FeatureListError>;
+    /// The flags whose change may change the session's shaper font, and so
+    /// what [`Self::font_features`] returns.
+    fn shaper_inputs(&self) -> Vec<FontChangeFlag>;
     /// What renaming `glyph` to `name` does: `Font::glyph_rename`. Null for a
     /// glyph the session's font lacks.
     fn glyph_rename(&self, glyph: GlyphId, name: String) -> Option<GlyphIdentityChange>;
@@ -150,16 +167,41 @@ pub trait EngineReads {
     fn external_location(&self, design: Vec<f64>) -> Vec<f64>;
 }
 
-/// Text to lay out, and where.
+/// A text run to lay out, and where.
 #[derive(Clone, Debug, PartialEq, Pack)]
 pub struct TextLayoutRequest {
-    pub text: LayoutRequest,
+    /// The run's items and settings as the scene stores them, which Rust
+    /// turns into layout options (`TextRun::layout_request`).
+    pub run: TextRun,
     /// The design location to lay out at, in the font's axis order with NaN
     /// for an axis default, as [`EngineReads::kerning_run`] takes it.
     pub location: Vec<f64>,
     /// A source, by the number the session interned, to lay out at instead,
     /// as its own layers draw.
     pub source: Option<usize>,
+}
+
+/// Why [`EngineReads::font_features`] could not list the features. Its
+/// details are text: the shaper's errors cannot cross to the editor.
+#[derive(Clone, Debug, PartialEq, Eq, Pack, thiserror::Error)]
+pub enum FeatureListError {
+    /// No shaper font could be made from the font, so text lays out as
+    /// typed; `reason` is why.
+    #[error("the font has no shaper font: {reason}")]
+    NoShaper { reason: String },
+    /// The shaper font could not be read.
+    #[error("the shaper font could not be read: {detail}")]
+    Unreadable { detail: String },
+}
+
+#[cfg(feature = "engine")]
+impl FeatureListError {
+    /// The shaper font could not be read, for `error`.
+    pub(crate) fn unreadable(error: impl std::fmt::Display) -> Self {
+        Self::Unreadable {
+            detail: error.to_string(),
+        }
+    }
 }
 
 /// Text as [`EngineReads::layout_text`] laid it out.
@@ -230,9 +272,9 @@ mod exports {
     use wasm_bindgen::prelude::*;
 
     use super::{
-        Axis, EditablePair, EngineReads, FontChangeFlag, GlyphIdentityChange, InterpolatedMetrics,
-        KerningSnapshot, LayoutError, NodeId, PlacedText, RevisedNode, SceneNode, Source,
-        SourceSetWeights, TextLayoutRequest, engine_reads_request,
+        Axis, EditablePair, EngineReads, FeatureListError, FontChangeFlag, FontFeature,
+        GlyphIdentityChange, InterpolatedMetrics, KerningSnapshot, LayoutError, NodeId, PlacedText,
+        RevisedNode, SceneNode, Source, SourceSetWeights, TextLayoutRequest, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::shaping::{TextPlace, TextShaping};
@@ -585,7 +627,7 @@ mod exports {
             let layout = self.shaping.layout_text(
                 font,
                 || self.shaper_font_source(),
-                &request.text,
+                &request.run.layout_request(),
                 place,
             )?;
             let residency = self.session.residency();
@@ -618,6 +660,15 @@ mod exports {
 
         fn layout_inputs(&self) -> Vec<FontChangeFlag> {
             FontChangeFlag::of(TextShaping::LAYOUT_INPUTS).collect()
+        }
+
+        fn font_features(&self) -> Result<Vec<FontFeature>, FeatureListError> {
+            self.shaping
+                .features(self.session.font(), || self.shaper_font_source())
+        }
+
+        fn shaper_inputs(&self) -> Vec<FontChangeFlag> {
+            FontChangeFlag::of(TextShaping::INPUTS).collect()
         }
 
         fn source_set_weights(&self, location: Vec<f64>) -> SourceSetWeights {

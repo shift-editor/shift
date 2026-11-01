@@ -158,6 +158,10 @@ pub enum SaveState {
     /// against its saved rows and discards the recovery overlay only when it
     /// holds.
     MatchesSaved,
+    /// The change is navigation, such as opening a glyph page: its rows are
+    /// kept, so the page survives reopening, but whether the document is
+    /// saved stays as it was.
+    Unchanged,
 }
 
 /// Whether a write advances the revision that addresses font-derived caches,
@@ -198,12 +202,17 @@ pub(crate) fn mark_workspace_changed_in_tx(
     save_state: SaveState,
     revision: Revision,
 ) -> Result<(), StoreError> {
-    let dirty = save_state == SaveState::Unsaved;
+    // NULL keeps the flag: navigation leaves the document as saved or not.
+    let dirty = match save_state {
+        SaveState::Unsaved => Some(true),
+        SaveState::MatchesSaved => Some(false),
+        SaveState::Unchanged => None,
+    };
     tx.execute(
         "
         UPDATE workspace_state
         SET
-            dirty = ?1,
+            dirty = COALESCE(?1, dirty),
             revision = revision + ?2,
             updated_at_ms = ?3
         WHERE id = 1

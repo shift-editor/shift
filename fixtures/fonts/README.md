@@ -78,13 +78,15 @@ repeated-instance handling, and skipped export.
 ## ShapingTest
 
 `ShapingTest.ufo` is a hand-written UFO for live shaping tests: an `f_i`
-ligature (`liga`); Arabic beh with `init`/`medi`/`fina` forms, joined by
-`entry`/`exit` anchors for cursive attachment; fatha and shadda marks with
-`_top`/`top` anchors for mark-to-base and mark-to-mark attachment; an
-anchorless superscript alef classed as a mark; `tick`, an unencoded spacing
-glyph classed as a mark; and noon, which `ccmp` decomposes into a dotless
-body and a dot mark. Written for Shift's tests and released under the same
-terms as the repository.
+ligature (`liga`, and an off-by-default `dlig` that makes it from `ff`);
+Arabic beh with `init`/`medi`/`fina` forms, joined by `entry`/`exit` anchors
+for cursive attachment; fatha and shadda marks with `_top`/`top` anchors for
+mark-to-base and mark-to-mark attachment; an anchorless superscript alef
+classed as a mark; `tick`, an unencoded spacing glyph classed as a mark;
+noon, which `ccmp` decomposes into a dotless body and a dot mark; and `locl`
+forms for Turkish (`i.loclTRK`) and for Arabic script (`one` becomes
+`one.arab`), so a chosen language or script changes the glyphs. Written for
+Shift's tests and released under the same terms as the repository.
 
 ## UndrawnLigature
 

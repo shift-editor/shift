@@ -111,8 +111,9 @@ impl ShiftStore {
         if let Some(recovery) = self.recovery.as_ref() {
             let state = recovery.state()?;
             match state {
-                RecoveryState::Clean => {}
-                RecoveryState::Dirty | RecoveryState::Conflict => {
+                // A clean overlay can still hold glyph pages, navigation the
+                // new document keeps too.
+                RecoveryState::Clean | RecoveryState::Dirty | RecoveryState::Conflict => {
                     crate::recovery::apply_overlay_to_snapshot(
                         &mut conn,
                         recovery,

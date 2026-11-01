@@ -24,9 +24,20 @@ pub struct FeatureSetting {
     pub value: u32,
 }
 
+impl FeatureSetting {
+    /// Turns feature `tag` on (`1`) or off (`0`).
+    pub fn switched(tag: String, on: bool) -> Self {
+        Self {
+            tag,
+            value: u32::from(on),
+        }
+    }
+}
+
 /// How lines sit in the width.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TextAlign {
     /// Where the paragraph's direction starts: left for left-to-right.
     Start,

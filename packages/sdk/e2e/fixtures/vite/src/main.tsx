@@ -1,3 +1,5 @@
+// This consumer has no tsconfig, so Vite compiles its JSX to React.createElement.
+/** @jsxRuntime classic */
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { createMemoryFontSession, scenePoint, type MemoryFontSession } from "@shift-editor/sdk";
@@ -77,7 +79,7 @@ window.shiftSdkHarness = {
   }),
   firstAxis: () => first.editor.externalLocation.get(weightAxis.id as never),
   secondAxis: () =>
-    second.editor.externalLocation.get(weightAxis.id as never) ?? weightAxis.default,
+    second.editor.externalLocation.get(weightAxis.id as never) ?? weightAxis.kind.default,
   disposedSession: () => ({
     toolReleased: lifecycle.editor.toolCell.peek() === null,
     toolsUnregistered: lifecycle.editor.toolRegistryCell.peek().size === 0,

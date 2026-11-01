@@ -3,9 +3,12 @@ use std::path::Path;
 use rusqlite::Connection;
 
 use super::catalog::{
-    RecoveryMode, RecoveryTableShape, identifier, load_recovery_table_shapes, matching_columns,
-    string_literal,
+    RecoveryMode, RecoveryTableShape, SCENE_NODES, identifier, load_recovery_table_shapes,
+    matching_columns, string_literal,
 };
+
+/// The temporary table of glyph-page nodes the saved comparison passes over.
+pub(super) const NAVIGATION_NODES: &str = "recovery_navigation_nodes";
 use crate::StoreError;
 
 pub(super) fn attach_recovery(conn: &Connection, path: &Path) -> Result<(), StoreError> {
@@ -104,18 +107,26 @@ pub(super) fn differs_from_saved_sql(table: &RecoveryTableShape) -> Option<Strin
         RecoveryMode::CanonicalOnly => return None,
         RecoveryMode::OverlayRows { tombstone_kind, .. } => {
             let primary_key = column_list(&table.primary_key);
+            let id = identifier(&table.primary_key[0]);
+            // Glyph pages are navigation: their nodes never differ from the save.
+            let navigation = if table.table == SCENE_NODES {
+                format!(" AND {id} NOT IN (SELECT id FROM temp.{NAVIGATION_NODES})")
+            } else {
+                String::new()
+            };
             let mut checks = vec![format!(
                 "SELECT {columns} FROM temp.{name}
-                 WHERE ({primary_key}) IN (SELECT {primary_key} FROM recovery.{name})
+                 WHERE ({primary_key}) IN (SELECT {primary_key} FROM recovery.{name}){navigation}
                  EXCEPT SELECT {columns} FROM main.{name}"
             )];
             if let Some(kind) = tombstone_kind {
                 checks.push(format!(
                     "SELECT 1 FROM main.{name} AS m
                      JOIN recovery.recovery_tombstones AS t
-                       ON t.entity_kind = {} AND t.entity_id = m.{}",
+                       ON t.entity_kind = {} AND t.entity_id = m.{id}
+                     WHERE 1{}",
                     string_literal(kind),
-                    identifier(&table.primary_key[0])
+                    navigation.replace(&format!(" AND {id}"), &format!(" AND m.{id}")),
                 ));
             }
             checks

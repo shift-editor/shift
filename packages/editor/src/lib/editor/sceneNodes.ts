@@ -1,7 +1,7 @@
 import type { NodeId, RunId, SourceId } from "@shift/types";
 import type { ShiftNode } from "../../types/node";
-import type { RevisedNode, SceneIntent, SceneNode } from "../../types/sceneDocument";
-import type { TextRunRecord } from "../../types/text";
+import type { RevisedNode, RunSettings, SceneIntent, SceneNode } from "../../types/sceneDocument";
+import type { TextRunRecord, TextRunSettings } from "../../types/text";
 import type { TextItem } from "../text/layout/types";
 
 /** One document node as the editor reads it, and the run it holds when it is a text run. */
@@ -121,7 +121,7 @@ export class SceneNodes {
             runId: node.runId,
             size: node.size,
             items: [...run.items],
-            settings: { shaping: run.shaping },
+            settings: runSettingsOf(run),
           },
         };
       case "glyph":
@@ -138,6 +138,30 @@ export class SceneNodes {
         throw new Error(`scene nodes of kind ${(node as ShiftNode).kind} are not stored`);
     }
   }
+}
+
+/** A run record's settings as the scene stores them. */
+export function runSettingsOf(run: TextRunSettings): RunSettings {
+  return {
+    shaping: run.shaping,
+    features: run.features,
+    language: run.language,
+    script: run.script,
+    lineHeight: run.lineHeight,
+    align: run.align,
+  };
+}
+
+/** The run record's settings for what the scene stores. */
+function runSettingsFrom(settings: RunSettings): TextRunSettings {
+  return {
+    shaping: settings.shaping,
+    features: settings.features,
+    language: settings.language ?? null,
+    script: settings.script ?? null,
+    lineHeight: settings.lineHeight ?? null,
+    align: settings.align ?? null,
+  };
 }
 
 /** The editor's node for `revised`, keeping the previous run record while its items are unchanged. */
@@ -170,7 +194,7 @@ function readNode(
         type: "textrun",
         scope: "document",
         items: content.items,
-        shaping: content.settings.shaping,
+        ...runSettingsFrom(content.settings),
       };
       return {
         revised,

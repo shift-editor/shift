@@ -1085,3 +1085,35 @@ fn an_unrecorded_scene_edit_is_kept_but_never_reaches_the_saved_position() {
     assert!(history.latest().is_none(), "no undo step");
     assert!(!history.matches_saved());
 }
+
+#[test]
+fn opening_a_glyph_page_keeps_the_history_at_its_save() {
+    use shift_engine::scene::{NodeContent, PageRole, SceneIntent, SceneNode};
+
+    let font = composite_font();
+    let mut session = EngineSession::open_directory(placeholders(&font));
+    let mut history = EditHistory::default();
+    history.mark_saved();
+
+    history.begin(None);
+    history.record_scene(
+        session
+            .apply_scene(&[SceneIntent::CreateNode(SceneNode {
+                content: NodeContent::Page {
+                    name: "Glyph".into(),
+                    role: Some(PageRole::Glyph),
+                },
+                ..scene_page("glyph")
+            })])
+            .unwrap(),
+    );
+    history
+        .end(session.font(), session.scene(), Recording::Unrecorded)
+        .unwrap();
+
+    assert!(history.latest().is_none(), "no undo step");
+    assert!(
+        history.matches_saved(),
+        "navigation leaves the history at its save"
+    );
+}

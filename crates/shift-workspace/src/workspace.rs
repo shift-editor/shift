@@ -360,6 +360,14 @@ impl FontWorkspace {
         let staged = self.session.stage_change_set(font_changes)?;
         let mut scene = self.session.scene().clone();
         scene.apply_change_set(&change_set.scene)?;
+        // Opening or closing a glyph page is navigation: kept, never unsaved.
+        let navigation =
+            staged.changes().is_empty() && scene.changes_only_glyph_pages(&change_set.scene);
+        let save_state = if navigation {
+            SaveState::Unchanged
+        } else {
+            save_state
+        };
         self.store.apply_document_change_set(
             staged.changes(),
             staged.font(),

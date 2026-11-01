@@ -35,6 +35,7 @@ mod exports {
     use shift_shaper_font::{LiveShaper, ShaperFontError, ShaperFontRequest, ShaperFontState};
 
     use super::ShapingFailure;
+    use crate::engine_reads::{FeatureListError, FontFeature};
 
     /// A session's shaper: the shaper font compiled from the session's font,
     /// and a shaper over it that maps characters through the font's Unicode
@@ -161,6 +162,26 @@ mod exports {
             Ok(layout)
         }
 
+        /// The features the shaper font defines, in tag order, with the
+        /// shaper brought up to date first as for [`Self::layout_text`].
+        ///
+        /// # Errors
+        ///
+        /// Returns [`FeatureListError::NoShaper`] when no shaper could be
+        /// made, with why, and [`FeatureListError::Unreadable`] when its
+        /// font cannot be read.
+        pub(crate) fn features<E: std::fmt::Display>(
+            &self,
+            font: &Font,
+            source: impl FnOnce() -> Result<ShaperFontSource, E>,
+        ) -> Result<Vec<FontFeature>, FeatureListError> {
+            let state = self.current(font, source);
+            let shaper = state
+                .shaper()
+                .map_err(|reason| FeatureListError::NoShaper { reason })?;
+            shaper.features().map_err(FeatureListError::unreadable)
+        }
+
         /// The shaper state, brought up to date with `font` when an edit may
         /// have changed what it reads.
         fn current<E: std::fmt::Display>(
@@ -235,7 +256,11 @@ mod exports {
         use shift_font::{DesignLocation, ExternalLocation};
         use shift_layout::{LayoutRequest, LayoutUnit, TextLayout, TextOptions};
 
+        use shift_engine::scene::{RunSettings, TextItem, TextRun};
+        use shift_font::TextItemId;
+
         use super::{TextPlace, TextShaping};
+        use crate::engine_reads::{FeatureDefault, FeatureGroup, FeatureListError, FontFeature};
 
         const LIGATURE: &str = "feature liga { sub f i by f_i; } liga;";
 
@@ -347,6 +372,36 @@ mod exports {
         }
 
         #[test]
+        fn features_say_why_when_there_is_no_shaper_font() {
+            let font = font_with(&[("f", Some('f'))]);
+            let shaping = TextShaping::default();
+
+            let features = shaping.features(&font, || Err::<ShaperFontSource, _>("closed"));
+
+            assert!(matches!(features, Err(FeatureListError::NoShaper { .. })));
+        }
+
+        #[test]
+        fn features_list_the_shaper_font_s_with_their_names_and_defaults() {
+            let font = font_with(&[("f", Some('f')), ("i", Some('i')), ("f_i", None)]);
+            let shaping = TextShaping::default();
+
+            let features = shaping
+                .features(&font, || Ok::<_, Infallible>(source(&font)))
+                .unwrap();
+
+            assert_eq!(
+                features,
+                [FontFeature {
+                    tag: "liga".to_string(),
+                    name: Some("Standard Ligatures".to_string()),
+                    default: FeatureDefault::On,
+                    group: FeatureGroup::Ligatures,
+                }]
+            );
+        }
+
+        #[test]
         fn text_lays_out_with_the_session_s_shaper_or_as_typed() {
             let font = font_with(&[("f", Some('f')), ("i", Some('i')), ("f_i", None)]);
             let shaping = TextShaping::default();
@@ -360,6 +415,57 @@ mod exports {
             assert_eq!(typed.glyphs.len(), 2);
             assert_eq!(shaped.carets.len(), 3);
             assert_eq!(shaping.compiles(), 1);
+        }
+
+        #[test]
+        fn a_run_lays_out_with_the_features_its_settings_turn_off() {
+            let font = font_with(&[("f", Some('f')), ("i", Some('i')), ("f_i", None)]);
+            let shaping = TextShaping::default();
+            let run = |features: &[(&str, bool)]| TextRun {
+                items: "fi"
+                    .chars()
+                    .enumerate()
+                    .map(|(index, character)| TextItem::Character {
+                        id: TextItemId::from_raw(index.to_string()),
+                        codepoint: u32::from(character),
+                    })
+                    .collect(),
+                settings: RunSettings {
+                    features: features
+                        .iter()
+                        .map(|&(tag, on)| (tag.to_string(), on))
+                        .collect(),
+                    ..RunSettings::default()
+                },
+            };
+            let names = |run: &TextRun| {
+                let place = TextPlace {
+                    design: DesignLocation::new(),
+                    external: ExternalLocation::new(),
+                    kerning: KerningBlend::default(),
+                };
+                shaping
+                    .layout_text(
+                        &font,
+                        || Ok::<_, Infallible>(source(&font)),
+                        &run.layout_request(),
+                        place,
+                    )
+                    .unwrap()
+                    .glyphs
+                    .iter()
+                    .map(|glyph| {
+                        font.glyph(glyph.glyph_id.unwrap())
+                            .unwrap()
+                            .name()
+                            .to_string()
+                    })
+                    .collect::<Vec<_>>()
+            };
+
+            assert_eq!(names(&run(&[])), ["f_i"]);
+            assert_eq!(names(&run(&[("liga", true)])), ["f_i"]);
+            assert_eq!(names(&run(&[("liga", false)])), ["f", "i"]);
         }
     }
 }
