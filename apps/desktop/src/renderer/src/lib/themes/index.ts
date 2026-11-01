@@ -69,9 +69,6 @@ export const colorThemes: readonly ColorTheme[] = [
       base0E: "#8b5cf6",
       base0F: "#f219d1",
     },
-    // A deeper blue for buttons and other accent fills, so their white text reaches
-    // WCAG's 4.5:1 (4.8:1 here; 3.3:1 on base0D). The editor keeps base0D.
-    colors: { accent: "#0874c8", "on-accent": "#ffffff" },
   },
   {
     id: "shift-dark",
