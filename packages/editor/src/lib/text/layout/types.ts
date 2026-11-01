@@ -107,7 +107,10 @@ export interface PositionedRun {
 }
 
 export interface Line {
+  /** Runs in screen order, left to right. */
   runs: PositionedRun[];
+  /** The paragraph's base direction. */
+  direction: Direction;
   y: number;
   ascent: number;
   descent: number;
@@ -125,7 +128,6 @@ export interface Hit {
   lineIndex: number;
   runIndex: number;
   cluster: number;
-  side: "left" | "right";
 }
 
 /** A selection highlight on one line, in layout coordinates. */

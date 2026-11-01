@@ -1,5 +1,5 @@
 import { mintRunId, type GlyphId, type RunId, type TextItemId } from "@shift/types";
-import { keyedCache, signal, untracked } from "../signals";
+import { computed, keyedCache, signal, track, untracked } from "../signals";
 import type { ComputedSignal, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
 import type { ShiftStore } from "../store/ShiftStore";
@@ -51,6 +51,25 @@ export class Text {
           }),
       ),
   });
+
+  /**
+   * The run the user is working in: the one being typed in, otherwise the
+   * scene's only run, such as the page run around an edited glyph.
+   *
+   * @remarks
+   * Null when no text is being typed and the scene holds no run or several.
+   */
+  readonly currentRunCell: Signal<TextRunRecord | null> = computed(
+    () => {
+      const editing = this.#editor.textEditing.stateCell.value;
+      const scene = this.#editor.scene;
+      // Scene lookups read without subscribing; rerun when its nodes change.
+      track(scene.cell);
+      const node = scene.nodeOfKind(editing?.nodeId ?? null, "textRun") ?? scene.only("textRun");
+      return node ? this.run(node.runId) : null;
+    },
+    { name: "text.currentRun" },
+  );
 
   constructor(store: ShiftStore<ShiftEditorRecord>, editor: Editor) {
     this.#store = store;
@@ -106,6 +125,7 @@ export class Text {
       type: "textrun",
       scope: "document",
       items: [...items],
+      shaping: true,
     };
     this.#store.put(record);
     return record;
@@ -147,6 +167,17 @@ export class Text {
   setItems(id: RunId, items: readonly TextItem[]): void {
     const run = this.run(id);
     if (run) this.#store.put({ ...run, items: [...items] });
+  }
+
+  /**
+   * Turns shaping on or off for a run; off lays out each item as typed.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setShaping(id: RunId, shaping: boolean): void {
+    const run = this.run(id);
+    if (run && run.shaping !== shaping) this.#store.put({ ...run, shaping });
   }
 
   /**

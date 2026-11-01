@@ -429,8 +429,9 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    * Returns the caret cluster nearest a point inside the run's lines.
    *
    * @remarks
-   * Accepts the glyph boxes, a narrow strip past each line's ends, and the
-   * empty run's origin; blank canvas elsewhere returns null.
+   * The caret stop nearest the point on the line whose band holds it, as
+   * Rust placed the stops, a narrow strip past each line's ends included,
+   * and the empty run's origin; blank canvas elsewhere returns null.
    *
    * @param node - the run node.
    * @param point - a point in the run's own units.
@@ -440,17 +441,10 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const run = this.editor.text.run(node.runId);
     if (!layout || !run) return null;
 
-    const hit = layout.hitTest(point);
-    if (hit) return hit.cluster + (hit.side === "right" ? 1 : 0);
+    const cluster = layout.caretAtPoint(point, this.editor.hitRadiusIn(node));
+    if (cluster !== null) return cluster;
 
     const padding = this.editor.hitRadiusIn(node);
-    for (const line of layout.lines) {
-      if (point.y < line.y + line.descent - padding || point.y > line.y + line.ascent + padding)
-        continue;
-      const advance = line.runs.reduce((sum, part) => sum + part.advance, 0);
-      if (point.x < -padding || point.x > advance + padding) continue;
-      return point.x <= 0 ? line.clusterStart : line.clusterEnd - 1;
-    }
     const nearEmptyOrigin =
       run.items.length === 0 &&
       Math.abs(point.x) <= padding &&

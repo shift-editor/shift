@@ -3,6 +3,7 @@ import type {
   LayoutLine,
   LayoutRequest,
   LayoutUnit,
+  CaretStop,
   PlacedGlyph,
   TextLayout as LaidOutText,
 } from "@shift/wasm/protocol";
@@ -50,7 +51,7 @@ export class RunText {
         track(editor.font.glyphEntriesCell);
         // A glyph the text shows finished loading into the engine.
         track(owner.glyphsLoadedCell);
-        const request = layoutRequest(record.items);
+        const request = layoutRequest(record);
         return editor.font.layoutText(request, location, sourceId) ?? typed(editor, record.items);
       },
       // An edit that leaves the text where it was, such as dragging an anchor
@@ -103,15 +104,15 @@ export class RunText {
   }
 }
 
-/** The layout request for a run's items, shaped with the font's default features. */
-function layoutRequest(items: readonly TextItem[]): LayoutRequest {
+/** The layout request for a run, shaped with the font's default features unless shaping is off. */
+function layoutRequest(record: TextRunRecord): LayoutRequest {
   return {
-    units: items.map(layoutUnit),
+    units: record.items.map(layoutUnit),
     options: {
       language: null,
       script: null,
       features: [],
-      shaping: true,
+      shaping: record.shaping,
       align: null,
       lineHeight: { kind: "auto" },
       width: null,
@@ -140,10 +141,19 @@ function typed(editor: Editor, items: readonly TextItem[]): LaidOutText {
   const lineHeight = metrics.ascender - metrics.descender + (metrics.lineGap ?? 0);
   const glyphs: PlacedGlyph[] = [];
   const lines: LayoutLine[] = [];
+  const carets: CaretStop[] = [];
   let start = 0;
   let pen = 0;
   const endLine = (end: number, withBreak: boolean) => {
     const first = glyphs.findIndex((glyph) => glyph.line === lines.length);
+    // WORKAROUND (Needs from PR 1): a preview has no engine to place caret
+    // stops, so its typed text stands one at each glyph's left and one at
+    // the line's end, left to right, as the engine places them for
+    // unshaped text.
+    for (const glyph of glyphs.slice(first < 0 ? glyphs.length : first)) {
+      carets.push(typedStop(glyph.start, lines.length, glyph.left));
+    }
+    carets.push(typedStop(end, lines.length, pen));
     lines.push({
       paragraph: lines.length,
       start,
@@ -201,7 +211,11 @@ function typed(editor: Editor, items: readonly TextItem[]): LaidOutText {
     pen += advance;
   }
   if (items.length > 0) endLine(items.length, false);
-  return { lines, glyphs, unitGlyphs: [], carets: [], width: 0, unshaped: null };
+  return { lines, glyphs, unitGlyphs: [], carets, width: 0, unshaped: null };
+}
+
+function typedStop(unit: number, line: number, x: number): CaretStop {
+  return { unit, line, x, direction: "ltr", secondary: null };
 }
 
 /**

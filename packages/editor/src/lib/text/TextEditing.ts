@@ -15,6 +15,7 @@ import {
   type CaretPosition,
   type SelectionRect,
   type TextItem,
+  type TextLayout,
 } from "./layout";
 import { TextBuffer } from "./TextBuffer";
 import type { Editor } from "../editor/Editor";
@@ -162,34 +163,42 @@ export class TextEditing {
     this.#edit("Delete text", (buffer) => buffer.delete(1));
   }
 
+  /**
+   * Moves the caret left (`-1`) or right (`1`) on screen, as the arrow keys do.
+   *
+   * @remarks
+   * Movement follows the screen, as on macOS: in right-to-left text, left is
+   * forward in reading order. A character step crosses a grapheme cluster,
+   * and a word step lands on the edge of the next word on that side, in
+   * whichever direction that word reads. Past a line's edge, either continues
+   * into the neighbouring line in reading order.
+   */
   move(direction: -1 | 1, granularity: "character" | "word" | "line", extend = false): void {
     const buffer = this.#buffer();
-    if (!buffer) return;
+    const layout = this.#layout();
+    if (!buffer || !layout) return;
+
     const cluster = buffer.focusCluster;
+    const lineIndex = layout.lineIndexForCluster(cluster);
+    // Reading order is screen order flipped in a right-to-left line.
+    const logical = layout.lineDirection(lineIndex) === "rtl" ? (-direction as -1 | 1) : direction;
     let target = cluster;
     switch (granularity) {
       case "character":
-        target = buffer.graphemeStep(cluster, direction);
+        target = layout.visualStep(cluster, direction) ?? buffer.graphemeStep(cluster, logical);
         break;
-      case "word":
-        target = buffer.wordStep(cluster, direction);
-        break;
-      case "line": {
-        const node = this.#node();
-        const line =
-          node &&
-          this.#editor.text
-            .layoutCell(node.runId)
-            .peek()
-            ?.lines.find((line) => cluster >= line.clusterStart && cluster < line.clusterEnd);
-        if (!line) {
-          target = cluster;
-          break;
-        }
-        target = direction === -1 ? line.clusterStart : line.clusterEnd - 1;
+      case "word": {
+        const edges = buffer.wordEdges(direction, (cluster) => layout.directionAt(cluster));
+        target =
+          layout.visualStep(cluster, direction, (stop) => edges.has(stop)) ??
+          buffer.wordStep(cluster, logical);
         break;
       }
+      case "line":
+        target = layout.lineEdge(lineIndex, direction) ?? cluster;
+        break;
     }
+
     this.#goalX = null;
     this.#place(target, extend, "Move text caret");
   }
@@ -238,6 +247,11 @@ export class TextEditing {
 
   #node(): TextRunNode | null {
     return this.#editor.scene.nodeOfKind(this.state?.nodeId ?? null, "textRun");
+  }
+
+  #layout(): TextLayout | null {
+    const node = this.#node();
+    return node ? this.#editor.text.layout(node.runId) : null;
   }
 
   /** The edited run's items with the current selection; null when not editing. */

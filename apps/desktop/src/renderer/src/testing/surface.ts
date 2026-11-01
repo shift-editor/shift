@@ -178,6 +178,12 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   selectAll(): void;
   /** Clicks at a glyph-local position and waits for the edit it makes. */
   clickAt(position: Point2D, modifiers?: Modifiers): Promise<void>;
+  /**
+   * Clicks at a position in the canvas text's own units, as clicking the
+   * text in Text mode does, and waits for the edit it makes. Unlike
+   * {@link clickAt}, it needs no open glyph.
+   */
+  clickTextAt(position: Point2D, modifiers?: Modifiers): Promise<void>;
   /** Clicks twice at a glyph-local position and waits for the edit it makes. */
   doubleClickAt(position: Point2D, modifiers?: Modifiers): Promise<void>;
   /** Presses the pointer at a glyph-local position, starting a gesture. */
@@ -300,6 +306,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   setTextSize(size: number): void;
   /** Moves the text the open glyph is edited in to a canvas position. */
   moveText(to: Point2D): void;
+  /** Turns shaping on or off for the canvas text, as the Text section's Shaping switch does. */
+  setTextShaping(shaping: boolean): void;
 
   /** Types `text` at the caret in Text mode, as the keyboard does; `"\n"` is Enter. */
   typeText(text: string): void;
