@@ -16,6 +16,13 @@ const storedTabSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("glyph"), pageId: nodeIdSchema, glyphId: glyphIdSchema }).strict(),
 ]);
 
+const storedCameraSchema = z
+  .object({
+    pan: z.object({ x: z.number(), y: z.number() }).strict(),
+    zoom: z.number().positive(),
+  })
+  .strict();
+
 const documentViewSchema = z
   .object({
     /** The glyph the editor route shows; absent on Home and the canvas. */
@@ -28,6 +35,8 @@ const documentViewSchema = z
     tabs: z.array(storedTabSchema).optional(),
     /** The page the font overview shows its selected glyph on. */
     selectionPageId: nodeIdSchema.optional(),
+    /** Each page's pan and zoom as last left, by page id. */
+    cameras: z.record(nodeIdSchema, storedCameraSchema).optional(),
   })
   .strict();
 
@@ -40,6 +49,9 @@ const storedViewSchema = documentViewSchema
 
 /** What a viewer last saw in one document, restored when the document resumes. */
 export type DocumentView = z.output<typeof documentViewSchema>;
+
+/** One page's camera as a {@link DocumentView} keeps it. */
+export type StoredCamera = z.output<typeof storedCameraSchema>;
 
 /** One page or glyph tab as a {@link DocumentView} keeps it. */
 export type StoredTab = z.output<typeof storedTabSchema>;

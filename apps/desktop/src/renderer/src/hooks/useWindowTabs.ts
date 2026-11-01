@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { NodeId } from "@shift/types";
 import { CANVAS_PATH, editorPath } from "@/lib/editorRoute";
@@ -83,5 +83,25 @@ export const useWindowTabs = (): WindowTabNavigation => {
   return useMemo(
     () => ({ tabs, show, showPage, close, closeShown }),
     [close, closeShown, show, showPage, tabs],
+  );
+};
+
+/**
+ * Lets undo and redo show the tab of the page they change, through the
+ * window's navigation; a tab already shown is left alone. Mount once per
+ * window.
+ */
+export const useShowReplayedPages = (): void => {
+  const editor = useEditor();
+  const { tabs, show } = useWindowTabs();
+  const { pathname } = useLocation();
+
+  useEffect(
+    () =>
+      tabs.followReveals((tab) => {
+        const shown = tabs.activeTab(windowLocation(pathname, editor.scene.shownPageIdCell.peek()));
+        if (shown?.id !== tab.id) show(tab);
+      }),
+    [editor, pathname, show, tabs],
   );
 };
