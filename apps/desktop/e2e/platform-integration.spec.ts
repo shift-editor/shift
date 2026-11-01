@@ -84,9 +84,9 @@ async function persistEvidence(
   exportTtfPath: string,
   testInfo: TestInfo,
 ): Promise<void> {
-  await runCommand(page, electronApp, "file.save");
+  await runCommand(page, "file.save");
   await expect.poll(() => fs.existsSync(saveShiftPath)).toBe(true);
-  await runCommand(page, electronApp, "file.exportTtf");
+  await runCommand(page, "file.exportTtf");
   await expect.poll(() => fs.existsSync(exportTtfPath)).toBe(true);
 
   await testInfo.attach("saved-document", {
