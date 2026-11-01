@@ -116,9 +116,16 @@ pub trait EngineReads {
     /// `shift_shape::Shaper::feature_substitutions` reads them from its
     /// `GSUB`: lookups that contextual rules call included, glyphs no
     /// character reaches included. Empty for a positioning feature, a tag the
-    /// font does not define, an invalid tag, or no shaper. Changes when a
-    /// flag in [`Self::shaper_inputs`] does.
-    fn feature_substitutions(&self, tag: String) -> Vec<FeatureSubstitution>;
+    /// font does not define, an invalid tag, or no shaper; null when the
+    /// shaper font's `GSUB` cannot be read. Changes when a flag in
+    /// [`Self::shaper_inputs`] does.
+    fn feature_substitutions(&self, tag: String) -> Option<Vec<FeatureSubstitution>>;
+    /// Whether shaping text applies feature `tag` when the text sets it to
+    /// `setting` (null when it leaves it): `FeatureDefault::applies` for the
+    /// session's shaper font's feature, so a required feature always does.
+    /// False for a tag the shaper font does not define, or no shaper.
+    /// Changes when a flag in [`Self::shaper_inputs`] does.
+    fn feature_applies(&self, tag: String, setting: Option<u32>) -> bool;
     /// Every interned source set's weights at a design location, as the
     /// basis the session's font gives each set evaluates them
     /// (`InterpolationBasis::weights_at`): the weights of the sets a frame
@@ -641,11 +648,20 @@ mod exports {
             FontChangeFlag::of(TextShaping::INPUTS).collect()
         }
 
-        fn feature_substitutions(&self, tag: String) -> Vec<FeatureSubstitution> {
+        fn feature_substitutions(&self, tag: String) -> Option<Vec<FeatureSubstitution>> {
             self.shaping.feature_substitutions(
                 self.session.font(),
                 || self.shaper_font_source(),
                 &tag,
+            )
+        }
+
+        fn feature_applies(&self, tag: String, setting: Option<u32>) -> bool {
+            self.shaping.feature_applies(
+                self.session.font(),
+                || self.shaper_font_source(),
+                &tag,
+                setting,
             )
         }
 

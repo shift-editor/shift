@@ -363,9 +363,23 @@ export class EngineSession {
   /**
    * Every substitution feature `tag` can make in the session's shaper font,
    * as shift-shape reads them from its `GSUB`; empty without a shaper.
+   *
+   * @throws When the shaper font's `GSUB` cannot be read.
    */
   featureSubstitutions(tag: string): readonly FeatureSubstitution[] {
-    return this.#reads.featureSubstitutions(tag);
+    const substitutions = this.#reads.featureSubstitutions(tag);
+    if (!substitutions) throw new Error(`the shaper font's GSUB could not be read for ${tag}`);
+    return substitutions;
+  }
+
+  /**
+   * Whether shaping applies feature `tag` when text sets it to `setting`
+   * (null when it leaves it), as shift-shape decides from the feature's
+   * default: a required feature always does. False for a tag the shaper font
+   * does not define, or without a shaper.
+   */
+  featureApplies(tag: string, setting: number | null): boolean {
+    return this.#reads.featureApplies(tag, setting);
   }
 
   /** The change flags whose change may change the session's shaper font. */

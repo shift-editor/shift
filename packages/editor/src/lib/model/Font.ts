@@ -1515,13 +1515,34 @@ export class Font {
    * brings in and what each replaces. Tracks what the shaper font reads, as
    * {@link fontFeatures} does.
    *
-   * @returns empty without an open engine or a shaper.
+   * @returns empty without an open engine or a shaper, or, logged, when the
+   * shaper font's `GSUB` cannot be read.
    */
   featureSubstitutions(tag: string): readonly FeatureSubstitution[] {
     const engine = this.#store.engine;
     if (!engine) return [];
     for (const flag of engine.shaperInputs()) track(engine.revision(flag));
-    return engine.featureSubstitutions(tag) ?? [];
+    try {
+      return engine.featureSubstitutions(tag) ?? [];
+    } catch (error) {
+      console.warn("listing a feature's substitutions failed", error);
+      return [];
+    }
+  }
+
+  /**
+   * Whether shaping applies a feature when text sets it to `setting` (null
+   * when it leaves it), as Rust decides from the feature's default in the
+   * window's engine's shaper font. Tracks what the shaper font reads, as
+   * {@link fontFeatures} does.
+   *
+   * @returns false without an open engine, or for a tag the font does not define.
+   */
+  featureApplies(tag: string, setting: number | null): boolean {
+    const engine = this.#store.engine;
+    if (!engine) return false;
+    for (const flag of engine.shaperInputs()) track(engine.revision(flag));
+    return engine.featureApplies(tag, setting);
   }
 
   /** @knipclassignore — used by VariationPanel component */

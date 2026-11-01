@@ -28,7 +28,7 @@ import type {
   TextLayout as LaidOutText,
 } from "@shift/wasm/protocol";
 import { RunText } from "./RunText";
-import { DEFAULT_TEXT_RUN_SETTINGS, textRunWithDefaults } from "./runSettings";
+import { DEFAULT_TEXT_RUN_SETTINGS, featureValue, textRunWithDefaults } from "./runSettings";
 import { GlyphNameParser, type TextParseContext, type TextParser } from "./parsing";
 
 /** The smallest size a run node sets its text at: one scene unit to the em. */
@@ -140,9 +140,11 @@ export class Text {
       const run = highlight ? this.run(highlight.runId) : null;
       if (!highlight || !run) return null;
 
-      const feature = this.featuresCell.value.find(({ tag }) => tag === highlight.tag);
-      const applies =
-        run.features[highlight.tag] ?? (feature !== undefined && feature.default !== "off");
+      const setting = run.features[highlight.tag];
+      const applies = this.#editor.font.featureApplies(
+        highlight.tag,
+        setting === undefined ? null : featureValue(setting),
+      );
       const substitutions = this.featureSubstitutionsCell(highlight.tag).value;
       const glyphs = new Set(
         substitutions.flatMap(({ input, output }) => (applies ? [output] : input)),

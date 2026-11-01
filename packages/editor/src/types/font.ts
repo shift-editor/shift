@@ -231,8 +231,18 @@ export interface FontEngine {
    * ordered by output glyph then input.
    *
    * @returns null only while the engine is not open; empty for a feature that substitutes nothing.
+   * @throws When the shaper font's `GSUB` cannot be read.
    */
   featureSubstitutions(tag: string): readonly FeatureSubstitution[] | null;
+
+  /**
+   * Whether shaping applies a feature when text sets it to `setting` (null
+   * when it leaves it), as Rust decides from the feature's default: a
+   * required feature always does.
+   *
+   * @returns false while the engine is not open, or for a tag its shaper font does not define.
+   */
+  featureApplies(tag: string, setting: number | null): boolean;
 }
 
 /**

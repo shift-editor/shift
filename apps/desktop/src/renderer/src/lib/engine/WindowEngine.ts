@@ -119,6 +119,10 @@ export class WindowEngine implements FontEngine {
     return this.#opened?.session.featureSubstitutions(tag) ?? null;
   }
 
+  featureApplies(tag: string, setting: number | null): boolean {
+    return this.#opened?.session.featureApplies(tag, setting) ?? false;
+  }
+
   get variationCell(): Signal<EngineVariation | null> {
     return this.#variation;
   }

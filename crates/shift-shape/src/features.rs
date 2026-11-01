@@ -174,6 +174,18 @@ impl FeatureDefault {
             Self::Off
         }
     }
+
+    /// Whether the shaper applies a feature treated so, when text sets it to
+    /// `setting` (`None` when text leaves it): a required feature always,
+    /// since text never switches it; otherwise a value above 0 applies it,
+    /// 0 does not, and left unset it applies only when on by default.
+    pub fn applies(self, setting: Option<u32>) -> bool {
+        match (self, setting) {
+            (Self::Required, _) | (Self::On, None) => true,
+            (_, Some(value)) => value > 0,
+            (Self::Off, None) => false,
+        }
+    }
 }
 
 /// A feature the shaping font defines.
@@ -264,6 +276,17 @@ fn name_string(font: &FontRef<'_>, name_id: NameId) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_feature_applies_as_text_sets_it_except_a_required_one() {
+        let applies = |default: FeatureDefault| {
+            [None, Some(0), Some(1)].map(|setting| default.applies(setting))
+        };
+
+        assert_eq!(applies(FeatureDefault::Required), [true, true, true]);
+        assert_eq!(applies(FeatureDefault::On), [true, false, true]);
+        assert_eq!(applies(FeatureDefault::Off), [false, false, true]);
+    }
 
     #[test]
     fn script_features_are_required_and_ligatures_are_on() {

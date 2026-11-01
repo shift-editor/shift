@@ -173,29 +173,58 @@ mod exports {
 
         /// Every substitution feature `tag` can make in the shaper font, with
         /// the shaper brought up to date first as for [`Self::layout_text`];
-        /// empty for an invalid tag, an unreadable `GSUB`, or no shaper.
+        /// empty for an invalid tag or no shaper, and `None` when the shaper
+        /// font's `GSUB` cannot be read.
         pub(crate) fn feature_substitutions<E: std::fmt::Display>(
             &self,
             font: &Font,
             source: impl FnOnce() -> Result<ShaperFontSource, E>,
             tag: &str,
-        ) -> Vec<FeatureSubstitution> {
+        ) -> Option<Vec<FeatureSubstitution>> {
             let Ok(tag) = shift_shape::Tag::new_checked(tag.as_bytes()) else {
-                return Vec::new();
+                return Some(Vec::new());
             };
             let state = self.current(font, source);
             let Ok(shaper) = state.shaper() else {
-                return Vec::new();
+                return Some(Vec::new());
+            };
+            let rules = shaper.feature_substitutions(tag).ok()?;
+            Some(
+                rules
+                    .into_iter()
+                    .map(|rule| FeatureSubstitution {
+                        input: rule.input,
+                        output: rule.output,
+                    })
+                    .collect(),
+            )
+        }
+
+        /// Whether shaping applies feature `tag` when text sets it to
+        /// `setting`, as `FeatureDefault::applies` decides for the shaper
+        /// font's feature, with the shaper brought up to date first as for
+        /// [`Self::layout_text`]; false for a tag the shaper font does not
+        /// define, an unreadable font, or no shaper.
+        pub(crate) fn feature_applies<E: std::fmt::Display>(
+            &self,
+            font: &Font,
+            source: impl FnOnce() -> Result<ShaperFontSource, E>,
+            tag: &str,
+            setting: Option<u32>,
+        ) -> bool {
+            let Ok(tag) = shift_shape::Tag::new_checked(tag.as_bytes()) else {
+                return false;
+            };
+            let state = self.current(font, source);
+            let Ok(shaper) = state.shaper() else {
+                return false;
             };
             shaper
-                .feature_substitutions(tag)
+                .features()
                 .unwrap_or_default()
-                .into_iter()
-                .map(|rule| FeatureSubstitution {
-                    input: rule.input,
-                    output: rule.output,
-                })
-                .collect()
+                .iter()
+                .find(|feature| feature.tag == tag)
+                .is_some_and(|feature| feature.default.applies(setting))
         }
 
         /// The shaper state, brought up to date with `font` when an edit may
@@ -448,12 +477,26 @@ mod exports {
 
             assert_eq!(
                 read("liga"),
-                [FeatureSubstitution {
+                Some(vec![FeatureSubstitution {
                     input: vec![id("f"), id("i")],
                     output: id("f_i"),
-                }]
+                }])
             );
-            assert!(read("li").is_empty());
+            assert_eq!(read("li"), Some(Vec::new()));
+        }
+
+        #[test]
+        fn a_feature_applies_as_the_text_sets_it_over_its_default() {
+            let font = font_with(&[("f", Some('f')), ("i", Some('i')), ("f_i", None)]);
+            let shaping = TextShaping::default();
+            let applies = |tag: &str, setting: Option<u32>| {
+                shaping.feature_applies(&font, || Ok::<_, Infallible>(source(&font)), tag, setting)
+            };
+
+            assert!(applies("liga", None));
+            assert!(!applies("liga", Some(0)));
+            // A tag the font does not define never applies.
+            assert!(!applies("ss01", Some(1)));
         }
 
         #[test]

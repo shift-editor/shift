@@ -2,7 +2,6 @@ import type { GlyphId, RunId } from "@shift/types";
 import type {
   CharacterGlyph,
   Direction,
-  FeatureSetting,
   LayoutRequest,
   LayoutUnit,
   PlacedText,
@@ -16,6 +15,7 @@ import type { Editor } from "../editor/Editor";
 import type { TextPlace, TextRunRecord } from "../../types/text";
 import { engineModuleCell, loadEngine } from "../wasm/engine";
 import { glyphIdForItem, TextLayout, type TextItem } from "./layout";
+import { featureSettings } from "./runSettings";
 
 /** What a run's text reads from the {@link Text} that owns it. */
 export interface RunTextOwner {
@@ -244,11 +244,6 @@ function layoutRequest(record: TextRunRecord): LayoutRequest {
       width: null,
     },
   };
-}
-
-/** A run's forced features as layout settings: `1` turns one on, `0` off. */
-function featureSettings(features: Readonly<Record<string, boolean>>): FeatureSetting[] {
-  return Object.entries(features).map(([tag, on]) => ({ tag, value: on ? 1 : 0 }));
 }
 
 function sameStrings(a: readonly string[], b: readonly string[]): boolean {
