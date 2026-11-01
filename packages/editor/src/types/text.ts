@@ -81,3 +81,11 @@ export type TextRunSettings = Pick<
   TextRunRecord,
   "shaping" | "features" | "language" | "script" | "lineHeight" | "align"
 >;
+
+/**
+ * A run record as the store may hold it: one saved before a setting
+ * existed lacks it. `Text` gives each missing setting its default when it
+ * reads the run, so every other reader sees a whole {@link TextRunRecord}.
+ */
+export type StoredTextRunRecord = Omit<TextRunRecord, keyof TextRunSettings> &
+  Partial<TextRunSettings>;

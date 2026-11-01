@@ -6,7 +6,7 @@ import type { ShiftStore } from "../store/ShiftStore";
 import type { StoreIndex } from "../store/StoreIndex";
 import type { ShiftEditorRecord } from "../../types/records";
 import type { TextRunNode } from "../../types/node";
-import type { TextRunRecord, TextRunSettings } from "../../types/text";
+import type { StoredTextRunRecord, TextRunRecord, TextRunSettings } from "../../types/text";
 import {
   characterTextItem,
   glyphTextItem,
@@ -21,6 +21,7 @@ import type {
   TextLayout as LaidOutText,
 } from "@shift/wasm/protocol";
 import { RunText } from "./RunText";
+import { DEFAULT_TEXT_RUN_SETTINGS, textRunWithDefaults } from "./runSettings";
 import { GlyphNameParser, type TextParseContext, type TextParser } from "./parsing";
 
 /** The smallest size a run node sets its text at: one scene unit to the em. */
@@ -35,7 +36,7 @@ export class Text {
   readonly #glyphsLoadedCell = signal(0);
   // non-reactive: dedupes in-flight glyph loads; only read by the imperative load path
   readonly #loading = new Map<GlyphId, Promise<void>>();
-  readonly #runsByItem: StoreIndex<TextItemId, TextRunRecord>;
+  readonly #runsByItem: StoreIndex<TextItemId, StoredTextRunRecord>;
   readonly #unsubscribeStore: () => void;
   readonly #parseContext: TextParseContext = {
     glyphNamed: (name) => {
@@ -156,12 +157,7 @@ export class Text {
       type: "textrun",
       scope: "document",
       items: [...items],
-      shaping: true,
-      features: {},
-      language: null,
-      script: null,
-      lineHeight: null,
-      align: null,
+      ...DEFAULT_TEXT_RUN_SETTINGS,
     };
     this.#store.put(record);
     return record;
@@ -176,7 +172,7 @@ export class Text {
   run(id: RunId | null): TextRunRecord | null {
     if (!id) return null;
     const record = this.#store.record(id);
-    return record?.type === "textrun" ? record : null;
+    return record?.type === "textrun" ? textRunWithDefaults(record) : null;
   }
 
   /**
@@ -196,7 +192,8 @@ export class Text {
    * Reactive: the reader reruns when the item is added to or removed from a run.
    */
   runForItem(id: TextItemId): TextRunRecord | null {
-    return this.#runsByItem.get(id)[0] ?? null;
+    const [stored] = this.#runsByItem.get(id);
+    return stored ? textRunWithDefaults(stored) : null;
   }
 
   /** Replaces a run's items; the run's definition removes a child whose item went (`onContentChange`). */
@@ -430,17 +427,13 @@ export class Text {
   }
 }
 
+/** Whether two feature lists list the same features, every field alike, in the same order. */
 function sameFeatures(a: readonly FontFeature[], b: readonly FontFeature[]): boolean {
-  return (
-    a.length === b.length &&
-    a.every((feature, index) => {
-      const other = b[index]!;
-      return (
-        feature.tag === other.tag &&
-        feature.name === other.name &&
-        feature.default === other.default &&
-        feature.group === other.group
-      );
-    })
-  );
+  return a.length === b.length && a.every((feature, index) => sameFields(feature, b[index]!));
+}
+
+/** Whether two records of flat fields hold the same value in every field, whatever fields they have. */
+function sameFields<T extends object>(a: T, b: T): boolean {
+  const keys = Object.keys(a) as (keyof T)[];
+  return keys.length === Object.keys(b).length && keys.every((key) => Object.is(a[key], b[key]));
 }
