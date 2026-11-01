@@ -476,6 +476,7 @@ jobs:
         with:
           shared-key: shift-rust
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
 
       - name: Run unit tests
         run: pnpm test:unit -- --reporter=default --reporter=json --outputFile.json=vitest-report.json
@@ -651,6 +652,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
           shared-key: shift-rust
 
       - name: Run clippy
@@ -707,6 +709,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
           shared-key: shift-rust
 
       - name: Restore node_modules
@@ -1145,6 +1148,32 @@ jobs:
   # ---------------------------------------------------------------------------
   # Gate: all required checks must pass
   # ---------------------------------------------------------------------------
+  # Pushes to main save the Rust caches; delete the ones they replaced, so
+  # main's caches stay under GitHub's 10 GB and the Nightly's, read once a
+  # day, are not evicted first.
+  prune-caches:
+    name: Prune superseded Rust caches
+    needs:
+      - unit-test
+      - rust-check
+      - integration
+      - e2e-build
+      - e2e-windows
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Delete superseded caches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/prune-superseded-caches.sh
+
   ci-passed:
     name: CI Passed
     if: always()
