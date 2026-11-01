@@ -71,10 +71,14 @@ jobs:
             platform: darwin
             arch: arm64
             builder-args: "--mac zip dmg --arm64"
+          # Cross-compiled on Apple silicon, as the Nightly does: it builds
+          # the bridge in about half the Intel runner's time. The smoke test
+          # runs it under Rosetta.
           - name: macOS x64
-            runner: macos-26-intel
+            runner: macos-26
             platform: darwin
             arch: x64
+            rust-target: x86_64-apple-darwin
             builder-args: "--mac zip dmg --x64"
           - name: Windows arm64
             runner: windows-11-arm
@@ -99,6 +103,11 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
+    env:
+      # The triple a cross build targets; empty builds for the runner. Read by
+      # the bridge's build script, the command-line tool step and
+      # electron-builder.config.ts, which finds shift-cli under it.
+      SHIFT_RUST_TARGET: ${{ matrix.rust-target }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -114,7 +123,19 @@ jobs:
           node-version: 24
 
       - name: Install Rust toolchain
-        run: rustup show
+        shell: bash
+        run: |
+          rustup show
+          if [[ -n "$SHIFT_RUST_TARGET" ]]; then rustup target add "$SHIFT_RUST_TARGET"; fi
+
+      # Restores the Nightly's cache for the same platform, which main saves
+      # every night with the same release profile. Never saved here: a release
+      # runs rarely, from a tag, and its cache would only evict main's.
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: nightly-${{ matrix.platform }}-${{ matrix.arch }}
+          save-if: false
 
       - name: Install Linux maker tools
         if: matrix.platform == 'linux'
@@ -152,16 +173,20 @@ jobs:
 
       - name: Build command-line tool
         if: matrix.platform != 'linux'
-        run: pnpm build:cli
+        shell: bash
+        run: pnpm build:cli ${SHIFT_RUST_TARGET:+--target "$SHIFT_RUST_TARGET"}
 
       - name: Build Linux native binaries against glibc 2.17
         if: matrix.platform == 'linux'
         run: scripts/build-linux-portable.sh
 
       # The app bundles the native workspace's generated clients, which are
-      # not committed.
+      # not committed. The bridge build above wrote index.d.ts and
+      # protocol.ts from its own compile (crates/shift-bridge/scripts/build.mjs),
+      # so this only turns them into @shift/types' files instead of checking
+      # the bridge a second time.
       - name: Generate bridge types
-        run: pnpm generate:bridge-types
+        run: pnpm --filter @shift/types generate:bridge-types
 
       - name: Build desktop application
         env:
@@ -208,6 +233,34 @@ jobs:
           esac
           test -d "$PACKAGE_PATH"
           echo "path=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
+
+      # Fails a build whose app, addon or shift-cli is not for the matrix
+      # architecture, such as a cross build that packaged a host binary.
+      - name: Verify macOS architectures
+        if: matrix.platform == 'darwin'
+        shell: bash
+        env:
+          APP_PATH: ${{ steps.package.outputs.app }}
+          EXPECTED: ${{ matrix.arch == 'x64' && 'x86_64' || 'arm64' }}
+        run: |
+          set -euo pipefail
+          BINARIES=(
+            "$APP_PATH/Contents/MacOS/Shift"
+            "$APP_PATH/Contents/Resources/bin/shift-cli"
+          )
+          while IFS= read -r -d '' addon; do BINARIES+=("$addon"); done \
+            < <(find "$APP_PATH/Contents/Resources/app.asar.unpacked" -name '*.node' -print0)
+          [[ "${#BINARIES[@]}" -ge 3 ]] || { echo "No native addon in the app" >&2; exit 1; }
+          for binary in "${BINARIES[@]}"; do
+            ARCHS="$(lipo -archs "$binary")"
+            echo "$binary: $ARCHS"
+            [[ "$ARCHS" == "$EXPECTED" ]] || { echo "Expected $EXPECTED" >&2; exit 1; }
+          done
+
+      # The arm64 runner runs the cross-compiled x64 app under Rosetta.
+      - name: Install Rosetta
+        if: matrix.platform == 'darwin' && matrix.arch == 'x64'
+        run: sudo softwareupdate --install-rosetta --agree-to-license
 
       - name: Smoke-test packaged application
         run: node scripts/smoke-packaged.mjs "${{ steps.package.outputs.path }}"
