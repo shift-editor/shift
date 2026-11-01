@@ -68,19 +68,49 @@ function buildTask(projects) {
 /**
  * Runs each project as its own Playwright run, so a project's worker limit holds for the
  * whole run: in one run, platform's single worker would share the screen with visual's
- * parallel apps. A filter that matches none of one project's specs is not a failure when
- * several projects run. Later projects still run after a failure; the first failing code wins.
+ * parallel apps. With several projects, a project the filter matches no test of is skipped,
+ * and a filter that matches no test in any of them fails. Later projects still run after a
+ * failure; the first failing code wins.
  */
 async function runProjects(projects, playwrightArguments) {
-  const projectArguments =
-    projects.length > 1 ? ["--pass-with-no-tests", ...playwrightArguments] : playwrightArguments;
+  const matched =
+    projects.length > 1 ? await projectsWithTests(projects, playwrightArguments) : projects;
+  if (matched.length === 0) {
+    console.error(`run-e2e: no test in ${projects.join(", ")} matches the filter`);
+    return 1;
+  }
+
   let exitCode = 0;
-  for (const project of projects) {
-    const projectExitCode = await runPlaywright([project], projectArguments);
+  for (const project of matched) {
+    const projectExitCode = await runPlaywright([project], playwrightArguments);
     if (exitCode === 0) exitCode = projectExitCode;
   }
 
   return exitCode;
+}
+
+/** The projects that hold at least one test `playwrightArguments` selects, listed without running. */
+async function projectsWithTests(projects, playwrightArguments) {
+  const matched = [];
+  for (const project of projects) {
+    const listing = await captureProcess(
+      process.execPath,
+      [
+        playwrightCli,
+        "test",
+        "--list",
+        "--pass-with-no-tests",
+        `--project=${project}`,
+        ...playwrightArguments,
+      ],
+      desktopRoot,
+    );
+    if (listing.code !== 0) throw new Error(`listing ${project} tests failed:\n${listing.output}`);
+
+    if (/^Total: [1-9]/m.test(listing.output)) matched.push(project);
+  }
+
+  return matched;
 }
 
 async function runPlaywright(projects, playwrightArguments) {
@@ -139,6 +169,20 @@ function runProcess(command, arguments_, cwd) {
       removeSignalHandlers();
       resolve(code ?? signalExitCode(signal));
     });
+  });
+}
+
+/** Runs a short command with its output collected instead of shown. */
+function captureProcess(command, arguments_, cwd) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, arguments_, { cwd, env: process.env });
+    let output = "";
+    child.stdout.on("data", (chunk) => (output += chunk));
+    child.stderr.on("data", (chunk) => (output += chunk));
+    child.once("error", (error) =>
+      reject(new Error(`Unable to start ${command}: ${error.message}`)),
+    );
+    child.once("exit", (code, signal) => resolve({ code: code ?? signalExitCode(signal), output }));
   });
 }
 
