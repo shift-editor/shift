@@ -17,6 +17,7 @@ export const engineModuleCell: Signal<EngineModule | null> = loadedCell;
 
 async function importEngine(): Promise<EngineModule> {
   const module = await import("./engineModule");
+  await module.initEngine();
   loadedCell.set(module);
   return module;
 }

@@ -38,7 +38,7 @@
     "test:playwright": "pnpm test:e2e",
     "test:watch": "turbo run test:watch",
     "test:native": "turbo run test --filter=shift-bridge",
-    "typecheck": "turbo run types generate:bridge-types && turbo run typecheck",
+    "typecheck": "turbo run types generate:bridge-types && turbo run typecheck && tsgo --noEmit -p tsconfig.scripts.json",
     "lint": "turbo run lint",
     "lint:check": "turbo run lint:check",
     "lint:tailwind": "pnpm --filter @shift/desktop lint:tailwind",

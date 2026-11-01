@@ -12,10 +12,33 @@ export function TextInput() {
   const tool = useToolIf("text");
   const editing = useSignalState(editor.textEditing.stateCell);
 
-  const textareaRef = useCallback((node: HTMLTextAreaElement | null) => {
-    ref.current = node;
-    node?.focus();
-  }, []);
+  const textareaRef = useCallback(
+    (node: HTMLTextAreaElement) => {
+      ref.current = node;
+      node.focus();
+
+      // Typing goes to the text until another control, such as a sidebar field or
+      // popover, takes focus; it comes back when focus falls to the page again.
+      let pending: ReturnType<typeof setTimeout> | undefined;
+      const reclaimFocus = () => {
+        clearTimeout(pending);
+        pending = setTimeout(() => {
+          const focused = document.activeElement;
+          const focusIsFree = focused === null || focused === document.body;
+          if (focusIsFree && editor.toolIf("text")?.state.type === "editing") node.focus();
+        }, 0);
+      };
+      document.addEventListener("focusout", reclaimFocus);
+      document.addEventListener("pointerdown", reclaimFocus);
+      return () => {
+        clearTimeout(pending);
+        document.removeEventListener("focusout", reclaimFocus);
+        document.removeEventListener("pointerdown", reclaimFocus);
+        ref.current = null;
+      };
+    },
+    [editor],
+  );
 
   if (tool?.state.type !== "editing" || !editing) return null;
 
@@ -114,11 +137,6 @@ export function TextInput() {
         flushInput();
       }}
       onKeyDown={handleKeyDown}
-      onBlur={() => {
-        setTimeout(() => {
-          if (editor.toolIf("text")?.state.type === "editing") ref.current?.focus();
-        }, 0);
-      }}
       aria-label="Text input"
       autoComplete="off"
       style={{

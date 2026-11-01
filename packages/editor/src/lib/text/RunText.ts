@@ -1,10 +1,10 @@
 import type { GlyphId, RunId } from "@shift/types";
 import type {
   CharacterGlyph,
-  LayoutRequest,
-  LayoutUnit,
+  Direction,
   PlacedText,
   TextLayout as LaidOutText,
+  TextRun,
   TypedFont,
   TypedGlyph,
 } from "@shift/wasm/protocol";
@@ -13,6 +13,7 @@ import type { ComputedSignal, Effect, Signal, WritableSignal } from "../signals"
 import type { Editor } from "../editor/Editor";
 import type { RunLaidOut, TextLayoutFailure, TextPlace, TextRunRecord } from "../../types/text";
 import { engineModuleCell, loadEngine } from "../wasm/engine";
+import { runSettingsOf } from "../editor/sceneNodes";
 import { glyphIdForItem, TextLayout, type TextItem } from "./layout";
 
 /** What a run's text reads from the {@link Text} that owns it. */
@@ -48,6 +49,8 @@ export class RunText {
   readonly #failureCell: ComputedSignal<TextLayoutFailure | null>;
   readonly #reports: Effect;
   readonly #layoutCell: ComputedSignal<TextLayout | null>;
+  readonly #scriptsCell: ComputedSignal<readonly string[]>;
+  readonly #directionCell: ComputedSignal<Direction>;
   // non-reactive: glyphs already asked of the engine, read only by the reporting effect
   readonly #preloaded = new Set<GlyphId>();
 
@@ -63,11 +66,11 @@ export class RunText {
         track(editor.font.glyphEntriesCell);
         // A glyph the text shows finished loading into the engine.
         track(owner.glyphsLoadedCell);
-        const request = layoutRequest(record);
+        const run = textRun(record);
         try {
           const placed =
-            editor.font.layoutText(request, location, sourceId) ??
-            this.#laidOutAsTyped(record.items, request, { location, sourceId });
+            editor.font.layoutText(run, location, sourceId) ??
+            this.#laidOutAsTyped(run, { location, sourceId });
           return placed && { kind: "placed", placed };
         } catch (error) {
           return { kind: "failed", failure: { stage: "layout", error } };
@@ -127,6 +130,15 @@ export class RunText {
       },
       { name: "text.layoutFailure" },
     );
+
+    this.#scriptsCell = computed(() => this.#layoutCell.value?.scripts ?? [], {
+      name: "text.scripts",
+      equals: sameStrings,
+    });
+
+    this.#directionCell = computed(() => this.#layoutCell.value?.lineDirection(0) ?? "ltr", {
+      name: "text.direction",
+    });
   }
 
   /**
@@ -135,6 +147,16 @@ export class RunText {
    */
   get failureCell(): Signal<TextLayoutFailure | null> {
     return this.#failureCell;
+  }
+
+  /** The ISO 15924 scripts the run's text is laid out in, in order of first use. */
+  get scriptsCell(): ComputedSignal<readonly string[]> {
+    return this.#scriptsCell;
+  }
+
+  /** The direction the run's first paragraph reads in, as layout resolved it. */
+  get directionCell(): ComputedSignal<Direction> {
+    return this.#directionCell;
   }
 
   /** The run's layout; invalidates on content, location, source, glyph loads, and edits layout reads. */
@@ -168,16 +190,12 @@ export class RunText {
    * The text laid out as typed by shift-layout, for a window without an engine:
    * null until the engine module, which holds the layout, has loaded.
    */
-  #laidOutAsTyped(
-    items: readonly TextItem[],
-    request: LayoutRequest,
-    place: TextPlace,
-  ): PlacedText | null {
+  #laidOutAsTyped(run: TextRun, place: TextPlace): PlacedText | null {
     // Called from the layout computed, which lays out again once the module loads.
     track(engineModuleCell);
     const engine = engineModuleCell.peek();
     if (!engine) return null;
-    const layout = engine.typedText.layoutTyped(request, this.#typedFont(items, place));
+    const layout = engine.typedText.layoutTyped(run, this.#typedFont(run.items, place));
     return { layout, unloaded: [] };
   }
 
@@ -236,37 +254,21 @@ export class RunText {
 
   dispose(): void {
     this.#reports.dispose();
+    this.#directionCell.dispose();
+    this.#scriptsCell.dispose();
     this.#failureCell.dispose();
     this.#layoutCell.dispose();
     this.#laidOutCell.dispose();
   }
 }
 
-/** The layout request for a run, shaped with the font's default features unless shaping is off. */
-function layoutRequest(record: TextRunRecord): LayoutRequest {
-  return {
-    units: record.items.map(layoutUnit),
-    options: {
-      language: null,
-      script: null,
-      features: [],
-      shaping: record.shaping,
-      align: null,
-      lineHeight: { kind: "auto" },
-      width: null,
-    },
-  };
+/** A run as the scene stores it, which Rust lays out with the options its settings give. */
+function textRun(record: TextRunRecord): TextRun {
+  return { items: record.items, settings: runSettingsOf(record) };
 }
 
-function layoutUnit(item: TextItem): LayoutUnit {
-  switch (item.kind) {
-    case "character":
-      return { kind: "character", codepoint: item.codepoint };
-    case "glyph":
-      return { kind: "glyph", glyphId: item.glyphId };
-    case "linebreak":
-      return { kind: "lineBreak" };
-  }
+function sameStrings(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 /**

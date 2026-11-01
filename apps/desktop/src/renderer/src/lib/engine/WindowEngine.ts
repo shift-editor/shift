@@ -25,9 +25,11 @@ import {
 } from "@shift/editor/model";
 import {
   FontChangeFlagSchema,
+  type FeatureSubstitution,
   type FontChangeFlag,
+  type FontFeature,
   type GlyphIdentityChange,
-  type LayoutRequest,
+  type TextRun,
   type PlacedText,
   type RevisedNode,
   type SceneIntent,
@@ -109,6 +111,22 @@ export class WindowEngine implements FontEngine {
   layoutInputs(): readonly FontChangeFlag[] {
     // Before a session opens, any flag: opening changes them all.
     return this.#opened?.session.layoutInputs() ?? CHANGE_FLAGS;
+  }
+
+  shaperInputs(): readonly FontChangeFlag[] {
+    return this.#opened?.session.shaperInputs() ?? CHANGE_FLAGS;
+  }
+
+  fontFeatures(): readonly FontFeature[] | null {
+    return this.#opened?.session.fontFeatures() ?? null;
+  }
+
+  featureSubstitutions(tag: string): readonly FeatureSubstitution[] | null {
+    return this.#opened?.session.featureSubstitutions(tag) ?? null;
+  }
+
+  featureApplies(tag: string, on: boolean | null): boolean {
+    return this.#opened?.session.featureApplies(tag, on) ?? false;
   }
 
   get variationCell(): Signal<EngineVariation | null> {
@@ -406,8 +424,8 @@ export class WindowEngine implements FontEngine {
     return this.#require().nextGlyphName(name);
   }
 
-  layoutText(text: LayoutRequest, place: KerningPlace): PlacedText | null {
-    return this.#opened?.session.layoutText(text, place) ?? null;
+  layoutText(run: TextRun, place: KerningPlace): PlacedText | null {
+    return this.#opened?.session.layoutText(run, place) ?? null;
   }
 
   /**

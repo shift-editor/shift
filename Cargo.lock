@@ -2514,6 +2514,7 @@ dependencies = [
  "rmp-serde",
  "serde",
  "shift-font",
+ "shift-layout",
  "thiserror",
 ]
 
@@ -2545,6 +2546,7 @@ name = "shift-layout"
 version = "0.1.0"
 dependencies = [
  "pack",
+ "serde",
  "shift-backends",
  "shift-font",
  "shift-shape",
@@ -2581,6 +2583,7 @@ name = "shift-shape"
 version = "0.1.0"
 dependencies = [
  "harfrust",
+ "pack",
  "read-fonts 0.43.3",
  "thiserror",
  "unicode-bidi",
@@ -2623,6 +2626,7 @@ dependencies = [
  "shift-proof",
  "skrifa",
  "unicode-script",
+ "write-fonts",
 ]
 
 [[package]]

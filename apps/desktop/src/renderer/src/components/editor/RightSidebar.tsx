@@ -6,10 +6,12 @@ import { useRef } from "react";
 import { Button } from "@shift/ui";
 import { BooleanOps } from "./BooleanOps";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
+import { FeaturesSection } from "./sidebar-right/FeaturesSection";
 import { GlyphKerningSection } from "./sidebar-right/GlyphKerningSection";
 import { HandleSection } from "./sidebar-right/HandleSection";
 import { KerningPairSection } from "./sidebar-right/KerningPairSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
+import { SidebarGroup } from "./sidebar-right/SidebarGroup";
 import { TextSection } from "./sidebar-right/TextSection";
 import { TransformSection } from "./sidebar-right/TransformSection";
 import { ZoomMenu } from "./sidebar-right/ZoomMenu";
@@ -57,13 +59,16 @@ export const RightSidebar = () => {
           <KerningPairSection />
         ) : (
           <TransformOriginProvider>
-            {/* Kerning | Text | Handle | Transform, each a group with a divider between. */}
+            {/* Kerning | Text | Features | Handle | Transform, each a group with a divider between. */}
             <div ref={selectionBlockRef} className="flex flex-col">
               <SidebarGroup>
                 <GlyphKerningSection anchorRef={selectionBlockRef} />
               </SidebarGroup>
               <SidebarGroup>
                 <TextSection />
+              </SidebarGroup>
+              <SidebarGroup>
+                <FeaturesSection />
               </SidebarGroup>
               {hasTransformSelection ? (
                 <SidebarGroup>
@@ -93,16 +98,3 @@ export const RightSidebar = () => {
     />
   );
 };
-
-/**
- * One group of the selection's sections. An empty group, whose section has
- * nothing to show, is hidden, and a group is divided from a shown one before it.
- */
-const SidebarGroup = ({ children }: { readonly children: React.ReactNode }) => (
-  <div
-    data-sidebar-group=""
-    className="flex flex-col gap-4 px-3 py-3 empty:hidden [[data-sidebar-group]:not(:empty)~&]:border-t [[data-sidebar-group]:not(:empty)~&]:border-line-subtle"
-  >
-    {children}
-  </div>
-);

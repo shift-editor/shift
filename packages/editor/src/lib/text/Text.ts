@@ -12,11 +12,16 @@ import type { Point2D } from "@shift/geo";
 import type { Editor } from "../editor/Editor";
 import type { PageNode, TextRunNode } from "../../types/node";
 import type {
+  FeatureHighlight,
+  FeatureListing,
   ParsedText,
   RunContent,
   RunPlacement,
+  SubstitutionListing,
+  TextHighlight,
   TextLayoutFailure,
   TextRunRecord,
+  TextRunSettings,
 } from "../../types/text";
 import {
   characterTextItem,
@@ -27,9 +32,21 @@ import {
   type TextItem,
   type TextLayout,
 } from "./layout";
-import type { TextLayout as LaidOutText, ProofTextItem } from "@shift/wasm/protocol";
+import type {
+  FontFeature,
+  Direction,
+  TextAlign,
+  ProofTextItem,
+  TextLayout as LaidOutText,
+} from "@shift/wasm/protocol";
 import { proofTexts } from "@shift/wasm";
 import { RunText } from "./RunText";
+import { runSettingsOf } from "../editor/sceneNodes";
+
+/** The smallest size a run node sets its text at: one scene unit to the em. */
+const MIN_TEXT_SIZE = 1;
+/** The smallest distance between baselines, in ems. */
+const MIN_LINE_HEIGHT = 0.1;
 
 /**
  * Owns proof text: each run's items, kept in the scene's text run nodes, and
@@ -72,14 +89,43 @@ export class Text {
    */
   readonly currentRunCell: Signal<TextRunRecord | null> = computed(
     () => {
+      const node = this.currentRunNodeCell.value;
+      return node ? this.run(node.runId) : null;
+    },
+    { name: "text.currentRun" },
+  );
+
+  /** The node that places {@link currentRunCell}'s run, whose size the Text section sets. */
+  readonly currentRunNodeCell: Signal<TextRunNode | null> = computed(
+    () => {
       const editing = this.#editor.textEditing.stateCell.value;
       const scene = this.#editor.scene;
       // Scene lookups read without subscribing; rerun when its nodes change.
       track(scene.cell);
-      const node = scene.nodeOfKind(editing?.nodeId ?? null, "textRun") ?? scene.only("textRun");
-      return node ? this.run(node.runId) : null;
+      return scene.nodeOfKind(editing?.nodeId ?? null, "textRun") ?? scene.only("textRun");
     },
-    { name: "text.currentRun" },
+    { name: "text.currentRunNode" },
+  );
+
+  /**
+   * The features the font's compiled feature code defines, in tag order,
+   * with their names, defaults and groups, as Rust lists them.
+   *
+   * @remarks
+   * Follows the shaper font: editing what it compiles from lists the new
+   * features once it recompiles. Empty in a preview, which has no engine;
+   * `failed`, with why, when the font has no shaper font or it cannot be
+   * read, so a list that could not be read is never shown as empty.
+   */
+  readonly featuresCell: Signal<FeatureListing> = computed(
+    (): FeatureListing => {
+      try {
+        return { kind: "listed", features: this.#editor.font.fontFeatures() };
+      } catch (error) {
+        return { kind: "failed", error };
+      }
+    },
+    { name: "text.features", equals: sameListing },
   );
 
   /**
@@ -96,6 +142,58 @@ export class Text {
       return null;
     },
     { name: "text.layoutFailure" },
+  );
+
+  readonly #substitutions = keyedCache({
+    name: "text.featureSubstitutions",
+    key: (tag: string) => tag,
+    dispose: (substitutionsCell: ComputedSignal<SubstitutionListing>) =>
+      substitutionsCell.dispose(),
+    create: (tagCell: Signal<string>) =>
+      computed(
+        (): SubstitutionListing => {
+          try {
+            const substitutions = this.#editor.font.featureSubstitutions(tagCell.value);
+            return { kind: "listed", substitutions };
+          } catch (error) {
+            return { kind: "failed", error };
+          }
+        },
+        { name: "text.featureSubstitutions" },
+      ),
+  });
+
+  readonly #featureHighlightCell = signal<FeatureHighlight | null>(null, {
+    name: "text.featureHighlight",
+  });
+
+  /**
+   * The glyphs a highlighted feature changes in its run: what it puts in the
+   * text while it applies there, what it would replace while it does not.
+   *
+   * @remarks
+   * Null while no feature is highlighted, and while its substitutions or
+   * whether it applies cannot be read: the Features section and the preview
+   * say why. Follows the run's setting, the font's default and the shaper
+   * font, so turning the feature on or off while it is highlighted moves the
+   * highlight.
+   */
+  readonly highlightCell: Signal<TextHighlight | null> = computed(
+    () => {
+      const highlight = this.#featureHighlightCell.value;
+      const run = highlight ? this.run(highlight.runId) : null;
+      if (!highlight || !run) return null;
+
+      const listing = this.featureSubstitutionsCell(highlight.tag).value;
+      if (listing.kind === "failed") return null;
+      const applies = this.#featureApplies(highlight.tag, run.features[highlight.tag] ?? null);
+      if (applies === null) return null;
+      const glyphs = new Set(
+        listing.substitutions.flatMap(({ input, output }) => (applies ? [output] : input)),
+      );
+      return { runId: run.id, glyphs };
+    },
+    { name: "text.highlight" },
   );
 
   constructor(editor: Editor) {
@@ -203,8 +301,101 @@ export class Text {
    * Writes the run record, so call it inside a history capture.
    */
   setShaping(id: RunId, shaping: boolean): void {
+    this.#setSetting(id, "shaping", shaping);
+  }
+
+  /**
+   * Turns a feature on or off for a run, or back to the font's default.
+   *
+   * @param on - `true` or `false` to force the feature; `null` for the default.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setFeature(id: RunId, tag: string, on: boolean | null): void {
     const run = this.run(id);
-    if (run && run.shaping !== shaping) this.#editor.scene.setRunSettings(id, { shaping });
+    if (!run || (run.features[tag] ?? null) === on) return;
+
+    const { [tag]: _previous, ...rest } = run.features;
+    this.#setSetting(id, "features", on === null ? rest : { ...rest, [tag]: on });
+  }
+
+  /**
+   * Returns every feature of a run to the font's default.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  resetFeatures(id: RunId): void {
+    const run = this.run(id);
+    if (run && Object.keys(run.features).length > 0) this.#setSetting(id, "features", {});
+  }
+
+  /**
+   * Sets the BCP 47 language a run is shaped as, or null for the font's default.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setLanguage(id: RunId, language: string | null): void {
+    this.#setSetting(id, "language", language);
+  }
+
+  /**
+   * Sets the ISO 15924 script a whole run is shaped in, or null for each
+   * stretch's own.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setScript(id: RunId, script: string | null): void {
+    this.#setSetting(id, "script", script);
+  }
+
+  /**
+   * Sets the distance between a run's baselines in ems, at least a tenth of
+   * an em, or null for the font's line spacing.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setLineHeight(id: RunId, lineHeight: number | null): void {
+    this.#setSetting(
+      id,
+      "lineHeight",
+      lineHeight === null ? null : Math.max(MIN_LINE_HEIGHT, lineHeight),
+    );
+  }
+
+  /**
+   * Sets the size a run node sets its text at: the scene units one em spans.
+   *
+   * @param size - At least one scene unit.
+   *
+   * @remarks
+   * Writes the scene node, so call it inside a history capture.
+   */
+  setSize(nodeId: NodeId, size: number): void {
+    const node = this.#editor.scene.nodeOfKind(nodeId, "textRun");
+    const clamped = Math.max(MIN_TEXT_SIZE, size);
+    if (node && node.size !== clamped) this.#editor.scene.updateNode({ id: nodeId, size: clamped });
+  }
+
+  /**
+   * Sets how a run's lines line up, or null to follow each line's direction.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setAlign(id: RunId, align: TextAlign | null): void {
+    this.#setSetting(id, "align", align);
+  }
+
+  #setSetting<K extends keyof TextRunSettings>(id: RunId, key: K, value: TextRunSettings[K]): void {
+    const run = this.run(id);
+    if (run && run[key] !== value) {
+      this.#editor.scene.setRunSettings(id, runSettingsOf({ ...run, [key]: value }));
+    }
   }
 
   /**
@@ -219,6 +410,51 @@ export class Text {
 
     this.setItems(id, [...current.slice(0, index + 1), ...items, ...current.slice(index + 1)]);
     return true;
+  }
+
+  /**
+   * Every substitution a feature can make, ordered by output glyph: the
+   * glyphs each rule replaces and the glyph it puts in their place, as Rust
+   * reads them from the shaper font's `GSUB`.
+   *
+   * @remarks
+   * Follows edits to what the shaper font compiles from. Empty for a
+   * positioning feature, a tag the font does not define, and in a preview;
+   * `failed`, with why, when they cannot be read.
+   */
+  featureSubstitutionsCell(tag: string): ComputedSignal<SubstitutionListing> {
+    return this.#substitutions.get(tag);
+  }
+
+  /**
+   * Whether shaping applies a feature a run turns on or off (`on`, null
+   * when it leaves it), as Rust decides; null when that cannot be read,
+   * which the feature listing reports ({@link featuresCell}).
+   */
+  #featureApplies(tag: string, on: boolean | null): boolean | null {
+    try {
+      return this.#editor.font.featureApplies(tag, on);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Highlights what a feature changes in one run's text, as
+   * {@link highlightCell} describes, or clears the highlight with null.
+   */
+  setFeatureHighlight(highlight: FeatureHighlight | null): void {
+    this.#featureHighlightCell.set(highlight);
+  }
+
+  /** The ISO 15924 scripts a run's text is laid out in, as layout itemized it, in order of first use. */
+  scriptsCell(id: RunId): Signal<readonly string[]> {
+    return this.#runs.get(id).scriptsCell;
+  }
+
+  /** The direction a run's first paragraph reads in, as layout resolved it; left to right for no text. */
+  directionCell(id: RunId): Signal<Direction> {
+    return this.#runs.get(id).directionCell;
   }
 
   /**
@@ -401,6 +637,7 @@ export class Text {
     this.#acquiring.dispose();
     this.#runsByItem.dispose();
     this.#runs.clear();
+    this.#substitutions.clear();
   }
 
   #acquireGlyphs(items: readonly TextItem[]): void {
@@ -447,4 +684,21 @@ export class Text {
       this.#loading.delete(id);
     }
   }
+}
+
+/** Whether two listings list the same features, or are the same failure. */
+function sameListing(a: FeatureListing, b: FeatureListing): boolean {
+  if (a.kind === "listed" && b.kind === "listed") return sameFeatures(a.features, b.features);
+  return a === b;
+}
+
+/** Whether two feature lists list the same features, every field alike, in the same order. */
+function sameFeatures(a: readonly FontFeature[], b: readonly FontFeature[]): boolean {
+  return a.length === b.length && a.every((feature, index) => sameFields(feature, b[index]!));
+}
+
+/** Whether two records of flat fields hold the same value in every field, whatever fields they have. */
+function sameFields<T extends object>(a: T, b: T): boolean {
+  const keys = Object.keys(a) as (keyof T)[];
+  return keys.length === Object.keys(b).length && keys.every((key) => Object.is(a[key], b[key]));
 }

@@ -1,5 +1,5 @@
 import type { GlyphId } from "@shift/types";
-import type { LayoutRequest, PlacedText } from "@shift/wasm/protocol";
+import type { FontFeature, PlacedText, TextRun } from "@shift/wasm/protocol";
 import type { KerningPlace } from "@shift/editor/types";
 import { WindowEngine } from "@/lib/engine/WindowEngine";
 
@@ -11,6 +11,18 @@ import { WindowEngine } from "@/lib/engine/WindowEngine";
 export class FailingWindowEngine extends WindowEngine {
   #layoutFailure: Error | null = null;
   #preloadFailure: Error | null = null;
+  #featureListFailure: Error | null = null;
+
+  /**
+   * Makes every feature list read fail as the engine does when the font has
+   * no shaper font: with a `FeatureListError` saying why.
+   */
+  failFeatureLists(reason: string): void {
+    this.#featureListFailure = Object.assign(new Error("FeatureListError.noShaper"), {
+      type: "FeatureListError",
+      error: { kind: "noShaper", reason },
+    });
+  }
 
   /** Makes the next layout read throw `error`. */
   failNextLayout(error: Error): void {
@@ -22,11 +34,16 @@ export class FailingWindowEngine extends WindowEngine {
     this.#preloadFailure = error;
   }
 
-  override layoutText(text: LayoutRequest, place: KerningPlace): PlacedText | null {
+  override layoutText(run: TextRun, place: KerningPlace): PlacedText | null {
     const failure = this.#layoutFailure;
     this.#layoutFailure = null;
     if (failure) throw failure;
-    return super.layoutText(text, place);
+    return super.layoutText(run, place);
+  }
+
+  override fontFeatures(): readonly FontFeature[] | null {
+    if (this.#featureListFailure) throw this.#featureListFailure;
+    return super.fontFeatures();
   }
 
   override preload(glyphIds: readonly GlyphId[]): void {

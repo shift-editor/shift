@@ -568,6 +568,7 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--editor-text-cursor-color": palette.base0D,
     "--editor-text-selection-fill": withAlpha(palette.base0D, 0.22),
     "--editor-text-hover-outline": palette.base0D,
+    "--editor-text-feature-highlight-fill": palette.base0D,
     // Spacing keeps one pink identity and amber for negatives; the faint half needs more
     // weight on light backgrounds to stay visible.
     "--editor-spacing": dark ? "#F472B6" : "#DB2E91",

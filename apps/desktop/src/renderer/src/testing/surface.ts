@@ -70,6 +70,14 @@ import type {
 export type { DrawOptions } from "./fixtures";
 export type { AxisFixture, AxisLocation } from "./fonts";
 
+/** A feature the font defines, as the Features section lists it. */
+export interface TextFeature {
+  readonly tag: string;
+  readonly name: string | null;
+  readonly default: "required" | "on" | "off";
+  readonly group: string;
+}
+
 /** Keyboard modifiers held during a gesture. */
 export interface Modifiers {
   readonly shiftKey?: boolean;
@@ -312,12 +320,36 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   zoomToSelection(): void;
   /** Frames the open glyph's metrics box, as opening a glyph does. */
   frameGlyph(): void;
-  /** Sets the size, in glyph units per em, of the text the open glyph is edited in. */
+  /** The ISO 15924 scripts the canvas text was laid out in, in order of first use. */
+  textScripts(): readonly string[];
+  /** The canvas text's size, in scene units per em. */
+  textSize(): number;
+  /** Sets the size, in glyph units per em, of the text the open glyph is edited in, as the Text section's size field does. */
   setTextSize(size: number): void;
   /** Moves the text the open glyph is edited in to a canvas position. */
   moveText(to: Point2D): void;
   /** Turns shaping on or off for the canvas text, as the Text section's Shaping switch does. */
   setTextShaping(shaping: boolean): void;
+  /** Turns a feature on or off for the canvas text, or back to the font's default with null. */
+  setTextFeature(tag: string, on: boolean | null): void;
+  /** Sets the BCP 47 language the canvas text is shaped as, as the Text section's Language picker does. */
+  setTextLanguage(language: string | null): void;
+  /** Sets the ISO 15924 script the canvas text is shaped in, as the Text section's Script picker does. */
+  setTextScript(script: string | null): void;
+  /** Sets the canvas text's line height in ems, or null for the font's, as the Line height field does. */
+  setTextLineHeight(lineHeight: number | null): void;
+  /** Lines the canvas text up left, centre or right, as the Alignment buttons do. */
+  setTextAlign(align: "left" | "center" | "right"): void;
+  /** The features the font defines, as the Features section lists them: tag, name, default and group. */
+  textFeatures(): readonly TextFeature[];
+  /** Each substitution a feature can make, as glyph names, as the feature preview lists them. */
+  featureSubstitutions(
+    tag: string,
+  ): readonly { readonly input: readonly string[]; readonly output: string }[];
+  /** Highlights what a feature changes in the canvas text, as hovering its tag does; null ends it. */
+  highlightFeature(tag: string | null): void;
+  /** The names of the glyphs the canvas text draws highlighted, in no particular order. */
+  highlightedGlyphs(): readonly string[];
 
   /** Types `text` at the caret in Text mode, as the keyboard does; `"\n"` is Enter. */
   typeText(text: string): void;
@@ -633,6 +665,15 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   failNextTextLayout(message: string): void;
   /** Makes the window's engine fail its next glyph preload with `message`. Test-only. */
   failNextGlyphPreload(message: string): void;
+  /**
+   * Makes the window's engine fail to list the font's features as it does
+   * for a font with no shaper font, for `reason`. Test-only.
+   */
+  failFeatureLists(reason: string): void;
+  /** What the Features section says when the font's features cannot be listed; null when they can. */
+  featureListFailure(): string | null;
+  /** What a feature's preview says when its substitutions cannot be read; null when they can. */
+  featureSubstitutionsFailure(tag: string): string | null;
   /**
    * Saves the document, as File › Save does. A document never saved yet is
    * saved to a temporary file, as if Save As chose one; {@link close} removes it.

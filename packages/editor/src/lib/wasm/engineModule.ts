@@ -50,15 +50,17 @@ import type {
   GlyphIdentityChange,
   InterpolatedMetrics,
   MissingKerningOrigin,
+  FeatureSubstitution,
   FontChangeFlag,
-  LayoutRequest,
+  FontFeature,
+  TextRun,
   RevisedNode,
   SceneIntent,
   SourceSetWeights,
   PlacedText,
 } from "@shift/wasm/protocol";
 
-export { svgPaths, typedText } from "@shift/wasm/engine";
+export { initEngine, svgPaths, typedText } from "@shift/wasm/engine";
 export type { ContourPoints } from "@shift/wasm/protocol";
 import type { KerningPlace } from "../../types/font";
 import { unkerned } from "../model/Kerning";
@@ -389,22 +391,60 @@ export class EngineSession {
   }
 
   /**
-   * Lays text out over the session's font, unsaved edits included: shaping,
+   * Lays a run's text out over the session's font, unsaved edits included,
+   * with the options Rust builds from the run's settings: shaping,
    * kerning, marks, cursive joins, lines, bidi order, carets and boxes, all
    * in Rust (`shift_layout::TextLayout`), at a source or a design location.
    */
-  layoutText(text: LayoutRequest, place: KerningPlace): PlacedText {
+  layoutText(run: TextRun, place: KerningPlace): PlacedText {
     const source =
       place.kind === "source"
         ? this.#numbers([place.sourceId], this.#sourceNumbers, engineSourceNumbers)[0]
         : null;
     const location = place.kind === "location" ? place.location : [];
-    return this.#reads.layoutText({ text, location, source: source ?? null });
+    return this.#reads.layoutText({ run, location, source: source ?? null });
   }
 
   /** The change flags whose change may change what {@link layoutText} returns. */
   layoutInputs(): readonly FontChangeFlag[] {
     return this.#reads.layoutInputs();
+  }
+
+  /**
+   * The features the session's shaper font defines, in tag order, as
+   * shift-shape lists them: name, default and group.
+   *
+   * @throws When the session has no shaper font, saying why, or it cannot be read.
+   */
+  fontFeatures(): readonly FontFeature[] {
+    return this.#reads.fontFeatures();
+  }
+
+  /**
+   * Every substitution feature `tag` can make in the session's shaper font,
+   * as shift-shape reads them from its `GSUB`.
+   *
+   * @throws When `tag` is no feature tag, the session has no shaper font, or
+   * its `GSUB` cannot be read.
+   */
+  featureSubstitutions(tag: string): readonly FeatureSubstitution[] {
+    return this.#reads.featureSubstitutions(tag);
+  }
+
+  /**
+   * Whether shaping applies feature `tag` when text sets it to `setting`
+   * (null when it leaves it), as shift-shape decides: the setting wins, else
+   * the feature's default. False for a tag the shaper font does not define.
+   *
+   * @throws When the session has no shaper font, or it cannot be read.
+   */
+  featureApplies(tag: string, on: boolean | null): boolean {
+    return this.#reads.featureApplies(tag, on);
+  }
+
+  /** The change flags whose change may change the session's shaper font. */
+  shaperInputs(): readonly FontChangeFlag[] {
+    return this.#reads.shaperInputs();
   }
 
   /**

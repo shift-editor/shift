@@ -346,6 +346,7 @@ export class App {
     maximised = false,
     minWidth?: number,
     titleBarHeight?: number,
+    systemTrafficLights = false,
   ): Window {
     const window = new Window({
       preloadPath: path.join(__dirname, "preload.js"),
@@ -353,6 +354,7 @@ export class App {
       maximised,
       minWidth,
       titleBarHeight,
+      systemTrafficLights,
       width: bounds?.width,
       height: bounds?.height,
       browserWindowOptions: bounds === undefined ? undefined : { x: bounds.x, y: bounds.y },
@@ -396,6 +398,7 @@ export class App {
       false,
       LAUNCHER_MIN_WIDTH,
       LAUNCHER_TITLE_BAR_HEIGHT,
+      true,
     );
     this.#loadLauncher(window);
     setTimeout(() => this.#presentIfHidden(window), LAUNCHER_SHOW_FALLBACK_MS);
@@ -1033,6 +1036,10 @@ export class App {
       this.#recents?.setSpecimen(visit, specimen);
     } catch (error) {
       this.#log.warn("building recent file specimen failed", visit.path, error);
+      this.#recents?.setSpecimenFailure(
+        visit,
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 

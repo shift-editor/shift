@@ -65,7 +65,13 @@ import type {
   WorkspaceEditCoordinator,
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
-import type { GlyphIdentityChange, LayoutRequest, PlacedText } from "@shift/wasm/protocol";
+import type {
+  FeatureSubstitution,
+  FontFeature,
+  GlyphIdentityChange,
+  PlacedText,
+  TextRun,
+} from "@shift/wasm/protocol";
 import { EngineVariationReader, StatelessVariationReader, locationValues } from "../wasm/variation";
 import type { GlyphIdentityEdit, GlyphReader } from "../../types/glyph";
 import { Glyph, GlyphLayer } from "./Glyph";
@@ -1491,8 +1497,9 @@ export class Font {
   }
 
   /**
-   * Lays text out in the window's engine, as it holds the font: unsaved
-   * edits included. Tracks the revision of each change flag layout reads,
+   * Lays a run's text out in the window's engine, as it holds the font:
+   * unsaved edits included, with the options Rust builds from the run's
+   * settings. Tracks the revision of each change flag layout reads,
    * so a computed that lays text out does again after any edit that may
    * change the result.
    *
@@ -1504,7 +1511,7 @@ export class Font {
    * @returns null without an open engine.
    */
   layoutText(
-    text: LayoutRequest,
+    run: TextRun,
     location: ExternalAxisLocation,
     sourceId: SourceId | null,
   ): PlacedText | null {
@@ -1518,7 +1525,7 @@ export class Font {
         location: locationValues(designspace.axes, designspace.toDesign(location)),
       };
     });
-    return engine.layoutText(text, place);
+    return engine.layoutText(run, place);
   }
 
   /**
@@ -1530,6 +1537,56 @@ export class Font {
    */
   preloadLaidOut(glyphIds: readonly GlyphId[]): void {
     this.#store.engine?.preload(glyphIds);
+  }
+
+  /**
+   * The features the font's compiled feature code defines, in tag order,
+   * each with the name it is shown by, its default and its group, from the
+   * window's engine's shaper font. Tracks the revision of each change flag
+   * the shaper font reads, so a computed that lists them does again after an
+   * edit that may change it.
+   *
+   * @returns empty without an open engine, as in a preview.
+   * @throws When the engine has no shaper font, saying why, or it cannot be read.
+   */
+  fontFeatures(): readonly FontFeature[] {
+    const engine = this.#store.engine;
+    if (!engine) return [];
+    for (const flag of engine.shaperInputs()) track(engine.revision(flag));
+    return engine.fontFeatures() ?? [];
+  }
+
+  /**
+   * Every substitution a feature can make, ordered by output glyph then
+   * input, from the window's engine's shaper font: the glyphs the feature
+   * brings in and what each replaces. Tracks what the shaper font reads, as
+   * {@link fontFeatures} does.
+   *
+   * @returns empty without an open engine, as in a preview.
+   * @throws When `tag` is no feature tag, the engine has no shaper font, or
+   * its `GSUB` cannot be read.
+   */
+  featureSubstitutions(tag: string): readonly FeatureSubstitution[] {
+    const engine = this.#store.engine;
+    if (!engine) return [];
+    for (const flag of engine.shaperInputs()) track(engine.revision(flag));
+    return engine.featureSubstitutions(tag) ?? [];
+  }
+
+  /**
+   * Whether shaping applies a feature when a run turns it on or off (`on`,
+   * null when it leaves it), as Rust decides from the feature's default in the
+   * window's engine's shaper font. Tracks what the shaper font reads, as
+   * {@link fontFeatures} does.
+   *
+   * @returns false without an open engine, or for a tag the font does not define.
+   * @throws When the engine has no shaper font, or it cannot be read.
+   */
+  featureApplies(tag: string, on: boolean | null): boolean {
+    const engine = this.#store.engine;
+    if (!engine) return false;
+    for (const flag of engine.shaperInputs()) track(engine.revision(flag));
+    return engine.featureApplies(tag, on);
   }
 
   /** @knipclassignore — used by VariationPanel component */

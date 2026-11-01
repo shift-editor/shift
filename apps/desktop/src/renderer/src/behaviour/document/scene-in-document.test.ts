@@ -82,6 +82,40 @@ describe("the scene is part of the document", () => {
     await expect(editor.documentState()).resolves.toMatchObject({ dirty: false });
   });
 
+  it("opens a glyph as navigation: saved stays saved, and its page survives reopening", async () => {
+    await editor.addGlyph("B", 66);
+    await editor.save();
+
+    await editor.openGlyph("B");
+    await editor.settle();
+    const glyphPage = editor.shownPageId()!;
+    await expect(editor.documentState()).resolves.toMatchObject({ dirty: false });
+
+    await editor.draw({
+      contours: [
+        {
+          closed: true,
+          points: [
+            [0, 0],
+            [100, 0],
+            [100, 100],
+          ],
+        },
+      ],
+    });
+    await expect(editor.documentState()).resolves.toMatchObject({ dirty: true });
+    await undo(editor);
+    await expect(editor.documentState()).resolves.toMatchObject({ dirty: false });
+
+    const reopened = await editor.reopen();
+    try {
+      expect(reopened.pageExists(glyphPage)).toBe(true);
+      await expect(reopened.documentState()).resolves.toMatchObject({ dirty: false });
+    } finally {
+      await reopened.close();
+    }
+  });
+
   it("keeps two pages and the text on each when the document is saved and reopened", async () => {
     const proofs = await typeOnNewPage(editor, "Proofs", "AB");
     const specimen = await typeOnNewPage(editor, "Specimen", "BA");

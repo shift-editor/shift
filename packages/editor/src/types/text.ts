@@ -1,6 +1,6 @@
 import type { Point2D } from "@shift/geo";
 import type { GlyphId, GlyphName, NodeId, RunId, SourceId, TextItemId } from "@shift/types";
-import type { PlacedText } from "@shift/wasm/protocol";
+import type { FeatureSubstitution, FontFeature, PlacedText, TextAlign } from "@shift/wasm/protocol";
 import type { PageNode } from "./node";
 import type { CaretEdge, Direction, TextItem } from "../lib/text/layout/types";
 import type { ExternalAxisLocation } from "./variation";
@@ -20,6 +20,22 @@ export interface TextLayoutFailure {
 export type RunLaidOut =
   | { readonly kind: "placed"; readonly placed: PlacedText }
   | { readonly kind: "failed"; readonly failure: TextLayoutFailure };
+
+/**
+ * The features a font's shaper font defines, as Rust lists them, or why
+ * they could not be listed.
+ */
+export type FeatureListing =
+  | { readonly kind: "listed"; readonly features: readonly FontFeature[] }
+  | { readonly kind: "failed"; readonly error: unknown };
+
+/**
+ * The substitutions a feature can make, as Rust reads them from the shaper
+ * font, or why they could not be read.
+ */
+export type SubstitutionListing =
+  | { readonly kind: "listed"; readonly substitutions: readonly FeatureSubstitution[] }
+  | { readonly kind: "failed"; readonly error: unknown };
 
 /** Where text is laid out: the location shown, and the source edited, which takes precedence. */
 export interface TextPlace {
@@ -104,4 +120,47 @@ export interface TextRunRecord {
    * as typed, glyph by glyph.
    */
   readonly shaping: boolean;
+  /**
+   * Features turned on (`true`) or off (`false`) for this text by tag, such
+   * as `ss01`; a tag left out keeps the font's default.
+   */
+  readonly features: Readonly<Record<string, boolean>>;
+  /**
+   * The BCP 47 language the text is shaped as, such as `ur` or `tr`, which
+   * picks the font's localized forms; null uses the font's default language.
+   */
+  readonly language: string | null;
+  /**
+   * An ISO 15924 script, such as `Arab`, that the whole text is shaped in;
+   * null shapes each stretch in the script of its own characters.
+   */
+  readonly script: string | null;
+  /**
+   * The distance between baselines, in ems (1.5 is one and a half ems); null
+   * uses the font's own line spacing: ascender, descender, and line gap.
+   */
+  readonly lineHeight: number | null;
+  /** How lines line up; null follows each line's direction, so Arabic lines sit right. */
+  readonly align: TextAlign | null;
 }
+
+/** A feature whose changes one run highlights, such as the one under the pointer. */
+export interface FeatureHighlight {
+  readonly runId: RunId;
+  readonly tag: string;
+}
+
+/** Glyphs one run draws highlighted. */
+export interface TextHighlight {
+  readonly runId: RunId;
+  readonly glyphs: ReadonlySet<GlyphId>;
+}
+
+/**
+ * How a run's text is shaped and set: the fields of its record that the
+ * Text and Features sections edit, kept in the scene's run node.
+ */
+export type TextRunSettings = Pick<
+  TextRunRecord,
+  "shaping" | "features" | "language" | "script" | "lineHeight" | "align"
+>;

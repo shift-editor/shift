@@ -44,6 +44,10 @@
   --color-destructive: #dc2626;
   --color-destructive-hover: #fef2f2;
 
+  /* A setting forced on or off, as against left at its default */
+  --color-state-on: #16a34a;
+  --color-state-off: #dc2626;
+
   /* Low-emphasis icon and control colors */
   --color-icon-subtle: #9f9f9f;
   --color-control-muted: #c2c2c2;
@@ -60,6 +64,16 @@
   --font-ui: "Inter";
   --font-display: "Host Grotesk";
   --font-mono: "JetBrains Mono";
+  /* Section headings, such as the launcher's "Recent". */
+  --text-heading: 0.9375rem /* 15px */;
+  --text-heading--line-height: 1.125rem /* 18px */;
+  --text-heading--letter-spacing: -0.01em;
+  /* Text set a step above labels, such as the launcher's View all tile. */
+  --text-body: 0.875rem /* 14px */;
+  --text-body--line-height: 1.125rem /* 18px */;
+  /* Labels of a page's main actions, such as the launcher's Open… and New font. */
+  --text-label: 0.8125rem /* 13px */;
+  --text-label--line-height: 1rem /* 16px */;
   --text-sm: 0.75rem /* 12px */;
   --text-ui: 0.6875rem /* 11px */;
   --text-xs: 0.625rem /* 10px */;
@@ -110,6 +124,7 @@
   --editor-text-cursor-color: #0c92f4;
   --editor-text-selection-fill: rgba(12, 146, 244, 0.2);
   --editor-text-hover-outline: #0c92f4;
+  --editor-text-feature-highlight-fill: #0c92f4;
   --editor-text-composite-arm-fill: rgba(128, 128, 128, 0.22);
   --editor-text-component-overlay-a: rgba(169, 236, 183, 0.26);
   --editor-text-component-overlay-b: rgba(255, 182, 207, 0.26);

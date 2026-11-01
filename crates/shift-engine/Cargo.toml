@@ -9,6 +9,8 @@ description = "Shift's editing session over a partly loaded font, shared by the 
 # The `StoreReader` request protocol, for an engine that runs apart from its store.
 pack = { workspace = true }
 shift-font = { workspace = true, features = ["pack"] }
+# The text options a run keeps (alignment, feature settings): their types only.
+shift-layout = { workspace = true, default-features = false, features = ["pack", "serde"] }
 serde = { version = "1.0", features = ["derive"] }
 thiserror = "2"
 

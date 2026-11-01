@@ -254,6 +254,16 @@ impl RecoveryOverlay {
         self.set_clean(saved_commit_id)
     }
 
+    /// Marks the overlay clean and keeps its rows, which hold only what the
+    /// save already has or navigation, such as glyph pages.
+    pub(crate) fn mark_clean(&mut self) -> Result<(), StoreError> {
+        self.conn.execute(
+            "UPDATE recovery_metadata SET state = 'clean', pending_commit_id = NULL WHERE id = 1",
+            [],
+        )?;
+        Ok(())
+    }
+
     pub(crate) fn begin_save(&mut self) -> Result<CommitId, StoreError> {
         let state = self.state()?;
         if state != RecoveryState::Dirty {

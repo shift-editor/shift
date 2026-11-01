@@ -28,7 +28,7 @@ use shift_font::{NodeId, PersistentMap, Replacement};
 pub use changes::{SceneChange, SceneChangeSet};
 pub use intents::{CreateRun, DeleteNode, MoveNode, SceneIntent, SetRunItems, SetRunSettings};
 pub use node::{
-    DEFAULT_PAGE_NAME, NodeContent, NodeKind, PageRole, RunSettings, SceneNode, TextItem,
+    DEFAULT_PAGE_NAME, NodeContent, NodeKind, PageRole, RunSettings, SceneNode, TextItem, TextRun,
 };
 
 /// Why a scene edit was refused. The scene is unchanged.
@@ -272,6 +272,61 @@ impl Scene {
             let parent = node.parent_id.as_ref()?;
             self.page_of(parent).map(|page| page.id.clone())
         })
+    }
+
+    /// Every glyph page and every node on one: what opening glyph tabs
+    /// placed, which is navigation, never a difference from the saved
+    /// document.
+    pub fn glyph_page_nodes(&self) -> Vec<NodeId> {
+        self.pages()
+            .filter(|page| page.is_glyph_page())
+            .flat_map(|page| {
+                std::iter::once(page.id.clone()).chain(
+                    self.descendants(&page.id)
+                        .into_iter()
+                        .map(|node| node.id.clone()),
+                )
+            })
+            .collect()
+    }
+
+    /// Whether `changes` touched only glyph pages and what is on them, as
+    /// opening, switching or closing a glyph tab does: navigation, which
+    /// leaves the document as saved. `self` is the scene after the changes;
+    /// a removed node is found through what the changes removed.
+    pub fn changes_only_glyph_pages(&self, changes: &SceneChangeSet) -> bool {
+        !changes.is_empty()
+            && changes.changes.iter().all(|change| {
+                let node = change.node.after.as_ref().or(change.node.before.as_ref());
+                node.is_some_and(|node| self.is_on_glyph_page(node, changes))
+            })
+    }
+
+    /// Whether `node` is a glyph page or under one, looking a parent up in
+    /// this scene or, for one `changes` removed, in what it was.
+    fn is_on_glyph_page(&self, node: &SceneNode, changes: &SceneChangeSet) -> bool {
+        let mut node = node;
+        // A scene has no cycles, so this ends; the bound guards a damaged one.
+        for _ in 0..=self.len() + changes.changes.len() {
+            if node.is_page() {
+                return node.is_glyph_page();
+            }
+            let Some(parent_id) = node.parent_id.as_ref() else {
+                return false;
+            };
+            let removed = || {
+                changes
+                    .changes
+                    .iter()
+                    .find(|change| &change.id == parent_id)
+                    .and_then(|change| change.node.before.as_ref())
+            };
+            let Some(parent) = self.node(parent_id).or_else(removed) else {
+                return false;
+            };
+            node = parent;
+        }
+        false
     }
 
     fn walk<'a>(&'a self, parent: Option<&NodeId>, found: &mut Vec<&'a SceneNode>) {
