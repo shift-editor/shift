@@ -121,7 +121,7 @@ describe("memory font editing", () => {
         const layout = editor.text.layout(run.runId);
         return {
           lefts: layout?.placedGlyphs.map((placed) => placed.left),
-          carets: [0, 1, 2].map((cluster) => layout?.pointAt(cluster)?.x),
+          carets: [0, 1, 2].map((cluster) => layout?.caretPosition(cluster).x),
         };
       })
       .toEqual({ lefts: [0, 500], carets: [0, 500, 1000] });

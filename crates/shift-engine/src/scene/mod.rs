@@ -26,8 +26,10 @@ use pack::Pack;
 use shift_font::{NodeId, PersistentMap, Replacement};
 
 pub use changes::{SceneChange, SceneChangeSet};
-pub use intents::{DeleteNode, MoveNode, SceneIntent, SetRunItems};
-pub use node::{DEFAULT_PAGE_NAME, NodeContent, NodeKind, PageRole, SceneNode, TextItem};
+pub use intents::{CreateRun, DeleteNode, MoveNode, SceneIntent, SetRunItems, SetRunSettings};
+pub use node::{
+    DEFAULT_PAGE_NAME, NodeContent, NodeKind, PageRole, RunSettings, SceneNode, TextItem,
+};
 
 /// Why a scene edit was refused. The scene is unchanged.
 #[derive(Clone, Debug, PartialEq, thiserror::Error)]
@@ -332,13 +334,8 @@ impl Scene {
         journal: &mut Journal,
     ) -> Result<(), SceneError> {
         match intent {
-            SceneIntent::CreateNode(node) => {
-                if self.node(&node.id).is_some() {
-                    return Err(SceneError::NodeExists(node.id.clone()));
-                }
-                self.check_placement(node)?;
-                self.record(node.clone(), Items::Changed, journal);
-            }
+            SceneIntent::CreateNode(node) => self.create(node.clone(), journal)?,
+            SceneIntent::CreateRun(run) => self.create(run.node(), journal)?,
             SceneIntent::UpdateNode(node) => {
                 let current = self.require(&node.id)?;
                 if !current.same_kind(node) {
@@ -386,7 +383,29 @@ impl Scene {
                 current.clone_from(items);
                 self.record(node, Items::Changed, journal);
             }
+            SceneIntent::SetRunSettings(SetRunSettings { id, settings }) => {
+                let mut node = self.require(id)?.clone();
+                let NodeContent::TextRun {
+                    settings: current, ..
+                } = &mut node.content
+                else {
+                    return Err(SceneError::NotATextRun(id.clone()));
+                };
+                current.clone_from(settings);
+                // A run's record holds its settings, so it is new too.
+                self.record(node, Items::Changed, journal);
+            }
         }
+        Ok(())
+    }
+
+    /// Places a new node, its id new and its placement allowed.
+    fn create(&mut self, node: SceneNode, journal: &mut Journal) -> Result<(), SceneError> {
+        if self.node(&node.id).is_some() {
+            return Err(SceneError::NodeExists(node.id));
+        }
+        self.check_placement(&node)?;
+        self.record(node, Items::Changed, journal);
         Ok(())
     }
 

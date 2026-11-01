@@ -97,6 +97,25 @@ export interface PositionedGlyph {
 
 export type Direction = "ltr" | "rtl";
 
+/**
+ * Which of a caret stop's places the caret shows at: the stop's own, or, at
+ * a direction boundary, its second place, on the other run's edge.
+ */
+export type CaretEdge = "primary" | "secondary";
+
+/** Where a caret stands: the boundary before `unit`, at its stop's `edge` place. */
+export interface CaretTarget {
+  readonly unit: number;
+  readonly edge: CaretEdge;
+}
+
+/** One place a caret can show on a line, where Rust put it on screen. */
+export interface CaretPlace extends CaretTarget {
+  readonly x: number;
+  /** The direction of the text the place is an edge of. */
+  readonly direction: Direction;
+}
+
 export interface PositionedRun {
   glyphs: PositionedGlyph[];
   direction: Direction;
@@ -107,7 +126,10 @@ export interface PositionedRun {
 }
 
 export interface Line {
+  /** Runs in screen order, left to right. */
   runs: PositionedRun[];
+  /** The paragraph's base direction. */
+  direction: Direction;
   y: number;
   ascent: number;
   descent: number;
@@ -125,7 +147,6 @@ export interface Hit {
   lineIndex: number;
   runIndex: number;
   cluster: number;
-  side: "left" | "right";
 }
 
 /** A selection highlight on one line, in layout coordinates. */

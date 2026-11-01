@@ -962,6 +962,7 @@ fn scene_and_font_edits_share_one_history_and_undo_in_order() {
                     run_id: RunId::from_raw("run"),
                     size: 1000.0,
                     items: Vec::new(),
+                    settings: shift_engine::scene::RunSettings::default(),
                 },
             })])
             .unwrap(),

@@ -40,6 +40,10 @@ pub enum NodeContent {
         /// The proof size, in font units per em.
         size: f64,
         items: Vec<TextItem>,
+        /// How the run is shaped. A run stored before a setting existed
+        /// reads it at its default.
+        #[serde(default)]
+        settings: RunSettings,
     },
     /// An authored glyph source placed for editing.
     Glyph {
@@ -49,6 +53,27 @@ pub enum NodeContent {
         /// text run.
         item_id: Option<TextItemId>,
     },
+}
+
+/// How a text run's text is shaped and set; each setting a run was stored
+/// without reads at its default.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Pack)]
+pub struct RunSettings {
+    /// Whether the font's feature code shapes the text; off lays out each
+    /// item as typed.
+    #[serde(default = "shaped")]
+    pub shaping: bool,
+}
+
+impl Default for RunSettings {
+    fn default() -> Self {
+        Self { shaping: shaped() }
+    }
+}
+
+/// A run is shaped unless it says otherwise.
+fn shaped() -> bool {
+    true
 }
 
 /// What a page is for, beyond the user's own pages.
@@ -100,13 +125,23 @@ impl SceneNode {
         matches!(self.content, NodeContent::Page { .. })
     }
 
-    /// Gives a text run `current`'s items in place of its own, as an update,
-    /// which never changes them, does; other kinds are unchanged.
+    /// Gives a text run `current`'s items and settings in place of its own,
+    /// as an update, which never changes them, does; other kinds are
+    /// unchanged.
     pub(super) fn keep_items_of(&mut self, current: &Self) {
-        if let (NodeContent::TextRun { items, .. }, NodeContent::TextRun { items: kept, .. }) =
-            (&mut self.content, &current.content)
+        if let (
+            NodeContent::TextRun {
+                items, settings, ..
+            },
+            NodeContent::TextRun {
+                items: kept,
+                settings: kept_settings,
+                ..
+            },
+        ) = (&mut self.content, &current.content)
         {
             items.clone_from(kept);
+            settings.clone_from(kept_settings);
         }
     }
 

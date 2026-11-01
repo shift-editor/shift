@@ -55,6 +55,25 @@ export class Text {
   });
 
   /**
+   * The run the user is working in: the one being typed in, otherwise the
+   * scene's only run, such as the page run around an edited glyph.
+   *
+   * @remarks
+   * Null when no text is being typed and the scene holds no run or several.
+   */
+  readonly currentRunCell: Signal<TextRunRecord | null> = computed(
+    () => {
+      const editing = this.#editor.textEditing.stateCell.value;
+      const scene = this.#editor.scene;
+      // Scene lookups read without subscribing; rerun when its nodes change.
+      track(scene.cell);
+      const node = scene.nodeOfKind(editing?.nodeId ?? null, "textRun") ?? scene.only("textRun");
+      return node ? this.run(node.runId) : null;
+    },
+    { name: "text.currentRun" },
+  );
+
+  /**
    * The first run whose text has no layout, or whose layout could not load
    * what it shows, with why; null while every run lays out. The editor
    * shows it, so a failed layout is never just an empty run.
@@ -166,6 +185,17 @@ export class Text {
   /** Replaces a run's items; the run's definition removes a child whose item went (`onContentChange`). */
   setItems(id: RunId, items: readonly TextItem[]): void {
     this.#editor.scene.setRunItems(id, items);
+  }
+
+  /**
+   * Turns shaping on or off for a run; off lays out each item as typed.
+   *
+   * @remarks
+   * Writes the run record, so call it inside a history capture.
+   */
+  setShaping(id: RunId, shaping: boolean): void {
+    const run = this.run(id);
+    if (run && run.shaping !== shaping) this.#editor.scene.setRunSettings(id, { shaping });
   }
 
   /**

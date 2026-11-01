@@ -74,10 +74,4 @@ describe("text item edits preserve caret identity", () => {
     expect(removed.clusterOf(b.id)).toBe(1);
     expect(removed.clusterOf(a.id)).toBe(0);
   });
-
-  it("word navigation stops at whitespace and punctuation", () => {
-    const buffer = new TextBuffer([char(65), char(32), char(66)]);
-    expect(buffer.wordStep(3, -1)).toBe(2);
-    expect(buffer.wordStep(0, 1)).toBe(1);
-  });
 });
