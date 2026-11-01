@@ -1,6 +1,6 @@
 import type { Direction, TextItem } from "./layout";
 import { wordSegments, type ItemSegment } from "./layout/segmentation";
-import type { TextCaret, TextSelectionRange } from "../../types/text";
+import type { TextCaret, TextSelectionRange, WordEdge } from "../../types/text";
 
 /**
  * A run's items with a selection, edited by value.
@@ -90,19 +90,20 @@ export class TextBuffer {
   }
 
   /**
-   * Returns the clusters at each word's left (`-1`) or right (`1`) edge on
-   * screen: a left-to-right word's start is its left edge, a right-to-left
-   * word's end is.
+   * Returns each word's left (`-1`) or right (`1`) edge on screen, as the
+   * cluster there and the word's direction: a left-to-right word's start is
+   * its left edge, a right-to-left word's end is. The direction picks the
+   * caret place at a boundary where directions meet: the edge of this word,
+   * not of the text beside it.
    *
    * @param directionAt - the direction the text at a cluster reads in, as the layout says.
    */
-  wordEdges(side: -1 | 1, directionAt: (cluster: number) => Direction): ReadonlySet<number> {
-    return new Set(
-      this.words.map((word) => {
-        const rightToLeft = directionAt(word.start) === "rtl";
-        return (side === 1) !== rightToLeft ? word.end : word.start;
-      }),
-    );
+  wordEdges(side: -1 | 1, directionAt: (cluster: number) => Direction): readonly WordEdge[] {
+    return this.words.map((word) => {
+      const direction = directionAt(word.start);
+      const unit = (side === 1) !== (direction === "rtl") ? word.end : word.start;
+      return { unit, direction };
+    });
   }
 
   /** Returns the end of the next word, or the start of the previous one, in reading order. */

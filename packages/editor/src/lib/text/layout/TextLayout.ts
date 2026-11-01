@@ -19,6 +19,8 @@ import type { CaretStop, TextLayout as LaidOutText } from "@shift/wasm/protocol"
 import { Caret } from "./Caret";
 import { CaretStops } from "./CaretStops";
 import type {
+  CaretEdge,
+  CaretPlace,
   CaretPosition,
   Direction,
   TextItem,
@@ -249,17 +251,19 @@ export class TextLayout {
   /**
    * Where a caret before `cluster` draws, at the stop Rust placed: the
    * leading edge of the unit there, or the trailing edge of the one before
-   * it at a line's end. A line with no stop for it, such as an empty
+   * it at a line's end; at a direction boundary with `edge` `secondary`,
+   * the stop's second place. A line with no stop for it, such as an empty
    * line, puts it at the line's start.
    */
-  caretPosition(cluster: number): CaretPosition {
+  caretPosition(cluster: number, edge: CaretEdge = "primary"): CaretPosition {
     const lineHeight = this.metrics.ascender - this.metrics.descender + (this.metrics.lineGap ?? 0);
     const lineIndex = this.lineIndexForCluster(cluster);
     const line = this.lines[lineIndex];
     if (!line) return { x: this.origin.x, y: this.origin.y, lineHeight };
 
     const stop = this.#carets[lineIndex]?.at(cluster);
-    return { x: stop?.x ?? this.origin.x, y: line.y, lineHeight };
+    const second = edge === "secondary" ? stop?.secondary : null;
+    return { x: second?.x ?? stop?.x ?? this.origin.x, y: line.y, lineHeight };
   }
 
   /**
@@ -283,13 +287,20 @@ export class TextLayout {
   }
 
   /**
-   * Returns the cluster one stop left (`-1`) or right (`1`) of `cluster` on
-   * screen, skipping stops `accept` refuses.
+   * Returns the next caret place left (`-1`) or right (`1`) on screen of the
+   * caret at `cluster`'s `edge` place, skipping places `accept` refuses. A
+   * direction boundary has two places, its stop's and its second.
    *
    * @returns null at its line's edge in that direction.
    */
-  visualStep(cluster: number, side: -1 | 1, accept?: (cluster: number) => boolean): number | null {
-    return this.#carets[this.lineIndexForCluster(cluster)]?.step(cluster, side, accept) ?? null;
+  visualStep(
+    cluster: number,
+    edge: CaretEdge,
+    side: -1 | 1,
+    accept?: (place: CaretPlace) => boolean,
+  ): CaretPlace | null {
+    const stops = this.#carets[this.lineIndexForCluster(cluster)];
+    return stops?.step(cluster, edge, side, accept) ?? null;
   }
 
   /**
@@ -307,8 +318,8 @@ export class TextLayout {
     return boundary ?? cluster;
   }
 
-  /** Returns the cluster at a line's left (`-1`) or right (`1`) end on screen. */
-  lineEdge(lineIndex: number, side: -1 | 1): number | null {
+  /** Returns the caret place at a line's left (`-1`) or right (`1`) end on screen. */
+  lineEdge(lineIndex: number, side: -1 | 1): CaretPlace | null {
     return this.#carets[lineIndex]?.edge(side) ?? null;
   }
 

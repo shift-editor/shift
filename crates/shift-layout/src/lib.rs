@@ -188,9 +188,10 @@ pub struct CaretStop {
     /// At a direction boundary, the other place the same boundary shows:
     /// the trailing edge of the unit before it.
     pub secondary: Option<SecondaryCaret>,
-    /// Its place among its line's stops left to right on screen, from 0:
-    /// by `x`, and where stops meet at one `x` (beside a glyph of no
-    /// advance) in the order their glyphs are drawn.
+    /// Its place among its line's caret places left to right on screen,
+    /// from 0, counting each stop's and each second place's: by `x`, and
+    /// where places meet at one `x` (beside a glyph of no advance, or where
+    /// directions meet) in the order their glyphs are drawn.
     pub screen: u32,
 }
 
@@ -200,6 +201,9 @@ pub struct CaretStop {
 pub struct SecondaryCaret {
     pub x: f64,
     pub direction: Direction,
+    /// Its place among its line's caret places left to right, numbered
+    /// with the stops' ([`CaretStop::screen`]).
+    pub screen: u32,
 }
 
 #[cfg(feature = "layout")]

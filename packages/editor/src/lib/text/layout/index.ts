@@ -3,6 +3,9 @@ export type { PlacedGlyph, TextLayoutParams } from "./TextLayout";
 export { Caret } from "./Caret";
 export { characterTextItem, glyphIdForItem, glyphTextItem, lineBreakTextItem } from "./types";
 export type {
+  CaretEdge,
+  CaretPlace,
+  CaretTarget,
   CaretPosition,
   TextItem,
   CharacterTextItem,

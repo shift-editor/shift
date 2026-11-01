@@ -1,5 +1,5 @@
 import type { NodeId, RunId, SourceId, TextItemId } from "@shift/types";
-import type { TextItem } from "../lib/text/layout/types";
+import type { CaretEdge, Direction, TextItem } from "../lib/text/layout/types";
 import type { ExternalAxisLocation } from "./variation";
 
 /** Where text is laid out: the location shown, and the source edited, which takes precedence. */
@@ -17,6 +17,12 @@ export type TextEditingId = string & {
 };
 export const currentTextEditingId = "textEditing:current" as TextEditingId;
 
+/** A word's edge on one side on screen: the cluster there, and the direction the word reads in. */
+export interface WordEdge {
+  readonly unit: number;
+  readonly direction: Direction;
+}
+
 export interface TextSelectionRange {
   readonly start: number;
   readonly end: number;
@@ -30,6 +36,11 @@ export interface TextEditingRecord {
   readonly nodeId: NodeId;
   readonly anchor: TextCaret;
   readonly focus: TextCaret;
+  /**
+   * Which of the focus stop's places the caret shows at: `secondary` only
+   * where a move landed on the second place of a direction boundary.
+   */
+  readonly focusEdge: CaretEdge;
   /**
    * Whether Text mode is showing this caret. An inactive record keeps the
    * caret and selection for the next visit.
