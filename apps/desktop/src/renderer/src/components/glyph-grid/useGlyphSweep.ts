@@ -7,17 +7,17 @@ const AUTOSCROLL_EDGE_PX = 12;
 const AUTOSCROLL_RATE = 0.4;
 const AUTOSCROLL_MAX_PX = 16;
 
-interface MemberDragOptions {
-  /** The scrolling element the members are drawn in. */
+interface GlyphSweepOptions {
+  /** The scrolling element the glyphs are drawn in. */
   readonly containerRef: React.RefObject<HTMLElement | null>;
-  /** The member under a point in client pixels, or null over empty space. */
-  readonly memberAt: (clientX: number, clientY: number) => GlyphId | null;
-  /** Called as the drag sweeps from `anchor` to `member`. */
-  readonly onSweep: (anchor: GlyphId, member: GlyphId) => void;
+  /** The glyph under a point in client pixels, or null over empty space. */
+  readonly glyphAt: (clientX: number, clientY: number) => GlyphId | null;
+  /** Called as the drag sweeps from `anchor` to `glyph`. */
+  readonly onSweep: (anchor: GlyphId, glyph: GlyphId) => void;
 }
 
-/** A sweep across the members, started on one with {@link MemberDrag.start}. */
-export interface MemberDrag {
+/** A sweep across the glyphs, started on one with {@link GlyphSweep.start}. */
+export interface GlyphSweep {
   start(anchor: GlyphId, clientX: number, clientY: number): void;
   /** Follows the pointer; does nothing when no drag is under way. */
   move(clientX: number, clientY: number): void;
@@ -25,19 +25,19 @@ export interface MemberDrag {
 }
 
 /**
- * A drag that sweeps a range of members, scrolling the container each frame
+ * A drag that sweeps a range of glyphs, scrolling the container each frame
  * while the pointer is held past its top or bottom and extending the sweep
- * to the member at the nearest visible edge.
+ * to the glyph at the nearest visible edge.
  */
-export function useMemberDrag({ containerRef, memberAt, onSweep }: MemberDragOptions): MemberDrag {
-  // non-reactive: the member the drag started on, while the pointer is down.
+export function useGlyphSweep({ containerRef, glyphAt, onSweep }: GlyphSweepOptions): GlyphSweep {
+  // non-reactive: the glyph the drag started on, while the pointer is down.
   const anchorRef = useRef<GlyphId | null>(null);
   // non-reactive: the dragging pointer in client pixels, for the autoscroll frame.
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
   const frameRef = useRef<number | null>(null);
   // The autoscroll frame outlives renders, so it reads the latest callbacks through a ref.
-  const latest = useRef({ memberAt, onSweep });
-  latest.current = { memberAt, onSweep };
+  const latest = useRef({ glyphAt, onSweep });
+  latest.current = { glyphAt, onSweep };
 
   const scroll = () => {
     const container = containerRef.current;
@@ -52,8 +52,8 @@ export function useMemberDrag({ containerRef, memberAt, onSweep }: MemberDragOpt
       const speed = Math.min(reach * AUTOSCROLL_RATE, AUTOSCROLL_MAX_PX);
       container.scrollTop += above > 0 ? -speed : speed;
       const y = Math.min(Math.max(pointer.y, bounds.top + 1), bounds.bottom - 1);
-      const member = latest.current.memberAt(pointer.x, y);
-      if (member) latest.current.onSweep(anchor, member);
+      const glyph = latest.current.glyphAt(pointer.x, y);
+      if (glyph) latest.current.onSweep(anchor, glyph);
     }
     frameRef.current = requestAnimationFrame(scroll);
   };
@@ -77,8 +77,8 @@ export function useMemberDrag({ containerRef, memberAt, onSweep }: MemberDragOpt
       const anchor = anchorRef.current;
       if (!anchor) return;
       pointerRef.current = { x: clientX, y: clientY };
-      const member = memberAt(clientX, clientY);
-      if (member) onSweep(anchor, member);
+      const glyph = glyphAt(clientX, clientY);
+      if (glyph) onSweep(anchor, glyph);
     },
     end,
   };

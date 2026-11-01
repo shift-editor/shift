@@ -96,6 +96,8 @@ export interface EditorRenderTheme {
     selectionFill: string;
     hoverOutline: string;
     hoverOutlineWidthPx: number;
+    /** The fill of the glyphs a highlighted feature changes. */
+    featureHighlightFill: string;
     compositeArmFill: string;
     componentOverlay: readonly [string, string];
     componentOverlayHover: readonly [string, string];
@@ -276,6 +278,7 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     selectionFill: "rgba(12, 146, 244, 0.2)",
     hoverOutline: "#0C92F4",
     hoverOutlineWidthPx: 3,
+    featureHighlightFill: "#0C92F4",
     compositeArmFill: "rgba(128, 128, 128, 0.22)",
     componentOverlay: ["rgba(169, 236, 183, 0.26)", "rgba(255, 182, 207, 0.26)"],
     componentOverlayHover: ["rgba(124, 220, 150, 0.4)", "rgba(255, 151, 186, 0.4)"],
@@ -456,6 +459,10 @@ export function readEditorRenderTheme(
     theme.textRun.selectionFill,
   );
   theme.textRun.hoverOutline = readColor("--editor-text-hover-outline", theme.textRun.hoverOutline);
+  theme.textRun.featureHighlightFill = readColor(
+    "--editor-text-feature-highlight-fill",
+    theme.textRun.featureHighlightFill,
+  );
   theme.textRun.compositeArmFill = readColor(
     "--editor-text-composite-arm-fill",
     theme.textRun.compositeArmFill,

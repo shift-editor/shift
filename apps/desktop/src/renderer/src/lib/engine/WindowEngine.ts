@@ -25,6 +25,7 @@ import {
 } from "@shift/editor/model";
 import {
   FontChangeFlagSchema,
+  type FeatureSubstitution,
   type FontChangeFlag,
   type FontFeature,
   type GlyphIdentityChange,
@@ -118,6 +119,14 @@ export class WindowEngine implements FontEngine {
 
   fontFeatures(): readonly FontFeature[] | null {
     return this.#opened?.session.fontFeatures() ?? null;
+  }
+
+  featureSubstitutions(tag: string): readonly FeatureSubstitution[] | null {
+    return this.#opened?.session.featureSubstitutions(tag) ?? null;
+  }
+
+  featureApplies(tag: string, on: boolean | null): boolean {
+    return this.#opened?.session.featureApplies(tag, on) ?? false;
   }
 
   get variationCell(): Signal<EngineVariation | null> {

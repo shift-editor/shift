@@ -33,6 +33,7 @@ import type {
   SourceSetWeights,
 } from "../lib/wasm/engine";
 import type {
+  FeatureSubstitution,
   EditLocation,
   FontChangeFlag,
   FontFeature,
@@ -243,6 +244,26 @@ export interface FontEngine {
    * @throws When the engine has no shaper font, saying why, or it cannot be read.
    */
   fontFeatures(): readonly FontFeature[] | null;
+
+  /**
+   * Every substitution a feature can make in the engine's shaper font,
+   * ordered by output glyph then input.
+   *
+   * @returns null only while the engine is not open; empty for a feature that substitutes nothing.
+   * @throws When `tag` is no feature tag, the engine has no shaper font, or
+   * its `GSUB` cannot be read.
+   */
+  featureSubstitutions(tag: string): readonly FeatureSubstitution[] | null;
+
+  /**
+   * Whether shaping applies a feature when a run turns it on or off (`on`,
+   * null when it leaves it), as Rust decides: the setting wins, else the
+   * feature's default.
+   *
+   * @returns false while the engine is not open, or for a tag its shaper font does not define.
+   * @throws When the engine has no shaper font, or it cannot be read.
+   */
+  featureApplies(tag: string, on: boolean | null): boolean;
 }
 
 /**

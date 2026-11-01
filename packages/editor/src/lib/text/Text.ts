@@ -4,8 +4,11 @@ import type { ComputedSignal, Effect, Signal } from "../signals";
 import type { Editor } from "../editor/Editor";
 import type { TextRunNode } from "../../types/node";
 import type {
+  FeatureHighlight,
   FeatureListing,
   RunPlacement,
+  SubstitutionListing,
+  TextHighlight,
   TextLayoutFailure,
   TextRunRecord,
   TextRunSettings,
@@ -133,6 +136,58 @@ export class Text {
       return null;
     },
     { name: "text.layoutFailure" },
+  );
+
+  readonly #substitutions = keyedCache({
+    name: "text.featureSubstitutions",
+    key: (tag: string) => tag,
+    dispose: (substitutionsCell: ComputedSignal<SubstitutionListing>) =>
+      substitutionsCell.dispose(),
+    create: (tagCell: Signal<string>) =>
+      computed(
+        (): SubstitutionListing => {
+          try {
+            const substitutions = this.#editor.font.featureSubstitutions(tagCell.value);
+            return { kind: "listed", substitutions };
+          } catch (error) {
+            return { kind: "failed", error };
+          }
+        },
+        { name: "text.featureSubstitutions" },
+      ),
+  });
+
+  readonly #featureHighlightCell = signal<FeatureHighlight | null>(null, {
+    name: "text.featureHighlight",
+  });
+
+  /**
+   * The glyphs a highlighted feature changes in its run: what it puts in the
+   * text while it applies there, what it would replace while it does not.
+   *
+   * @remarks
+   * Null while no feature is highlighted, and while its substitutions or
+   * whether it applies cannot be read: the Features section and the preview
+   * say why. Follows the run's setting, the font's default and the shaper
+   * font, so turning the feature on or off while it is highlighted moves the
+   * highlight.
+   */
+  readonly highlightCell: Signal<TextHighlight | null> = computed(
+    () => {
+      const highlight = this.#featureHighlightCell.value;
+      const run = highlight ? this.run(highlight.runId) : null;
+      if (!highlight || !run) return null;
+
+      const listing = this.featureSubstitutionsCell(highlight.tag).value;
+      if (listing.kind === "failed") return null;
+      const applies = this.#featureApplies(highlight.tag, run.features[highlight.tag] ?? null);
+      if (applies === null) return null;
+      const glyphs = new Set(
+        listing.substitutions.flatMap(({ input, output }) => (applies ? [output] : input)),
+      );
+      return { runId: run.id, glyphs };
+    },
+    { name: "text.highlight" },
   );
 
   constructor(editor: Editor) {
@@ -351,6 +406,41 @@ export class Text {
     return true;
   }
 
+  /**
+   * Every substitution a feature can make, ordered by output glyph: the
+   * glyphs each rule replaces and the glyph it puts in their place, as Rust
+   * reads them from the shaper font's `GSUB`.
+   *
+   * @remarks
+   * Follows edits to what the shaper font compiles from. Empty for a
+   * positioning feature, a tag the font does not define, and in a preview;
+   * `failed`, with why, when they cannot be read.
+   */
+  featureSubstitutionsCell(tag: string): ComputedSignal<SubstitutionListing> {
+    return this.#substitutions.get(tag);
+  }
+
+  /**
+   * Whether shaping applies a feature a run turns on or off (`on`, null
+   * when it leaves it), as Rust decides; null when that cannot be read,
+   * which the feature listing reports ({@link featuresCell}).
+   */
+  #featureApplies(tag: string, on: boolean | null): boolean | null {
+    try {
+      return this.#editor.font.featureApplies(tag, on);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Highlights what a feature changes in one run's text, as
+   * {@link highlightCell} describes, or clears the highlight with null.
+   */
+  setFeatureHighlight(highlight: FeatureHighlight | null): void {
+    this.#featureHighlightCell.set(highlight);
+  }
+
   /** The ISO 15924 scripts a run's text is laid out in, as layout itemized it, in order of first use. */
   scriptsCell(id: RunId): Signal<readonly string[]> {
     return this.#runs.get(id).scriptsCell;
@@ -460,6 +550,7 @@ export class Text {
     this.#acquiring.dispose();
     this.#runsByItem.dispose();
     this.#runs.clear();
+    this.#substitutions.clear();
   }
 
   #acquireGlyphs(items: readonly TextItem[]): void {

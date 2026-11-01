@@ -58,7 +58,8 @@ use inputs::{FeatureSource, GlyphSet, ShaperAxes};
 pub use positioning::{GeneratedPositioning, LiveAdvances, PositioningGlyphs};
 pub use shape::{
     FeatureDefault, FeatureGroup, FeatureSetting, FontFeature, LiveShaper, ParagraphRequest,
-    ShapeError, ShapeRequest, ShapeUnit, ShapedGlyph, ShapedParagraph, ShapedRun, TextDirection,
+    ShapeError, ShapeRequest, ShapeUnit, ShapedGlyph, ShapedParagraph, ShapedRun, Substitution,
+    TextDirection,
 };
 pub use state::ShaperFontState;
 
@@ -411,6 +412,8 @@ mod shape_tests;
 
 #[cfg(test)]
 mod positioning_tests;
+#[cfg(test)]
+mod substitution_tests;
 #[cfg(test)]
 mod tests;
 

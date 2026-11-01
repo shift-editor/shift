@@ -25,12 +25,17 @@ pub struct FeatureSetting {
 }
 
 impl FeatureSetting {
-    /// Turns feature `tag` on (`1`) or off (`0`).
+    /// Turns feature `tag` on or off ([`Self::switch`]).
     pub fn switched(tag: String, on: bool) -> Self {
         Self {
             tag,
-            value: u32::from(on),
+            value: Self::switch(on),
         }
+    }
+
+    /// The value that turns a feature on (`1`) or off (`0`).
+    pub fn switch(on: bool) -> u32 {
+        u32::from(on)
     }
 }
 

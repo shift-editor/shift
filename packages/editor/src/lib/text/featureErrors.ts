@@ -15,6 +15,8 @@ export function featureReadMessage(error: unknown): string {
       return "This font has no shaper yet, so its features can't be listed.";
     case "unreadable":
       return "This font's compiled features can't be read, so its features can't be listed.";
+    case "invalidTag":
+      return `“${listError.tag}” isn't a feature tag, so its substitutions can't be shown.`;
   }
 }
 

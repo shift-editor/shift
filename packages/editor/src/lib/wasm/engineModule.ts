@@ -50,6 +50,7 @@ import type {
   GlyphIdentityChange,
   InterpolatedMetrics,
   MissingKerningOrigin,
+  FeatureSubstitution,
   FontChangeFlag,
   FontFeature,
   TextRun,
@@ -417,6 +418,28 @@ export class EngineSession {
    */
   fontFeatures(): readonly FontFeature[] {
     return this.#reads.fontFeatures();
+  }
+
+  /**
+   * Every substitution feature `tag` can make in the session's shaper font,
+   * as shift-shape reads them from its `GSUB`.
+   *
+   * @throws When `tag` is no feature tag, the session has no shaper font, or
+   * its `GSUB` cannot be read.
+   */
+  featureSubstitutions(tag: string): readonly FeatureSubstitution[] {
+    return this.#reads.featureSubstitutions(tag);
+  }
+
+  /**
+   * Whether shaping applies feature `tag` when text sets it to `setting`
+   * (null when it leaves it), as shift-shape decides: the setting wins, else
+   * the feature's default. False for a tag the shaper font does not define.
+   *
+   * @throws When the session has no shaper font, or it cannot be read.
+   */
+  featureApplies(tag: string, on: boolean | null): boolean {
+    return this.#reads.featureApplies(tag, on);
   }
 
   /** The change flags whose change may change the session's shaper font. */

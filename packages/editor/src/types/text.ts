@@ -1,6 +1,6 @@
 import type { Point2D } from "@shift/geo";
 import type { GlyphId, NodeId, RunId, SourceId, TextItemId } from "@shift/types";
-import type { FontFeature, PlacedText, TextAlign } from "@shift/wasm/protocol";
+import type { FeatureSubstitution, FontFeature, PlacedText, TextAlign } from "@shift/wasm/protocol";
 import type { PageNode } from "./node";
 import type { CaretEdge, Direction, TextItem } from "../lib/text/layout/types";
 import type { ExternalAxisLocation } from "./variation";
@@ -27,6 +27,14 @@ export type RunLaidOut =
  */
 export type FeatureListing =
   | { readonly kind: "listed"; readonly features: readonly FontFeature[] }
+  | { readonly kind: "failed"; readonly error: unknown };
+
+/**
+ * The substitutions a feature can make, as Rust reads them from the shaper
+ * font, or why they could not be read.
+ */
+export type SubstitutionListing =
+  | { readonly kind: "listed"; readonly substitutions: readonly FeatureSubstitution[] }
   | { readonly kind: "failed"; readonly error: unknown };
 
 /** Where text is laid out: the location shown, and the source edited, which takes precedence. */
@@ -118,6 +126,18 @@ export interface TextRunRecord {
   readonly lineHeight: number | null;
   /** How lines line up; null follows each line's direction, so Arabic lines sit right. */
   readonly align: TextAlign | null;
+}
+
+/** A feature whose changes one run highlights, such as the one under the pointer. */
+export interface FeatureHighlight {
+  readonly runId: RunId;
+  readonly tag: string;
+}
+
+/** Glyphs one run draws highlighted. */
+export interface TextHighlight {
+  readonly runId: RunId;
+  readonly glyphs: ReadonlySet<GlyphId>;
 }
 
 /**

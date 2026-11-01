@@ -285,6 +285,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_feature_applies_as_text_sets_it_else_by_its_default() {
+        let applies = |default: FeatureDefault| {
+            [None, Some(0), Some(1)].map(|setting| default.applies(setting))
+        };
+
+        assert_eq!(applies(FeatureDefault::Required), [true, false, true]);
+        assert_eq!(applies(FeatureDefault::On), [true, false, true]);
+        assert_eq!(applies(FeatureDefault::Off), [false, false, true]);
+    }
+
+    #[test]
     fn script_features_are_required_and_ligatures_are_on() {
         let default = |tag: &[u8; 4]| FeatureDefault::of(Tag::new(tag));
 

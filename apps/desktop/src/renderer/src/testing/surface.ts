@@ -341,6 +341,14 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   setTextAlign(align: "left" | "center" | "right"): void;
   /** The features the font defines, as the Features section lists them: tag, name, default and group. */
   textFeatures(): readonly TextFeature[];
+  /** Each substitution a feature can make, as glyph names, as the feature preview lists them. */
+  featureSubstitutions(
+    tag: string,
+  ): readonly { readonly input: readonly string[]; readonly output: string }[];
+  /** Highlights what a feature changes in the canvas text, as hovering its tag does; null ends it. */
+  highlightFeature(tag: string | null): void;
+  /** The names of the glyphs the canvas text draws highlighted, in no particular order. */
+  highlightedGlyphs(): readonly string[];
 
   /** Types `text` at the caret in Text mode, as the keyboard does; `"\n"` is Enter. */
   typeText(text: string): void;
@@ -655,6 +663,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   failFeatureLists(reason: string): void;
   /** What the Features section says when the font's features cannot be listed; null when they can. */
   featureListFailure(): string | null;
+  /** What a feature's preview says when its substitutions cannot be read; null when they can. */
+  featureSubstitutionsFailure(tag: string): string | null;
   /**
    * Saves the document, as File › Save does. A document never saved yet is
    * saved to a temporary file, as if Save As chose one; {@link close} removes it.

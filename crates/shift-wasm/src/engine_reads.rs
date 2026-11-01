@@ -125,6 +125,34 @@ pub trait EngineReads {
     /// The flags whose change may change the session's shaper font, and so
     /// what [`Self::font_features`] returns.
     fn shaper_inputs(&self) -> Vec<FontChangeFlag>;
+    /// Every substitution feature `tag` can make in the session's shaper
+    /// font, ordered by output glyph then input, as
+    /// `shift_shape::Shaper::feature_substitutions` reads them from its
+    /// `GSUB`: lookups that contextual rules call included, glyphs no
+    /// character reaches included. Empty for a positioning feature or a tag
+    /// the font does not define. Changes when a flag in
+    /// [`Self::shaper_inputs`] does.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FeatureListError`] for an invalid tag, when there is no
+    /// shaper font, saying why, or when its `GSUB` cannot be read.
+    fn feature_substitutions(
+        &self,
+        tag: String,
+    ) -> Result<Vec<FeatureSubstitution>, FeatureListError>;
+    /// Whether shaping text applies feature `tag` when a run turns it on or
+    /// off (`on`, null when the run leaves it), as the run's layout sets it
+    /// (`FeatureSetting::switch`): `FeatureDefault::applies` for the
+    /// session's shaper font's feature: the setting wins, else its default.
+    /// False for a tag the shaper font does not define. Changes when a flag
+    /// in [`Self::shaper_inputs`] does.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FeatureListError`] when there is no shaper font, saying
+    /// why, or it cannot be read.
+    fn feature_applies(&self, tag: String, on: Option<bool>) -> Result<bool, FeatureListError>;
     /// What renaming `glyph` to `name` does: `Font::glyph_rename`. Null for a
     /// glyph the session's font lacks.
     fn glyph_rename(&self, glyph: GlyphId, name: String) -> Option<GlyphIdentityChange>;
@@ -192,6 +220,9 @@ pub enum FeatureListError {
     /// The shaper font could not be read.
     #[error("the shaper font could not be read: {detail}")]
     Unreadable { detail: String },
+    /// A feature was asked for by a tag that is not four characters.
+    #[error("`{tag}` is not a feature tag")]
+    InvalidTag { tag: String },
 }
 
 #[cfg(feature = "engine")]
@@ -211,6 +242,14 @@ pub struct PlacedText {
     /// The glyphs it shows whose layers the session has not loaded, which
     /// laid out from their placeholders.
     pub unloaded: Vec<GlyphId>,
+}
+
+/// One substitution a feature can make: `input` in the text becomes `output`.
+#[derive(Clone, Debug, PartialEq, Eq, Pack)]
+pub struct FeatureSubstitution {
+    /// The glyphs replaced; more than one for a ligature.
+    pub input: Vec<GlyphId>,
+    pub output: GlyphId,
 }
 
 /// The authored pair an edit to the kerning between two glyphs at a source changes.
@@ -268,13 +307,15 @@ mod exports {
         GlyphRecords, InterpolationBasis, Kerning, KerningSide, LayerId, MissingKerningOrigin,
         ResolvedKerning, SourceId,
     };
+    use shift_layout::FeatureSetting;
     use shift_wire::values::{self, WireParse};
     use wasm_bindgen::prelude::*;
 
     use super::{
-        Axis, EditablePair, EngineReads, FeatureListError, FontChangeFlag, FontFeature,
-        GlyphIdentityChange, InterpolatedMetrics, KerningSnapshot, LayoutError, NodeId, PlacedText,
-        RevisedNode, SceneNode, Source, SourceSetWeights, TextLayoutRequest, engine_reads_request,
+        Axis, EditablePair, EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag,
+        FontFeature, GlyphIdentityChange, InterpolatedMetrics, KerningSnapshot, LayoutError,
+        NodeId, PlacedText, RevisedNode, SceneNode, Source, SourceSetWeights, TextLayoutRequest,
+        engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::shaping::{TextPlace, TextShaping};
@@ -669,6 +710,26 @@ mod exports {
 
         fn shaper_inputs(&self) -> Vec<FontChangeFlag> {
             FontChangeFlag::of(TextShaping::INPUTS).collect()
+        }
+
+        fn feature_substitutions(
+            &self,
+            tag: String,
+        ) -> Result<Vec<FeatureSubstitution>, FeatureListError> {
+            self.shaping.feature_substitutions(
+                self.session.font(),
+                || self.shaper_font_source(),
+                &tag,
+            )
+        }
+
+        fn feature_applies(&self, tag: String, on: Option<bool>) -> Result<bool, FeatureListError> {
+            self.shaping.feature_applies(
+                self.session.font(),
+                || self.shaper_font_source(),
+                &tag,
+                on.map(FeatureSetting::switch),
+            )
         }
 
         fn source_set_weights(&self, location: Vec<f64>) -> SourceSetWeights {

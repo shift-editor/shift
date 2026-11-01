@@ -339,6 +339,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
     this.#stack.engine.failFeatureLists(reason);
   }
 
+  featureSubstitutionsFailure(tag: string): string | null {
+    const listing = this.text.featureSubstitutionsCell(tag).peek();
+    return listing.kind === "failed" ? featureReadMessage(listing.error) : null;
+  }
+
   featureListFailure(): string | null {
     const listing = this.text.featuresCell.peek();
     return listing.kind === "failed" ? featureReadMessage(listing.error) : null;
@@ -963,6 +968,28 @@ export class TestEditor extends Editor implements EditorTestSurface {
       default: shown,
       group,
     }));
+  }
+
+  featureSubstitutions(
+    tag: string,
+  ): readonly { readonly input: readonly string[]; readonly output: string }[] {
+    const name = (id: GlyphId) => this.font.glyphName(id) ?? id;
+    const listing = this.text.featureSubstitutionsCell(tag).peek();
+    if (listing.kind === "failed") throw listing.error;
+    return listing.substitutions.map(({ input, output }) => ({
+      input: input.map(name),
+      output: name(output),
+    }));
+  }
+
+  highlightFeature(tag: string | null): void {
+    const run = this.#requireTextRun();
+    this.text.setFeatureHighlight(tag === null ? null : { runId: run.runId, tag });
+  }
+
+  highlightedGlyphs(): readonly string[] {
+    const glyphs = this.text.highlightCell.peek()?.glyphs ?? new Set<GlyphId>();
+    return [...glyphs].map((id) => this.font.glyphName(id) ?? id);
   }
 
   #requireTextRun(): TextRunNode {
