@@ -38,6 +38,8 @@ pub mod geometry;
 pub mod index_keys;
 pub mod names;
 mod numbers;
+#[cfg(feature = "engine-protocol")]
+pub mod page_layout;
 pub mod proof_text;
 pub mod scene;
 pub mod shaping;

@@ -82,6 +82,8 @@ jobs:
               # The editor runs these through packages/wasm.
               - 'crates/shift-font/**'
               - 'crates/shift-wasm/**'
+              # Its vocabulary crosses into @shift/wasm/protocol with the scene.
+              - 'crates/shift-layout/**'
               # They generate @shift/wasm/protocol.
               - 'crates/pack/**'
               - 'crates/pack-derive/**'
@@ -657,7 +659,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Check WebAssembly font core
-        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo check --target wasm32-unknown-unknown -p fontsrc -p rumil -p rumil-build -p shift-backends -p shift-engine -p shift-font -p shift-slug -p shift-wasm -p shift-wire
+        run: RUSTFLAGS='-D warnings --cfg getrandom_backend="wasm_js"' cargo check --target wasm32-unknown-unknown -p fontsrc -p rumil -p rumil-build -p shift-backends -p shift-engine -p shift-font -p shift-layout -p shift-slug -p shift-wasm -p shift-wire
 
       # The workspace clippy run leaves features off, so the editing engine's
       # exports are linted here, for the target they build for.
@@ -675,6 +677,11 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace --exclude shift-bridge
+
+      # The workspace run leaves features off, so the engine module's own
+      # tests (text and page layout over the session's shaper) run here.
+      - name: Run the engine module's tests
+        run: cargo test -p shift-wasm --features engine --lib
 
       # Time budgets hold for optimised code, so they are only asserted here.
       - name: Check performance budgets

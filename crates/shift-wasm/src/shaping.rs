@@ -148,6 +148,24 @@ mod exports {
             request: &LayoutRequest,
             place: TextPlace,
         ) -> Result<TextLayout, LayoutError> {
+            let mut layout =
+                self.with_layout_font(font, source, place, |lay_out| lay_out(request))?;
+            self.placements.borrow_mut().assign(&mut layout);
+            Ok(layout)
+        }
+
+        /// Calls `with` with a function that lays text out over `font` at
+        /// `place`, as [`Self::layout_text`] does, without placement keys:
+        /// for laying out many texts, or one text at many widths, with one
+        /// shaper update and one font. The shaper stays borrowed while
+        /// `with` runs.
+        pub(crate) fn with_layout_font<E: std::fmt::Display, R>(
+            &self,
+            font: &Font,
+            source: impl FnOnce() -> Result<ShaperFontSource, E>,
+            place: TextPlace,
+            with: impl FnOnce(&mut dyn FnMut(&LayoutRequest) -> Result<TextLayout, LayoutError>) -> R,
+        ) -> R {
             let state = self.current(font, source);
             let class = |glyph| state.compilation.class(glyph);
             let layout_font = LayoutFont::new(
@@ -159,9 +177,7 @@ mod exports {
                 &class,
                 LineMetrics::at(font, &place.design),
             );
-            let mut layout = TextLayout::new(&layout_font, request)?;
-            self.placements.borrow_mut().assign(&mut layout);
-            Ok(layout)
+            with(&mut |request| TextLayout::new(&layout_font, request))
         }
 
         /// The features the shaper font defines, in tag order, with the
