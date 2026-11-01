@@ -103,10 +103,14 @@ jobs:
             platform: darwin
             arch: arm64
             builder-args: "--mac zip dmg --arm64"
+          # Cross-compiled on Apple silicon, which built the bridge in about
+          # half the Intel runner's time (12 against 20 minutes, both
+          # uncached, on 2026-11-01). The smoke test runs it under Rosetta.
           - name: macOS x64
-            runner: macos-26-intel
+            runner: macos-26
             platform: darwin
             arch: x64
+            rust-target: x86_64-apple-darwin
             builder-args: "--mac zip dmg --x64"
           - name: Windows arm64
             runner: windows-11-arm
@@ -131,6 +135,11 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
+    env:
+      # The triple a cross build targets; empty builds for the runner. Read by
+      # the bridge's build script, the command-line tool step and
+      # electron-builder.config.ts, which finds shift-cli under it.
+      SHIFT_RUST_TARGET: ${{ matrix.rust-target }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -145,10 +154,19 @@ jobs:
           node-version: 24
 
       - name: Install Rust toolchain
-        run: rustup show
+        shell: bash
+        run: |
+          rustup show
+          if [[ -n "$SHIFT_RUST_TARGET" ]]; then rustup target add "$SHIFT_RUST_TARGET"; fi
 
+      # One key per platform, so the cross-compiled macOS x64 build on the
+      # arm64 runner keeps a cache of its own. Saved after a failed step too:
+      # a job that compiled the dependencies before failing still saves them.
       - name: Restore Rust build cache
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: nightly-${{ matrix.platform }}-${{ matrix.arch }}
+          cache-on-failure: true
 
       - name: Install Linux maker tools
         if: matrix.platform == 'linux'
@@ -186,7 +204,8 @@ jobs:
 
       - name: Build command-line tool
         if: matrix.platform != 'linux'
-        run: pnpm build:cli
+        shell: bash
+        run: pnpm build:cli ${SHIFT_RUST_TARGET:+--target "$SHIFT_RUST_TARGET"}
 
       - name: Build Linux native binaries against glibc 2.17
         if: matrix.platform == 'linux'
@@ -197,9 +216,12 @@ jobs:
         run: pnpm build:wasm
 
       # The app bundles the native workspace's generated clients, which are
-      # not committed.
+      # not committed. The bridge build above wrote index.d.ts and
+      # protocol.ts from its own compile (crates/shift-bridge/scripts/build.mjs),
+      # so this only turns them into @shift/types' files instead of checking
+      # the bridge a second time.
       - name: Generate bridge types
-        run: pnpm generate:bridge-types
+        run: pnpm --filter @shift/types generate:bridge-types
 
       - name: Build desktop application
         env:
@@ -246,6 +268,34 @@ jobs:
           esac
           test -d "$PACKAGE_PATH"
           echo "path=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
+
+      # Fails a build whose app, addon or shift-cli is not for the matrix
+      # architecture, such as a cross build that packaged a host binary.
+      - name: Verify macOS architectures
+        if: matrix.platform == 'darwin'
+        shell: bash
+        env:
+          APP_PATH: ${{ steps.package.outputs.app }}
+          EXPECTED: ${{ matrix.arch == 'x64' && 'x86_64' || 'arm64' }}
+        run: |
+          set -euo pipefail
+          BINARIES=(
+            "$APP_PATH/Contents/MacOS/Shift Nightly"
+            "$APP_PATH/Contents/Resources/bin/shift-cli-nightly"
+          )
+          while IFS= read -r -d '' addon; do BINARIES+=("$addon"); done \
+            < <(find "$APP_PATH/Contents/Resources/app.asar.unpacked" -name '*.node' -print0)
+          [[ "${#BINARIES[@]}" -ge 3 ]] || { echo "No native addon in the app" >&2; exit 1; }
+          for binary in "${BINARIES[@]}"; do
+            ARCHS="$(lipo -archs "$binary")"
+            echo "$binary: $ARCHS"
+            [[ "$ARCHS" == "$EXPECTED" ]] || { echo "Expected $EXPECTED" >&2; exit 1; }
+          done
+
+      # The arm64 runner runs the cross-compiled x64 app under Rosetta.
+      - name: Install Rosetta
+        if: matrix.platform == 'darwin' && matrix.arch == 'x64'
+        run: sudo softwareupdate --install-rosetta --agree-to-license
 
       - name: Smoke-test packaged application
         run: node scripts/smoke-packaged.mjs "${{ steps.package.outputs.path }}" nightly
@@ -295,6 +345,26 @@ jobs:
             apps/desktop/out/${{ matrix.platform }}-${{ matrix.arch }}/latest*.yml
           if-no-files-found: error
           retention-days: 14
+
+  # The builds above saved their caches; delete the ones they replaced, so
+  # main's caches stay under GitHub's 10 GB and the Nightly's are not evicted
+  # before the next night.
+  prune-caches:
+    name: Prune superseded Rust caches
+    needs: build
+    if: always() && github.ref == 'refs/heads/main' && needs.build.result != 'skipped'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Delete superseded caches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/prune-superseded-caches.sh
 
   publish:
     name: Publish rolling Nightly assets

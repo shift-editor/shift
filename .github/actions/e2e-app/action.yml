@@ -46,9 +46,11 @@ runs:
       with:
         path: |
           crates/shift-bridge/*.node
+          crates/shift-bridge/index.d.ts
+          crates/shift-bridge/protocol.ts
           packages/wasm/src/generated
           packages/wasm/src/generated-engine
-        key: native-module-e2e-v3-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'Cargo.toml', 'crates/**', 'Cargo.lock', 'rust-toolchain.toml') }}
+        key: native-module-e2e-v4-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'packages/pack/src/**', 'Cargo.toml', 'crates/**', 'Cargo.lock', 'rust-toolchain.toml') }}
 
     # A cache saved on a pull request or merge-queue ref can be restored only by
     # that ref, and each is about 400 MB: saving them evicted main's caches, so
@@ -58,6 +60,7 @@ runs:
       with:
         shared-key: shift-rust-${{ runner.os }}
         save-if: ${{ github.ref == 'refs/heads/main' }}
+        cache-on-failure: true
 
     - name: Build native module
       if: steps.native-cache.outputs.cache-hit != 'true'
@@ -70,9 +73,11 @@ runs:
       with:
         path: |
           crates/shift-bridge/*.node
+          crates/shift-bridge/index.d.ts
+          crates/shift-bridge/protocol.ts
           packages/wasm/src/generated
           packages/wasm/src/generated-engine
-        key: native-module-e2e-v3-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'Cargo.toml', 'crates/**', 'Cargo.lock', 'rust-toolchain.toml') }}
+        key: native-module-e2e-v4-${{ runner.os }}-${{ hashFiles('packages/wasm/scripts/**', 'packages/pack/src/**', 'Cargo.toml', 'crates/**', 'Cargo.lock', 'rust-toolchain.toml') }}
 
     - name: Generate glyph info
       if: github.event_name != 'push'
@@ -80,11 +85,14 @@ runs:
       run: pnpm generate:glyph-info
 
     # The app bundles the native workspace's generated clients, which are
-    # not committed.
+    # not committed. The bridge build wrote index.d.ts and protocol.ts from its
+    # own compile (crates/shift-bridge/scripts/build.mjs), and the native
+    # module cache keeps them, so this only turns them into @shift/types'
+    # files instead of checking the bridge a second time.
     - name: Generate bridge types
       if: github.event_name != 'push'
       shell: bash
-      run: pnpm generate:bridge-types
+      run: pnpm --filter @shift/types generate:bridge-types
 
     - name: Build E2E app
       if: github.event_name != 'push'

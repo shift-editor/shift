@@ -12,6 +12,7 @@
         "package.json",
         "Cargo.toml",
         "dts-header.d.ts",
+        "scripts/**",
         "$TURBO_ROOT$/Cargo.toml",
         "$TURBO_ROOT$/Cargo.lock",
         "$TURBO_ROOT$/rust-toolchain.toml",
@@ -19,7 +20,8 @@
         "$TURBO_ROOT$/crates/*/build.rs",
         "$TURBO_ROOT$/crates/*/src/**"
       ],
-      "outputs": ["index.js", "index.d.ts", "*.node"]
+      "outputs": ["index.js", "index.d.ts", "*.node"],
+      "env": ["SHIFT_RUST_TARGET"]
     },
     "shift-bridge#build:debug": {
       "inputs": [
@@ -27,6 +29,7 @@
         "package.json",
         "Cargo.toml",
         "dts-header.d.ts",
+        "scripts/**",
         "$TURBO_ROOT$/Cargo.toml",
         "$TURBO_ROOT$/Cargo.lock",
         "$TURBO_ROOT$/rust-toolchain.toml",
@@ -34,7 +37,8 @@
         "$TURBO_ROOT$/crates/*/build.rs",
         "$TURBO_ROOT$/crates/*/src/**"
       ],
-      "outputs": ["index.js", "index.d.ts", "*.node"]
+      "outputs": ["index.js", "index.d.ts", "*.node"],
+      "env": ["SHIFT_RUST_TARGET"]
     },
     "shift-bridge#build:e2e": {
       "inputs": [
@@ -42,6 +46,7 @@
         "package.json",
         "Cargo.toml",
         "dts-header.d.ts",
+        "scripts/**",
         "$TURBO_ROOT$/Cargo.toml",
         "$TURBO_ROOT$/Cargo.lock",
         "$TURBO_ROOT$/rust-toolchain.toml",
@@ -49,7 +54,8 @@
         "$TURBO_ROOT$/crates/*/build.rs",
         "$TURBO_ROOT$/crates/*/src/**"
       ],
-      "outputs": ["index.js", "index.d.ts", "*.node"]
+      "outputs": ["index.js", "index.d.ts", "*.node"],
+      "env": ["SHIFT_RUST_TARGET"]
     },
     "shift-bridge#types": {
       "inputs": [
