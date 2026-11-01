@@ -1,6 +1,15 @@
 import type {
   AuthoredLayer,
+  CommandListInput,
+  CommandRun,
+  CommandRunInput,
+  CommandSummary,
   EditorInspection,
+  EditorOpenGlyphInput,
+  EditorSelectInput,
+  EditorSetToolInput,
+  EditorSetViewInput,
+  EditorShowPageInput,
   FontOverview,
   GlyphGetInput,
   GlyphListInput,
@@ -55,6 +64,34 @@ export type SandboxHostCallMap = {
   };
   "shift.editor.inspect": {
     request: ShiftTarget;
+    response: ShiftObservation<EditorInspection>;
+  };
+  "shift.commands.list": {
+    request: CommandListInput;
+    response: CommandSummary[];
+  };
+  "shift.commands.run": {
+    request: CommandRunInput;
+    response: CommandRun;
+  };
+  "shift.editor.setTool": {
+    request: EditorSetToolInput;
+    response: ShiftObservation<EditorInspection>;
+  };
+  "shift.editor.showPage": {
+    request: EditorShowPageInput;
+    response: ShiftObservation<EditorInspection>;
+  };
+  "shift.editor.openGlyph": {
+    request: EditorOpenGlyphInput;
+    response: ShiftObservation<EditorInspection>;
+  };
+  "shift.editor.setView": {
+    request: EditorSetViewInput;
+    response: ShiftObservation<EditorInspection>;
+  };
+  "shift.editor.select": {
+    request: EditorSelectInput;
     response: ShiftObservation<EditorInspection>;
   };
   "shift.font.get": {

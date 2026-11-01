@@ -6,6 +6,10 @@ import { ShiftMcpServer } from "./server";
 import type { ShiftCapabilities } from "@shift/runtime";
 import type { ShiftMcpConnection } from "./types";
 
+async function noWindow(): Promise<never> {
+  throw new Error("No open Shift window");
+}
+
 const capabilities: ShiftCapabilities = {
   async capture({ windowId, target, scale = 1 }) {
     return {
@@ -28,10 +32,19 @@ const capabilities: ShiftCapabilities = {
       return [];
     },
   },
+  commands: {
+    list: noWindow,
+    run: noWindow,
+  },
   editor: {
     async inspect() {
       throw new Error("No open Shift window");
     },
+    setTool: noWindow,
+    showPage: noWindow,
+    openGlyph: noWindow,
+    setView: noWindow,
+    select: noWindow,
   },
   font: {
     async get() {
@@ -235,6 +248,37 @@ describe("Shift MCP local connection", () => {
     expect(await guideText(nightly)).toMatch(
       /^This build installs its command-line tool as `shift-cli-nightly`/,
     );
+  });
+
+  it("tells agents they can control the window's view but not fonts or files", async () => {
+    const connection = await startServer().start();
+
+    const initialized = await mcpRequest(connection, "initialize", {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: { name: "shift-test", version: "1.0.0" },
+    });
+    const described = await mcpRequest(connection, "tools/call", {
+      name: "shift.describe",
+      arguments: {},
+    });
+
+    expect(initialized).toMatchObject({
+      result: {
+        instructions: expect.stringMatching(/cannot change a font or a file.*shift\.commands/),
+      },
+    });
+    expect(described).toMatchObject({
+      result: {
+        content: [
+          {
+            text: expect.stringMatching(
+              /commands: \{\s*list\(input: CommandListInput\)[\s\S]*setView\(input: EditorSetViewInput\)/,
+            ),
+          },
+        ],
+      },
+    });
   });
 
   it("connects with a native MCP client", async () => {

@@ -115,6 +115,35 @@ export interface BoundsCorner {
 }
 
 // @public
+export type CommandId = string;
+
+// @public
+export interface CommandListInput {
+    // (undocumented)
+    windowId: number;
+}
+
+// @public
+export interface CommandRun {
+    ran: boolean;
+}
+
+// @public
+export interface CommandRunInput extends ShiftTarget {
+    // (undocumented)
+    command: CommandId;
+}
+
+// @public
+export interface CommandSummary {
+    enabled: boolean;
+    // (undocumented)
+    id: CommandId;
+    shortcut: string | null;
+    title: string;
+}
+
+// @public
 export interface ComponentTransform {
     // (undocumented)
     dx: number;
@@ -435,6 +464,34 @@ export interface EditorInspection extends EditorView {
 }
 
 // @public
+export type EditorOpenGlyphInput = ShiftTarget & {
+    glyph: GlyphSelector;
+};
+
+// @public
+export interface EditorSelectInput extends ShiftTarget {
+    ids: SelectableId[];
+}
+
+// @public
+export interface EditorSetToolInput extends ShiftTarget {
+    tool: string;
+}
+
+// @public
+export interface EditorSetViewInput extends ShiftTarget {
+    // (undocumented)
+    center?: Point2D;
+    // (undocumented)
+    zoom?: number;
+}
+
+// @public
+export interface EditorShowPageInput extends ShiftTarget {
+    pageId: NodeId;
+}
+
+// @public
 export interface EditorTool {
     // (undocumented)
     id: string;
@@ -466,6 +523,13 @@ export interface EditorView {
     shownPageId: NodeId | null;
     // (undocumented)
     tool: EditorTool | null;
+    viewport: EditorViewport;
+}
+
+// @public
+export interface EditorViewport {
+    center: Point2D | null;
+    zoom: number;
 }
 
 // @public
@@ -1240,9 +1304,17 @@ export type SelectableId = ShiftId;
 export interface ShiftCapabilities {
     // (undocumented)
     capture(input: ShiftCaptureInput): Promise<ShiftObservation<ShiftCapture>>;
-    // (undocumented)
+    commands: {
+        list(input: CommandListInput): Promise<CommandSummary[]>;
+        run(input: CommandRunInput): Promise<CommandRun>;
+    };
     editor: {
         inspect(input: ShiftTarget): Promise<ShiftObservation<EditorInspection>>;
+        setTool(input: EditorSetToolInput): Promise<ShiftObservation<EditorInspection>>;
+        showPage(input: EditorShowPageInput): Promise<ShiftObservation<EditorInspection>>;
+        openGlyph(input: EditorOpenGlyphInput): Promise<ShiftObservation<EditorInspection>>;
+        setView(input: EditorSetViewInput): Promise<ShiftObservation<EditorInspection>>;
+        select(input: EditorSelectInput): Promise<ShiftObservation<EditorInspection>>;
     };
     // (undocumented)
     font: {

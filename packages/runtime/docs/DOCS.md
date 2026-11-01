@@ -1,6 +1,6 @@
 # @shift/runtime
 
-<!-- reviewed: 2026-10-04 review-every: 90d -->
+<!-- reviewed: 2026-11-01 review-every: 90d -->
 
 Host-neutral capability contracts shared by Shift protocol adapters and future plugin hosts.
 
@@ -22,6 +22,7 @@ packages/runtime/
   src/
     capabilities.ts       -- canonical capability, observation, and `ShiftRead` contracts
     read.ts               -- `ShiftReadScope` and `FontChangedError` over raw capabilities
+    controlErrors.ts      -- typed failures of the `commands` and `editor` control calls
     inputs.ts             -- Zod validation of untrusted code-mode arguments
     index.ts              -- public capability types and input schemas
   scripts/
@@ -37,6 +38,9 @@ packages/runtime/
 - `ShiftObservation`, `FontRevision`, and `ShiftTarget` -- revision-correlated result, opaque authored-state identity, and explicit window/precondition input.
 - `ShiftCapture` and `ShiftCaptureTarget` -- point-in-time PNG output and its explicit `window` or `editor` target.
 - `EditorInspection` -- point-in-time editor observation paired with its explicit target.
+- `EditorViewport` -- the canvas camera in an inspection: `zoom`, and the `center` point in the open glyph's units (or the page's), null before the canvas has a size.
+- `CommandSummary`, `CommandRun`, and the `Editor*Input` types -- the app commands an agent may run, and the inputs of the `commands` and `editor` control calls.
+- `CommandNotFoundError`, `CommandNotRunnableError`, `CommandDisabledError`, `ToolNotFoundError`, `PageNotFoundError`, `GlyphNotFoundError`, `ObjectNotFoundError`, and `CanvasHiddenError` (`src/controlErrors.ts`) -- the typed failures of control calls, recognized by `name` across process and sandbox boundaries.
 - `FontOverview`, `GlyphPage`, `GlyphSummary`, and `AuthoredLayer` -- read-only font (with its axes, axis mappings, sources and instances), paged directory, stable layer references, and nested source-specific geometry.
 - `ResolvedLocation`, `ResolvedGlyph`, and `ResolvedGlyphs` -- mapped location/metrics and drawable glyph output at arbitrary external coordinates.
 - `AuthoredContour`, `AuthoredPoint`, `AuthoredComponent`, `AuthoredAnchor`, and `AffineTransformation` -- familiar scripting hierarchy with stable IDs and conventional component transforms.
@@ -68,6 +72,8 @@ Layer reads use one native accepted-state query keyed by `LayerId`, behind pendi
 The code-API generator bundles only declarations reachable from `capabilities.ts`, including the canonical branded identifiers from `@shift/types`, then adds the code-mode global `shift: ShiftScript` (`ShiftCapabilities` plus `read`). `@shift/mcp` imports that generated file as text for `shift.describe`; it does not maintain another declaration.
 
 Kerning reads are read-only. `kerning.groups` lists font-wide groups by position, each with its member glyphs. `kerning.pairs` pages through one source's authored pairs in side-id order; a cursor names the last pair returned, so it survives that pair being removed, and the optional `glyph` filter keeps pairs naming the glyph directly or through its group at that position. Every kerning read takes its master as `source` (a `SourceSelector`), the default source when omitted. `kerning.resolve` takes pairs of glyph selectors (`{ name }` or `{ glyphId }`, as `kerning.at` and the `glyph` filter do) and answers at a `source`, an external `location`, or the default location, using the host's own kerning lookup and blending rather than re-deriving them: the most specific authored pair wins (glyph/glyph, glyph/group, group/glyph, group/group), a source that kerns other pairs but not this one is 0 there, and a source that authors no kerning takes the blend of the sources that do. Each resolution lists every source with that value, its `origin`, and the pair that applies. `kerning.at` reads one such entry: one pair, by glyph selectors, at one source.
+
+`commands` and the `editor` setters change what a window shows, never font data or files. `commands.list` returns the app commands whose registry `effect` is `view` (zoom, interface size, Select All, Deselect, Close Tab, Settings), and `commands.run` runs one through the window's own command request, as its menu item does; the host refuses any other command with `CommandNotRunnableError`, an unknown one with `CommandNotFoundError`, and a disabled one with `CommandDisabledError`. `editor.setTool`, `showPage`, `openGlyph`, `setView` and `select` make the model calls the toolbar, pages list, glyph overview, zoom controls and selection make, and answer with the `EditorInspection` afterwards. None marks the document unsaved or moves `fontRevision`; each checks `ifFontRevision` first and fails with `FontChangedError`, doing nothing, when it is stale.
 
 ## Workflow recipes
 

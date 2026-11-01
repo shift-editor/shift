@@ -45,7 +45,7 @@ import {
   flipSelection,
   rotateSelection,
 } from "@/lib/editor/sidebarActions";
-import type { EditorCommandId } from "@shared/commands";
+import type { CommandId, EditorCommandId } from "@shared/commands";
 import { Bounds, Rect, type Point2D, type Rect2D } from "@shift/geo";
 import {
   mintAxisMappingId,
@@ -97,6 +97,11 @@ import type {
   SpacingToolView,
   TextRunView,
 } from "@shift/runtime";
+import { AgentControl, type ControlCall, type ControlOperation } from "@/agent/AgentControl";
+import { AgentRevisions } from "@/agent/AgentRevisions";
+import { ShiftEditorControl } from "@/agent/ShiftEditorControl";
+import type { WindowRouter } from "@/lib/tabs/WindowNavigation";
+import type { AgentCallMap } from "@shared/agent/protocol";
 import { ShiftEditorReader, type DrawnHandle } from "@/agent/ShiftEditorReader";
 import { ShiftFontReader } from "@/agent/ShiftFontReader";
 import { ShiftKerningReader } from "@/agent/ShiftKerningReader";
@@ -235,6 +240,12 @@ export class TestEditor extends Editor implements EditorTestSurface {
   readonly #stack: WorkspaceStack;
   /** The window's tabs, which open glyphs as the editor route does. */
   readonly #tabs: WindowTabs;
+  /** The window's route, which agents' navigation moves; no view follows it here. */
+  readonly #route: { path: string } & WindowRouter;
+  /** The window-control calls agents make, over this editor's tabs, readers and edit coordinator. */
+  readonly #agentControl: AgentControl;
+  /** Where `commands.run` sends a command, as the window's command request sends it to main. */
+  #appCommands: ((command: CommandId) => Promise<void>) | null = null;
   /** Temporary directories this editor's document was saved into, removed on {@link close}. */
   readonly #temporaryDirectories: string[] = [];
   /**
@@ -277,6 +288,22 @@ export class TestEditor extends Editor implements EditorTestSurface {
     };
     registerBuiltInTools(this);
     this.setActiveTool("select");
+    this.#route = {
+      path: "",
+      pathname() {
+        return this.path;
+      },
+      navigate(path) {
+        this.path = path;
+      },
+    };
+    this.#agentControl = new AgentControl(
+      new ShiftEditorControl(this, stack.font, this.#tabs, this.#route),
+      this.#reads.editor,
+      new AgentRevisions(stack.editCoordinator),
+      this.#route,
+      (command) => this.#runAppCommand(command),
+    );
   }
 
   /**
@@ -1365,7 +1392,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   editorView(): EditorView {
-    return this.#reads.editor.inspect("");
+    return this.#reads.editor.inspect(this.#route.pathname());
   }
 
   toolState(): EditorTool | null {
@@ -1583,6 +1610,23 @@ export class TestEditor extends Editor implements EditorTestSurface {
   viewportCentre(): ScreenPoint {
     const { x, y } = this.camera.centre;
     return screenPoint(x, y);
+  }
+
+  agentControl<K extends ControlOperation>(
+    operation: K,
+    input: AgentCallMap[K]["request"],
+  ): Promise<AgentCallMap[K]["response"]> {
+    const call: ControlCall<K> = this.#agentControl.calls[operation];
+    return call(input);
+  }
+
+  connectAppCommands(run: (command: CommandId) => Promise<void>): void {
+    this.#appCommands = run;
+  }
+
+  #runAppCommand(command: CommandId): Promise<void> {
+    if (!this.#appCommands) throw new Error("connectAppCommands before running app commands");
+    return this.#appCommands(command);
   }
 
   async reopen(): Promise<EditorTestSurface> {

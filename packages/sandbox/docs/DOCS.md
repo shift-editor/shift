@@ -1,6 +1,6 @@
 # Sandbox
 
-<!-- reviewed: 2026-10-04 review-every: 90d -->
+<!-- reviewed: 2026-11-01 review-every: 90d -->
 
 Bounded Shift code execution over host-supplied typed capabilities, independent of MCP transport.
 
@@ -10,6 +10,7 @@ Bounded Shift code execution over host-supplied typed capabilities, independent 
 - **Architecture Invariant:** Each `executeShiftCode()` call gets a fresh QuickJS realm with only the explicitly installed `shift` read API. Code has no Node.js, filesystem, environment, Electron, or network globals; output must be JSON-compatible.
 - **Architecture Invariant:** Source, memory, stack, result, and execution time are bounded. The Electron host additionally supervises execution in a utility process and stops that process on its hard deadline. Neither this one-shot API nor the current read-only capability contract promises persistent plugin state or mutation authority.
 - **Architecture Invariant:** Raw capabilities preserve `ShiftObservation<T>` unchanged. Revision binding happens only inside an explicit `shift.read` callback, through `@shift/runtime`'s `ShiftReadScope`; the executor never pins, retries, or silently refreshes authored state outside it.
+- **Architecture Invariant:** Window-control calls (`shift.commands.*` and the `shift.editor` setters) are validated like every other input and passed to the host as parsed; the host, not the sandbox, decides which commands an agent may run.
 - **Architecture Invariant:** Every untrusted input, including each `shift.read` call, is parsed by `@shift/runtime`'s schemas before reaching a host capability. Host errors cross into the realm with their `name`, so scripts can recognize `FontChangedError`.
 
 ## Codemap

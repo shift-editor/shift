@@ -1,6 +1,11 @@
 import type {
   AuthoredLayer,
   AxisCoordinate,
+  EditorOpenGlyphInput,
+  EditorSelectInput,
+  EditorSetToolInput,
+  EditorSetViewInput,
+  EditorShowPageInput,
   EditorView,
   FontOverview,
   FontRevision,
@@ -26,6 +31,7 @@ import type {
   InstanceSelector,
 } from "@shift/runtime";
 import type { GlyphId, KerningPosition, NamedInstance, Source } from "@shift/types";
+import type { CommandId } from "../commands";
 
 /** Main-to-renderer calls for live agent inspection of one explicit window. */
 export interface EditorCaptureBounds {
@@ -46,6 +52,34 @@ export type AgentCallMap = {
   };
   "editor.inspect": {
     request: { ifFontRevision?: FontRevision };
+    response: ShiftObservation<EditorView>;
+  };
+  /**
+   * Runs an app command main has already checked agents may run, through the
+   * window's own command request, once `ifFontRevision` still matches.
+   */
+  "commands.run": {
+    request: { command: CommandId; ifFontRevision?: FontRevision };
+    response: ShiftObservation<null>;
+  };
+  "editor.setTool": {
+    request: ShiftReadInput<EditorSetToolInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<EditorView>;
+  };
+  "editor.showPage": {
+    request: ShiftReadInput<EditorShowPageInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<EditorView>;
+  };
+  "editor.openGlyph": {
+    request: ShiftReadInput<EditorOpenGlyphInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<EditorView>;
+  };
+  "editor.setView": {
+    request: ShiftReadInput<EditorSetViewInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<EditorView>;
+  };
+  "editor.select": {
+    request: ShiftReadInput<EditorSelectInput> & { ifFontRevision?: FontRevision };
     response: ShiftObservation<EditorView>;
   };
   "font.get": {
@@ -138,6 +172,14 @@ export type AgentCallMap = {
     response: unknown;
   };
 };
+
+/** The agent-lane calls that change what the editor shows, each answering with its view. */
+export type EditorControlOperation =
+  | "editor.setTool"
+  | "editor.showPage"
+  | "editor.openGlyph"
+  | "editor.setView"
+  | "editor.select";
 
 /**
  * Test actions the renderer serves on the agent lane only when main enables

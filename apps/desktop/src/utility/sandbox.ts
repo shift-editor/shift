@@ -15,8 +15,17 @@ const capabilities: ShiftCapabilities = {
   sessions: {
     list: () => host.call("shift.sessions.list", undefined),
   },
+  commands: {
+    list: (input) => host.call("shift.commands.list", input),
+    run: (input) => host.call("shift.commands.run", input),
+  },
   editor: {
     inspect: (input) => host.call("shift.editor.inspect", input),
+    setTool: (input) => host.call("shift.editor.setTool", input),
+    showPage: (input) => host.call("shift.editor.showPage", input),
+    openGlyph: (input) => host.call("shift.editor.openGlyph", input),
+    setView: (input) => host.call("shift.editor.setView", input),
+    select: (input) => host.call("shift.editor.select", input),
   },
   font: {
     get: (input) => host.call("shift.font.get", input),
