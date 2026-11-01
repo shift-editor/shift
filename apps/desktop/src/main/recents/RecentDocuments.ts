@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { RecentDocument, RecentDocumentVisit } from "../../shared/recents";
+import type { RecentDocument, RecentDocumentVisit, RecentPreview } from "../../shared/recents";
 import type { Specimen } from "../../shared/workspace/lanes";
 import { RecentList, type RecentListRules } from "@shift/types";
 import { z } from "zod";
@@ -26,6 +26,8 @@ const thumbnailSchema = z.looseObject({
   specimen: z.custom<Specimen | null>((value) => typeof value === "object"),
   modifiedAt: z.number(),
   revision: z.custom<number | undefined>(() => true).optional(),
+  /** Why building the specimen failed; the launcher shows it in place of a preview. */
+  error: z.string().optional(),
 });
 
 type Thumbnail = z.output<typeof thumbnailSchema>;
@@ -99,6 +101,7 @@ export class RecentDocuments {
         location: displayLocation(entry.path, this.#homeDirectory),
         missing: modifiedAt === null,
         specimen: shownThumbnail(entry, modifiedAt)?.specimen ?? null,
+        preview: previewOf(shownThumbnail(entry, modifiedAt)),
       };
     });
   }
@@ -122,13 +125,32 @@ export class RecentDocuments {
    * @param specimen - Built specimen, or null when the font draws nothing usable.
    */
   setSpecimen(visit: RecentDocumentVisit, specimen: Specimen | null): void {
+    this.#setThumbnail(visit, { specimen });
+  }
+
+  /**
+   * Records that building a recent file's specimen failed, so the launcher
+   * says why instead of showing an empty tile. It is built again once the file
+   * changes or the specimen rules do.
+   *
+   * @param visit - File whose specimen failed; ignored when it left recents meanwhile.
+   * @param error - What went wrong, as the build reported it.
+   */
+  setSpecimenFailure(visit: RecentDocumentVisit, error: string): void {
+    this.#setThumbnail(visit, { specimen: null, error });
+  }
+
+  #setThumbnail(
+    visit: RecentDocumentVisit,
+    built: { specimen: Specimen | null; error?: string },
+  ): void {
     const entry = this.#entries.find(visit);
     const modifiedAt = modificationTime(visit.path);
     if (!entry || modifiedAt === null) return;
 
     this.#entries = this.#entries.update(visit, (candidate) => ({
       ...candidate,
-      thumbnail: { specimen, modifiedAt, revision: SPECIMEN_REVISION },
+      thumbnail: { ...built, modifiedAt, revision: SPECIMEN_REVISION },
     }));
     this.#changed();
   }
@@ -288,6 +310,12 @@ function shownThumbnail(entry: RecentEntry, modifiedAt: number | null): Thumbnai
   if (entry.documentId !== null) return thumbnail;
 
   return thumbnail.modifiedAt === modifiedAt ? thumbnail : null;
+}
+
+function previewOf(thumbnail: Thumbnail | null): RecentPreview {
+  if (!thumbnail) return { status: "pending" };
+  if (thumbnail.error !== undefined) return { status: "failed", error: thumbnail.error };
+  return thumbnail.specimen ? { status: "ready" } : { status: "empty" };
 }
 
 function readEntries(filePath: string): RecentList<RecentEntry, RecentDocumentVisit> {

@@ -171,9 +171,9 @@ export const RecentFileTile = ({
         </Tooltip>
         <div className={cn("pointer-events-none h-full", document.missing && "opacity-50")}>
           {wide ? (
-            <LastOpenedSpecimen specimen={document.specimen} />
+            <LastOpenedSpecimen specimen={document.specimen} preview={document.preview} />
           ) : (
-            <TileSpecimen specimen={document.specimen} />
+            <TileSpecimen specimen={document.specimen} preview={document.preview} />
           )}
         </div>
         <RecentFileMenu document={document} actions={actions} className={TILE_MENU_CLASS} />

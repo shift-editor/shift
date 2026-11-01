@@ -63,7 +63,15 @@ describe("RecentDocuments", () => {
     new RecentDocuments(storePath).record({ path: a, documentId: null }, 5);
 
     expect(new RecentDocuments(storePath).list()).toEqual([
-      { path: a, documentId: null, openedAt: 5, location: root, missing: false, specimen: null },
+      {
+        path: a,
+        documentId: null,
+        openedAt: 5,
+        location: root,
+        missing: false,
+        specimen: null,
+        preview: { status: "pending" },
+      },
     ]);
   });
 
@@ -121,6 +129,42 @@ describe("RecentDocuments", () => {
     expect(recents.needsSpecimen({ path: otf, documentId: null })).toBe(true);
   });
 
+  it("says whether a recent file's preview is pending, drawn or drew nothing", () => {
+    const recents = new RecentDocuments(storePath);
+    const otf = font("London.otf");
+    const ttf = font("Blank.ttf");
+    recents.record({ path: otf, documentId: null }, 1);
+    recents.record({ path: ttf, documentId: null }, 2);
+    const previews = () => Object.fromEntries(recents.list().map((d) => [d.path, d.preview]));
+    expect(previews()[otf]).toEqual({ status: "pending" });
+
+    recents.setSpecimen({ path: otf, documentId: null }, specimen);
+    recents.setSpecimen({ path: ttf, documentId: null }, null);
+    expect(previews()[otf]).toEqual({ status: "ready" });
+    expect(previews()[ttf]).toEqual({ status: "empty" });
+  });
+
+  it("keeps why a preview failed until the file changes", () => {
+    const recents = new RecentDocuments(storePath);
+    const otf = font("Broken.otf");
+    const visit = { path: otf, documentId: null };
+    recents.record(visit, 1);
+
+    recents.setSpecimenFailure(visit, "store schema version 9 is newer than supported version 4");
+    const [document] = new RecentDocuments(storePath).list();
+    expect(document.specimen).toBeNull();
+    expect(document.preview).toEqual({
+      status: "failed",
+      error: "store schema version 9 is newer than supported version 4",
+    });
+    expect(recents.needsSpecimen(visit)).toBe(false);
+
+    const later = new Date(Date.now() + 60_000);
+    fs.utimesSync(otf, later, later);
+    expect(recents.list()[0].preview).toEqual({ status: "pending" });
+    expect(recents.needsSpecimen(visit)).toBe(true);
+  });
+
   it("shows a specimen built under older rules until the file is opened again", () => {
     const otf = font("London.otf");
     const modifiedAt = fs.statSync(otf).mtimeMs;
@@ -147,7 +191,15 @@ describe("RecentDocuments", () => {
     recents.record({ path: moved, documentId: "doc-1" }, 2);
 
     expect(recents.list()).toEqual([
-      { path: moved, documentId: "doc-1", openedAt: 2, location: root, missing: false, specimen },
+      {
+        path: moved,
+        documentId: "doc-1",
+        openedAt: 2,
+        location: root,
+        missing: false,
+        specimen,
+        preview: { status: "ready" },
+      },
     ]);
   });
 

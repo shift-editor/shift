@@ -1036,6 +1036,10 @@ export class App {
       this.#recents?.setSpecimen(visit, specimen);
     } catch (error) {
       this.#log.warn("building recent file specimen failed", visit.path, error);
+      this.#recents?.setSpecimenFailure(
+        visit,
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 
