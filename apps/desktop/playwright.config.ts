@@ -1,3 +1,5 @@
+import os from "node:os";
+
 import { defineConfig } from "@playwright/test";
 
 /**
@@ -82,11 +84,12 @@ export default defineConfig({
   // One CI retry collects a second trace for diagnosis. Retry passes are reported as flaky
   // in the job summary, and goldens refuse to compare on retry (fixtures/snapshots.ts).
   retries: process.env.CI ? 1 : 0,
-  // Every test launches its own Electron app with its own user-data directory, so CI runs
-  // `E2E_WORKERS` apps at once. Platform specs need the OS focus and clipboard to themselves,
-  // so their project stays at one worker. Local runs default to one so a test run does not
-  // keep stealing focus from the developer.
-  workers: Number(process.env.E2E_WORKERS ?? 1),
+  // Every test launches its own Electron app with its own user-data directory, so a run
+  // starts `workers` apps at once. CI sets `E2E_WORKERS` per job. Local runs default to half
+  // the cores, at most four: visual specs emulate focus, so parallel apps do not race for it.
+  // Platform specs need the OS focus and clipboard to themselves, and gpu and perf specs
+  // measure the hardware GPU, so those projects stay at one worker unless `E2E_WORKERS` is set.
+  workers: e2eWorkers(),
   reportSlowTests: { max: 10, threshold: 20_000 },
   // Shards write blob reports that CI merges into one HTML report and a flaky/slow summary.
   reporter: process.env.CI ? [["blob"], ["line"]] : [["list"]],
@@ -101,7 +104,21 @@ export default defineConfig({
   projects: [
     { name: "visual", testMatch: VISUAL_SPECS },
     { name: "platform", testMatch: PLATFORM_SPECS, workers: 1 },
-    { name: "gpu", testMatch: GPU_SPECS },
-    { name: "perf", testMatch: PERF_SPECS, timeout: 120_000 },
+    { name: "gpu", testMatch: GPU_SPECS, workers: serialUnlessOverridden() },
+    { name: "perf", testMatch: PERF_SPECS, timeout: 120_000, workers: serialUnlessOverridden() },
   ],
 });
+
+/** `E2E_WORKERS` when set; otherwise one on CI and half the cores (one to four) locally. */
+function e2eWorkers(): number {
+  if (process.env.E2E_WORKERS) return Number(process.env.E2E_WORKERS);
+
+  if (process.env.CI) return 1;
+
+  return Math.min(4, Math.max(1, Math.floor(os.availableParallelism() / 2)));
+}
+
+/** One worker for a project that needs the hardware to itself, unless `E2E_WORKERS` asks for more. */
+function serialUnlessOverridden(): number | undefined {
+  return process.env.E2E_WORKERS ? undefined : 1;
+}

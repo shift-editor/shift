@@ -8,6 +8,7 @@ use shift_shape::{
 
 pub use shift_shape::{FeatureSetting, ShapeError, TextDirection};
 
+use super::positioning::{GeneratedPositioning, MarkerHook};
 use super::{ShaperFont, ShaperGlyphOrder};
 
 /// One unit of text to shape, inserting glyphs by Shift glyph id.
@@ -92,7 +93,28 @@ impl LiveShaper {
     pub fn shape(&self, request: &ShapeRequest) -> Result<Vec<ShapedGlyph>, ShapeError> {
         let coords = self.normalized_coords(request.location);
         self.shaper
-            .shape(&self.glyphs, &request.at(coords.as_slice()))
+            .shape(&self.glyphs, &request.at(coords.as_slice()), None)
+    }
+
+    /// Shapes one run of text, running `positioning` for each feature export
+    /// generates at that feature's place among the font's lookups; see
+    /// [`GeneratedPositioning`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShapeError`] for the reasons [`Self::shape`] gives.
+    pub fn shape_positioned(
+        &self,
+        request: &ShapeRequest,
+        positioning: &mut dyn GeneratedPositioning,
+    ) -> Result<Vec<ShapedGlyph>, ShapeError> {
+        let coords = self.normalized_coords(request.location);
+        let mut hook = self.marker_hook(request.features, positioning);
+        self.shaper.shape(
+            &self.glyphs,
+            &request.at(coords.as_slice()),
+            Some(&mut hook),
+        )
     }
 
     /// Shapes a paragraph, run by run; see [`Shaper::shape_paragraph`].
@@ -106,7 +128,50 @@ impl LiveShaper {
     ) -> Result<Vec<ShapedRun>, ShapeError> {
         let coords = self.normalized_coords(request.location);
         self.shaper
-            .shape_paragraph(&self.glyphs, &request.at(coords.as_slice()))
+            .shape_paragraph(&self.glyphs, &request.at(coords.as_slice()), None)
+    }
+
+    /// Shapes a paragraph, run by run, running `positioning` in each run as
+    /// [`Self::shape_positioned`] does. Clusters `positioning` sees index the
+    /// run's units, not the paragraph's.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ShapeError`] for the reasons [`Self::shape`] gives.
+    pub fn shape_paragraph_positioned(
+        &self,
+        request: &ParagraphRequest,
+        positioning: &mut dyn GeneratedPositioning,
+    ) -> Result<Vec<ShapedRun>, ShapeError> {
+        let coords = self.normalized_coords(request.location);
+        let mut hook = self.marker_hook(request.features, positioning);
+        self.shaper.shape_paragraph(
+            &self.glyphs,
+            &request.at(coords.as_slice()),
+            Some(&mut hook),
+        )
+    }
+
+    /// A hook running `positioning` at the font's insert markers, for each
+    /// generated feature `features` leaves on.
+    fn marker_hook<'a>(
+        &'a self,
+        features: &[FeatureSetting],
+        positioning: &'a mut dyn GeneratedPositioning,
+    ) -> MarkerHook<'a> {
+        let enabled = |tag| {
+            features
+                .iter()
+                .rev()
+                .find(|setting| setting.tag == tag)
+                .is_none_or(|setting| setting.value != 0)
+        };
+        MarkerHook::new(
+            self.glyphs.font.insert_markers(),
+            enabled,
+            &self.glyphs.order,
+            positioning,
+        )
     }
 
     /// Normalizes `location` on the shaper font's axes, in `fvar` order.

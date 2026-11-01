@@ -631,21 +631,18 @@ export class TestEditor extends Editor implements EditorTestSurface {
   }
 
   keyDown(key: string, options?: Partial<typeof DEFAULT_MODIFIERS>): this {
-    const mods = { ...DEFAULT_MODIFIERS, ...options };
-    this.toolManager.handleKeyDown({
-      key,
-      code: key,
-      shiftKey: mods.shiftKey,
-      altKey: mods.altKey,
-      metaKey: mods.metaKey,
-      ctrlKey: false,
-      preventDefault: () => {},
-    } as KeyboardEvent);
+    this.toolManager.handleKeyDown(keyEvent(key, options));
     return this;
   }
 
   async pressKey(key: string, options?: Partial<typeof DEFAULT_MODIFIERS>): Promise<void> {
     this.keyDown(key, options);
+
+    await this.settle();
+  }
+
+  async releaseKey(key: string, options?: Partial<typeof DEFAULT_MODIFIERS>): Promise<void> {
+    this.toolManager.handleKeyUp(keyEvent(key, options));
 
     await this.settle();
   }
@@ -740,6 +737,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
       ...DEFAULT_MODIFIERS,
       ...modifiers,
     });
+  }
+
+  passFrame(): void {
+    this.toolManager.flushPointerMoves();
   }
 
   async releaseAt(position: Point2D, modifiers?: Modifiers): Promise<void> {
@@ -1632,4 +1633,16 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
 function plainBounds(bounds: Bounds | null): Bounds | null {
   return bounds && { min: { ...bounds.min }, max: { ...bounds.max } };
+}
+
+/** A key event as the tool manager reads it, with `options` overriding the default modifiers. */
+function keyEvent(key: string, options?: Partial<typeof DEFAULT_MODIFIERS>): KeyboardEvent {
+  const modifiers = { ...DEFAULT_MODIFIERS, ...options };
+  return {
+    key,
+    code: key,
+    ...modifiers,
+    ctrlKey: false,
+    preventDefault: () => {},
+  } as KeyboardEvent;
 }

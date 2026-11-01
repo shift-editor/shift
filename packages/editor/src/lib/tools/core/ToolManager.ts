@@ -245,6 +245,9 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   handleKeyDown(e: KeyboardEvent): boolean {
+    // A pointer move still queued for the next frame happened before this key and carries
+    // older modifiers; apply it first so it cannot overwrite the key's modifiers later.
+    this.flushPointerMoves();
     const modifiers = normalizeModifiers({
       shiftKey: e.shiftKey,
       altKey: e.altKey,
@@ -268,6 +271,7 @@ export class ToolManager implements ToolSwitchHandler {
   }
 
   handleKeyUp(e: KeyboardEvent): boolean {
+    this.flushPointerMoves();
     const modifiers = normalizeModifiers({
       shiftKey: e.shiftKey,
       altKey: e.altKey,

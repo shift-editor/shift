@@ -192,6 +192,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   movePointerTo(position: Point2D, modifiers?: Modifiers): void;
   /** Moves the pointer without a frame passing, so the move is still queued when the next event arrives. */
   queuePointerMove(position: Point2D, modifiers?: Modifiers): void;
+  /** Lets the next animation frame run, as the browser does, so a queued pointer move is applied. */
+  passFrame(): void;
   /** Releases the pointer at a glyph-local position and waits for the edit it makes. */
   releaseAt(position: Point2D, modifiers?: Modifiers): Promise<void>;
   /**
@@ -217,6 +219,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   cancelGesture(): void;
   /** Presses a key and waits for the edit it makes. */
   pressKey(key: string, modifiers?: Modifiers): Promise<void>;
+  /** Releases a key, with the modifiers still held after it, and waits for the editor to settle. */
+  releaseKey(key: string, modifiers?: Modifiers): Promise<void>;
   /** Switches to the Hand for as long as Space is held, as the Space key binding does. */
   holdSpaceForHand(): void;
   /** Lets go of Space, returning from the Hand to the tool before it. */

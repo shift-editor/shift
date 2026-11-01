@@ -21,11 +21,12 @@ crates/shift-shaper-font/src/
   lib.rs           ShaperFontRequest, ShaperFont::compile, InsertMarker, ShaperFontError, UnitsPerEm, ToGlyphClassDef
   axes.rs          to_ir_axes, axis_tag, AxisConversionError
   diagnostics.rs   fea-rs diagnostics with UTF-16 ranges
-  tables.rs        GDEF classes, fvar axis names, insert markers
+  tables.rs        GDEF classes, an empty GPOS when the source positions nothing, fvar axis names, insert markers
   glyph_order.rs   ShaperGlyphOrder: the Shift glyph at each shaper glyph id, both ways
   state.rs         ShaperFontState: last valid font, compile only when a compile input changes
   references.rs    the glyph names a feature source names
   shape.rs         LiveShaper over shift-shape
+  positioning.rs   GeneratedPositioning: the editor's kern, mark, mkmk and curs, run at their insert markers
 ```
 
 ## Key Types
@@ -33,6 +34,7 @@ crates/shift-shaper-font/src/
 - `ShaperFontRequest` / `ShaperFont::compile` -- compile a font's authored feature source with fea-rs into a shaper font: `GSUB`/`GPOS`/`GDEF`, `head`, and `fvar`, with no outlines, `cmap`, or `hmtx`. Glyph ids index the request's glyph order with `.notdef` first; `GDEF` glyph classes come from the source's classes unless the feature code declares its own; diagnostics carry UTF-16 ranges
 - `ShaperFontState` -- keeps the last successfully compiled shaper font active while later feature source has errors, and compiles only when a compile input changes: units per em, the feature source, the axes and their mappings, a glyph the feature source names (added, removed or renamed; a source with a glyph range or CID names every glyph), or a glyph's `GDEF` class. Any other added glyph is appended to its `glyph_order` past the compiled font's glyph count, where HarfRust shapes it as itself, uncovered by any lookup and unclassed; a removed glyph keeps its slot, unmapped. `compiles` counts compile attempts. **WHY:** a compile of a large feature source takes about 11 ms (10,000 glyphs, 5,074-line source), and adding a glyph is the commonest edit that changes the glyph directory
 - `LiveShaper` -- what the editor's WebAssembly engine module (`crates/shift-wasm`, `engine` feature) shapes with, over the state's glyph order (`set_glyphs`): `shift-shape` through `LiveGlyphs`, a `GlyphSource` mapping characters through the live font's Unicode values with zero advances; the request and result types are `shift-shape`'s, aliased over `GlyphId` and `ExternalLocation`
+- `GeneratedPositioning` -- how the editor positions the features export generates from kerning and anchors (`curs`, `kern`, `mark`, `mkmk`), which the shaper font leaves out. `LiveShaper::shape_positioned` and `shape_paragraph_positioned` run it through a HarfRust shape hook once per feature per run, where export would insert that feature's lookups: at the first `GPOS` lookup at or past the feature's `InsertMarker`, or at the end of `GPOS` for a feature with no marker (or none left to reach), in insertion order, skipping a feature the request turns off. "At or past" rather than "at": a shaper reports only the lookups its plan enables, so a marked lookup the script, language or a feature setting leaves out still lets the feature run at the next one. **WHY:** generated positioning composes with authored `GPOS` in export's order without recompiling on kerning or anchor edits. Every shaper font carries a `GPOS` table, empty when the source positions nothing, so the hook always runs
 
 ## How it works
 
