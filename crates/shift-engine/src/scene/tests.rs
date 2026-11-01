@@ -37,6 +37,7 @@ fn run(id: &str, parent: &str, position: usize) -> SceneNode {
             run_id: RunId::from_raw(id),
             size: 1000.0,
             items: Vec::new(),
+            settings: RunSettings::default(),
         },
     }
 }
@@ -302,4 +303,104 @@ fn an_update_never_changes_a_runs_items() {
         panic!("the run is still a run");
     };
     assert_eq!(items.len(), 1);
+}
+
+#[test]
+fn a_run_stored_without_settings_reads_them_at_their_defaults() {
+    /// A text run node as stored before runs had settings.
+    #[derive(serde::Serialize)]
+    enum OldContent {
+        TextRun {
+            run_id: RunId,
+            size: f64,
+            items: Vec<TextItem>,
+        },
+    }
+    #[derive(serde::Serialize)]
+    struct OldNode {
+        id: NodeId,
+        parent_id: Option<NodeId>,
+        index: String,
+        x: f64,
+        y: f64,
+        content: OldContent,
+    }
+    let old = OldNode {
+        id: NodeId::from_raw("run_node"),
+        parent_id: None,
+        index: "a0".to_string(),
+        x: 0.0,
+        y: 0.0,
+        content: OldContent::TextRun {
+            run_id: RunId::from_raw("run"),
+            size: 1000.0,
+            items: Vec::new(),
+        },
+    };
+
+    let stored = rmp_serde::to_vec_named(&old).unwrap();
+    let node: SceneNode = rmp_serde::from_slice(&stored).unwrap();
+
+    let NodeContent::TextRun { settings, .. } = node.content else {
+        panic!("expected a text run");
+    };
+    assert_eq!(settings, RunSettings { shaping: true });
+}
+
+#[test]
+fn setting_a_run_s_settings_keeps_its_items_and_an_update_keeps_both() {
+    let mut scene = Scene::default();
+    scene
+        .apply_intents(&[
+            SceneIntent::CreateNode(page("page", 0)),
+            SceneIntent::CreateNode(run("run", "page", 0)),
+        ])
+        .unwrap();
+
+    scene
+        .apply_intents(&[SceneIntent::SetRunSettings(SetRunSettings {
+            id: NodeId::from_raw("run"),
+            settings: RunSettings { shaping: false },
+        })])
+        .unwrap();
+    scene
+        .apply_intents(&[SceneIntent::UpdateNode(run("run", "page", 0))])
+        .unwrap();
+
+    let Some(NodeContent::TextRun { settings, .. }) = scene
+        .node(&NodeId::from_raw("run"))
+        .map(|node| node.content.clone())
+    else {
+        panic!("expected the run");
+    };
+    assert_eq!(settings, RunSettings { shaping: false });
+}
+
+#[test]
+fn a_run_created_without_settings_gets_their_defaults() {
+    let mut scene = Scene::default();
+    let page = page("page", 0);
+    scene
+        .apply_intents(&[
+            SceneIntent::CreateNode(page),
+            SceneIntent::CreateRun(CreateRun {
+                id: NodeId::from_raw("run"),
+                parent_id: Some(NodeId::from_raw("page")),
+                index: key(0),
+                x: 0.0,
+                y: 0.0,
+                run_id: RunId::from_raw("run"),
+                size: 1000.0,
+                items: Vec::new(),
+            }),
+        ])
+        .unwrap();
+
+    let Some(NodeContent::TextRun { settings, .. }) = scene
+        .node(&NodeId::from_raw("run"))
+        .map(|node| node.content.clone())
+    else {
+        panic!("expected the run");
+    };
+    assert_eq!(settings, RunSettings::default());
 }

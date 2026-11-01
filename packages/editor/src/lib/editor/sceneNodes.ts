@@ -1,6 +1,6 @@
 import type { NodeId, RunId, SourceId } from "@shift/types";
 import type { ShiftNode } from "../../types/node";
-import type { RevisedNode, SceneNode } from "../../types/sceneDocument";
+import type { RevisedNode, SceneIntent, SceneNode } from "../../types/sceneDocument";
 import type { TextRunRecord } from "../../types/text";
 import type { TextItem } from "../text/layout/types";
 
@@ -69,12 +69,39 @@ export class SceneNodes {
   }
 
   /**
-   * `node` as the document stores it; a text run carries `items`, which only
-   * a new node and `setRunItems` set: an update keeps the run's own.
+   * The intent that places `node`: a text run with `items`, its settings
+   * left to the engine's defaults; any other node as the document stores it.
    *
    * @throws When `node`'s kind is not one the document stores.
    */
-  static toDocument(node: ShiftNode, items: readonly TextItem[] = []): SceneNode {
+  static createIntent(node: ShiftNode, items: readonly TextItem[] = []): SceneIntent {
+    if (node.kind !== "textRun") {
+      return { kind: "createNode", createNode: SceneNodes.toDocument(node, null) };
+    }
+    return {
+      kind: "createRun",
+      createRun: {
+        id: node.id,
+        parentId: node.parentId,
+        index: node.index,
+        x: node.position.x,
+        y: node.position.y,
+        runId: node.runId,
+        size: node.size,
+        items: [...items],
+      },
+    };
+  }
+
+  /**
+   * `node` as the document stores it. A text run's items and settings are
+   * the ones `run` holds now; an update keeps the run's own regardless, and
+   * only `setRunItems` and `setRunSettings` change them.
+   *
+   * @throws When `node`'s kind is not one the document stores, or a text
+   * run comes without its run.
+   */
+  static toDocument(node: ShiftNode, run: TextRunRecord | null): SceneNode {
     const base = {
       id: node.id,
       parentId: node.parentId,
@@ -86,9 +113,16 @@ export class SceneNodes {
       case "page":
         return { ...base, content: { kind: "page", name: node.name, role: node.role ?? null } };
       case "textRun":
+        if (!run) throw new Error(`text run node ${node.id} has no run`);
         return {
           ...base,
-          content: { kind: "textRun", runId: node.runId, size: node.size, items: [...items] },
+          content: {
+            kind: "textRun",
+            runId: node.runId,
+            size: node.size,
+            items: [...run.items],
+            settings: { shaping: run.shaping },
+          },
         };
       case "glyph":
         return {
@@ -136,6 +170,7 @@ function readNode(
         type: "textrun",
         scope: "document",
         items: content.items,
+        shaping: content.settings.shaping,
       };
       return {
         revised,

@@ -31,6 +31,50 @@ const TYPED_MARK_ANCHOR_X: f64 = 300.0;
 /// object, a grapheme of its own.
 const OBJECT_REPLACEMENT: char = '\u{FFFC}';
 
+/// A paragraph's units as text, for Unicode segmentation, with the unit
+/// each byte starts.
+pub(crate) struct ParagraphText {
+    pub text: String,
+    /// The paragraph's first unit, in the text.
+    start: u32,
+    /// For each byte offset in `text` that starts a char, and its end, the
+    /// unit there, counted in the paragraph.
+    unit_at_byte: Vec<u32>,
+}
+
+impl ParagraphText {
+    /// `paragraph` as text: each unit one char, a glyph inserted by name the
+    /// object replacement character.
+    pub(crate) fn of(paragraph: &Paragraph) -> Self {
+        let text: String = paragraph
+            .units
+            .iter()
+            .map(|unit| match unit {
+                Unit::Character(character) => *character,
+                Unit::Glyph(_) => OBJECT_REPLACEMENT,
+            })
+            .collect();
+        let mut unit_at_byte = vec![0u32; text.len() + 1];
+        let mut count = 0u32;
+        for (unit, (byte, _)) in (0u32..).zip(text.char_indices()) {
+            unit_at_byte[byte] = unit;
+            count = unit + 1;
+        }
+        unit_at_byte[text.len()] = count;
+        Self {
+            text,
+            start: paragraph.start,
+            unit_at_byte,
+        }
+    }
+
+    /// The unit, in the text, that starts at `byte`, or one past the last
+    /// at the text's end.
+    pub(crate) fn unit_at(&self, byte: usize) -> u32 {
+        self.start + self.unit_at_byte.get(byte).copied().unwrap_or_default()
+    }
+}
+
 /// The units between two line breaks.
 pub(crate) struct Paragraph {
     /// The first unit's index in the text.
@@ -97,22 +141,11 @@ impl Paragraph {
     /// The paragraph's grapheme boundaries as unit indices in the text, its
     /// start and end included.
     fn grapheme_boundaries(&self) -> BTreeSet<u32> {
-        let text: String = self
-            .units
-            .iter()
-            .map(|unit| match unit {
-                Unit::Character(character) => *character,
-                Unit::Glyph(_) => OBJECT_REPLACEMENT,
-            })
-            .collect();
-        // Each unit is one char, so a char's index is its unit's.
-        let mut unit_at_byte = vec![0u32; text.len() + 1];
-        for (unit, (byte, _)) in (0u32..).zip(text.char_indices()) {
-            unit_at_byte[byte] = unit;
-        }
+        let text = ParagraphText::of(self);
         let mut boundaries: BTreeSet<u32> = text
+            .text
             .grapheme_indices(true)
-            .map(|(byte, _)| self.start + unit_at_byte[byte])
+            .map(|(byte, _)| text.unit_at(byte))
             .collect();
         boundaries.insert(self.start);
         boundaries.insert(self.end);

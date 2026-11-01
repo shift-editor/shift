@@ -27,7 +27,12 @@ import {
 } from "../../types/node";
 import type { TextRunRecord } from "../../types/text";
 import type { TextItem } from "../text/layout/types";
-import type { SceneDocument, SceneIntent, SceneRecording } from "../../types/sceneDocument";
+import type {
+  RunSettings,
+  SceneDocument,
+  SceneIntent,
+  SceneRecording,
+} from "../../types/sceneDocument";
 import { IndexKey } from "../../types/indexKey";
 import { SceneNodes } from "./sceneNodes";
 
@@ -466,7 +471,7 @@ export class Scene {
       position: { ...node.position },
     } as unknown as N;
 
-    this.#apply([{ kind: "createNode", createNode: SceneNodes.toDocument(next, items) }], [next]);
+    this.#apply([SceneNodes.createIntent(next, items)], [next]);
     return (this.node(next.id) as N | null) ?? next;
   }
 
@@ -483,7 +488,7 @@ export class Scene {
       deleteNode: { id: root.id },
     }));
     for (const node of parentsFirst(nodes)) {
-      intents.push({ kind: "createNode", createNode: SceneNodes.toDocument(node, []) });
+      intents.push(SceneNodes.createIntent(node));
     }
     this.#apply(intents, [...this.allNodes(), ...nodes]);
   }
@@ -501,9 +506,11 @@ export class Scene {
     if (shown) this.#showSource(node.id, shown);
     if (!stored) return;
 
-    // An update keeps a run's items, so none are sent.
+    // An update keeps a run's items and settings; it carries the run's own.
     const next = { ...node, ...stored } as ShiftNode;
-    this.#apply([{ kind: "updateNode", updateNode: SceneNodes.toDocument(next) }], [next]);
+    const run =
+      next.kind === "textRun" ? (this.#documentCell.peek().runs.get(next.runId) ?? null) : null;
+    this.#apply([{ kind: "updateNode", updateNode: SceneNodes.toDocument(next, run) }], [next]);
   }
 
   /**
@@ -556,6 +563,19 @@ export class Scene {
     if (!node) return false;
 
     this.#apply([{ kind: "setRunItems", setRunItems: { id: node.id, items: [...items] } }], [node]);
+    return true;
+  }
+
+  /**
+   * Replaces how the run a text run node places is shaped and set.
+   *
+   * @returns false when no node places `runId`.
+   */
+  setRunSettings(runId: RunId, settings: RunSettings): boolean {
+    const node = this.node(this.#documentCell.peek().runNodes.get(runId) ?? null);
+    if (!node) return false;
+
+    this.#apply([{ kind: "setRunSettings", setRunSettings: { id: node.id, settings } }], [node]);
     return true;
   }
 

@@ -9,6 +9,9 @@ export {
   typedTextItems,
 } from "./types";
 export type {
+  CaretEdge,
+  CaretPlace,
+  CaretTarget,
   CaretPosition,
   TextItem,
   CharacterTextItem,

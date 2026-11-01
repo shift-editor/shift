@@ -215,6 +215,13 @@ fn a_right_to_left_caret_starts_at_the_right_edge() {
             .iter()
             .all(|stop| stop.direction == Direction::Rtl)
     );
+    // Screen order runs against reading order in right-to-left text.
+    let screen: Vec<(u32, u32)> = layout
+        .carets
+        .iter()
+        .map(|stop| (stop.unit, stop.screen))
+        .collect();
+    assert_eq!(screen, [(0, 2), (1, 1), (2, 0)]);
 }
 
 #[test]
@@ -228,6 +235,22 @@ fn a_direction_boundary_has_a_second_caret() {
     let secondary = boundary.secondary.unwrap();
     assert_eq!(secondary.direction, Direction::Ltr);
     assert_ne!(secondary.x, boundary.x);
+    // Every place, stops and second places alike, numbered left to right.
+    let mut places: Vec<(u32, f64)> = layout
+        .carets
+        .iter()
+        .flat_map(|stop| {
+            std::iter::once((stop.screen, stop.x))
+                .chain(stop.secondary.map(|second| (second.screen, second.x)))
+        })
+        .collect();
+    places.sort_by_key(|(screen, _)| *screen);
+    let screens: Vec<u32> = places.iter().map(|(screen, _)| *screen).collect();
+    assert_eq!(
+        screens,
+        (0..u32::try_from(places.len()).unwrap()).collect::<Vec<_>>()
+    );
+    assert!(places.windows(2).all(|pair| pair[0].1 <= pair[1].1));
 }
 
 #[test]
@@ -503,4 +526,21 @@ fn glyph_bounds_are_not_placement() {
     keys.assign(&mut unbounded);
 
     assert_eq!(bounded.placement, unbounded.placement);
+}
+
+#[test]
+fn words_skip_spaces_and_punctuation_and_name_their_screen_edges() {
+    let fixture = Fixture::open("ShapingTest.ufo");
+
+    let layout = fixture.lay_out("fi, \u{628}\u{628}", shaped());
+
+    let words: Vec<(u32, u32, Direction, u32, u32)> = layout
+        .words
+        .iter()
+        .map(|word| (word.start, word.end, word.direction, word.left, word.right))
+        .collect();
+    assert_eq!(
+        words,
+        [(0, 2, Direction::Ltr, 0, 2), (4, 6, Direction::Rtl, 6, 4)]
+    );
 }

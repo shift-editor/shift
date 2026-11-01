@@ -8,11 +8,21 @@
  * `origin.y - lineHeight * n`. Cluster is whole-buffer monotonic.
  */
 import type { Bounds as BoundsType } from "@shift/geo";
-import { EntityMap, type GlyphId, type GlyphName, type ReadonlyEntityMap } from "@shift/types";
-import type { CaretStop, TextLayout as LaidOutText } from "@shift/wasm/protocol";
+import {
+  ascending,
+  EntityMap,
+  type GlyphId,
+  type GlyphName,
+  type ReadonlyEntityMap,
+} from "@shift/types";
+import type { CaretStop, LayoutWord, TextLayout as LaidOutText } from "@shift/wasm/protocol";
 import { Caret } from "./Caret";
+import { CaretStops } from "./CaretStops";
 import type {
+  CaretEdge,
+  CaretPlace,
   CaretPosition,
+  Direction,
   TextItem,
   SourceMetrics,
   Hit,
@@ -24,7 +34,7 @@ import type {
   TextItemId,
 } from "./types";
 import type { Font } from "../../model/Font";
-import type { TextSelectionRange } from "../../../types/text";
+import type { TextSelectionRange, WordEdge } from "../../../types/text";
 
 export interface TextLayoutParams {
   items: readonly TextItem[];
@@ -65,7 +75,12 @@ export class TextLayout {
   /** How far apart baselines are, in font units, as Rust laid the lines out. */
   readonly lineHeight: number;
   readonly #placedByItem: ReadonlyEntityMap<TextItemId, PlacedGlyph>;
-  readonly #carets: readonly CaretStop[];
+  /** Each line's caret stops, indexed for moves and hit tests. */
+  readonly #carets: readonly CaretStops[];
+  /** Every grapheme boundary Rust put a stop at, in reading order. */
+  readonly #boundaries: readonly number[];
+  /** The words Rust found, in reading order, with their screen edges. */
+  readonly #words: readonly LayoutWord[];
 
   constructor(params: TextLayoutParams) {
     const { items, origin, font, metrics, laidOut } = params;
@@ -74,7 +89,6 @@ export class TextLayout {
     this.bufferLength = items.length;
     this.unshaped = laidOut.unshaped ?? null;
     this.lineHeight = laidOut.lineHeight;
-    this.#carets = laidOut.carets;
 
     const placed: PlacedGlyph[] = [];
     const lines: Line[] = [];
@@ -122,6 +136,7 @@ export class TextLayout {
       const clusterEnd = nextStart === null ? line.end + 1 : line.end;
       lines.push({
         runs,
+        direction: line.direction,
         y: origin.y + line.baseline,
         ascent: line.ascent,
         descent: line.descent,
@@ -130,6 +145,20 @@ export class TextLayout {
       });
     }
     this.lines = lines;
+    const caretsByLine = Map.groupBy(laidOut.carets, (stop) => stop.line);
+    this.#carets = lines.map(
+      (_, lineIndex) =>
+        new CaretStops(
+          (caretsByLine.get(lineIndex) ?? []).map(
+            (stop): CaretStop => ({ ...stop, x: origin.x + stop.x }),
+          ),
+        ),
+    );
+    this.#words = laidOut.words;
+    this.#boundaries = new Set(laidOut.carets.map((stop) => stop.unit))
+      .values()
+      .toArray()
+      .toSorted(ascending);
     this.placedGlyphs = placed;
     this.totalAdvance = laidOut.lines.reduce((sum, line) => sum + line.advance, 0);
 
@@ -177,10 +206,9 @@ export class TextLayout {
    *   2. Return the glyph on that line whose box [left, left + advance + kern)
    *      contains p.x, so a kerned pair leaves no hole and its first glyph
    *      owns any overlap.
-   *   3. Within the hit glyph, "left" if p.x is in the left half of the
-   *      advance box, "right" otherwise.
    *
-   * Returns null when no line / no glyph contains the point.
+   * Returns null when no line / no glyph contains the point. Where a caret
+   * goes for the point is {@link caretAtPoint}'s answer, from Rust's stops.
    */
   hitTest(p: Point2D, padding: number = 0): Hit | null {
     const lineIndex = this.lines.findIndex(
@@ -193,13 +221,7 @@ export class TextLayout {
       const width = placed.glyph.xAdvance + placed.glyph.xKern;
       const right = placed.left + width;
       if (p.x < placed.left - padding || p.x >= right + padding) continue;
-      const mid = placed.left + width / 2;
-      return {
-        lineIndex,
-        runIndex: placed.runIndex,
-        cluster: placed.glyph.cluster,
-        side: p.x < mid ? "left" : "right",
-      };
+      return { lineIndex, runIndex: placed.runIndex, cluster: placed.glyph.cluster };
     }
     return null;
   }
@@ -210,32 +232,127 @@ export class TextLayout {
   }
 
   /**
-   * Where the caret goes before `cluster`, from the caret stops Rust placed:
-   * the leading edge of the unit there, or the trailing edge of the one
-   * before it at a line's end.
+   * Returns the line a caret at `cluster` stands on: the line that holds
+   * the cluster, or for a line that wraps, the one it starts.
    *
-   * @returns null when no line has a stop at `cluster`, as inside a grapheme.
+   * @returns -1 for a cluster past the text.
    */
-  pointAt(cluster: number): CaretPosition | null {
+  lineIndexForCluster(cluster: number): number {
+    return this.lines.findIndex(
+      (line) => cluster >= line.clusterStart && cluster < line.clusterEnd,
+    );
+  }
+
+  /** Returns the base direction of a line's paragraph; left to right for no line. */
+  lineDirection(lineIndex: number): Direction {
+    return this.lines[lineIndex]?.direction ?? "ltr";
+  }
+
+  /** Returns the direction of the text a caret at `cluster` stands in, as Rust's stop says. */
+  directionAt(cluster: number): Direction {
+    const lineIndex = this.lineIndexForCluster(cluster);
+    return this.#carets[lineIndex]?.at(cluster)?.direction ?? this.lineDirection(lineIndex);
+  }
+
+  /**
+   * Where a caret before `cluster` draws, at the stop Rust placed: the
+   * leading edge of the unit there, or the trailing edge of the one before
+   * it at a line's end; at a direction boundary with `edge` `secondary`,
+   * the stop's second place. A line with no stop for it, such as an empty
+   * line, puts it at the line's start.
+   */
+  caretPosition(cluster: number, edge: CaretEdge = "primary"): CaretPosition {
     const lineHeight = this.metrics.ascender - this.metrics.descender + (this.metrics.lineGap ?? 0);
-    const stop =
-      this.#carets.find(
-        (candidate) =>
-          candidate.unit === cluster && cluster < (this.lines[candidate.line]?.clusterEnd ?? 0) - 1,
-      ) ?? this.#carets.find((candidate) => candidate.unit === cluster);
-    const line = stop ? this.lines[stop.line] : undefined;
-    if (!stop || !line) return null;
-    return { x: this.origin.x + stop.x, y: line.y, lineHeight };
+    const lineIndex = this.lineIndexForCluster(cluster);
+    const line = this.lines[lineIndex];
+    if (!line) return { x: this.origin.x, y: this.origin.y, lineHeight };
+
+    const stop = this.#carets[lineIndex]?.at(cluster);
+    const second = edge === "secondary" ? stop?.secondary : null;
+    return { x: second?.x ?? stop?.x ?? this.origin.x, y: line.y, lineHeight };
+  }
+
+  /**
+   * Returns the caret cluster nearest a point: on the line whose band holds
+   * it, the stop nearest its x.
+   *
+   * @param padding - how far above, below, and past a line's ends still counts.
+   * @returns null when the point is on no line or past a line's ends.
+   */
+  caretAtPoint(p: Point2D, padding: number = 0): number | null {
+    const lineIndex = this.lines.findIndex(
+      (line) => p.y <= line.y + line.ascent + padding && p.y >= line.y + line.descent - padding,
+    );
+    return this.#carets[lineIndex]?.nearest(p.x, padding)?.unit ?? null;
+  }
+
+  /** Returns the caret cluster on a line nearest `x`, as moving up or down a line lands. */
+  nearestCaretOnLine(lineIndex: number, x: number): number {
+    const line = this.lines[lineIndex];
+    return this.#carets[lineIndex]?.nearest(x)?.unit ?? line?.clusterStart ?? 0;
+  }
+
+  /**
+   * Returns the next caret place left (`-1`) or right (`1`) on screen of the
+   * caret at `cluster`'s `edge` place, skipping places `accept` refuses. A
+   * direction boundary has two places, its stop's and its second.
+   *
+   * @returns null at its line's edge in that direction.
+   */
+  visualStep(
+    cluster: number,
+    edge: CaretEdge,
+    side: -1 | 1,
+    accept?: (place: CaretPlace) => boolean,
+  ): CaretPlace | null {
+    const stops = this.#carets[this.lineIndexForCluster(cluster)];
+    return stops?.step(cluster, edge, side, accept) ?? null;
+  }
+
+  /**
+   * Returns the next grapheme boundary after (`1`) or before (`-1`)
+   * `cluster` in reading order, across lines, from the stops Rust placed at
+   * each one: a base and its marks, or an emoji sequence, are crossed whole.
+   *
+   * @returns `cluster` when there is none that way.
+   */
+  graphemeStep(cluster: number, direction: -1 | 1): number {
+    const boundary =
+      direction === 1
+        ? this.#boundaries.find((unit) => unit > cluster)
+        : this.#boundaries.findLast((unit) => unit < cluster);
+    return boundary ?? cluster;
+  }
+
+  /**
+   * Returns each word's left (`-1`) or right (`1`) edge on screen, as Rust
+   * found the words and their edges: the boundary there, and the direction
+   * the word reads in, which picks the caret place on the word's own side
+   * where directions meet.
+   */
+  wordEdges(side: -1 | 1): readonly WordEdge[] {
+    return this.#words.map((word) => ({
+      unit: side === 1 ? word.right : word.left,
+      direction: word.direction,
+    }));
+  }
+
+  /** Returns the end of the next word, or the start of the previous one, in reading order. */
+  wordStep(cluster: number, direction: -1 | 1): number {
+    if (direction === 1) {
+      return this.#words.find((word) => word.end > cluster)?.end ?? this.bufferLength;
+    }
+    return this.#words.findLast((word) => word.start < cluster)?.start ?? 0;
+  }
+
+  /** Returns the caret place at a line's left (`-1`) or right (`1`) end on screen. */
+  lineEdge(lineIndex: number, side: -1 | 1): CaretPlace | null {
+    return this.#carets[lineIndex]?.edge(side) ?? null;
   }
 
   /** @knipclassignore — convenience for caret construction at a cluster */
   caretAt(cluster: number): Caret {
     return Caret.atCluster(this, cluster);
-  }
-
-  /** @knipclassignore — convenience for caret construction at a canvas point */
-  caretAtPoint(p: Point2D): Caret {
-    return Caret.atPoint(this, p);
   }
 
   /** Returns advance-based highlight rectangles for a cluster range, one per line; line breaks own no fill. */

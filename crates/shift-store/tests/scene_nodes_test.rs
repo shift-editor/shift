@@ -3,7 +3,9 @@
 
 use std::path::Path;
 
-use shift_engine::scene::{NodeContent, Scene, SceneChangeSet, SceneIntent, SceneNode};
+use shift_engine::scene::{
+    NodeContent, RunSettings, Scene, SceneChangeSet, SceneIntent, SceneNode,
+};
 use shift_font::test_support::sample_font;
 use shift_font::{FontChangeSet, NodeId, RunId};
 use shift_store::{RecoveryState, SaveState, ShiftStore, WorkspaceState};
@@ -42,6 +44,7 @@ fn run(id: &str, page: &str) -> SceneNode {
             run_id: RunId::from_raw(id),
             size: 1000.0,
             items: Vec::new(),
+            settings: RunSettings::default(),
         },
     }
 }

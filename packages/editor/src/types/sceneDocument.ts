@@ -1,8 +1,8 @@
 import type { NodeId } from "@shift/types";
-import type { RevisedNode, SceneIntent, SceneNode } from "@shift/wasm/protocol";
+import type { RevisedNode, RunSettings, SceneIntent, SceneNode } from "@shift/wasm/protocol";
 import type { Signal } from "../lib/signals";
 
-export type { RevisedNode, SceneIntent, SceneNode };
+export type { RevisedNode, RunSettings, SceneIntent, SceneNode };
 
 /**
  * Whether a scene edit is an undo step, as shift-engine's `Recording` says:
