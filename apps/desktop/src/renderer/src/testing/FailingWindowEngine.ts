@@ -1,5 +1,5 @@
 import type { GlyphId } from "@shift/types";
-import type { FontFeature, LayoutRequest, PlacedText } from "@shift/wasm/protocol";
+import type { FontFeature, PlacedText, TextRun } from "@shift/wasm/protocol";
 import type { KerningPlace } from "@shift/editor/types";
 import { WindowEngine } from "@/lib/engine/WindowEngine";
 
@@ -34,11 +34,11 @@ export class FailingWindowEngine extends WindowEngine {
     this.#preloadFailure = error;
   }
 
-  override layoutText(text: LayoutRequest, place: KerningPlace): PlacedText | null {
+  override layoutText(run: TextRun, place: KerningPlace): PlacedText | null {
     const failure = this.#layoutFailure;
     this.#layoutFailure = null;
     if (failure) throw failure;
-    return super.layoutText(text, place);
+    return super.layoutText(run, place);
   }
 
   override fontFeatures(): readonly FontFeature[] | null {

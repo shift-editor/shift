@@ -2,10 +2,9 @@ import type { GlyphId, RunId } from "@shift/types";
 import type {
   CharacterGlyph,
   Direction,
-  LayoutRequest,
-  LayoutUnit,
   PlacedText,
   TextLayout as LaidOutText,
+  TextRun,
   TypedFont,
   TypedGlyph,
 } from "@shift/wasm/protocol";
@@ -14,8 +13,8 @@ import type { ComputedSignal, Effect, Signal, WritableSignal } from "../signals"
 import type { Editor } from "../editor/Editor";
 import type { RunLaidOut, TextLayoutFailure, TextPlace, TextRunRecord } from "../../types/text";
 import { engineModuleCell, loadEngine } from "../wasm/engine";
+import { runSettingsOf } from "../editor/sceneNodes";
 import { glyphIdForItem, TextLayout, type TextItem } from "./layout";
-import { featureSettings } from "./runSettings";
 
 /** What a run's text reads from the {@link Text} that owns it. */
 export interface RunTextOwner {
@@ -67,11 +66,11 @@ export class RunText {
         track(editor.font.glyphEntriesCell);
         // A glyph the text shows finished loading into the engine.
         track(owner.glyphsLoadedCell);
-        const request = layoutRequest(record);
+        const run = textRun(record);
         try {
           const placed =
-            editor.font.layoutText(request, location, sourceId) ??
-            this.#laidOutAsTyped(record.items, request, { location, sourceId });
+            editor.font.layoutText(run, location, sourceId) ??
+            this.#laidOutAsTyped(run, { location, sourceId });
           return placed && { kind: "placed", placed };
         } catch (error) {
           return { kind: "failed", failure: { stage: "layout", error } };
@@ -191,16 +190,12 @@ export class RunText {
    * The text laid out as typed by shift-layout, for a window without an engine:
    * null until the engine module, which holds the layout, has loaded.
    */
-  #laidOutAsTyped(
-    items: readonly TextItem[],
-    request: LayoutRequest,
-    place: TextPlace,
-  ): PlacedText | null {
+  #laidOutAsTyped(run: TextRun, place: TextPlace): PlacedText | null {
     // Called from the layout computed, which lays out again once the module loads.
     track(engineModuleCell);
     const engine = engineModuleCell.peek();
     if (!engine) return null;
-    const layout = engine.typedText.layoutTyped(request, this.#typedFont(items, place));
+    const layout = engine.typedText.layoutTyped(run, this.#typedFont(run.items, place));
     return { layout, unloaded: [] };
   }
 
@@ -267,36 +262,13 @@ export class RunText {
   }
 }
 
-/** The layout request for a run: its items, with the run's settings as layout options. */
-function layoutRequest(record: TextRunRecord): LayoutRequest {
-  return {
-    units: record.items.map(layoutUnit),
-    options: {
-      language: record.language,
-      script: record.script,
-      features: featureSettings(record.features),
-      shaping: record.shaping,
-      align: record.align,
-      lineHeight:
-        record.lineHeight === null ? { kind: "auto" } : { kind: "em", em: record.lineHeight },
-      width: null,
-    },
-  };
+/** A run as the scene stores it, which Rust lays out with the options its settings give. */
+function textRun(record: TextRunRecord): TextRun {
+  return { items: record.items, settings: runSettingsOf(record) };
 }
 
 function sameStrings(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);
-}
-
-function layoutUnit(item: TextItem): LayoutUnit {
-  switch (item.kind) {
-    case "character":
-      return { kind: "character", codepoint: item.codepoint };
-    case "glyph":
-      return { kind: "glyph", glyphId: item.glyphId };
-    case "linebreak":
-      return { kind: "lineBreak" };
-  }
 }
 
 /**

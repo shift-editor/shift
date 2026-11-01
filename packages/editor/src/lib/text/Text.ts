@@ -27,7 +27,6 @@ import type {
   TextLayout as LaidOutText,
 } from "@shift/wasm/protocol";
 import { RunText } from "./RunText";
-import { featureValue } from "./runSettings";
 import { runSettingsOf } from "../editor/sceneNodes";
 import { GlyphNameParser, type TextParseContext, type TextParser } from "./parsing";
 
@@ -181,11 +180,7 @@ export class Text {
 
       const listing = this.featureSubstitutionsCell(highlight.tag).value;
       if (listing.kind === "failed") return null;
-      const setting = run.features[highlight.tag];
-      const applies = this.#featureApplies(
-        highlight.tag,
-        setting === undefined ? null : featureValue(setting),
-      );
+      const applies = this.#featureApplies(highlight.tag, run.features[highlight.tag] ?? null);
       if (applies === null) return null;
       const glyphs = new Set(
         listing.substitutions.flatMap(({ input, output }) => (applies ? [output] : input)),
@@ -426,13 +421,13 @@ export class Text {
   }
 
   /**
-   * Whether shaping applies a feature at `setting`, as Rust decides; null
-   * when that cannot be read, which the feature listing reports
-   * ({@link featuresCell}).
+   * Whether shaping applies a feature a run turns on or off (`on`, null
+   * when it leaves it), as Rust decides; null when that cannot be read,
+   * which the feature listing reports ({@link featuresCell}).
    */
-  #featureApplies(tag: string, setting: number | null): boolean | null {
+  #featureApplies(tag: string, on: boolean | null): boolean | null {
     try {
-      return this.#editor.font.featureApplies(tag, setting);
+      return this.#editor.font.featureApplies(tag, on);
     } catch {
       return null;
     }

@@ -10,6 +10,7 @@
   "napi": {
     "binaryName": "shift-bridge",
     "dtsHeaderFile": "dts-header.d.ts",
+    "constEnum": false,
     "targets": [
       "aarch64-apple-darwin",
       "aarch64-linux-android",

@@ -53,7 +53,7 @@ import type {
   FeatureSubstitution,
   FontChangeFlag,
   FontFeature,
-  LayoutRequest,
+  TextRun,
   RevisedNode,
   SceneIntent,
   SourceSetWeights,
@@ -391,17 +391,18 @@ export class EngineSession {
   }
 
   /**
-   * Lays text out over the session's font, unsaved edits included: shaping,
+   * Lays a run's text out over the session's font, unsaved edits included,
+   * with the options Rust builds from the run's settings: shaping,
    * kerning, marks, cursive joins, lines, bidi order, carets and boxes, all
    * in Rust (`shift_layout::TextLayout`), at a source or a design location.
    */
-  layoutText(text: LayoutRequest, place: KerningPlace): PlacedText {
+  layoutText(run: TextRun, place: KerningPlace): PlacedText {
     const source =
       place.kind === "source"
         ? this.#numbers([place.sourceId], this.#sourceNumbers, engineSourceNumbers)[0]
         : null;
     const location = place.kind === "location" ? place.location : [];
-    return this.#reads.layoutText({ text, location, source: source ?? null });
+    return this.#reads.layoutText({ run, location, source: source ?? null });
   }
 
   /** The change flags whose change may change what {@link layoutText} returns. */
@@ -437,8 +438,8 @@ export class EngineSession {
    *
    * @throws When the session has no shaper font, or it cannot be read.
    */
-  featureApplies(tag: string, setting: number | null): boolean {
-    return this.#reads.featureApplies(tag, setting);
+  featureApplies(tag: string, on: boolean | null): boolean {
+    return this.#reads.featureApplies(tag, on);
   }
 
   /** The change flags whose change may change the session's shaper font. */

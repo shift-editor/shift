@@ -2,7 +2,6 @@ import type { NodeId, RunId, SourceId } from "@shift/types";
 import type { ShiftNode } from "../../types/node";
 import type { RevisedNode, RunSettings, SceneIntent, SceneNode } from "../../types/sceneDocument";
 import type { TextRunRecord, TextRunSettings } from "../../types/text";
-import { featureSettings } from "../text/runSettings";
 import type { TextItem } from "../text/layout/types";
 
 /** One document node as the editor reads it, and the run it holds when it is a text run. */
@@ -141,11 +140,11 @@ export class SceneNodes {
   }
 }
 
-/** A run record's settings as the scene stores them: a forced feature on is `1`, off `0`. */
+/** A run record's settings as the scene stores them. */
 export function runSettingsOf(run: TextRunSettings): RunSettings {
   return {
     shaping: run.shaping,
-    features: featureSettings(run.features),
+    features: run.features,
     language: run.language,
     script: run.script,
     lineHeight: run.lineHeight,
@@ -157,7 +156,7 @@ export function runSettingsOf(run: TextRunSettings): RunSettings {
 function runSettingsFrom(settings: RunSettings): TextRunSettings {
   return {
     shaping: settings.shaping,
-    features: Object.fromEntries(settings.features.map(({ tag, value }) => [tag, value > 0])),
+    features: settings.features,
     language: settings.language ?? null,
     script: settings.script ?? null,
     lineHeight: settings.lineHeight ?? null,

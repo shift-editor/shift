@@ -25,13 +25,13 @@
 
 use pack::Pack;
 use shift_engine::StoreReadError;
-use shift_engine::scene::{RevisedNode, SceneNode};
+use shift_engine::scene::{RevisedNode, SceneNode, TextRun};
 use shift_font::glyph_identity::GlyphIdentityChange;
 use shift_font::{
     Axis, FontChangeFlag, GlyphId, GlyphRecords, MetricValue, MissingKerningOrigin, NodeId,
     ResolvedKerning, Source,
 };
-use shift_layout::{LayoutError, LayoutRequest, TextLayout};
+use shift_layout::{LayoutError, TextLayout};
 pub use shift_shape::{FeatureDefault, FeatureGroup, FontFeature};
 use shift_wire::KerningSnapshot;
 
@@ -83,7 +83,9 @@ pub trait EngineReads {
     ///
     /// Returns [`StoreReadError`] when the store's reader cannot answer.
     fn glyph_records(&self) -> Result<GlyphRecords, StoreReadError>;
-    /// Lays text out over the session's font, unsaved edits included, as
+    /// Lays a run's text out over the session's font, unsaved edits
+    /// included, with the options its settings give
+    /// (`TextRun::layout_request`), as
     /// `shift_layout::TextLayout::new` does: shaped with the session's
     /// shaper (brought up to date as [`Self::shape_paragraphs`] does), with
     /// kerning, mark attachment and cursive joins at each generated feature's
@@ -139,8 +141,9 @@ pub trait EngineReads {
         &self,
         tag: String,
     ) -> Result<Vec<FeatureSubstitution>, FeatureListError>;
-    /// Whether shaping text applies feature `tag` when the text sets it to
-    /// `setting` (null when it leaves it): `FeatureDefault::applies` for the
+    /// Whether shaping text applies feature `tag` when a run turns it on or
+    /// off (`on`, null when the run leaves it), as the run's layout sets it
+    /// (`FeatureSetting::switch`): `FeatureDefault::applies` for the
     /// session's shaper font's feature: the setting wins, else its default.
     /// False for a tag the shaper font does not define. Changes when a flag
     /// in [`Self::shaper_inputs`] does.
@@ -149,7 +152,7 @@ pub trait EngineReads {
     ///
     /// Returns [`FeatureListError`] when there is no shaper font, saying
     /// why, or it cannot be read.
-    fn feature_applies(&self, tag: String, setting: Option<u32>) -> Result<bool, FeatureListError>;
+    fn feature_applies(&self, tag: String, on: Option<bool>) -> Result<bool, FeatureListError>;
     /// What renaming `glyph` to `name` does: `Font::glyph_rename`. Null for a
     /// glyph the session's font lacks.
     fn glyph_rename(&self, glyph: GlyphId, name: String) -> Option<GlyphIdentityChange>;
@@ -192,10 +195,12 @@ pub trait EngineReads {
     fn external_location(&self, design: Vec<f64>) -> Vec<f64>;
 }
 
-/// Text to lay out, and where.
+/// A text run to lay out, and where.
 #[derive(Clone, Debug, PartialEq, Pack)]
 pub struct TextLayoutRequest {
-    pub text: LayoutRequest,
+    /// The run's items and settings as the scene stores them, which Rust
+    /// turns into layout options (`TextRun::layout_request`).
+    pub run: TextRun,
     /// The design location to lay out at, in the font's axis order with NaN
     /// for an axis default, as [`EngineReads::kerning_run`] takes it.
     pub location: Vec<f64>,
@@ -302,6 +307,7 @@ mod exports {
         GlyphRecords, InterpolationBasis, Kerning, KerningSide, LayerId, MissingKerningOrigin,
         ResolvedKerning, SourceId,
     };
+    use shift_layout::FeatureSetting;
     use shift_wire::values::{self, WireParse};
     use wasm_bindgen::prelude::*;
 
@@ -662,7 +668,7 @@ mod exports {
             let layout = self.shaping.layout_text(
                 font,
                 || self.shaper_font_source(),
-                &request.text,
+                &request.run.layout_request(),
                 place,
             )?;
             let residency = self.session.residency();
@@ -717,16 +723,12 @@ mod exports {
             )
         }
 
-        fn feature_applies(
-            &self,
-            tag: String,
-            setting: Option<u32>,
-        ) -> Result<bool, FeatureListError> {
+        fn feature_applies(&self, tag: String, on: Option<bool>) -> Result<bool, FeatureListError> {
             self.shaping.feature_applies(
                 self.session.font(),
                 || self.shaper_font_source(),
                 &tag,
-                setting,
+                on.map(FeatureSetting::switch),
             )
         }
 

@@ -38,7 +38,7 @@ import type {
   FontChangeFlag,
   FontFeature,
   GlyphIdentityChange,
-  LayoutRequest,
+  TextRun,
   PlacedText,
 } from "@shift/wasm/protocol";
 import type { PendingEditId } from "./editing";
@@ -215,7 +215,8 @@ export interface FontEngine {
   newAnchorName(layerIds: readonly LayerId[]): string;
 
   /**
-   * Lays text out over the engine's font, unsaved edits included: shaped
+   * Lays a run's text out over the engine's font, unsaved edits included,
+   * with the options Rust builds from its settings: shaped
    * with its shaper, positioned with live kerning, marks and cursive joins,
    * broken into lines and given caret stops, at a source or a design
    * location. Text that cannot be shaped is laid out as typed, with the
@@ -225,7 +226,7 @@ export interface FontEngine {
    *
    * @returns null only while the engine is not open.
    */
-  layoutText(text: LayoutRequest, place: KerningPlace): PlacedText | null;
+  layoutText(run: TextRun, place: KerningPlace): PlacedText | null;
 
   /**
    * Loads the layers of glyphs a layout listed as unloaded, then bumps the
@@ -255,14 +256,14 @@ export interface FontEngine {
   featureSubstitutions(tag: string): readonly FeatureSubstitution[] | null;
 
   /**
-   * Whether shaping applies a feature when text sets it to `setting` (null
-   * when it leaves it), as Rust decides: the setting wins, else the
+   * Whether shaping applies a feature when a run turns it on or off (`on`,
+   * null when it leaves it), as Rust decides: the setting wins, else the
    * feature's default.
    *
    * @returns false while the engine is not open, or for a tag its shaper font does not define.
    * @throws When the engine has no shaper font, or it cannot be read.
    */
-  featureApplies(tag: string, setting: number | null): boolean;
+  featureApplies(tag: string, on: boolean | null): boolean;
 }
 
 /**
