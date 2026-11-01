@@ -1,6 +1,6 @@
 import type { Point2D } from "@shift/geo";
 
-/** The camera a page had when it was last shown; session-only. */
+/** The camera a page had when it was last shown; the window keeps it with its view state. */
 export interface PageCamera {
   /** Screen position of the scene origin, in logical pixels. */
   readonly pan: Point2D;

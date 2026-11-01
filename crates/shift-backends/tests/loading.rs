@@ -475,6 +475,74 @@ fn binary_font_missing_hmtx_returns_error_instead_of_panicking() {
     );
 }
 
+/// `bytes` with its `name` table's records for `remove` dropped and `add` added.
+fn with_names(bytes: &[u8], remove: &[u16], add: &[(u16, &str)]) -> Vec<u8> {
+    use write_fonts::FontBuilder;
+    use write_fonts::from_obj::ToOwnedTable;
+    use write_fonts::read::{FontRef, TableProvider};
+    use write_fonts::tables::name::{Name, NameRecord};
+    use write_fonts::types::NameId;
+
+    let font = FontRef::new(bytes).unwrap();
+    let mut name: Name = font.name().unwrap().to_owned_table();
+    let dropped = remove.iter().chain(add.iter().map(|(id, _)| id));
+    let dropped: Vec<NameId> = dropped.map(|id| NameId::new(*id)).collect();
+    name.name_record
+        .retain(|record| !dropped.contains(&record.name_id));
+    for (id, string) in add {
+        let string = string.to_string().into();
+        name.name_record
+            .push(NameRecord::new(3, 1, 0x409, NameId::new(*id), string));
+    }
+    name.name_record.sort();
+    FontBuilder::new()
+        .add_table(&name)
+        .unwrap()
+        .copy_missing_tables(font)
+        .build()
+}
+
+/// Loads `bytes` as a font file named `file_name`.
+fn load_binary(bytes: Vec<u8>, file_name: &str) -> Font {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join(file_name);
+    fs::write(&path, bytes).unwrap();
+    FontLoader::new().read_font(path.to_str().unwrap()).unwrap()
+}
+
+#[test]
+fn a_binary_font_takes_its_typographic_family_name() {
+    let bytes = with_names(
+        &fs::read(fixtures::mutatorsans_ttf()).unwrap(),
+        &[],
+        &[
+            (1, "Mutator Sans SemiBold"),
+            (2, "Regular"),
+            (16, "Mutator Sans"),
+            (17, "SemiBold"),
+        ],
+    );
+
+    let font = load_binary(bytes, "MutatorSans-SemiBold.ttf");
+
+    assert_eq!(font.metadata().family_name.as_deref(), Some("Mutator Sans"));
+    assert_eq!(font.metadata().style_name.as_deref(), Some("Regular"));
+}
+
+#[test]
+fn a_binary_font_without_a_typographic_family_takes_name_id_1() {
+    let bytes = with_names(
+        &fs::read(fixtures::mutatorsans_ttf()).unwrap(),
+        &[16, 17],
+        &[(1, "Mutator Sans"), (2, "Bold")],
+    );
+
+    let font = load_binary(bytes, "MutatorSans-Bold.ttf");
+
+    assert_eq!(font.metadata().family_name.as_deref(), Some("Mutator Sans"));
+    assert_eq!(font.metadata().style_name.as_deref(), Some("Bold"));
+}
+
 #[test]
 fn truncated_binary_font_returns_error_instead_of_panicking() {
     let bytes = fs::read(fixtures::mutatorsans_ttf()).unwrap();
