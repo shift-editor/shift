@@ -13,6 +13,9 @@ const STRIP =
 
 const LABEL = "relative min-w-0 flex-1 truncate text-label font-semibold";
 
+/** The ghost is line art in the strip's text colour, so it reads on every theme's surfaces. */
+const GHOST = "relative h-5.5 w-6.5 shrink-0";
+
 interface UpdateStripProps {
   /** Positions the strip in its container, which must be `relative`. */
   readonly className?: string;
@@ -21,13 +24,21 @@ interface UpdateStripProps {
 /**
  * The one-line update prompt at the bottom of launcher and workspace windows:
  * "Update available" with Download and Later, then the download's progress
- * filling the strip, then a dark "Downloaded" strip with Restart and Later.
- * Main owns the state; every window shows the same strip.
+ * filling the strip, then "Downloaded" with Restart and Later. Main owns the
+ * state; every window shows the same strip.
  */
 export function UpdateStrip({ className }: UpdateStripProps) {
   const notice = useUpdateNotice();
   if (notice.type === "hidden") return null;
 
+  const host = getShiftHost();
+  const run = (action: () => Promise<void>, failure: string) => async () => {
+    try {
+      await action();
+    } catch (error) {
+      console.error(failure, error);
+    }
+  };
   const label = message("update.strip.accessibleLabel", {
     applicationName: shiftProductName,
     version: notice.version,
@@ -37,42 +48,39 @@ export function UpdateStrip({ className }: UpdateStripProps) {
     <div
       role="status"
       aria-label={label}
-      className={cn("pointer-events-none absolute flex", className)}
+      // Above the glyph grid's and canvas's own layers, which go up to z-4.
+      className={cn("pointer-events-none absolute z-10 flex", className)}
     >
-      <UpdateStripContent notice={notice} />
+      <UpdateStripView
+        notice={notice}
+        onDownload={run(() => host.update.startDownload(), "starting the update download failed")}
+        onRestart={run(() => host.update.restartToUpdate(), "restarting to update failed")}
+        onLater={run(() => host.update.later(), "putting off the update failed")}
+      />
     </div>
   );
 }
 
-const UpdateStripContent = ({ notice }: { notice: ShownUpdateNotice }) => {
-  const host = getShiftHost();
-  const run = (action: () => Promise<void>, failure: string) => async () => {
-    try {
-      await action();
-    } catch (error) {
-      console.error(failure, error);
-    }
-  };
-  const later = run(() => host.update.later(), "putting off the update failed");
+interface UpdateStripViewProps {
+  readonly notice: ShownUpdateNotice;
+  readonly onDownload: () => void;
+  readonly onRestart: () => void;
+  readonly onLater: () => void;
+}
 
+/** The strip for one notice, without main's state. */
+export function UpdateStripView({ notice, onDownload, onRestart, onLater }: UpdateStripViewProps) {
   switch (notice.type) {
     case "available":
       return (
-        <div className={cn(STRIP, "bg-surface pr-2 text-primary ring-1 ring-line-subtle")}>
-          <UpdateGhost aria-hidden="true" className="h-5.5 w-6.5 shrink-0" />
+        <div className={cn(STRIP, "bg-surface pr-2 text-primary ring-1 ring-primary/15")}>
+          <UpdateGhost aria-hidden="true" className={GHOST} />
           <span className={LABEL}>{message("update.strip.available")}</span>
           <div className="flex items-center gap-1">
-            <Button
-              variant="primary"
-              size="prompt"
-              onClick={run(
-                () => host.update.startDownload(),
-                "starting the update download failed",
-              )}
-            >
+            <Button variant="primary" size="prompt" onClick={onDownload}>
               {message("action.download")}
             </Button>
-            <Button variant="muted" size="prompt" onClick={later}>
+            <Button variant="muted" size="prompt" onClick={onLater}>
               {message("action.later")}
             </Button>
           </div>
@@ -80,17 +88,17 @@ const UpdateStripContent = ({ notice }: { notice: ShownUpdateNotice }) => {
       );
     case "downloading":
       return (
-        <div className={cn(STRIP, "bg-surface pr-4 text-primary ring-1 ring-line-subtle")}>
+        <div className={cn(STRIP, "bg-surface pr-4 text-primary ring-1 ring-primary/15")}>
           <div
             role="progressbar"
             aria-label={message("update.strip.downloading")}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.floor(notice.percent)}
-            className="absolute inset-y-0 left-0 bg-accent/12 transition-[width] duration-200"
+            className="absolute inset-y-0 left-0 bg-accent/30 transition-[width] duration-200"
             style={{ width: `${notice.percent}%` }}
           />
-          <UpdateGhost aria-hidden="true" className="relative h-5.5 w-6.5 shrink-0" />
+          <UpdateGhost aria-hidden="true" className={GHOST} />
           <span className={LABEL}>{message("update.strip.downloading")}</span>
           <span className="relative text-sm font-medium text-secondary tabular-nums">
             {Math.floor(notice.percent)}%
@@ -99,25 +107,21 @@ const UpdateStripContent = ({ notice }: { notice: ShownUpdateNotice }) => {
       );
     case "ready":
       return (
-        <div className={cn(STRIP, "bg-surface-inverse pr-2 text-on-surface-inverse")}>
-          <UpdateGhost aria-hidden="true" className="h-5.5 w-6.5 shrink-0" />
+        <div className={cn(STRIP, "bg-surface pr-2 text-primary ring-1 ring-primary/15")}>
+          <UpdateGhost aria-hidden="true" className={GHOST} />
           <span className={LABEL}>{message("update.strip.ready")}</span>
           <div className="flex items-center gap-1">
-            <Button
-              variant="primary"
-              size="prompt"
-              onClick={run(() => host.update.restartToUpdate(), "restarting to update failed")}
-            >
+            <Button variant="primary" size="prompt" onClick={onRestart}>
               {message("action.restart")}
             </Button>
-            <Button variant="inverse" size="prompt" onClick={later}>
+            <Button variant="muted" size="prompt" onClick={onLater}>
               {message("action.later")}
             </Button>
           </div>
         </div>
       );
   }
-};
+}
 
 /** What main says the update strip shows, kept current as it changes. */
 function useUpdateNotice(): UpdateNotice {

@@ -3,14 +3,14 @@ import type { UpdateBackend, UpdateBackendEvents } from "./types";
 
 const SIMULATED_VERSION = "9.9.9";
 const PROGRESS_STEP = 4;
-const PROGRESS_INTERVAL_MS = 120;
+const PROGRESS_INTERVAL_MS = 300;
 
 /**
  * Pretends a newer version exists, for trying the update strip in `pnpm dev`.
  *
  * @remarks
  * Enabled by `SHIFT_SIMULATE_UPDATE=1` in unpackaged builds only. The download
- * counts to 100% over a few seconds, and installing relaunches the same build.
+ * counts to 100% over about eight seconds, and installing relaunches the same build.
  */
 export class SimulatedUpdateBackend implements UpdateBackend {
   #events: UpdateBackendEvents | null = null;

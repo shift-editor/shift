@@ -12,8 +12,7 @@ export type ButtonProps = BaseButtonProps & {
     | "row"
     | "muted"
     | "transparent"
-    | "field"
-    | "inverse";
+    | "field";
   size?: "sm" | "md" | "lg" | "action" | "prompt" | "icon" | "icon-sm" | "field";
   isActive?: boolean;
   icon?: React.ReactNode;
@@ -36,9 +35,6 @@ const variantStyles = {
    */
   field:
     "rounded border border-line-subtle bg-surface-muted font-normal text-primary hover:bg-input data-[active]:border-accent",
-  /** A quiet action on an inverse surface, such as Later on the dark update strip. */
-  inverse:
-    "text-on-surface-inverse/60 hover:bg-on-surface-inverse/10 hover:text-on-surface-inverse",
 };
 
 const sizeStyles = {

@@ -55,7 +55,8 @@ export const Landing = () => {
           {recentDocuments && <RecentFiles documents={recentDocuments} />}
         </div>
       </div>
-      <UpdateStrip className="inset-x-0 bottom-3.5 justify-center" />
+      {/* Left of the Help button, centred on it. */}
+      <UpdateStrip className="right-12 bottom-2" />
       <HelpMenu className="absolute right-3.5 bottom-3.5" />
     </main>
   );

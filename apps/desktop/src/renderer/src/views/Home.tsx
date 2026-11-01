@@ -48,7 +48,7 @@ export const Home = () => {
         <ResizablePanel id="grid" minSize={300}>
           <div className="relative h-full">
             <GlyphGrid />
-            <UpdateStrip className="inset-x-0 bottom-3 justify-center" />
+            <UpdateStrip className="right-3 bottom-3" />
           </div>
         </ResizablePanel>
         <ResizableHandle
