@@ -239,6 +239,95 @@ fn unshaped_text_lays_out_as_typed() {
     assert_eq!(layout.glyphs[1].left, fixture.advance("f"));
 }
 
+/// A font known only by its glyphs' advances and mark classes: `a` at 500,
+/// `b` at 600 and a mark `m` of no advance.
+fn two_letters_and_a_mark() -> (TypedFont, [GlyphId; 3]) {
+    let [a, b, m] = [GlyphId::new(), GlyphId::new(), GlyphId::new()];
+    let glyph = |glyph_id, advance, is_mark| TypedGlyph {
+        glyph_id,
+        advance,
+        is_mark,
+    };
+    let character = |character: char, glyph_id| CharacterGlyph {
+        codepoint: u32::from(character),
+        glyph_id,
+    };
+    let font = TypedFont {
+        characters: vec![
+            character('a', a),
+            character('b', b),
+            character('\u{301}', m),
+        ],
+        glyphs: vec![
+            glyph(a, 500.0, false),
+            glyph(b, 600.0, false),
+            glyph(m, 0.0, true),
+        ],
+        metrics: LineMetrics {
+            units_per_em: 1000.0,
+            ascender: 800.0,
+            descender: -200.0,
+            line_gap: 0.0,
+            cap_height: None,
+        },
+    };
+    (font, [a, b, m])
+}
+
+fn lay_out_typed(font: &TypedFont, text: &str) -> TextLayout {
+    TextLayout::new(
+        &LayoutFont::typed(font),
+        &LayoutRequest {
+            units: units(text),
+            options: shaped(),
+        },
+    )
+}
+
+#[test]
+fn a_typed_font_lays_text_out_as_typed_with_lines_and_carets() {
+    let (font, [a, b, _]) = two_letters_and_a_mark();
+
+    let layout = lay_out_typed(&font, "ab\nb");
+
+    let placed: Vec<(Option<GlyphId>, u32, f64, f64)> = layout
+        .glyphs
+        .iter()
+        .map(|glyph| (glyph.glyph_id, glyph.line, glyph.left, glyph.baseline))
+        .collect();
+    assert_eq!(
+        placed,
+        [
+            (Some(a), 0, 0.0, 0.0),
+            (Some(b), 0, 500.0, 0.0),
+            (Some(b), 1, 0.0, -1000.0),
+        ]
+    );
+    assert_eq!(
+        stops(&layout),
+        [(0, 0.0), (1, 500.0), (2, 1100.0), (3, 0.0), (4, 600.0)]
+    );
+    assert!(layout.unshaped.is_some());
+}
+
+#[test]
+fn a_typed_font_shows_a_mark_of_no_advance_at_the_editor_s_stand_in() {
+    let (font, [a, _, m]) = two_letters_and_a_mark();
+
+    let layout = lay_out_typed(&font, "a\u{301}a");
+
+    let placed: Vec<(Option<GlyphId>, f64)> = layout
+        .glyphs
+        .iter()
+        .map(|glyph| (glyph.glyph_id, glyph.left))
+        .collect();
+    let after_mark = 500.0 + paragraph::NONSPACING_MARK_EDITOR_ADVANCE;
+    assert_eq!(
+        placed,
+        [(Some(a), 0.0), (Some(m), 500.0), (Some(a), after_mark)]
+    );
+}
+
 #[test]
 fn each_unit_knows_the_glyphs_it_shows() {
     let fixture = Fixture::open("ShapingTest.ufo");

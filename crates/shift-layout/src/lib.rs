@@ -25,10 +25,28 @@ mod request;
 mod units;
 
 #[cfg(feature = "layout")]
-pub use font::{LayoutFont, LineMetrics};
-pub use request::{FeatureSetting, LayoutRequest, LayoutUnit, LineHeight, TextAlign, TextOptions};
+pub use font::LayoutFont;
+pub use request::{
+    CharacterGlyph, FeatureSetting, LayoutRequest, LayoutUnit, LineHeight, LineMetrics, TextAlign,
+    TextOptions, TypedFont, TypedGlyph,
+};
 
 use shift_font::GlyphId;
+
+// Unit and glyph indices are `u32`; every target Shift builds for has a
+// `usize` at least that wide.
+const _: () = assert!(usize::BITS >= u32::BITS);
+
+/// A unit or glyph index as a slice index, which never loses data (see the
+/// assertion above).
+#[cfg(feature = "layout")]
+#[allow(
+    clippy::as_conversions,
+    reason = "widening: usize is at least 32 bits on every target, asserted above"
+)]
+pub(crate) const fn slice_index(index: u32) -> usize {
+    index as usize
+}
 
 /// The direction a line, run or glyph reads in.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
