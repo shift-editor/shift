@@ -1,0 +1,22 @@
+diff --git a/build/Code.js b/build/Code.js
+index 4d62ea04e332d0de2620c6f554b9283b6a7d9502..1c056da1369a477fc0c8991ad91dbb7a3dcae0d6 100644
+--- a/build/Code.js
++++ b/build/Code.js
+@@ -9,7 +9,6 @@ const Import_1 = require("./Import");
+ const is_plain_object_1 = require("./is-plain-object");
+ const ConditionalOutput_1 = require("./ConditionalOutput");
+ const index_1 = require("./index");
+-const dprint_node_1 = __importDefault(require("dprint-node"));
+ class Code extends Node_1.Node {
+     constructor(literals, placeholders) {
+         super();
+@@ -246,6 +245,9 @@ const baseOptions = {
+ };
+ function maybePretty(input, options) {
+     try {
++        // Loaded here, not at import: dprint-node ships no binary for some
++        // platforms (win32-arm64), where the code is returned unformatted.
++        const dprint_node_1 = __importDefault(require("dprint-node"));
+         return dprint_node_1.default.format("file.ts", input.trim(), { ...baseOptions, ...options });
+     }
+     catch (e) {
