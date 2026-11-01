@@ -5,7 +5,6 @@ import { HelpMenu } from "@/components/launcher/HelpMenu";
 import { LauncherActions } from "@/components/launcher/LauncherActions";
 import { RecentFiles } from "@/components/launcher/RecentFiles";
 import { useRecentDocuments } from "@/components/launcher/useRecentDocuments";
-import { Titlebar } from "@/components/chrome/Titlebar";
 import { WindowControls } from "@/components/chrome/WindowControls";
 import { WindowMenuBar } from "@/components/chrome/WindowMenuBar";
 import { getShiftHost } from "@/host/shiftHost";
@@ -29,10 +28,10 @@ export const Landing = () => {
   return (
     <main className="relative flex h-screen flex-col bg-background text-primary">
       {isMac ? (
-        // Overlaid so the launcher centres against the whole window, not the space below the bar.
-        <div className="absolute inset-x-0 top-0 z-10">
-          <Titlebar />
-        </div>
+        // macOS draws the traffic lights (systemTrafficLights in main); this strip
+        // only drags the window. Overlaid so the launcher centres against the
+        // whole window, not the space below the bar.
+        <div className="titlebar-drag absolute inset-x-0 top-0 z-10 h-10" />
       ) : (
         <div className="title-bar-area shrink-0 bg-chrome">
           <div className="titlebar-drag flex h-10 items-center">
