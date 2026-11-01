@@ -1,82 +1,88 @@
 import { app, dialog, shell, type MessageBoxOptions } from "electron";
-import electronUpdater from "electron-updater";
-import path from "node:path";
 import { message } from "../../shared/messages";
-import type { UpdateProgress } from "../../shared/update/types";
+import type { UpdateNotice } from "../../shared/update/types";
 import { shiftDistribution, shiftProductVersion, shiftUpdateBaseUrl } from "../release";
-import { UpdateWindow } from "./UpdateWindow";
+import { ElectronUpdateBackend } from "./ElectronUpdateBackend";
+import { SimulatedUpdateBackend } from "./SimulatedUpdateBackend";
 import { detectLinuxInstallation } from "./linuxInstallation";
 import { updateFeed } from "./updateFeed";
-import type { AppUpdaterOptions, LinuxInstallation, UpdateStatus, UpdateTrigger } from "./types";
+import { sameNotice, updateNotice } from "./updateNotice";
+import type {
+  AppUpdaterOptions,
+  LinuxInstallation,
+  UpdateBackend,
+  UpdateStatus,
+  UpdateTrigger,
+} from "./types";
 
 const INITIAL_CHECK_DELAY_MS = 30_000;
+const SIMULATED_CHECK_DELAY_MS = 3_000;
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const RELEASES_URL = "https://github.com/shift-editor/shift/releases";
 const NIGHTLY_URL = "https://github.com/shift-editor/shift/releases/tag/nightly";
-const { autoUpdater, CancellationToken } = electronUpdater;
 
-/** Owns application update checks, user consent, download progress, and restart safety. */
+/**
+ * Owns application update checks, user consent, download progress, and restart
+ * safety, and tells every window what its update strip shows.
+ */
 export class AppUpdater {
   readonly #options: AppUpdaterOptions;
-  readonly #updateWindow: UpdateWindow;
   readonly #linuxInstallation: LinuxInstallation | null =
     process.platform === "linux"
       ? detectLinuxInstallation(process.env.APPIMAGE, process.resourcesPath)
       : null;
+  readonly #backend: UpdateBackend | null;
 
   #status: UpdateStatus = { type: "idle" };
+  /** Whether the user chose Later for the available or ready update. */
+  #putOff = false;
+  #notice: UpdateNotice = { type: "hidden" };
   #started = false;
-  #downloadCancellationToken: InstanceType<typeof CancellationToken> | null = null;
   #relaunching = false;
 
   /**
-   * Creates the application updater and its lazy progress window.
+   * Creates the application updater.
    *
    * @param options - app-shell dependencies used for document safety, window ownership, and logging.
    */
   constructor(options: AppUpdaterOptions) {
     this.#options = options;
-    this.#updateWindow = new UpdateWindow(path.join(__dirname, "preload.js"), options.log, () =>
-      this.#updateWindowClosed(),
-    );
+    this.#backend = this.#createBackend();
   }
 
-  /** Installs Electron listeners and schedules quiet checks for eligible builds. */
+  /** What the update strip shows now. */
+  get notice(): UpdateNotice {
+    return this.#notice;
+  }
+
+  /** Installs backend listeners and schedules quiet checks for eligible builds. */
   start(): void {
-    if (this.#started || !app.isPackaged || !this.#feed()) return;
+    const backend = this.#backend;
+    if (this.#started || !backend) return;
     this.#started = true;
 
-    autoUpdater.autoDownload = false;
-    autoUpdater.autoInstallOnAppQuit = false;
-    autoUpdater.autoRunAppAfterInstall = true;
-    autoUpdater.disableWebInstaller = true;
-    autoUpdater.logger = this.#options.log;
-    autoUpdater.on("update-available", (info) => this.#updateAvailable(info.version));
-    autoUpdater.on("update-not-available", () => {
-      void this.#updateNotAvailable().catch((error) => {
-        this.#options.log.error("update-not-available handler failed", error);
-      });
-    });
-    autoUpdater.on("download-progress", (progress) => {
-      this.#downloadProgress({
-        percent: Math.min(100, Math.max(0, progress.percent)),
-        transferred: progress.transferred,
-        total: progress.total,
-        bytesPerSecond: progress.bytesPerSecond,
-      });
-    });
-    autoUpdater.on("update-downloaded", () => this.#updateDownloaded());
-    autoUpdater.on("error", (error) => {
-      void this.#updateFailed(error).catch((handlerError) => {
-        this.#options.log.error("updater error handler failed", handlerError);
-      });
+    backend.listen({
+      available: (version) => this.#updateAvailable(version),
+      notAvailable: () => {
+        void this.#updateNotAvailable().catch((error) => {
+          this.#options.log.error("update-not-available handler failed", error);
+        });
+      },
+      progress: (percent) => this.#downloadProgress(percent),
+      downloaded: () => this.#updateDownloaded(),
+      error: (error) => {
+        void this.#updateFailed(error).catch((handlerError) => {
+          this.#options.log.error("updater error handler failed", handlerError);
+        });
+      },
     });
 
+    const delay = app.isPackaged ? INITIAL_CHECK_DELAY_MS : SIMULATED_CHECK_DELAY_MS;
     const initialCheck = setTimeout(() => {
       void this.checkForUpdates("automatic").catch((error) => {
         this.#options.log.error("initial update check failed", error);
       });
-    }, INITIAL_CHECK_DELAY_MS);
+    }, delay);
     initialCheck.unref();
 
     const periodicCheck = setInterval(() => {
@@ -87,10 +93,13 @@ export class AppUpdater {
     periodicCheck.unref();
   }
 
-  /** Checks the compiled channel, deduplicating checks, downloads, and restart prompts. */
+  /**
+   * Checks the compiled channel, deduplicating checks, downloads, and restart
+   * prompts. A manual check shows a strip the user put off again.
+   */
   async checkForUpdates(trigger: UpdateTrigger): Promise<void> {
-    const feed = app.isPackaged ? this.#feed() : null;
-    if (!feed) {
+    const backend = this.#backend;
+    if (!backend) {
       if (trigger === "manual") await this.#showManualDownload();
       return;
     }
@@ -98,83 +107,57 @@ export class AppUpdater {
     switch (this.#status.type) {
       case "checking":
       case "restarting":
+      case "downloading":
         return;
       case "available":
-        if (trigger === "manual") this.#notifyAvailable();
-        return;
-      case "downloading":
-        if (trigger === "manual") this.#updateWindow.showDownloading();
-        return;
       case "ready":
-        if (trigger === "manual") this.#notifyReady();
+        if (trigger === "manual") this.#setPutOff(false);
         return;
       case "idle":
         break;
     }
 
-    this.#status = { type: "checking", trigger };
-    this.#options.log.info("checking Electron update feed", {
+    this.#setStatus({ type: "checking", trigger });
+    this.#options.log.info("checking for application updates", {
       distribution: shiftDistribution,
       platform: process.platform,
       architecture: process.arch,
-      feedUrl: feed.url,
     });
 
     try {
-      autoUpdater.setFeedURL(feed);
-      void autoUpdater.checkForUpdates().catch((error) => {
-        void this.#updateFailed(error).catch((handlerError) => {
-          this.#options.log.error("update check rejection handler failed", handlerError);
-        });
-      });
+      await backend.check();
     } catch (error) {
-      this.#status = { type: "idle" };
-      this.#options.log.warn("application update check failed", error);
-      if (trigger === "manual") await this.#showFailure();
+      await this.#updateFailed(error);
     }
   }
 
-  /** Downloads the available update and presents cumulative progress until completion. */
+  /** Downloads the available update; the strip shows its progress. */
   async startDownload(): Promise<void> {
-    if (this.#status.type !== "available") return;
+    const backend = this.#backend;
+    if (!backend || this.#status.type !== "available") return;
 
-    const version = this.#status.version;
-    const cancellationToken = new CancellationToken();
-    this.#status = { type: "downloading", version };
-    this.#downloadCancellationToken = cancellationToken;
-    this.#updateWindow.showDownloading();
+    this.#putOff = false;
+    this.#setStatus({ type: "downloading", version: this.#status.version, percent: 0 });
 
     try {
-      await autoUpdater.downloadUpdate(cancellationToken);
+      await backend.download();
     } catch (error) {
-      if (this.#status.type === "downloading") await this.#updateFailed(error);
-    } finally {
-      if (this.#downloadCancellationToken === cancellationToken) {
-        this.#downloadCancellationToken = null;
-      }
+      // Only a download still in progress fails; `#updateFailed` ignores any later state.
+      await this.#updateFailed(error);
     }
   }
 
-  /** Cancels the active download and returns the available update to a deferred state. */
-  cancelDownload(): void {
-    if (this.#status.type !== "downloading") return;
-
-    const version = this.#status.version;
-    this.#status = { type: "available", version };
-    this.#downloadCancellationToken?.cancel();
-    this.#updateWindow.close();
-  }
-
-  /** Defers the available or ready update without discarding its current state. */
+  /** Hides the strip for the available or ready update, keeping the update itself. */
   later(): void {
     if (this.#status.type !== "available" && this.#status.type !== "ready") return;
 
-    this.#updateWindow.close();
+    this.#setPutOff(true);
   }
 
-  /** Closes every document, then asks Electron to apply the downloaded update. */
+  /** Closes every document, then asks the backend to apply the downloaded update. */
   async restartToUpdate(): Promise<void> {
-    if (this.#status.type !== "ready") return;
+    const backend = this.#backend;
+    if (!backend || this.#status.type !== "ready") return;
 
     try {
       if (!(await this.#options.lifecycle.confirmQuit("update"))) {
@@ -193,37 +176,59 @@ export class AppUpdater {
       return;
     }
 
-    this.#status = { type: "restarting" };
-    this.#updateWindow.close();
+    this.#setStatus({ type: "restarting" });
     this.#options.log.info("update installation beginning");
     try {
-      autoUpdater.quitAndInstall(false, true);
+      backend.install();
     } catch (error) {
       this.#relaunchInstalledVersion(error);
     }
   }
 
-  #feed() {
-    return updateFeed(shiftUpdateBaseUrl, {
+  #createBackend(): UpdateBackend | null {
+    if (!app.isPackaged) {
+      return process.env.SHIFT_SIMULATE_UPDATE === "1" ? new SimulatedUpdateBackend() : null;
+    }
+
+    const feed = updateFeed(shiftUpdateBaseUrl, {
       distribution: shiftDistribution,
       platform: process.platform,
       architecture: process.arch,
       linuxInstallation: this.#linuxInstallation,
     });
+    return feed ? new ElectronUpdateBackend(feed, this.#options.log) : null;
+  }
+
+  #setStatus(status: UpdateStatus): void {
+    this.#status = status;
+    this.#publish();
+  }
+
+  #setPutOff(putOff: boolean): void {
+    this.#putOff = putOff;
+    this.#publish();
+  }
+
+  #publish(): void {
+    const notice = updateNotice(this.#status, this.#putOff);
+    if (sameNotice(notice, this.#notice)) return;
+
+    this.#notice = notice;
+    this.#options.broadcast(notice);
   }
 
   #updateAvailable(version: string): void {
     if (this.#status.type !== "checking") return;
 
-    this.#status = { type: "available", version };
-    this.#notifyAvailable();
+    this.#putOff = false;
+    this.#setStatus({ type: "available", version });
   }
 
   async #updateNotAvailable(): Promise<void> {
     if (this.#status.type !== "checking") return;
 
     const trigger = this.#status.trigger;
-    this.#status = { type: "idle" };
+    this.#setStatus({ type: "idle" });
     if (trigger !== "manual") return;
 
     await this.#showMessage({
@@ -235,19 +240,18 @@ export class AppUpdater {
     });
   }
 
-  #downloadProgress(progress: UpdateProgress): void {
+  #downloadProgress(percent: number): void {
     if (this.#status.type !== "downloading") return;
 
-    this.#updateWindow.updateProgress(progress);
+    const clamped = Math.min(100, Math.max(0, percent));
+    this.#setStatus({ ...this.#status, percent: clamped });
   }
 
   #updateDownloaded(): void {
     if (this.#status.type !== "downloading") return;
 
-    const version = this.#status.version;
-    this.#status = { type: "ready", version };
-    this.#downloadCancellationToken = null;
-    this.#notifyReady();
+    this.#putOff = false;
+    this.#setStatus({ type: "ready", version: this.#status.version });
   }
 
   async #updateFailed(error: unknown): Promise<void> {
@@ -257,16 +261,13 @@ export class AppUpdater {
         return;
       case "checking": {
         const trigger = this.#status.trigger;
-        this.#status = { type: "idle" };
+        this.#setStatus({ type: "idle" });
         this.#options.log.warn("application update check failed", error);
         if (trigger === "manual") await this.#showFailure();
         return;
       }
       case "downloading": {
-        const version = this.#status.version;
-        this.#status = { type: "available", version };
-        this.#downloadCancellationToken = null;
-        this.#updateWindow.close();
+        this.#setStatus({ type: "available", version: this.#status.version });
         this.#options.log.warn("application update download failed", error);
         await this.#showDownloadFailure();
         return;
@@ -276,22 +277,6 @@ export class AppUpdater {
       case "ready":
         return;
     }
-  }
-
-  #notifyAvailable(): void {
-    if (this.#status.type !== "available") return;
-
-    this.#updateWindow.showAvailable(this.#status.version);
-  }
-
-  #notifyReady(): void {
-    if (this.#status.type !== "ready") return;
-
-    this.#updateWindow.showReady(this.#status.version);
-  }
-
-  #updateWindowClosed(): void {
-    if (this.#status.type === "downloading") this.cancelDownload();
   }
 
   async #showFailure(): Promise<void> {
