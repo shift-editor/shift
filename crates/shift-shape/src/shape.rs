@@ -386,7 +386,7 @@ impl Shaper {
         Ok(glyphs)
     }
 
-    fn font(&self) -> Result<FontRef<'_>, ShapeError> {
+    pub(crate) fn font(&self) -> Result<FontRef<'_>, ShapeError> {
         FontRef::new(&self.bytes).map_err(|_| ShapeError::InvalidFont)
     }
 }

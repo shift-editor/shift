@@ -521,6 +521,7 @@ export class Font {
     entryForUnicode(unicode: Unicode): GlyphEntry | null;
     get externalAxesCell(): Signal<readonly Axis[]>;
     externalLocationForSource(sourceId: SourceId): ExternalAxisLocation | null;
+    fontFeatures(): readonly FontFeature[];
     getAxes(): readonly Axis[];
     getAxisMappingBases(): readonly AxisMappingBasis[];
     getAxisMappings(): readonly AxisMapping[];
@@ -552,7 +553,7 @@ export class Font {
     layerIdForPoint(pointId: PointId): LayerId | null;
     layerIdForSegment(segmentId: SegmentId): LayerId | null;
     layerState(layerId: LayerId): GlyphLayerState | null;
-    layoutText(text: LayoutRequest, location: ExternalAxisLocation, sourceId: SourceId | null): PlacedText | null;
+    layoutText(run: TextRun, location: ExternalAxisLocation, sourceId: SourceId | null): PlacedText | null;
     // (undocumented)
     get loaded(): boolean;
     get loadedCell(): Signal<boolean>;

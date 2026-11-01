@@ -240,6 +240,15 @@ export class TextLayout {
     );
   }
 
+  /** The ISO 15924 scripts the text's runs are in, as layout itemized them, in order of first use. */
+  get scripts(): readonly string[] {
+    const scripts = new Set<string>();
+    for (const line of this.lines) {
+      for (const run of line.runs) if (run.script) scripts.add(run.script);
+    }
+    return [...scripts];
+  }
+
   /** Returns the base direction of a line's paragraph; left to right for no line. */
   lineDirection(lineIndex: number): Direction {
     return this.lines[lineIndex]?.direction ?? "ltr";

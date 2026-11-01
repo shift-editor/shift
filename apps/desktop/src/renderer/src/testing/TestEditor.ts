@@ -24,6 +24,7 @@ import {
   type ScreenVector,
 } from "@shift/editor/spaces";
 import { Editor } from "@shift/editor";
+import { featureReadMessage } from "@shift/editor/text";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import { effect } from "@shift/editor/signals";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
@@ -110,6 +111,7 @@ import type {
   EditorTestSurface,
   TextLayoutFailureRead,
   Modifiers,
+  TextFeature,
   ToolbarButton,
   ToolShortcut,
 } from "./surface";
@@ -331,6 +333,15 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   failNextGlyphPreload(message: string): void {
     this.#stack.engine.failNextPreload(new Error(message));
+  }
+
+  failFeatureLists(reason: string): void {
+    this.#stack.engine.failFeatureLists(reason);
+  }
+
+  featureListFailure(): string | null {
+    const listing = this.text.featuresCell.peek();
+    return listing.kind === "failed" ? featureReadMessage(listing.error) : null;
   }
 
   textLayoutFailure(): TextLayoutFailureRead | null {
@@ -895,7 +906,15 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   setTextSize(size: number): void {
     const run = this.#requireTextRun();
-    this.scene.updateNode({ id: run.id, size });
+    this.history.capture("Set font size", () => this.text.setSize(run.id, size));
+  }
+
+  textScripts(): readonly string[] {
+    return this.text.scriptsCell(this.#requireTextRun().runId).peek();
+  }
+
+  textSize(): number {
+    return this.#requireTextRun().size;
   }
 
   moveText(to: Point2D): void {
@@ -908,6 +927,42 @@ export class TestEditor extends Editor implements EditorTestSurface {
     this.history.capture(shaping ? "Turn shaping on" : "Turn shaping off", () =>
       this.text.setShaping(run.runId, shaping),
     );
+  }
+
+  setTextFeature(tag: string, on: boolean | null): void {
+    const run = this.#requireTextRun();
+    this.history.capture(`Set ${tag}`, () => this.text.setFeature(run.runId, tag, on));
+  }
+
+  setTextLanguage(language: string | null): void {
+    const run = this.#requireTextRun();
+    this.history.capture("Set text language", () => this.text.setLanguage(run.runId, language));
+  }
+
+  setTextScript(script: string | null): void {
+    const run = this.#requireTextRun();
+    this.history.capture("Set text script", () => this.text.setScript(run.runId, script));
+  }
+
+  setTextLineHeight(lineHeight: number | null): void {
+    const run = this.#requireTextRun();
+    this.history.capture("Set line height", () => this.text.setLineHeight(run.runId, lineHeight));
+  }
+
+  setTextAlign(align: "left" | "center" | "right"): void {
+    const run = this.#requireTextRun();
+    this.history.capture("Align text", () => this.text.setAlign(run.runId, align));
+  }
+
+  textFeatures(): readonly TextFeature[] {
+    const listing = this.text.featuresCell.peek();
+    if (listing.kind === "failed") throw listing.error;
+    return listing.features.map(({ tag, name, default: shown, group }) => ({
+      tag,
+      name: name ?? null,
+      default: shown,
+      group,
+    }));
   }
 
   #requireTextRun(): TextRunNode {

@@ -2,6 +2,7 @@ use shift_font::{GlyphId, NodeId, RunId, SourceId, TextItemId};
 
 use super::*;
 use shift_font::index_key;
+use shift_layout::{FeatureSetting, LayoutUnit, LineHeight, TextAlign, TextOptions};
 
 /// The sibling key at `position`: ascending keys made one after another.
 fn key(position: usize) -> String {
@@ -344,7 +345,8 @@ fn a_run_stored_without_settings_reads_them_at_their_defaults() {
     let NodeContent::TextRun { settings, .. } = node.content else {
         panic!("expected a text run");
     };
-    assert_eq!(settings, RunSettings { shaping: true });
+    assert_eq!(settings, RunSettings::default());
+    assert!(settings.shaping);
 }
 
 #[test]
@@ -360,7 +362,10 @@ fn setting_a_run_s_settings_keeps_its_items_and_an_update_keeps_both() {
     scene
         .apply_intents(&[SceneIntent::SetRunSettings(SetRunSettings {
             id: NodeId::from_raw("run"),
-            settings: RunSettings { shaping: false },
+            settings: RunSettings {
+                shaping: false,
+                ..RunSettings::default()
+            },
         })])
         .unwrap();
     scene
@@ -373,7 +378,7 @@ fn setting_a_run_s_settings_keeps_its_items_and_an_update_keeps_both() {
     else {
         panic!("expected the run");
     };
-    assert_eq!(settings, RunSettings { shaping: false });
+    assert!(!settings.shaping);
 }
 
 #[test]
@@ -403,4 +408,80 @@ fn a_run_created_without_settings_gets_their_defaults() {
         panic!("expected the run");
     };
     assert_eq!(settings, RunSettings::default());
+}
+
+#[test]
+fn a_run_s_settings_become_its_layout_options() {
+    let settings = RunSettings {
+        shaping: false,
+        features: [("liga".to_string(), false), ("ss01".to_string(), true)].into(),
+        language: Some("tr".into()),
+        script: Some("Latn".into()),
+        line_height: Some(1.5),
+        align: Some(TextAlign::Center),
+    };
+
+    let options = settings.text_options();
+
+    assert_eq!(
+        options,
+        TextOptions {
+            language: Some("tr".into()),
+            script: Some("Latn".into()),
+            features: vec![
+                FeatureSetting {
+                    tag: "liga".into(),
+                    value: 0
+                },
+                FeatureSetting {
+                    tag: "ss01".into(),
+                    value: 1
+                },
+            ],
+            shaping: false,
+            align: Some(TextAlign::Center),
+            line_height: LineHeight::Em { em: 1.5 },
+            width: None,
+        }
+    );
+}
+
+#[test]
+fn a_run_with_default_settings_lays_out_shaped_at_the_font_s_line_spacing() {
+    let options = RunSettings::default().text_options();
+
+    assert!(options.shaping);
+    assert!(options.features.is_empty());
+    assert_eq!(options.line_height, LineHeight::Auto);
+    assert_eq!(options.align, None);
+}
+
+#[test]
+fn a_run_lays_out_one_unit_per_item() {
+    let glyph = GlyphId::from_raw("a.alt");
+    let run = TextRun {
+        items: vec![
+            TextItem::Character {
+                id: TextItemId::from_raw("a"),
+                codepoint: 0x61,
+            },
+            TextItem::Linebreak {
+                id: TextItemId::from_raw("break"),
+            },
+            TextItem::Glyph {
+                id: TextItemId::from_raw("alt"),
+                glyph_id: glyph,
+            },
+        ],
+        settings: RunSettings::default(),
+    };
+
+    assert_eq!(
+        run.layout_request().units,
+        [
+            LayoutUnit::Character { codepoint: 0x61 },
+            LayoutUnit::LineBreak,
+            LayoutUnit::Glyph { glyph_id: glyph },
+        ]
+    );
 }

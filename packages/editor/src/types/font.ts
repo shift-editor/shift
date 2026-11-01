@@ -35,8 +35,9 @@ import type {
 import type {
   EditLocation,
   FontChangeFlag,
+  FontFeature,
   GlyphIdentityChange,
-  LayoutRequest,
+  TextRun,
   PlacedText,
 } from "@shift/wasm/protocol";
 import type { PendingEditId } from "./editing";
@@ -109,6 +110,8 @@ export interface FontEngine {
   revision(flag: FontChangeFlag): Signal<number>;
   /** The flags whose change may change what {@link layoutText} returns. */
   layoutInputs(): readonly FontChangeFlag[];
+  /** The flags whose change may change the engine's shaper font, and so {@link fontFeatures}. */
+  shaperInputs(): readonly FontChangeFlag[];
   /**
    * Stops showing a gesture's preview in text: {@link layoutText} reads the
    * font as it stands again.
@@ -211,7 +214,8 @@ export interface FontEngine {
   newAnchorName(layerIds: readonly LayerId[]): string;
 
   /**
-   * Lays text out over the engine's font, unsaved edits included: shaped
+   * Lays a run's text out over the engine's font, unsaved edits included,
+   * with the options Rust builds from its settings: shaped
    * with its shaper, positioned with live kerning, marks and cursive joins,
    * broken into lines and given caret stops, at a source or a design
    * location. Text that cannot be shaped is laid out as typed, with the
@@ -221,7 +225,7 @@ export interface FontEngine {
    *
    * @returns null only while the engine is not open.
    */
-  layoutText(text: LayoutRequest, place: KerningPlace): PlacedText | null;
+  layoutText(run: TextRun, place: KerningPlace): PlacedText | null;
 
   /**
    * Loads the layers of glyphs a layout listed as unloaded, then bumps the
@@ -230,6 +234,15 @@ export interface FontEngine {
    * @throws When the store's reader cannot answer.
    */
   preload(glyphIds: readonly GlyphId[]): void;
+
+  /**
+   * The features the engine's shaper font defines, in tag order, each with
+   * the name it is shown by, its default and its group.
+   *
+   * @returns null only while the engine is not open.
+   * @throws When the engine has no shaper font, saying why, or it cannot be read.
+   */
+  fontFeatures(): readonly FontFeature[] | null;
 }
 
 /**

@@ -28,7 +28,7 @@ use shift_font::{NodeId, PersistentMap, Replacement};
 pub use changes::{SceneChange, SceneChangeSet};
 pub use intents::{CreateRun, DeleteNode, MoveNode, SceneIntent, SetRunItems, SetRunSettings};
 pub use node::{
-    DEFAULT_PAGE_NAME, NodeContent, NodeKind, PageRole, RunSettings, SceneNode, TextItem,
+    DEFAULT_PAGE_NAME, NodeContent, NodeKind, PageRole, RunSettings, SceneNode, TextItem, TextRun,
 };
 
 /// Why a scene edit was refused. The scene is unchanged.

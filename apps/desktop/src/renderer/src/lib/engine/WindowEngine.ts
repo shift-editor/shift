@@ -26,8 +26,9 @@ import {
 import {
   FontChangeFlagSchema,
   type FontChangeFlag,
+  type FontFeature,
   type GlyphIdentityChange,
-  type LayoutRequest,
+  type TextRun,
   type PlacedText,
   type RevisedNode,
   type SceneIntent,
@@ -109,6 +110,14 @@ export class WindowEngine implements FontEngine {
   layoutInputs(): readonly FontChangeFlag[] {
     // Before a session opens, any flag: opening changes them all.
     return this.#opened?.session.layoutInputs() ?? CHANGE_FLAGS;
+  }
+
+  shaperInputs(): readonly FontChangeFlag[] {
+    return this.#opened?.session.shaperInputs() ?? CHANGE_FLAGS;
+  }
+
+  fontFeatures(): readonly FontFeature[] | null {
+    return this.#opened?.session.fontFeatures() ?? null;
   }
 
   get variationCell(): Signal<EngineVariation | null> {
@@ -406,8 +415,8 @@ export class WindowEngine implements FontEngine {
     return this.#require().nextGlyphName(name);
   }
 
-  layoutText(text: LayoutRequest, place: KerningPlace): PlacedText | null {
-    return this.#opened?.session.layoutText(text, place) ?? null;
+  layoutText(run: TextRun, place: KerningPlace): PlacedText | null {
+    return this.#opened?.session.layoutText(run, place) ?? null;
   }
 
   /**

@@ -5,7 +5,13 @@ edition = "2024"
 description = "Shapes text with compiled OpenType features: bidi and script itemization, HarfRust shaping, and line-break opportunities"
 license.workspace = true
 
+[features]
+# A number packing for the feature list, which the editor's WebAssembly
+# calls carry as they are.
+pack = ["dep:pack"]
+
 [dependencies]
+pack = { workspace = true, optional = true }
 harfrust = "0.13.3"
 read-fonts = "0.43.3"
 thiserror = "2.0.18"
