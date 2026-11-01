@@ -10,6 +10,7 @@ import {
 } from "./fixtures/electronApp";
 import {
   closeWindow,
+  convertPreview,
   createNewFont,
   dirtyDocumentDecisions,
   launchSecondInstance,
@@ -321,7 +322,7 @@ test.describe("opening a font through the application shell", () => {
 });
 
 failedOpenTest("failed Open keeps the launcher available", async ({ electronApp, page }) => {
-  await runCommand(page, electronApp, "file.open");
+  await runCommand(page, "file.open");
 
   await expect(page).toHaveURL(/#\/launcher$/);
   expect(electronApp.windows()).toHaveLength(1);
@@ -340,7 +341,7 @@ for (const { format, fontPath } of [
     async ({ electronApp, page, testRoot }) => {
       const workspacePage = await openSelectedPreview(page, electronApp);
 
-      await runCommand(workspacePage, electronApp, "file.save");
+      await runCommand(workspacePage, "file.save");
 
       expect(await sessionMode(workspacePage, electronApp)).toBe("preview");
       expect(findShiftDocuments(testRoot)).toEqual([]);
@@ -368,7 +369,9 @@ convertiblePreviewTest(
     await workspacePage.getByRole("button", { name: "Read-only preview", exact: true }).click();
     const notice = workspacePage.getByRole("dialog", { name: "Save as Shift to edit" });
     await expect(notice).toBeVisible();
-    await notice.getByRole("button", { name: "Save as Shift…" }).click();
+    await convertPreview(workspacePage, () =>
+      notice.getByRole("button", { name: "Save as Shift…" }).click(),
+    );
     await waitForWorkspaceReady(workspacePage);
     await expect.poll(() => sessionMode(workspacePage, electronApp)).toBe("workspace");
 
@@ -376,7 +379,7 @@ convertiblePreviewTest(
     expect(sourceTreeSnapshot(FONTS.mutatorSansLightCondensed)).toEqual(sourceBefore);
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
     await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved.shift *");
-    await runCommand(workspacePage, electronApp, "file.save");
+    await runCommand(workspacePage, "file.save");
     expect(sourceTreeSnapshot(FONTS.mutatorSansLightCondensed)).toEqual(sourceBefore);
 
     await quitApp(electronApp);
@@ -415,7 +418,7 @@ for (const { format, sourcePath, sourceRoot } of [
       const sourceBefore = sourceTreeSnapshot(sourceRoot);
       const workspacePage = await openSelectedPreview(page, electronApp);
 
-      await runCommand(workspacePage, electronApp, "file.saveAs");
+      await convertPreview(workspacePage, () => runCommand(workspacePage, "file.saveAs"));
       await waitForWorkspaceReady(workspacePage);
       await expect.poll(() => sessionMode(workspacePage, electronApp)).toBe("workspace");
 
@@ -433,10 +436,7 @@ convertiblePreviewTest(
     const workspacePage = await openSelectedPreview(page, electronApp);
     const glyphId = await openFirstCatalogGlyph(workspacePage);
 
-    // Conversion reloads the window into the new workspace.
-    const reloaded = workspacePage.waitForEvent("load");
-    await runCommand(workspacePage, electronApp, "file.saveAs");
-    await reloaded;
+    await convertPreview(workspacePage, () => runCommand(workspacePage, "file.saveAs"));
     await expect.poll(() => sessionMode(workspacePage, electronApp)).toBe("workspace");
 
     await waitForEditorReady(workspacePage, glyphId);
@@ -449,7 +449,7 @@ cancelPreviewSaveTest(
   async ({ electronApp, page, testRoot }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
 
-    await runCommand(workspacePage, electronApp, "file.save");
+    await runCommand(workspacePage, "file.save");
 
     expect(await sessionMode(workspacePage, electronApp)).toBe("preview");
     expect(findShiftDocuments(testRoot)).toEqual([]);
@@ -461,7 +461,7 @@ failedPreviewSaveTest(
   async ({ electronApp, page, saveShiftPath, testRoot }) => {
     const workspacePage = await openSelectedPreview(page, electronApp);
 
-    await runCommand(workspacePage, electronApp, "file.save");
+    await runCommand(workspacePage, "file.save");
 
     expect(await sessionMode(workspacePage, electronApp)).toBe("preview");
     expect(fs.existsSync(saveShiftPath)).toBe(false);
@@ -494,7 +494,7 @@ test.describe("document lifecycle through the application shell", () => {
       await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
       await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("Untitled *");
 
-      await runCommand(workspacePage, electronApp, "file.save");
+      await runCommand(workspacePage, "file.save");
 
       await expect.poll(() => fs.existsSync(saveShiftPath)).toBe(true);
       await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved.shift -");
@@ -502,7 +502,7 @@ test.describe("document lifecycle through the application shell", () => {
 
       await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
       await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved.shift *");
-      await runCommand(workspacePage, electronApp, "file.save");
+      await runCommand(workspacePage, "file.save");
       await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved.shift -");
 
       await quitApp(electronApp);
@@ -546,7 +546,7 @@ existingSaveTest(
     const workspacePage = await createNewFont(page, electronApp);
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
 
-    await runCommand(workspacePage, electronApp, "file.save");
+    await runCommand(workspacePage, "file.save");
 
     await expect
       .poll(() => new EditorDriver(workspacePage, electronApp).documentState())
@@ -567,7 +567,7 @@ cancelSaveTest(
     const workspace = new EditorDriver(workspacePage, electronApp);
     const before = await workspace.documentState();
 
-    await runCommand(workspacePage, electronApp, "file.save");
+    await runCommand(workspacePage, "file.save");
 
     expect(await workspace.documentState()).toEqual(before);
     expect(await windowTitle(workspacePage, electronApp)).toContain("Untitled *");
@@ -583,7 +583,7 @@ failedSaveTest(
     const workspace = new EditorDriver(workspacePage, electronApp);
     const before = await workspace.documentState();
 
-    await runCommand(workspacePage, electronApp, "file.save");
+    await runCommand(workspacePage, "file.save");
 
     expect(await workspace.documentState()).toEqual(before);
     expect(await windowTitle(workspacePage, electronApp)).toContain("Untitled *");
@@ -610,7 +610,7 @@ discardTest(
   async ({ relaunch, electronApp, page, saveShiftPath }) => {
     const workspacePage = await createNewFont(page, electronApp);
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
-    await runCommand(workspacePage, electronApp, "file.save");
+    await runCommand(workspacePage, "file.save");
     await expect.poll(() => fs.existsSync(saveShiftPath)).toBe(true);
 
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
@@ -645,18 +645,18 @@ saveAsTest(
   async ({ electronApp, page, saveShiftPath, saveAsShiftPath, testRoot }) => {
     const workspacePage = await createNewFont(page, electronApp);
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
-    await runCommand(workspacePage, electronApp, "file.save");
+    await runCommand(workspacePage, "file.save");
     await expect.poll(() => fs.existsSync(saveShiftPath)).toBe(true);
     const sourceSnapshot = fs.readFileSync(saveShiftPath);
 
-    await runCommand(workspacePage, electronApp, "file.saveAs");
+    await runCommand(workspacePage, "file.saveAs");
     await expect.poll(() => fs.existsSync(saveAsShiftPath)).toBe(true);
     await expect.poll(() => windowTitle(workspacePage, electronApp)).toContain("saved-as.shift -");
     expect(savedGlyphNames(saveAsShiftPath, testRoot)).toEqual(["newGlyph"]);
     expect(fs.readFileSync(saveShiftPath)).toEqual(sourceSnapshot);
 
     await workspacePage.getByRole("button", { name: "Create glyph", exact: true }).click();
-    await runCommand(workspacePage, electronApp, "file.save");
+    await runCommand(workspacePage, "file.save");
 
     expect(fs.readFileSync(saveShiftPath)).toEqual(sourceSnapshot);
     expect(savedGlyphNames(saveAsShiftPath, testRoot)).toEqual(["newGlyph", "newGlyph.1"]);
@@ -669,7 +669,7 @@ copiedDocumentTest(
   async ({ electronApp, page, saveShiftPath, copyShiftPath, testRoot }) => {
     const originalPage = await createNewFont(page, electronApp);
     await originalPage.getByRole("button", { name: "Create glyph", exact: true }).click();
-    await runCommand(originalPage, electronApp, "file.save");
+    await runCommand(originalPage, "file.save");
     await expect.poll(() => fs.existsSync(saveShiftPath)).toBe(true);
     fs.copyFileSync(saveShiftPath, copyShiftPath);
 
@@ -680,7 +680,7 @@ copiedDocumentTest(
     const copySnapshot = fs.readFileSync(copyShiftPath);
     expect(copySnapshot).toEqual(sourceSnapshot);
 
-    await runCommand(originalPage, electronApp, "file.open");
+    await runCommand(originalPage, "file.open");
 
     expect(electronApp.windows()).toHaveLength(originalWindowCount);
     expect(await original.documentState()).toEqual(originalState);
@@ -688,7 +688,7 @@ copiedDocumentTest(
 
     await originalPage.getByRole("button", { name: "Create glyph", exact: true }).click();
     await expect.poll(() => windowTitle(originalPage, electronApp)).toContain("saved.shift *");
-    await runCommand(originalPage, electronApp, "file.save");
+    await runCommand(originalPage, "file.save");
 
     expect(fs.readFileSync(copyShiftPath)).toEqual(copySnapshot);
     expect(savedGlyphNames(saveShiftPath, testRoot)).toContain("newGlyph.1");
@@ -715,7 +715,7 @@ cancelExportTest("canceling Export preserves document state", async ({ electronA
   await expect.poll(() => windowTitle(page, electronApp)).toContain("font.shift -");
   const titleBefore = await windowTitle(page, electronApp);
 
-  await runCommand(page, electronApp, "file.exportTtf");
+  await runCommand(page, "file.exportTtf");
 
   expect(await workspace.documentState()).toEqual(before);
   expect(await windowTitle(page, electronApp)).toBe(titleBefore);
@@ -729,7 +729,7 @@ failedExportTest(
     await expect.poll(() => windowTitle(page, electronApp)).toContain("font.shift -");
     const titleBefore = await windowTitle(page, electronApp);
 
-    await runCommand(page, electronApp, "file.exportTtf");
+    await runCommand(page, "file.exportTtf");
 
     expect(await workspace.documentState()).toEqual(before);
     expect(await windowTitle(page, electronApp)).toBe(titleBefore);
@@ -746,7 +746,7 @@ workspaceTest(
     await expect.poll(() => windowTitle(page, electronApp)).toContain("font.shift -");
     const titleBefore = await windowTitle(page, electronApp);
 
-    await runCommand(page, electronApp, "file.exportTtf");
+    await runCommand(page, "file.exportTtf");
 
     await expect.poll(() => fs.existsSync(exportTtfPath)).toBe(true);
     const workspaceGlyphs = await workspace.glyphNames();
