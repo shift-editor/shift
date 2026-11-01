@@ -329,6 +329,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
     this.#stack.engine.failFeatureLists(reason);
   }
 
+  featureSubstitutionsFailure(tag: string): string | null {
+    const listing = this.text.featureSubstitutionsCell(tag).peek();
+    return listing.kind === "failed" ? featureReadMessage(listing.error) : null;
+  }
+
   featureListFailure(): string | null {
     const listing = this.text.featuresCell.peek();
     return listing.kind === "failed" ? featureReadMessage(listing.error) : null;

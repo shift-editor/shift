@@ -637,6 +637,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   failFeatureLists(reason: string): void;
   /** What the Features section says when the font's features cannot be listed; null when they can. */
   featureListFailure(): string | null;
+  /** What a feature's preview says when its substitutions cannot be read; null when they can. */
+  featureSubstitutionsFailure(tag: string): string | null;
   /**
    * Saves the document, as File › Save does. A document never saved yet is
    * saved to a temporary file, as if Save As chose one; {@link close} removes it.

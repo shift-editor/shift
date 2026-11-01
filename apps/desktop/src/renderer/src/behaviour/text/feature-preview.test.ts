@@ -19,7 +19,10 @@ describe("what a feature changes in proof text", () => {
   });
 
   it("says why a feature's substitutions cannot be read, rather than listing none", () => {
-    expect(() => editor.featureSubstitutions("ligatures")).toThrow("FeatureListError.invalidTag");
+    expect(editor.featureSubstitutionsFailure("ligatures")).toBe(
+      "“ligatures” isn't a feature tag, so its substitutions can't be shown.",
+    );
+    expect(editor.featureSubstitutionsFailure("liga")).toBeNull();
   });
 
   it("highlights what a feature brings in while it is on, and what it replaces while off", async () => {

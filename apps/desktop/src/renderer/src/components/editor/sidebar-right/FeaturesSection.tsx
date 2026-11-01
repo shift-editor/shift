@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FontFeature, TextRunRecord } from "@shift/editor/text";
+import { featureReadMessage, type FontFeature, type TextRunRecord } from "@shift/editor/text";
 import { useSignalState } from "@shift/editor/signals";
 import {
   Button,
@@ -18,13 +18,7 @@ import {
 import HorizontalEllipsis from "@/assets/general/horizontal-ellipsis.svg";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { FeaturePreviewPopover, TAG_PILL } from "./FeaturePreviewPopover";
-import {
-  errorMessage,
-  featureSetting,
-  FontFeatures,
-  onByDefault,
-  settingStep,
-} from "./fontFeatures";
+import { featureSetting, FontFeatures, onByDefault, settingStep } from "./fontFeatures";
 import { useSidebarBlock } from "./SidebarGroup";
 import { SidebarSection } from "./SidebarSection";
 import { useTextSettingsRun } from "./TextSection";
@@ -55,7 +49,7 @@ export const FeaturesSection = () => {
     return (
       <SidebarSection title="Features">
         <p role="alert" className="text-ui text-error">
-          The font's features could not be read: {errorMessage(listing.error)}
+          {featureReadMessage(listing.error)}
         </p>
       </SidebarSection>
     );

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type RefObject } from "react";
-import type { FontFeature, TextRunRecord } from "@shift/editor/text";
+import { featureReadMessage, type FontFeature, type TextRunRecord } from "@shift/editor/text";
 import type { GlyphId } from "@shift/types";
 import {
   ContextMenu,
@@ -25,7 +25,6 @@ import { useGlyphSelection } from "../../glyph-grid/useGlyphSelection";
 import { GlyphThumbnail } from "../../kerning/groups/GlyphThumbnail";
 import { glyphName } from "../../kerning/groups/previewGlyphs";
 import { MAX_PREVIEW_GLYPHS, inputItems, insertIntoRun, useFeatureGlyphs } from "./featureGlyphs";
-import { errorMessage } from "./fontFeatures";
 
 /** How a feature tag is shown wherever features are listed; callers add its colour. */
 export const TAG_PILL = "shrink-0 rounded bg-input px-1.5 py-0.5 font-mono text-ui font-normal";
@@ -156,7 +155,7 @@ const FeaturePreview = ({ run, tag }: FeaturePreviewProps) => {
           role="alert"
           className="flex h-32 items-center justify-center rounded-md bg-input px-3 text-center text-ui text-error"
         >
-          The feature's substitutions could not be read: {errorMessage(error)}
+          {featureReadMessage(error)}
         </p>
       </div>
     );
