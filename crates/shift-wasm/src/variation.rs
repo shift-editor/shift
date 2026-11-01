@@ -345,9 +345,7 @@ pub(crate) fn to_location(axes: &[Axis], values: &[f64]) -> Location {
 }
 
 fn from_location(axes: &[Axis], location: &Location) -> Vec<f64> {
-    axes.iter()
-        .map(|axis| location.get(axis.id()).unwrap_or(f64::NAN))
-        .collect()
+    location.values_in(axes)
 }
 
 #[cfg(test)]

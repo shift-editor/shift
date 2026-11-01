@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashSet};
 
 use shift_font::{
     AppliedIntents, CoreError, Font, FontChange, FontChangeSet, FontIntentSet, Glyph, GlyphId,
-    GlyphLayer, LayerId,
+    GlyphLayer, LayerId, TouchedLayer,
 };
 
 use crate::scene::{Scene, SceneChangeSet, SceneError, SceneIntent};
@@ -60,6 +60,11 @@ impl StagedEdit {
 
     pub fn changes(&self) -> &FontChangeSet {
         &self.applied.changes
+    }
+
+    /// The layers the edit touches, in first-touch order.
+    pub fn touched(&self) -> &[TouchedLayer] {
+        &self.applied.layers
     }
 }
 

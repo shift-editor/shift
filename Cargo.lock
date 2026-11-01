@@ -2440,6 +2440,8 @@ dependencies = [
  "rayon",
  "serde",
  "shift-font",
+ "shift-layout",
+ "shift-shape",
  "shift-shaper-font",
  "shift-slug",
  "shift-store",
@@ -2538,6 +2540,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "shift-layout"
+version = "0.1.0"
+dependencies = [
+ "pack",
+ "shift-backends",
+ "shift-font",
+ "shift-shape",
+ "shift-shaper-font",
+ "thiserror",
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "shift-proof"
 version = "0.1.0"
 dependencies = [
@@ -2565,7 +2580,9 @@ name = "shift-shape"
 version = "0.1.0"
 dependencies = [
  "harfrust",
+ "read-fonts 0.43.3",
  "thiserror",
+ "unicode-bidi",
  "unicode-linebreak",
  "unicode-script",
 ]
@@ -2637,6 +2654,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "shift-engine",
  "shift-font",
+ "shift-layout",
  "shift-shape",
  "shift-shaper-font",
  "shift-wire",

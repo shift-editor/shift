@@ -226,6 +226,10 @@ export class WorkspaceEditCoordinator {
     return this.#engine.preview(intents);
   }
 
+  showPreview(intents: readonly FontIntent[]): void {
+    this.#engine.showPreview(intents);
+  }
+
   /**
    * Groups synchronous edit intents into one workspace operation.
    *
