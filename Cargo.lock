@@ -2440,11 +2440,9 @@ dependencies = [
  "rayon",
  "serde",
  "shift-font",
- "shift-layout",
- "shift-shape",
- "shift-shaper-font",
  "shift-slug",
  "shift-store",
+ "shift-text",
  "skrifa",
  "tempfile",
  "thiserror",
@@ -2514,7 +2512,7 @@ dependencies = [
  "rmp-serde",
  "serde",
  "shift-font",
- "shift-layout",
+ "shift-text",
  "thiserror",
 ]
 
@@ -2541,31 +2539,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "shift-layout"
-version = "0.1.0"
-dependencies = [
- "pack",
- "serde",
- "shift-backends",
- "shift-font",
- "shift-shape",
- "shift-shaper-font",
- "thiserror",
- "unicode-segmentation",
-]
-
-[[package]]
 name = "shift-proof"
 version = "0.1.0"
 dependencies = [
- "harfrust",
  "png",
  "serde",
+ "shift-text",
  "skrifa",
  "thiserror",
  "tiny-skia",
- "unicode-bidi",
- "unicode-script",
 ]
 
 [[package]]
@@ -2575,34 +2557,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.104",
-]
-
-[[package]]
-name = "shift-shape"
-version = "0.1.0"
-dependencies = [
- "harfrust",
- "pack",
- "read-fonts 0.43.3",
- "thiserror",
- "unicode-bidi",
- "unicode-linebreak",
- "unicode-script",
-]
-
-[[package]]
-name = "shift-shaper-font"
-version = "0.1.0"
-dependencies = [
- "fea-rs",
- "fontbe",
- "fontdrasil",
- "fontir",
- "harfrust",
- "shift-font",
- "shift-shape",
- "thiserror",
- "write-fonts",
 ]
 
 [[package]]
@@ -2647,6 +2601,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "shift-text"
+version = "0.1.0"
+dependencies = [
+ "fea-rs",
+ "fontbe",
+ "fontdrasil",
+ "fontir",
+ "harfrust",
+ "pack",
+ "read-fonts 0.43.3",
+ "serde",
+ "shift-backends",
+ "shift-font",
+ "thiserror",
+ "unicode-bidi",
+ "unicode-linebreak",
+ "unicode-script",
+ "unicode-segmentation",
+ "write-fonts",
+]
+
+[[package]]
 name = "shift-wasm"
 version = "0.0.0"
 dependencies = [
@@ -2658,9 +2634,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "shift-engine",
  "shift-font",
- "shift-layout",
- "shift-shape",
- "shift-shaper-font",
+ "shift-text",
  "shift-wire",
  "thiserror",
  "wasm-bindgen",

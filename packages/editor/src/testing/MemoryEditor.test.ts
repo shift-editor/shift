@@ -97,7 +97,7 @@ describe("memory font editing", () => {
     session.dispose();
   });
 
-  it("lays proof text out as typed, by shift-layout, without an engine", async () => {
+  it("lays proof text out as typed, by shift-text, without an engine", async () => {
     const session = createMemoryFontSession({
       source: memorySource(fixture()),
       clipboard: new MemoryClipboard(),

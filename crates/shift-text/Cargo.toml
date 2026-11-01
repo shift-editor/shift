@@ -1,0 +1,70 @@
+[package]
+name = "shift-text"
+version = "0.1.0"
+edition = "2024"
+description = "Shapes and lays out text: bidi and script itemization, HarfRust shaping, the shaper font, and text layout over the live font"
+license.workspace = true
+
+# Every part is on by default, so `cargo test -p shift-text` tests all of
+# it; the workspace dependency turns defaults off, and each consumer names
+# the parts it compiles.
+[features]
+default = ["layout"]
+# Itemizing (bidi levels, scripts), shaping with HarfRust, and line-break
+# opportunities: `shape`.
+shape = [
+    "dep:harfrust",
+    "dep:read-fonts",
+    "dep:unicode-bidi",
+    "dep:unicode-linebreak",
+    "dep:unicode-script",
+]
+# Compiling authored features into a shaper font (fea-rs and fontbe):
+# `shaper_font`.
+shaper-font = [
+    "shape",
+    "dep:fea-rs",
+    "dep:fontbe",
+    "dep:fontdrasil",
+    "dep:fontir",
+    "dep:write-fonts",
+]
+# Laying out: positioning, line breaking, bidi order and carets over the
+# shaper font. Without it `layout` holds only the request and result types,
+# for the editor's generated side.
+layout = ["shaper-font", "dep:unicode-segmentation"]
+# A number packing for the types the editor's WebAssembly calls carry.
+pack = ["dep:pack", "shift-font/pack"]
+# Storing the text options a document keeps with a run (alignment and
+# feature settings), as the engine's scene does.
+serde = ["dep:serde"]
+# Exposes `ShaperFontState::compiles` to other crates' tests.
+test-support = ["shaper-font"]
+
+[dependencies]
+shift-font = { workspace = true }
+thiserror = "2.0.18"
+
+pack = { workspace = true, optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true }
+
+harfrust = { version = "0.13.3", optional = true }
+read-fonts = { version = "0.43.3", optional = true }
+unicode-bidi = { version = "0.3", optional = true }
+unicode-linebreak = { version = "0.1.5", optional = true }
+unicode-script = { version = "0.5", optional = true }
+
+fea-rs = { version = "1.0", optional = true }
+fontbe = { version = "1.0", optional = true }
+fontdrasil = { version = "1.0", optional = true }
+fontir = { version = "1.0", optional = true }
+write-fonts = { version = "0.52", optional = true }
+
+unicode-segmentation = { version = "1.12", optional = true }
+
+[dev-dependencies]
+shift-backends = { workspace = true }
+shift-font = { workspace = true, features = ["test-support"] }
+
+[lints]
+workspace = true

@@ -2,7 +2,7 @@ use shift_font::{GlyphId, NodeId, RunId, SourceId, TextItemId};
 
 use super::*;
 use shift_font::index_key;
-use shift_layout::{FeatureSetting, LayoutUnit, LineHeight, TextAlign, TextOptions};
+use shift_text::layout::{FeatureSetting, LayoutUnit, LineHeight, TextAlign, TextOptions};
 
 /// The sibling key at `position`: ascending keys made one after another.
 fn key(position: usize) -> String {

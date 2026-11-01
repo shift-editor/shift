@@ -1,5 +1,5 @@
-//! Text layout in the editor: shift-layout over the session's font and a
-//! shaper font the editing engine compiles from it (shift-shaper-font's
+//! Text layout in the editor: shift-text's layout over the session's font and a
+//! shaper font the editing engine compiles from it (shift-text's `shaper_font`,
 //! fea-rs compile), answered by
 //! [`EngineReads::layout_text`](crate::engine_reads::EngineReads::layout_text).
 //!
@@ -28,11 +28,13 @@ mod exports {
 
     use shift_font::interpolation::KerningBlend;
     use shift_font::{DesignLocation, ExternalLocation, Font, FontChangeImpact, ShaperFontSource};
-    use shift_layout::{
+    use shift_text::layout::{
         LayoutError, LayoutFont, LayoutRequest, LineMetrics, PlacementKeys, TextLayout,
     };
-    use shift_shape::ShapeError;
-    use shift_shaper_font::{LiveShaper, ShaperFontError, ShaperFontRequest, ShaperFontState};
+    use shift_text::shape::ShapeError;
+    use shift_text::shaper_font::{
+        LiveShaper, ShaperFontError, ShaperFontRequest, ShaperFontState,
+    };
 
     use super::ShapingFailure;
     use crate::engine_reads::{FeatureListError, FeatureSubstitution, FontFeature};
@@ -197,7 +199,7 @@ mod exports {
             source: impl FnOnce() -> Result<ShaperFontSource, E>,
             tag: &str,
         ) -> Result<Vec<FeatureSubstitution>, FeatureListError> {
-            let tag = shift_shape::Tag::new_checked(tag.as_bytes()).map_err(|_| {
+            let tag = shift_text::shape::Tag::new_checked(tag.as_bytes()).map_err(|_| {
                 FeatureListError::InvalidTag {
                     tag: tag.to_string(),
                 }
@@ -314,7 +316,7 @@ mod exports {
 
         use shift_font::interpolation::KerningBlend;
         use shift_font::{DesignLocation, ExternalLocation};
-        use shift_layout::{LayoutRequest, LayoutUnit, TextLayout, TextOptions};
+        use shift_text::layout::{LayoutRequest, LayoutUnit, TextLayout, TextOptions};
 
         use shift_engine::scene::{RunSettings, TextItem, TextRun};
         use shift_font::TextItemId;
