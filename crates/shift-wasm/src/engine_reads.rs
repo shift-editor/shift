@@ -203,7 +203,7 @@ pub(crate) use exports::{FontVariation, InternedIds};
 #[cfg(feature = "engine")]
 mod exports {
     use std::cell::RefCell;
-    use std::collections::{BTreeSet, HashMap};
+    use std::collections::HashMap;
     use std::hash::Hash;
     use std::rc::Rc;
 
@@ -232,6 +232,15 @@ mod exports {
         glyphs: IdTable<GlyphId>,
         sources: IdTable<SourceId>,
         source_sets: IdTable<Vec<SourceId>>,
+    }
+
+    impl InternedIds {
+        /// The source `font` has for the source the session interned as
+        /// `number`; none for a number never interned or a source the font
+        /// no longer has.
+        fn source<'f>(&self, number: usize, font: &'f Font) -> Option<&'f Source> {
+            font.source(*self.sources.get(number)?)
+        }
     }
 
     /// What the variation reads evaluate, derived from the session's font:
@@ -542,10 +551,12 @@ mod exports {
         }
 
         fn missing_kerning_origin(&self, source: usize) -> MissingKerningOrigin {
-            match self.ids.sources.get(source) {
-                Some(source_id) => self.session.font().missing_kerning_origin(*source_id),
-                None => MissingKerningOrigin::Unkerned,
-            }
+            self.ids
+                .sources
+                .get(source)
+                .map_or(MissingKerningOrigin::Unkerned, |source_id| {
+                    self.session.font().missing_kerning_origin(*source_id)
+                })
         }
 
         fn glyph_records(&self) -> Result<GlyphRecords, StoreReadError> {
@@ -565,13 +576,9 @@ mod exports {
                 &request.text,
                 place,
             )?;
-            let shown: BTreeSet<GlyphId> = layout
-                .glyphs
-                .iter()
-                .filter_map(|glyph| glyph.glyph_id)
-                .collect();
             let residency = self.session.residency();
-            let unloaded = shown
+            let unloaded = layout
+                .glyph_ids()
                 .into_iter()
                 .filter(|glyph| {
                     font.layer_ids_of_glyphs([glyph])
@@ -648,8 +655,7 @@ mod exports {
             let font = self.session.font();
             let source = request
                 .source
-                .and_then(|number| self.ids.sources.get(number))
-                .and_then(|source_id| font.source(*source_id));
+                .and_then(|number| self.ids.source(number, font));
             let external_of = |design: &[f64]| {
                 let values = external_values(font.axes(), &self.variation().mappings, design);
                 ExternalLocation::from_untyped(to_location(font.axes(), &values))
@@ -663,11 +669,7 @@ mod exports {
                         .unwrap_or_default(),
                 };
             };
-            let design: Vec<f64> = font
-                .axes()
-                .iter()
-                .map(|axis| source.location().get(&axis.id()).unwrap_or(f64::NAN))
-                .collect();
+            let design = source.location().as_untyped().values_in(font.axes());
             TextPlace {
                 design: source.location().clone(),
                 external: external_of(&design),

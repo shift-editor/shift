@@ -66,12 +66,16 @@ pub struct LayoutFont<'a> {
 
 /// Where a [`LayoutFont`] reads its glyphs.
 enum Glyphs<'a> {
-    Live(Box<LiveGlyphs<'a>>),
-    Typed(TypedGlyphs),
+    /// The document's font, through the window's engine: outlines,
+    /// anchors, kerning and its shaper.
+    Session(Box<SessionGlyphs<'a>>),
+    /// A preview's: only each glyph's advance and mark class, sent in by a
+    /// window that has no engine.
+    Advances(AdvanceGlyphs),
 }
 
-/// The live font at one location.
-struct LiveGlyphs<'a> {
+/// The document's font at one location, as the window's engine holds it.
+struct SessionGlyphs<'a> {
     font: &'a Font,
     external: ExternalLocation,
     projection: RefCell<FontProjection<'a>>,
@@ -80,8 +84,8 @@ struct LiveGlyphs<'a> {
     classes: &'a dyn Fn(GlyphId) -> Option<OpenTypeCategory>,
 }
 
-/// A [`TypedFont`], indexed by character and glyph.
-struct TypedGlyphs {
+/// A preview's [`TypedFont`]: advances and mark classes, indexed by character and glyph.
+struct AdvanceGlyphs {
     characters: HashMap<u32, GlyphId>,
     glyphs: HashMap<GlyphId, TypedGlyph>,
 }
@@ -110,7 +114,7 @@ impl<'a> LayoutFont<'a> {
         metrics: LineMetrics,
     ) -> Self {
         Self {
-            glyphs: Glyphs::Live(Box::new(LiveGlyphs {
+            glyphs: Glyphs::Session(Box::new(SessionGlyphs {
                 font,
                 external,
                 projection: RefCell::new(font.projection(design)),
@@ -130,7 +134,7 @@ impl<'a> LayoutFont<'a> {
     /// no advance.
     pub fn typed(font: &TypedFont) -> Self {
         Self {
-            glyphs: Glyphs::Typed(TypedGlyphs {
+            glyphs: Glyphs::Advances(AdvanceGlyphs {
                 characters: font
                     .characters
                     .iter()
@@ -151,11 +155,11 @@ impl<'a> LayoutFont<'a> {
     /// lays out as typed.
     pub(crate) fn shaper(&self) -> Result<(&'a LiveShaper, &ExternalLocation), &str> {
         match &self.glyphs {
-            Glyphs::Live(live) => match &live.shaper {
-                Ok(shaper) => Ok((*shaper, &live.external)),
+            Glyphs::Session(session) => match &session.shaper {
+                Ok(shaper) => Ok((*shaper, &session.external)),
                 Err(reason) => Err(reason),
             },
-            Glyphs::Typed(_) => Err(NO_FEATURE_CODE),
+            Glyphs::Advances(_) => Err(NO_FEATURE_CODE),
         }
     }
 
@@ -165,8 +169,8 @@ impl<'a> LayoutFont<'a> {
 
     pub(crate) fn class(&self, glyph: GlyphId) -> Option<OpenTypeCategory> {
         match &self.glyphs {
-            Glyphs::Live(live) => (live.classes)(glyph),
-            Glyphs::Typed(typed) => typed
+            Glyphs::Session(session) => (session.classes)(glyph),
+            Glyphs::Advances(typed) => typed
                 .glyphs
                 .get(&glyph)
                 .filter(|typed| typed.is_mark)
@@ -176,14 +180,15 @@ impl<'a> LayoutFont<'a> {
 
     /// The glyph a character maps to, as shaping maps it.
     pub(crate) fn character_glyph(&self, codepoint: u32) -> Option<GlyphId> {
-        let live = match &self.glyphs {
-            Glyphs::Live(live) => live,
-            Glyphs::Typed(typed) => return typed.characters.get(&codepoint).copied(),
+        let session = match &self.glyphs {
+            Glyphs::Session(session) => session,
+            Glyphs::Advances(typed) => return typed.characters.get(&codepoint).copied(),
         };
-        if let Ok(shaper) = &live.shaper {
+        if let Ok(shaper) = &session.shaper {
             return shaper.character_glyph(codepoint);
         }
-        live.font
+        session
+            .font
             .character_map()
             .find(|(mapped, _)| *mapped == codepoint)
             .map(|(_, glyph)| glyph)
@@ -202,11 +207,12 @@ impl<'a> LayoutFont<'a> {
     /// The glyph's anchors as export compiles them, at the location; none
     /// over a [`TypedFont`].
     pub(crate) fn anchors(&self, glyph: GlyphId) -> Option<Arc<PropagatedAnchors>> {
-        let Glyphs::Live(live) = &self.glyphs else {
+        let Glyphs::Session(session) = &self.glyphs else {
             return None;
         };
         let class = |glyph| self.class(glyph);
-        live.projection
+        session
+            .projection
             .borrow_mut()
             .compiled_anchors(glyph, &class)
             .ok()
@@ -217,10 +223,10 @@ impl<'a> LayoutFont<'a> {
     /// [`TypedFont`].
     fn kerning(&self, pairs: &[(GlyphId, GlyphId)]) -> Vec<f64> {
         match &self.glyphs {
-            Glyphs::Live(live) => live
+            Glyphs::Session(session) => session
                 .kerning
-                .values(live.font.kerning(), pairs.iter().copied()),
-            Glyphs::Typed(_) => vec![0.0; pairs.len()],
+                .values(session.font.kerning(), pairs.iter().copied()),
+            Glyphs::Advances(_) => vec![0.0; pairs.len()],
         }
     }
 
@@ -229,8 +235,8 @@ impl<'a> LayoutFont<'a> {
             return *resolved;
         }
         let resolved = match &self.glyphs {
-            Glyphs::Live(live) => live.resolve(glyph),
-            Glyphs::Typed(typed) => typed.glyphs.get(&glyph).map(|typed| Resolved {
+            Glyphs::Session(session) => session.resolve(glyph),
+            Glyphs::Advances(typed) => typed.glyphs.get(&glyph).map(|typed| Resolved {
                 advance: typed.advance,
                 bounds: None,
             }),
@@ -240,7 +246,7 @@ impl<'a> LayoutFont<'a> {
     }
 }
 
-impl LiveGlyphs<'_> {
+impl SessionGlyphs<'_> {
     fn resolve(&self, glyph: GlyphId) -> Option<Resolved> {
         self.projection
             .borrow_mut()
@@ -311,15 +317,8 @@ impl GeneratedPositioning for GeneratedPositions<'_, '_> {
                 }
             })
             .collect();
-        let mut run_positions: Vec<RunPosition> = positions
-            .iter()
-            .map(|position| RunPosition {
-                x_advance: f64::from(position.x_advance),
-                y_advance: f64::from(position.y_advance),
-                x_offset: f64::from(position.x_offset),
-                y_offset: f64::from(position.y_offset),
-            })
-            .collect();
+        let mut run_positions: Vec<RunPosition> =
+            positions.iter().map(ShapedPosition::run_position).collect();
         let direction = match glyphs.direction() {
             TextDirection::LeftToRight => RunDirection::LeftToRight,
             TextDirection::RightToLeft => RunDirection::RightToLeft,
@@ -333,11 +332,36 @@ impl GeneratedPositioning for GeneratedPositions<'_, '_> {
             }
         }
         for (position, positioned) in positions.iter_mut().zip(&run_positions) {
-            position.x_advance = font_units(positioned.x_advance);
-            position.y_advance = font_units(positioned.y_advance);
-            position.x_offset = font_units(positioned.x_offset);
-            position.y_offset = font_units(positioned.y_offset);
+            position.set_run_position(positioned);
         }
+    }
+}
+
+/// A shaped glyph's position as shift-font's positioning reads and writes
+/// it: whole font units in the shaper, `f64` in positioning.
+pub(crate) trait ShapedPosition {
+    /// The position as positioning reads it.
+    fn run_position(&self) -> RunPosition;
+    /// Takes `positioned` back, rounded to whole font units as export
+    /// rounds what it compiles.
+    fn set_run_position(&mut self, positioned: &RunPosition);
+}
+
+impl ShapedPosition for GlyphPosition {
+    fn run_position(&self) -> RunPosition {
+        RunPosition {
+            x_advance: f64::from(self.x_advance),
+            y_advance: f64::from(self.y_advance),
+            x_offset: f64::from(self.x_offset),
+            y_offset: f64::from(self.y_offset),
+        }
+    }
+
+    fn set_run_position(&mut self, positioned: &RunPosition) {
+        self.x_advance = font_units(positioned.x_advance);
+        self.y_advance = font_units(positioned.y_advance);
+        self.x_offset = font_units(positioned.x_offset);
+        self.y_offset = font_units(positioned.y_offset);
     }
 }
 

@@ -37,6 +37,8 @@ pub use request::{
     LineMetrics, TextAlign, TextOptions, TypedFont, TypedGlyph,
 };
 
+use std::collections::BTreeSet;
+
 use shift_font::GlyphId;
 
 // Unit and glyph indices are `u32`; every target Shift builds for has a
@@ -243,6 +245,16 @@ pub struct SecondaryCaret {
     /// Its place among its line's caret places left to right, numbered
     /// with the stops' ([`CaretStop::screen`]).
     pub screen: u32,
+}
+
+impl TextLayout {
+    /// The glyphs the layout shows, each once, in id order.
+    pub fn glyph_ids(&self) -> BTreeSet<GlyphId> {
+        self.glyphs
+            .iter()
+            .filter_map(|glyph| glyph.glyph_id)
+            .collect()
+    }
 }
 
 #[cfg(feature = "layout")]
