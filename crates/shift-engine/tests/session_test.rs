@@ -7,6 +7,7 @@ use std::convert::Infallible;
 use proptest::prelude::*;
 use shift_engine::{EditHistory, EngineSession, LayerSource, RecordCache, RecordSource, Recording};
 use shift_font::test_support::sample_font;
+
 use shift_font::{
     AddComponent, Anchor, AnchorId, Component, ComponentId, CreateGlyph, DecomposeComponents,
     DecomposedTransform, Font, FontIntent, FontIntentSet, Glyph, GlyphCategory, GlyphDataCategory,
@@ -898,12 +899,21 @@ fn a_record_cache_asks_the_store_again_only_for_glyphs_whose_name_or_codepoints_
     assert_eq!(renamed, session.shaper_font_source(counted.inner).unwrap());
 }
 
+/// The sibling key at `position`: ascending keys made one after another.
+fn key(position: usize) -> String {
+    let mut key = shift_font::index_key::between(None, None).unwrap();
+    for _ in 0..position {
+        key = shift_font::index_key::between(Some(&key), None).unwrap();
+    }
+    key
+}
+
 /// A page with `id`, at the top of the scene.
 fn scene_page(id: &str) -> shift_engine::scene::SceneNode {
     shift_engine::scene::SceneNode {
         id: shift_font::NodeId::from_raw(id),
         parent_id: None,
-        index: "a0".into(),
+        index: key(0),
         x: 0.0,
         y: 0.0,
         content: shift_engine::scene::NodeContent::Page {
@@ -945,7 +955,7 @@ fn scene_and_font_edits_share_one_history_and_undo_in_order() {
             .apply_scene(&[SceneIntent::CreateNode(SceneNode {
                 id: run.clone(),
                 parent_id: Some(page.clone()),
-                index: "a0".into(),
+                index: key(0),
                 x: 0.0,
                 y: 0.0,
                 content: NodeContent::TextRun {

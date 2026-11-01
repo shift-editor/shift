@@ -8,11 +8,20 @@ use shift_font::test_support::sample_font;
 use shift_font::{FontChangeSet, NodeId, RunId};
 use shift_store::{RecoveryState, SaveState, ShiftStore, WorkspaceState};
 
-fn page(id: &str, index: &str) -> SceneNode {
+/// The sibling key at `position`: ascending keys made one after another.
+fn key(position: usize) -> String {
+    let mut key = shift_font::index_key::between(None, None).unwrap();
+    for _ in 0..position {
+        key = shift_font::index_key::between(Some(&key), None).unwrap();
+    }
+    key
+}
+
+fn page(id: &str, position: usize) -> SceneNode {
     SceneNode {
         id: NodeId::from_raw(id),
         parent_id: None,
-        index: index.into(),
+        index: key(position),
         x: 0.0,
         y: 0.0,
         content: NodeContent::Page {
@@ -26,7 +35,7 @@ fn run(id: &str, page: &str) -> SceneNode {
     SceneNode {
         id: NodeId::from_raw(id),
         parent_id: Some(NodeId::from_raw(page)),
-        index: "a0".into(),
+        index: key(0),
         x: 120.0,
         y: -40.0,
         content: NodeContent::TextRun {
@@ -53,8 +62,8 @@ fn write(store: &mut ShiftStore, changes: &SceneChangeSet, save_state: SaveState
 /// Two pages, a run on each.
 fn two_pages_and_runs() -> Vec<SceneIntent> {
     vec![
-        SceneIntent::CreateNode(page("one", "a1")),
-        SceneIntent::CreateNode(page("two", "a2")),
+        SceneIntent::CreateNode(page("one", 1)),
+        SceneIntent::CreateNode(page("two", 2)),
         SceneIntent::CreateNode(run("first", "one")),
         SceneIntent::CreateNode(run("second", "two")),
     ]

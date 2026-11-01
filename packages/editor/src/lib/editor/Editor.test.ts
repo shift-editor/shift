@@ -9,6 +9,7 @@ import {
 } from "@shift/types";
 import { startEmptyMemorySession } from "../../testing/emptyMemorySession";
 import type { MemoryFontSession } from "../../types/fontSession";
+import { IndexKey } from "../../types/indexKey";
 import type { GlyphNode, TextRunNode } from "../../types/node";
 import { effect } from "../signals";
 import type { Editor } from "./Editor";
@@ -121,6 +122,7 @@ describe("Editor scene", () => {
   it("can place the same glyph id twice with distinct node ids", () => {
     const left = mintNodeId();
     const right = mintNodeId();
+    const leftIndex = IndexKey.between(null, null);
 
     editor.scene.setNodes([
       {
@@ -128,7 +130,7 @@ describe("Editor scene", () => {
         type: "node",
         kind: "glyph",
         parentId: null,
-        index: "a0",
+        index: leftIndex,
         glyphId,
         sourceId: editor.font.defaultSource.id,
         position: { x: 0, y: 0 },
@@ -138,7 +140,7 @@ describe("Editor scene", () => {
         type: "node",
         kind: "glyph",
         parentId: null,
-        index: "a1",
+        index: IndexKey.between(leftIndex, null),
         glyphId,
         sourceId: editor.font.defaultSource.id,
         position: { x: 700, y: 0 },

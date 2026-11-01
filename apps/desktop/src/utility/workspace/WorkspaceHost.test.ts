@@ -46,6 +46,7 @@ import type {
 import { client } from "../../shared/workspace/remote";
 import { Axis, loadEngine, type EngineEdit, type EngineSession } from "@shift/editor/model";
 import { engineStoreRequest } from "../../renderer/src/lib/engine/engineStoreRequest";
+import { indexKeys } from "@shift/wasm";
 import { storeReader } from "@shift/wasm/store-reader";
 import type { SceneIntent, SceneNode } from "@shift/wasm/protocol";
 import { WorkspaceHost } from "./WorkspaceHost";
@@ -241,7 +242,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     return {
       id: mintNodeId(),
       parentId: page.id,
-      index: "a0",
+      index: indexKeys.between(null, null),
       x: 10,
       y: 20,
       content: {
@@ -276,8 +277,10 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
 
   /** Two pages, Proofs and Specimen, each with a text run, added to the document's scene. */
   async function addTwoPagesWithRuns(sync: SyncChannel): Promise<void> {
-    const proofs = scenePage("Proofs", "a5");
-    const specimen = scenePage("Specimen", "a6");
+    // After the document's own first page.
+    const proofsIndex = indexKeys.between(indexKeys.between(null, null), null);
+    const proofs = scenePage("Proofs", proofsIndex);
+    const specimen = scenePage("Specimen", indexKeys.between(proofsIndex, null));
     await editScene(sync, [
       { kind: "createNode", createNode: proofs },
       { kind: "createNode", createNode: specimen },

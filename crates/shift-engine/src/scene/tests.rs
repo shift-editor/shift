@@ -3,11 +3,20 @@ use shift_font::{GlyphId, NodeId, RunId, SourceId, TextItemId};
 use super::*;
 use shift_font::index_key;
 
-fn page(id: &str, index: &str) -> SceneNode {
+/// The sibling key at `position`: ascending keys made one after another.
+fn key(position: usize) -> String {
+    let mut key = index_key::between(None, None).unwrap();
+    for _ in 0..position {
+        key = index_key::between(Some(&key), None).unwrap();
+    }
+    key
+}
+
+fn page(id: &str, position: usize) -> SceneNode {
     SceneNode {
         id: NodeId::from_raw(id),
         parent_id: None,
-        index: index.into(),
+        index: key(position),
         x: 0.0,
         y: 0.0,
         content: NodeContent::Page {
@@ -17,11 +26,11 @@ fn page(id: &str, index: &str) -> SceneNode {
     }
 }
 
-fn run(id: &str, parent: &str, index: &str) -> SceneNode {
+fn run(id: &str, parent: &str, position: usize) -> SceneNode {
     SceneNode {
         id: NodeId::from_raw(id),
         parent_id: Some(NodeId::from_raw(parent)),
-        index: index.into(),
+        index: key(position),
         x: 10.0,
         y: 20.0,
         content: NodeContent::TextRun {
@@ -32,11 +41,11 @@ fn run(id: &str, parent: &str, index: &str) -> SceneNode {
     }
 }
 
-fn glyph(id: &str, parent: &str, index: &str) -> SceneNode {
+fn glyph(id: &str, parent: &str, position: usize) -> SceneNode {
     SceneNode {
         id: NodeId::from_raw(id),
         parent_id: Some(NodeId::from_raw(parent)),
-        index: index.into(),
+        index: key(position),
         x: 0.0,
         y: 0.0,
         content: NodeContent::Glyph {
@@ -56,10 +65,10 @@ fn two_pages() -> Scene {
     let mut scene = Scene::default();
     scene
         .apply_intents(&[
-            SceneIntent::CreateNode(page("second", "a1")),
-            SceneIntent::CreateNode(page("first", "a0")),
-            SceneIntent::CreateNode(run("run", "first", "a0")),
-            SceneIntent::CreateNode(glyph("glyph", "run", "a0")),
+            SceneIntent::CreateNode(page("second", 1)),
+            SceneIntent::CreateNode(page("first", 0)),
+            SceneIntent::CreateNode(run("run", "first", 0)),
+            SceneIntent::CreateNode(glyph("glyph", "run", 0)),
         ])
         .unwrap();
     scene
@@ -125,7 +134,7 @@ fn a_refused_intent_leaves_the_scene_unchanged() {
         SceneIntent::MoveNode(MoveNode {
             id: NodeId::from_raw("run"),
             parent_id: Some(NodeId::from_raw("glyph")),
-            index: "a0".into(),
+            index: key(0),
         }),
     ]);
 
@@ -134,14 +143,14 @@ fn a_refused_intent_leaves_the_scene_unchanged() {
     assert_eq!(
         scene.apply_intents(&[SceneIntent::CreateNode(SceneNode {
             parent_id: Some(NodeId::from_raw("second")),
-            ..page("third", "a0")
+            ..page("third", 0)
         })]),
         Err(SceneError::PageWithParent(NodeId::from_raw("third")))
     );
     assert_eq!(
         scene.apply_intents(&[SceneIntent::UpdateNode(SceneNode {
             id: NodeId::from_raw("run"),
-            ..page("x", "a0")
+            ..page("x", 0)
         })]),
         Err(SceneError::KindChanged {
             id: NodeId::from_raw("run"),
@@ -157,7 +166,7 @@ fn several_edits_to_one_node_coalesce_to_its_first_and_last_values() {
     let moved = |x: f64| {
         SceneIntent::UpdateNode(SceneNode {
             x,
-            ..run("run", "first", "a0")
+            ..run("run", "first", 0)
         })
     };
     let first = scene.apply_intents(&[moved(30.0)]).unwrap();
@@ -180,7 +189,7 @@ fn a_replay_of_a_stale_change_is_refused() {
         .apply_intents(&[SceneIntent::MoveNode(MoveNode {
             id: NodeId::from_raw("run"),
             parent_id: Some(NodeId::from_raw("second")),
-            index: "a0".into(),
+            index: key(0),
         })])
         .unwrap();
 
@@ -198,7 +207,7 @@ fn a_replay_of_a_stale_change_is_refused() {
 fn a_change_set_round_trips_through_named_messagepack() {
     let mut scene = Scene::default();
     let changes = scene
-        .apply_intents(&[SceneIntent::CreateNode(page("first", "a0"))])
+        .apply_intents(&[SceneIntent::CreateNode(page("first", 0))])
         .unwrap();
 
     let bytes = rmp_serde::to_vec_named(&changes).unwrap();
@@ -232,7 +241,7 @@ fn a_node_gets_a_new_revision_when_it_changes_and_a_run_keeps_its_items_revision
     scene
         .apply_intents(&[SceneIntent::UpdateNode(SceneNode {
             x: 99.0,
-            ..run("run", "first", "a0")
+            ..run("run", "first", 0)
         })])
         .unwrap();
     let (moved, moved_items) = revision_of(&scene, "run");
@@ -262,7 +271,7 @@ fn an_update_never_changes_a_runs_items() {
         .unwrap();
 
     scene
-        .apply_intents(&[SceneIntent::UpdateNode(run("run", "first", "a0"))])
+        .apply_intents(&[SceneIntent::UpdateNode(run("run", "first", 0))])
         .unwrap();
 
     let Some(NodeContent::TextRun { items, .. }) = scene
