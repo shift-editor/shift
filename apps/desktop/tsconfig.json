@@ -12,6 +12,7 @@
   "compilerOptions": {
     "useDefineForClassFields": true,
     "strict": true,
+    "noImplicitAny": true,
     "noImplicitOverride": true,
     "skipLibCheck": true,
     "allowJs": true,

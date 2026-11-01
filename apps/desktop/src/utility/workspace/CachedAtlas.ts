@@ -70,10 +70,19 @@ const variationBasisSchema = z
     deltas: z.array(variationDeltaSchema),
   })
   .strict();
+const designNormalizationSchema = z
+  .object({
+    axisId: z.string(),
+    minimum: finiteNumber,
+    default: finiteNumber,
+    maximum: finiteNumber,
+  })
+  .strict();
 const interpolationBasisSchema = z
   .object({
     sourceIds: z.array(z.string()),
     basis: variationBasisSchema,
+    designNormalization: z.array(designNormalizationSchema),
   })
   .strict();
 const slugAtlasSchema = z

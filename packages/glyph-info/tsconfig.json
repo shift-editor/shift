@@ -4,5 +4,5 @@
     "rootDir": ".",
     "outDir": "./dist"
   },
-  "include": ["src", "resources/**/*.json"]
+  "include": ["src", "resources/**/*.json", "scripts", "vitest.config.ts"]
 }

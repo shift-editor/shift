@@ -11,7 +11,7 @@
     "check:browser": "vite build --config vite.browser.config.ts",
     "package": "electron-builder --config electron-builder.config.ts --dir --publish never",
     "make": "electron-builder --config electron-builder.config.ts --publish never",
-    "typecheck": "tsgo --noEmit -p tsconfig.build.json && tsgo --noEmit -p tsconfig.config.json && pnpm typecheck:e2e",
+    "typecheck": "tsgo --noEmit -p tsconfig.build.json && tsgo --noEmit -p tsconfig.node.json && tsgo --noEmit -p tsconfig.config.json && pnpm typecheck:e2e",
     "typecheck:e2e": "tsgo --noEmit -p e2e/tsconfig.json",
     "lint": "oxlint --fix src/ e2e/",
     "lint:check": "oxlint --deny-warnings src/ e2e/",
