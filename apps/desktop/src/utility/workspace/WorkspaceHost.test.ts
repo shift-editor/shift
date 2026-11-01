@@ -387,45 +387,40 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const chunks: Uint8Array[] = [];
     let receivedLength = 0;
     const complete = new Promise<number>((resolve, reject) => {
-      lane.port2.onmessage = (event: MessageEvent<ByteStreamMessage>) => {
-        switch (event.data.kind) {
+      lane.port2.on("message", (message: ByteStreamMessage) => {
+        switch (message.kind) {
           case "chunk":
-            if (event.data.offset !== receivedLength) {
-              reject(
-                new Error(`Slug chunk started at ${event.data.offset}, not ${receivedLength}`),
-              );
+            if (message.offset !== receivedLength) {
+              reject(new Error(`Slug chunk started at ${message.offset}, not ${receivedLength}`));
               lane.port2.close();
               return;
             }
-            if (event.data.bytes.byteLength > maximumLength) {
+            if (message.bytes.byteLength > maximumLength) {
               reject(new Error(`Slug chunk exceeded ${maximumLength} bytes`));
               lane.port2.close();
               return;
             }
-            chunks.push(event.data.bytes);
-            receivedLength += event.data.bytes.byteLength;
+            chunks.push(message.bytes);
+            receivedLength += message.bytes.byteLength;
             lane.port2.postMessage({
               kind: "ack",
               nextOffset: receivedLength,
             } satisfies ByteStreamControl);
             return;
           case "complete":
-            if (event.data.totalLength !== receivedLength) {
+            if (message.totalLength !== receivedLength) {
               reject(
-                new Error(
-                  `Slug stream completed at ${event.data.totalLength}, not ${receivedLength}`,
-                ),
+                new Error(`Slug stream completed at ${message.totalLength}, not ${receivedLength}`),
               );
               return;
             }
-            resolve(event.data.totalLength);
+            resolve(message.totalLength);
             return;
           case "error":
-            reject(new Error(event.data.message));
+            reject(new Error(message.message));
         }
-      };
+      });
     });
-    lane.port2.start();
     if (pageOrigin === "source") {
       await sync.channel.call("streamSourceAtlasPage", { generation, maximumLength }, [lane.port1]);
     } else if (pageOrigin) {
@@ -937,11 +932,10 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     });
     const atlas = await sync.prepareSlugAtlas(256);
     const lane = new MessageChannel();
-    lane.port2.onmessage = (event: MessageEvent<ByteStreamMessage>) => {
-      if (event.data.kind !== "chunk") return;
+    lane.port2.on("message", (message: ByteStreamMessage) => {
+      if (message.kind !== "chunk") return;
       lane.port2.postMessage({ kind: "cancel", message: "GPU upload rejected" });
-    };
-    lane.port2.start();
+    });
 
     await expect(
       sync.channel.call("streamSlugAtlas", { generation: atlas.generation, maximumLength: 64 }, [

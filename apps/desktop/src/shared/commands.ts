@@ -80,6 +80,13 @@ export const commandShortcuts = {
   "glyph.addComponent": shortcut("c", true),
 } satisfies Partial<Record<CommandId, CommandShortcut>>;
 
+const shortcutsById: Partial<Record<CommandId, CommandShortcut>> = commandShortcuts;
+
+/** Returns the shortcut assigned to `id`, or null when the command has none. */
+export function commandShortcut(id: CommandId): CommandShortcut | null {
+  return shortcutsById[id] ?? null;
+}
+
 /** Converts a shared command shortcut to Electron's native accelerator syntax. */
 export function toElectronAccelerator(shortcut: CommandShortcut): string {
   const parts: string[] = [];

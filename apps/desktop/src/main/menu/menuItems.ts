@@ -1,5 +1,5 @@
 import type { MenuItemConstructorOptions } from "electron";
-import { commandShortcuts, toElectronAccelerator, type CommandId } from "../../shared/commands";
+import { commandShortcut, toElectronAccelerator, type CommandId } from "../../shared/commands";
 import { commands } from "../commands/Commands";
 import { pathBasename, recentFolderLabels, type RecentDocument } from "../../shared/recents";
 import { DEBUG_OVERLAY_ITEMS, type DebugOverlayId, type DebugOverlays } from "../../shared/debug";
@@ -19,7 +19,7 @@ export function commandMenuItem(
   const command = commands.find((candidate) => candidate.id === id);
   if (!command) throw new Error(`Unknown menu command: ${id}`);
 
-  const shortcut = commandShortcuts[id];
+  const shortcut = commandShortcut(id);
 
   return {
     id,
