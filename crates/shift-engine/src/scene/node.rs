@@ -1,10 +1,12 @@
 //! The nodes a scene holds: pages, text runs and placed glyphs.
 
+use std::collections::BTreeMap;
+
 use pack::Pack;
 use serde::{Deserialize, Serialize};
 use shift_font::index_key::{self, IndexKeyError};
 use shift_font::{GlyphId, NodeId, RunId, SourceId, TextItemId};
-use shift_layout::{FeatureSetting, TextAlign};
+use shift_layout::{FeatureSetting, LayoutRequest, LayoutUnit, LineHeight, TextAlign, TextOptions};
 
 /// One placed object on the canvas.
 ///
@@ -64,10 +66,10 @@ pub struct RunSettings {
     /// item as typed.
     #[serde(default = "shaped")]
     pub shaping: bool,
-    /// Features turned on or off for this text, by tag; a tag left out
-    /// keeps the font's default.
+    /// Features turned on (`true`) or off (`false`) for this text, by tag;
+    /// a tag left out keeps the font's default.
     #[serde(default)]
-    pub features: Vec<FeatureSetting>,
+    pub features: BTreeMap<String, bool>,
     /// The BCP 47 language the text is shaped as; `None` for the font's
     /// default language system.
     #[serde(default)]
@@ -89,7 +91,7 @@ impl Default for RunSettings {
     fn default() -> Self {
         Self {
             shaping: shaped(),
-            features: Vec::new(),
+            features: BTreeMap::new(),
             language: None,
             script: None,
             line_height: None,
@@ -98,9 +100,52 @@ impl Default for RunSettings {
     }
 }
 
+impl RunSettings {
+    /// The options text with these settings is laid out with, each
+    /// paragraph on one line: each forced feature switched on or off
+    /// ([`FeatureSetting::switched`]), and no line height read as the font's
+    /// own.
+    pub fn text_options(&self) -> TextOptions {
+        TextOptions {
+            language: self.language.clone(),
+            script: self.script.clone(),
+            features: self
+                .features
+                .iter()
+                .map(|(tag, &on)| FeatureSetting::switched(tag.clone(), on))
+                .collect(),
+            shaping: self.shaping,
+            align: self.align,
+            line_height: self
+                .line_height
+                .map_or(LineHeight::Auto, |em| LineHeight::Em { em }),
+            width: None,
+        }
+    }
+}
+
 /// A run is shaped unless it says otherwise.
 fn shaped() -> bool {
     true
+}
+
+/// A text run's items and settings, as the scene stores them: what its text
+/// is laid out from.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub struct TextRun {
+    pub items: Vec<TextItem>,
+    pub settings: RunSettings,
+}
+
+impl TextRun {
+    /// The run laid out as its settings say ([`RunSettings::text_options`]),
+    /// one unit per item.
+    pub fn layout_request(&self) -> LayoutRequest {
+        LayoutRequest {
+            units: self.items.iter().map(TextItem::layout_unit).collect(),
+            options: self.settings.text_options(),
+        }
+    }
 }
 
 /// What a page is for, beyond the user's own pages.
@@ -121,6 +166,18 @@ pub enum TextItem {
     Glyph { id: TextItemId, glyph_id: GlyphId },
     /// A paragraph break; never laid out as a glyph.
     Linebreak { id: TextItemId },
+}
+
+impl TextItem {
+    /// The unit layout takes for this item: its character, its glyph, or a
+    /// line break.
+    pub fn layout_unit(&self) -> LayoutUnit {
+        match *self {
+            Self::Character { codepoint, .. } => LayoutUnit::Character { codepoint },
+            Self::Glyph { glyph_id, .. } => LayoutUnit::Glyph { glyph_id },
+            Self::Linebreak { .. } => LayoutUnit::LineBreak,
+        }
+    }
 }
 
 /// The name of the page a document gets when it has none.

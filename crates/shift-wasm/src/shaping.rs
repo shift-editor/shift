@@ -256,6 +256,9 @@ mod exports {
         use shift_font::{DesignLocation, ExternalLocation};
         use shift_layout::{LayoutRequest, LayoutUnit, TextLayout, TextOptions};
 
+        use shift_engine::scene::{RunSettings, TextItem, TextRun};
+        use shift_font::TextItemId;
+
         use super::{TextPlace, TextShaping};
         use crate::engine_reads::{FeatureDefault, FeatureGroup, FeatureListError, FontFeature};
 
@@ -412,6 +415,57 @@ mod exports {
             assert_eq!(typed.glyphs.len(), 2);
             assert_eq!(shaped.carets.len(), 3);
             assert_eq!(shaping.compiles(), 1);
+        }
+
+        #[test]
+        fn a_run_lays_out_with_the_features_its_settings_turn_off() {
+            let font = font_with(&[("f", Some('f')), ("i", Some('i')), ("f_i", None)]);
+            let shaping = TextShaping::default();
+            let run = |features: &[(&str, bool)]| TextRun {
+                items: "fi"
+                    .chars()
+                    .enumerate()
+                    .map(|(index, character)| TextItem::Character {
+                        id: TextItemId::from_raw(index.to_string()),
+                        codepoint: u32::from(character),
+                    })
+                    .collect(),
+                settings: RunSettings {
+                    features: features
+                        .iter()
+                        .map(|&(tag, on)| (tag.to_string(), on))
+                        .collect(),
+                    ..RunSettings::default()
+                },
+            };
+            let names = |run: &TextRun| {
+                let place = TextPlace {
+                    design: DesignLocation::new(),
+                    external: ExternalLocation::new(),
+                    kerning: KerningBlend::default(),
+                };
+                shaping
+                    .layout_text(
+                        &font,
+                        || Ok::<_, Infallible>(source(&font)),
+                        &run.layout_request(),
+                        place,
+                    )
+                    .unwrap()
+                    .glyphs
+                    .iter()
+                    .map(|glyph| {
+                        font.glyph(glyph.glyph_id.unwrap())
+                            .unwrap()
+                            .name()
+                            .to_string()
+                    })
+                    .collect::<Vec<_>>()
+            };
+
+            assert_eq!(names(&run(&[])), ["f_i"]);
+            assert_eq!(names(&run(&[("liga", true)])), ["f_i"]);
+            assert_eq!(names(&run(&[("liga", false)])), ["f", "i"]);
         }
     }
 }

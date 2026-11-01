@@ -140,11 +140,11 @@ export class SceneNodes {
   }
 }
 
-/** A run record's settings as the scene stores them: a forced feature on is `1`, off `0`. */
+/** A run record's settings as the scene stores them. */
 export function runSettingsOf(run: TextRunSettings): RunSettings {
   return {
     shaping: run.shaping,
-    features: Object.entries(run.features).map(([tag, on]) => ({ tag, value: on ? 1 : 0 })),
+    features: run.features,
     language: run.language,
     script: run.script,
     lineHeight: run.lineHeight,
@@ -156,7 +156,7 @@ export function runSettingsOf(run: TextRunSettings): RunSettings {
 function runSettingsFrom(settings: RunSettings): TextRunSettings {
   return {
     shaping: settings.shaping,
-    features: Object.fromEntries(settings.features.map(({ tag, value }) => [tag, value > 0])),
+    features: settings.features,
     language: settings.language ?? null,
     script: settings.script ?? null,
     lineHeight: settings.lineHeight ?? null,

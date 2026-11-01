@@ -25,13 +25,13 @@
 
 use pack::Pack;
 use shift_engine::StoreReadError;
-use shift_engine::scene::{RevisedNode, SceneNode};
+use shift_engine::scene::{RevisedNode, SceneNode, TextRun};
 use shift_font::glyph_identity::GlyphIdentityChange;
 use shift_font::{
     Axis, FontChangeFlag, GlyphId, GlyphRecords, MetricValue, MissingKerningOrigin, NodeId,
     ResolvedKerning, Source,
 };
-use shift_layout::{LayoutError, LayoutRequest, TextLayout};
+use shift_layout::{LayoutError, TextLayout};
 pub use shift_shape::{FeatureDefault, FeatureGroup, FontFeature};
 use shift_wire::KerningSnapshot;
 
@@ -83,7 +83,9 @@ pub trait EngineReads {
     ///
     /// Returns [`StoreReadError`] when the store's reader cannot answer.
     fn glyph_records(&self) -> Result<GlyphRecords, StoreReadError>;
-    /// Lays text out over the session's font, unsaved edits included, as
+    /// Lays a run's text out over the session's font, unsaved edits
+    /// included, with the options its settings give
+    /// (`TextRun::layout_request`), as
     /// `shift_layout::TextLayout::new` does: shaped with the session's
     /// shaper (brought up to date as [`Self::shape_paragraphs`] does), with
     /// kerning, mark attachment and cursive joins at each generated feature's
@@ -165,10 +167,12 @@ pub trait EngineReads {
     fn external_location(&self, design: Vec<f64>) -> Vec<f64>;
 }
 
-/// Text to lay out, and where.
+/// A text run to lay out, and where.
 #[derive(Clone, Debug, PartialEq, Pack)]
 pub struct TextLayoutRequest {
-    pub text: LayoutRequest,
+    /// The run's items and settings as the scene stores them, which Rust
+    /// turns into layout options (`TextRun::layout_request`).
+    pub run: TextRun,
     /// The design location to lay out at, in the font's axis order with NaN
     /// for an axis default, as [`EngineReads::kerning_run`] takes it.
     pub location: Vec<f64>,
@@ -623,7 +627,7 @@ mod exports {
             let layout = self.shaping.layout_text(
                 font,
                 || self.shaper_font_source(),
-                &request.text,
+                &request.run.layout_request(),
                 place,
             )?;
             let residency = self.session.residency();

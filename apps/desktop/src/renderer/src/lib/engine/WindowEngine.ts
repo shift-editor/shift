@@ -28,7 +28,7 @@ import {
   type FontChangeFlag,
   type FontFeature,
   type GlyphIdentityChange,
-  type LayoutRequest,
+  type TextRun,
   type PlacedText,
   type RevisedNode,
   type SceneIntent,
@@ -415,8 +415,8 @@ export class WindowEngine implements FontEngine {
     return this.#require().nextGlyphName(name);
   }
 
-  layoutText(text: LayoutRequest, place: KerningPlace): PlacedText | null {
-    return this.#opened?.session.layoutText(text, place) ?? null;
+  layoutText(run: TextRun, place: KerningPlace): PlacedText | null {
+    return this.#opened?.session.layoutText(run, place) ?? null;
   }
 
   /**

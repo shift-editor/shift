@@ -3,31 +3,31 @@
 //! (`TextLayout::new` over `LayoutFont::typed`). Answered in the engine
 //! module only, which holds shift-layout; the call is stateless.
 
-use shift_layout::{LayoutError, LayoutRequest, TextLayout, TypedFont};
+use shift_engine::scene::TextRun;
+use shift_layout::{LayoutError, TextLayout, TypedFont};
 
 /// Text laid out over what a window knows of a font without its engine.
 #[pack::interface]
 pub trait TypedText {
-    /// `text` laid out as typed over `font`, as `shift_layout::TextLayout`
-    /// lays out text it cannot shape: one glyph per unit at its advance, a
-    /// mark of no advance at the editor's stand-in, lines at each line break
-    /// and the request's width, aligned, with caret stops, and the reason it
-    /// was not shaped.
+    /// `run`'s text laid out as typed over `font`, with the options its
+    /// settings give (`TextRun::layout_request`), as
+    /// `shift_layout::TextLayout` lays out text it cannot shape: one glyph
+    /// per item at its advance, a mark of no advance at the editor's
+    /// stand-in, lines at each line break, aligned, with caret stops, and
+    /// the reason it was not shaped.
     ///
     /// # Errors
     ///
     /// Returns [`LayoutError::TooLong`] for text too long to index.
-    fn layout_typed(&self, text: LayoutRequest, font: TypedFont)
-    -> Result<TextLayout, LayoutError>;
+    fn layout_typed(&self, run: TextRun, font: TypedFont) -> Result<TextLayout, LayoutError>;
 }
 
 #[cfg(feature = "engine")]
 mod exports {
     use std::cell::RefCell;
 
-    use shift_layout::{
-        LayoutError, LayoutFont, LayoutRequest, PlacementKeys, TextLayout, TypedFont,
-    };
+    use shift_engine::scene::TextRun;
+    use shift_layout::{LayoutError, LayoutFont, PlacementKeys, TextLayout, TypedFont};
     use wasm_bindgen::prelude::wasm_bindgen;
 
     use super::{TypedText, typed_text_request};
@@ -42,12 +42,8 @@ mod exports {
     pub struct TypedLayout;
 
     impl TypedText for TypedLayout {
-        fn layout_typed(
-            &self,
-            text: LayoutRequest,
-            font: TypedFont,
-        ) -> Result<TextLayout, LayoutError> {
-            let mut layout = TextLayout::new(&LayoutFont::typed(&font), &text)?;
+        fn layout_typed(&self, run: TextRun, font: TypedFont) -> Result<TextLayout, LayoutError> {
+            let mut layout = TextLayout::new(&LayoutFont::typed(&font), &run.layout_request())?;
             PLACEMENTS.with_borrow_mut(|keys| keys.assign(&mut layout));
             Ok(layout)
         }

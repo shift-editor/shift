@@ -17,12 +17,21 @@ pub enum LayoutUnit {
 /// A feature to turn on, off, or to an alternate for the whole text.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FeatureSetting {
     /// A feature tag such as `liga`.
     pub tag: String,
     /// `0` turns the feature off, `1` on; larger values pick an alternate.
     pub value: u32,
+}
+
+impl FeatureSetting {
+    /// Turns feature `tag` on (`1`) or off (`0`).
+    pub fn switched(tag: String, on: bool) -> Self {
+        Self {
+            tag,
+            value: u32::from(on),
+        }
+    }
 }
 
 /// How lines sit in the width.
