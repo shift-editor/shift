@@ -42,6 +42,7 @@ jobs:
       pull-requests: read
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
+      integration: ${{ steps.filter.outputs.integration }}
       typescript: ${{ steps.filter.outputs.typescript }}
       release: ${{ steps.filter.outputs.release }}
       skills: ${{ steps.filter.outputs.skills }}
@@ -64,6 +65,18 @@ jobs:
               - 'Cargo.toml'
               - 'Cargo.lock'
               - 'rust-toolchain.toml'
+            # shift-bridge's tests also run the packages it imports.
+            integration:
+              - 'crates/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - 'packages/wasm/**'
+              - 'packages/pack/**'
+              - 'packages/types/**'
+              - '.github/actions/wasm-toolchain/**'
+              - 'pnpm-lock.yaml'
+              - '.github/workflows/ci.yml'
             typescript:
               - 'apps/**'
               # The editor runs these through packages/wasm.
@@ -670,7 +683,7 @@ jobs:
   integration:
     name: Integration Tests
     needs: detect-changes
-    if: needs.detect-changes.outputs.rust == 'true'
+    if: needs.detect-changes.outputs.integration == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:

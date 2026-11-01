@@ -72,6 +72,8 @@ export class TextLayout {
   readonly placedGlyphs: readonly PlacedGlyph[];
   /** Why some of the text was laid out as typed rather than shaped, when it was. */
   readonly unshaped: string | null;
+  /** How far apart baselines are, in font units, as Rust laid the lines out. */
+  readonly lineHeight: number;
   readonly #placedByItem: ReadonlyEntityMap<TextItemId, PlacedGlyph>;
   /** Each line's caret stops, indexed for moves and hit tests. */
   readonly #carets: readonly CaretStops[];
@@ -86,6 +88,7 @@ export class TextLayout {
     this.origin = origin;
     this.bufferLength = items.length;
     this.unshaped = laidOut.unshaped ?? null;
+    this.lineHeight = laidOut.lineHeight;
 
     const placed: PlacedGlyph[] = [];
     const lines: Line[] = [];

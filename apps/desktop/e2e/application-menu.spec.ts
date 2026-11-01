@@ -102,15 +102,20 @@ launcherTest(
   },
 );
 
-launcherTest(
-  "Update uses platform-appropriate window controls",
-  { tag: "@os" },
-  async ({ page }) => {
-    await page.goto(`${page.url().split("#")[0]}#/update?state=ready&version=1.2.3`);
-    await page.waitForURL(/#\/update\?state=ready&version=1\.2\.3$/);
+const simulatedUpdateTest = launcherTest.extend({ simulatedUpdate: true });
 
-    await expectCloseOnlyWindowControls(page);
-    await expect(page.getByRole("button", { name: "Restart and install" })).toBeVisible();
+simulatedUpdateTest(
+  "An update is offered, downloaded and put off in the update strip",
+  async ({ page }) => {
+    const strip = page.getByRole("status", { name: /9\.9\.9 update$/ });
+
+    await expect(strip.getByText("Update available")).toBeVisible({ timeout: 15_000 });
+    await strip.getByRole("button", { name: "Download" }).click();
+    await expect(strip.getByText("Downloaded")).toBeVisible({ timeout: 15_000 });
+    await expect(strip.getByRole("button", { name: "Restart" })).toBeVisible();
+
+    await strip.getByRole("button", { name: "Later" }).click();
+    await expect(strip).toBeHidden();
   },
 );
 

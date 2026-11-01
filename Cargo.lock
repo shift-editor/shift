@@ -2531,6 +2531,7 @@ dependencies = [
  "libm",
  "linesweeper",
  "pack",
+ "proptest",
  "rusqlite",
  "serde",
  "serde_json",

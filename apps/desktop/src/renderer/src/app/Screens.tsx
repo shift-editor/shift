@@ -14,17 +14,16 @@ import { PreviewNoticeProvider } from "@/context/PreviewNoticeProvider";
 import { useDocumentViewMemory } from "@/hooks/useDocumentViewMemory";
 import { AboutScreen } from "@/views/AboutScreen";
 import { FeedbackScreen } from "@/views/FeedbackScreen";
-import { UpdateScreen } from "@/views/UpdateScreen";
 import { DocumentErrorBoundary } from "./DocumentErrorBoundary";
 
 declare const __PLAYWRIGHT__: boolean;
 
 /**
- * Routes launcher, updater, and workspace windows to their screen trees.
+ * Routes launcher, About, Feedback, and workspace windows to their screen trees.
  *
  * @remarks
- * Main chooses the initial route when it creates a window. Launcher and updater
- * routes do not connect to a workspace; workspace routes connect through the
+ * Main chooses the initial route when it creates a window. Launcher, About and
+ * Feedback routes do not connect to a workspace; workspace routes connect through the
  * sender window and fail if main has not attached that window to a session.
  */
 export const Screens = () => {
@@ -33,7 +32,6 @@ export const Screens = () => {
       <Route path="/about" element={<AboutScreen />} />
       <Route path="/feedback" element={<FeedbackScreen />} />
       <Route path="/launcher" element={<Landing />} />
-      <Route path="/update" element={<UpdateScreen />} />
       <Route path="/e2e-root-render-failure" element={<E2ERootRenderFailure />} />
       <Route
         element={

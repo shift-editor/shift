@@ -1,4 +1,7 @@
-import { engineOpen, engineReads, engineRelease } from "@shift/wasm/engine";
+import { engineOpen, engineReads, engineRelease, initEngine } from "@shift/wasm/engine";
+
+// The engine compiles its module once before any call, as the SDK's consumers await it.
+await initEngine();
 
 /**
  * The open workspace's font records as the window's engine reads them: the

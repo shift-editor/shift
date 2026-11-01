@@ -1,5 +1,12 @@
 export { shiftInputSchemas } from "./inputs";
 export { FontChangedError, ShiftReadScope } from "./read";
+export {
+  ProofTextError,
+  TextCaretError,
+  TextRunOptionsError,
+  TextRunNotFoundError,
+  UnknownGlyphNameError,
+} from "./errors";
 
 export type {
   AffineTransformation,
@@ -65,6 +72,7 @@ export type {
   LayerSelector,
   LayerSvg,
   LocationResolveInput,
+  PagePoint,
   ResolvedComponent,
   ResolvedGlyph,
   ResolvedGlyphs,
@@ -90,8 +98,18 @@ export type {
   SpacingHalfView,
   SpacingToolView,
   TextRunCaret,
+  TextRunCreateInput,
+  TextRunDeleteInput,
+  TextRunGetInput,
   TextRunGlyph,
   TextRunItem,
+  TextRunAlign,
+  TextRunOptions,
+  TextRunSetOptionsInput,
+  TextRunSetCaretInput,
+  TextRunSetTextInput,
+  TextRunsInput,
+  TextRunSummary,
   TextRunView,
 } from "./capabilities";
 

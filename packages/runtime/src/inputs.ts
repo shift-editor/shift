@@ -17,6 +17,12 @@ const sourceId = z.string().min(1).transform(asSourceId);
 const instanceId = z.string().min(1).transform(asNamedInstanceId);
 const layerId = z.string().min(1).transform(asLayerId);
 const axisId = z.string().min(1).transform(asAxisId);
+const nodeId = z.string().min(1).max(256).transform(asNodeId);
+/** A text position, between items: 0 is before the first. */
+const textPosition = z.number().int().min(0);
+/** Proof text, as the Text tool reads pasted text. */
+const proofText = z.string().max(4096);
+const pagePoint = z.strictObject({ x: z.number().finite(), y: z.number().finite() });
 const axisCoordinate = z.strictObject({ axisId, value: z.number() });
 const location = z.array(axisCoordinate).max(64);
 const kerningPosition = z.enum(["first", "second"]);
@@ -147,6 +153,37 @@ export const shiftInputSchemas = {
     second: glyphSelector,
     source: sourceSelector.optional(),
   }),
+  "text.runs": z.strictObject({ windowId, ifFontRevision, pageId: nodeId.optional() }),
+  "text.get": z.strictObject({ windowId, ifFontRevision, runId: nodeId }),
+  "text.create": z.strictObject({
+    windowId,
+    ifFontRevision,
+    pageId: nodeId.optional(),
+    text: proofText,
+    at: pagePoint.optional(),
+  }),
+  "text.setText": z.strictObject({ windowId, ifFontRevision, runId: nodeId, text: proofText }),
+  "text.setCaret": z.strictObject({
+    windowId,
+    ifFontRevision,
+    runId: nodeId,
+    position: textPosition,
+    selection: z.strictObject({ start: textPosition, end: textPosition }).optional(),
+  }),
+  "text.setOptions": z.strictObject({
+    windowId,
+    ifFontRevision,
+    runId: nodeId,
+    options: z.strictObject({
+      shaping: z.boolean().optional(),
+      features: z.record(z.string().max(64), z.boolean().nullable()).optional(),
+      language: z.string().max(64).nullable().optional(),
+      script: z.string().max(64).nullable().optional(),
+      lineHeight: z.number().finite().nullable().optional(),
+      align: z.enum(["start", "end", "left", "center", "right"]).nullable().optional(),
+    }),
+  }),
+  "text.delete": z.strictObject({ windowId, ifFontRevision, runId: nodeId }),
   "layers.get": z.union([
     z.strictObject({ windowId, ifFontRevision, ...layerSelector.byId }),
     z.strictObject({ windowId, ifFontRevision, ...layerSelector.byGlyph }),

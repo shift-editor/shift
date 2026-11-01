@@ -109,6 +109,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
   ],
   electronArgs: [[], { option: true }],
   scriptedDialogs: [false, { option: true }],
+  simulatedUpdate: [false, { option: true }],
   openFontPath: [undefined, { option: true }],
   saveShiftPaths: [undefined, { option: true }],
   font: [undefined, { option: true }],
@@ -170,6 +171,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
       deviceScaleFactor,
       electronArgs,
       scriptedDialogs,
+      simulatedUpdate,
       openFontPath,
       saveShiftPaths,
       dirtyDocumentChoice,
@@ -186,7 +188,12 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
     testInfo,
   ) => {
     if (sharedWorkspace) {
-      if (startupFontPath !== FONTS.mutatorSansTtf || scriptedDialogs || electronArgs.length > 0) {
+      if (
+        startupFontPath !== FONTS.mutatorSansTtf ||
+        scriptedDialogs ||
+        simulatedUpdate ||
+        electronArgs.length > 0
+      ) {
         throw new Error("sharedWorkspace needs the default MutatorSans workspace fixture.");
       }
       const { app, processes } = await sharedWorkspaceApp();
@@ -205,6 +212,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
       ? createAuthoredDocument(startupFontPath, path.join(testRoot, "workspace"))
       : undefined;
     const environment = shiftTestEnvironment();
+    if (simulatedUpdate) environment.SHIFT_SIMULATE_UPDATE = "1";
 
     if (scriptedDialogs) {
       environment.SHIFT_E2E_NATIVE_DIALOGS = "1";

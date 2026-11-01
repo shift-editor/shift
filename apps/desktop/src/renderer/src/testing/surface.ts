@@ -18,7 +18,6 @@
  * `Editor`.
  */
 import type { ControlOperation } from "@/agent/AgentControl";
-import type { AgentCallMap } from "@shared/agent/protocol";
 import type { DeleteMode, Editor } from "@shift/editor";
 import type { GlyphOutlineTarget, PositionGuide, SourceSelectionMode } from "@shift/editor/types";
 import type { ToolName } from "@shift/editor/tools";
@@ -26,6 +25,7 @@ import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import type { Bounds, Point2D, Rect2D } from "@shift/geo";
 import type { LocalPoint, ScreenPoint, ScreenVector } from "@shift/editor/spaces";
 import type { EditorTool, KerningToolView, ResolvedGlyph } from "@shift/runtime";
+import type { AgentCallMap, TextOperation } from "@shared/agent/protocol";
 import type {
   AnchorId,
   ComponentId,
@@ -642,6 +642,14 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   connectAppCommands(run: (command: CommandId) => Promise<void>): void;
   /** The document's save state behind every edit made so far, as agents read it; null without a document. */
   documentState(): Promise<DocumentSaveState | null>;
+  /**
+   * Makes one proof-text call as an agent does over MCP (`shift.text.*`), on
+   * this editor and behind the same font-revision guard; only the window id is left out.
+   */
+  agentText<K extends TextOperation>(
+    operation: K,
+    input: AgentCallMap[K]["request"],
+  ): Promise<AgentCallMap[K]["response"]>;
 
   /** The document's pages in list order, as agents read them (`EditorView.pages`). */
   pageList(): readonly PageEntry[];

@@ -4,6 +4,7 @@ import { LeftSidebar } from "@/components/home/LeftSidebar";
 import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Toolbar } from "@/components/chrome/Toolbar";
 import { useSidebarLayout } from "@/components/chrome/useSidebarLayout";
+import { UpdateStrip } from "@/components/chrome/UpdateStrip";
 
 export const Home = () => {
   const {
@@ -45,7 +46,10 @@ export const Home = () => {
           onDoubleClick={resetLeftSidebar}
         />
         <ResizablePanel id="grid" minSize={300}>
-          <GlyphGrid />
+          <div className="relative h-full">
+            <GlyphGrid />
+            <UpdateStrip className="right-3 bottom-3" />
+          </div>
         </ResizablePanel>
         <ResizableHandle
           aria-label="Resize right sidebar"

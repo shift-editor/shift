@@ -15,7 +15,7 @@ Shift exposes the fonts **currently open in the desktop app** through a local [M
 | Shift Dev         | `shift-dev`         | `http://127.0.0.1:17463/mcp` |
 | Shift Nightly Dev | `shift-nightly-dev` | `http://127.0.0.1:17464/mcp` |
 
-There is no token. The server answers only on `127.0.0.1`, rejects requests whose `Host` is not local (DNS rebinding), and rejects browser requests from non-local origins, so a web page cannot reach it. Any program running on your computer can connect while the setting is on; turn it off when you don't need it. Agents can inspect, render, and capture fonts, and control what a Shift window shows (see below), but cannot change fonts or files.
+There is no token. The server answers only on `127.0.0.1`, rejects requests whose `Host` is not local (DNS rebinding), and rejects browser requests from non-local origins, so a web page cannot reach it. Any program running on your computer can connect while the setting is on; turn it off when you don't need it. Agents can inspect, render, and capture fonts, control what a Shift window shows, and write the proof text on the canvas and its Text caret (see below), but cannot change fonts or files.
 
 ### Claude Code
 
@@ -70,5 +70,13 @@ async () => {
   });
 };
 ```
+
+## What the connection can write
+
+Agents can write the proof text on the canvas and nothing else. `shift.text.runs({ windowId, pageId? })` lists a page's text runs (the shown page by default) and `shift.text.get({ windowId, runId })` reads one as it shows, with its items, laid-out glyphs and caret. `shift.text.create({ windowId, text, pageId?, at? })` adds a run (below the page's last run by default), `shift.text.setText({ windowId, runId, text })` replaces its text, `shift.text.delete({ windowId, runId })` removes it, and `shift.text.setCaret({ windowId, runId, position, selection? })` puts the Text mode caret in it, switching to its page and the Text tool. Text is proof text, read as pasting into the Text tool reads it and as Glyphs writes it: `/` starts a glyph name, which runs to the next space, the next `/`, or the end of the text. A space that ends a name is not text, so `"/a b"` is glyph `a` then `b`, and `"/a  b"` is `a`, a space, then `b`; a `/` that ends one starts the next, so `"/a/b"` is glyphs `a` and `b`. `//` is a slash (`"1//2"` is 1/2, `"/a//b"` is `a`, a slash, `b`) and `"\n"` a line break. A `/` that names nothing fails with `ProofTextError`, and a name the font lacks with `UnknownGlyphNameError`. `text.runs` gives each run's `text` back in the same syntax, so a run created from `"1//2 /a.alt b"` reads back as `"1//2 /a.alt b"`.
+
+Each write is one edit through the Text tool's own path. `create`, `setText`, `setOptions` and `delete` are one undo step each and mark the document unsaved, as typing does (on a glyph tab's page, which is navigation, they leave it saved); `setCaret` is session state, with no undo step and no unsaved change. Proof text is view state, not font data, so no write advances `fontRevision`. With `ifFontRevision`, a write fails with `FontChangedError` and changes nothing when the font has moved on. Failures are typed errors: `TextRunNotFoundError`, `PageNotFoundError`, `ProofTextError`, `UnknownGlyphNameError`, `TextCaretError`, `TextRunOptionsError`.
+
+`shift.text.setOptions({ windowId, runId, options })` changes a run's options as the Text section does: `shaping`, `features` (tag to `true`/`false`, or `null` for the font's default), `language` (BCP 47), `script` (ISO 15924), `lineHeight` (ems, `null` for the font's spacing) and `align` (`start`, `end`, `left`, `center`, `right`, or `null`). Fields left out keep their values. A feature tag, language or script shaping cannot read, or a line height that is not positive, fails with `TextRunOptionsError` from the engine and nothing changes. `text.runs` and `text.get` return each run's current `options`. For example, `options: { features: { liga: false }, lineHeight: 1.5 }` sets `fi` as two glyphs with its lines one and a half ems apart.
 
 If a connection fails, check that the build is running and that **Settings → Agents** shows it listening. Shift does **not** switch to another port when its port is occupied; the Agents panel reports the conflict. Quit the app holding the port, then turn agent connections off and on again.

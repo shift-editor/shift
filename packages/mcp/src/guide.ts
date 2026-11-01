@@ -45,5 +45,5 @@ export function shiftGuide(topic: ShiftGuideTopic, command: string = RELEASE_COM
 export const SHIFT_MCP_INSTRUCTIONS = [
   "Shift is a desktop font editor; this server reads the fonts open in the running app.",
   "Call shift.guide first for how to work with Shift, then shift.describe for the exact typed API used inside shift.execute.",
-  "This server cannot change a font or a file: it inspects, renders, and captures, and controls what a window shows (shift.commands for view commands such as Zoom In, and shift.editor for the tool, page, open glyph, camera and selection).",
+  "This server cannot change a font or a file: it inspects, renders, and captures; controls what a window shows (shift.commands for view commands such as Zoom In, and shift.editor for the tool, page, open glyph, camera and selection); and writes the proof text on the canvas (shift.text) and its Text mode caret.",
 ].join(" ");

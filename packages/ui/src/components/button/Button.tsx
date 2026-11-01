@@ -13,7 +13,7 @@ export type ButtonProps = BaseButtonProps & {
     | "muted"
     | "transparent"
     | "field";
-  size?: "sm" | "md" | "lg" | "action" | "icon" | "icon-sm" | "field";
+  size?: "sm" | "md" | "lg" | "action" | "prompt" | "icon" | "icon-sm" | "field";
   isActive?: boolean;
   icon?: React.ReactNode;
 };
@@ -43,6 +43,8 @@ const sizeStyles = {
   lg: "h-11 px-6 text-base",
   /** A page's main actions, with room for a shortcut after the label. */
   action: "h-7.5 gap-2.5 rounded-lg pr-2.5 pl-3 text-label font-medium",
+  /** The actions of a one-line prompt, such as the update strip's Download and Later. */
+  prompt: "h-7 rounded-lg px-3 text-sm font-medium",
   icon: "h-8 w-8 p-1",
   "icon-sm": "h-6 w-6 p-0.5",
   field: "h-7 w-full justify-between px-2 text-ui",

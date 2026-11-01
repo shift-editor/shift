@@ -211,6 +211,12 @@ export class App {
     this.#updater = new AppUpdater({
       lifecycle: this.#lifecycle,
       activeWindow: () => this.#windows.activeWindow(),
+      broadcast: (notice) => {
+        for (const window of this.#windows.allWindows()) {
+          if (window.window.isDestroyed()) continue;
+          ipc.send(window.window.webContents, "update.noticeChanged", notice);
+        }
+      },
       log: createShiftLogger("app.update"),
     });
   }
@@ -591,11 +597,9 @@ export class App {
     ipc.handle(ipcMain, "clipboard.writeText", (_event, text) => {
       clipboard.writeText(text);
     });
+    ipc.handle(ipcMain, "update.notice", () => this.#updater.notice);
     ipc.handle(ipcMain, "update.startDownload", async () => {
       await this.#updater.startDownload();
-    });
-    ipc.handle(ipcMain, "update.cancelDownload", () => {
-      this.#updater.cancelDownload();
     });
     ipc.handle(ipcMain, "update.restartToUpdate", async () => {
       await this.#updater.restartToUpdate();
@@ -623,7 +627,7 @@ export class App {
         return;
       }
 
-      // About, Feedback, and Update windows are plain BrowserWindows.
+      // About and Feedback windows are plain BrowserWindows.
       if (process.platform !== "win32" || !browserWindow) return;
       browserWindow.setTitleBarOverlay({
         color: colors.background,
@@ -1188,6 +1192,22 @@ export class App {
           this.#windowForAgentRequest(windowId).agent.resolveKerning(input),
         at: ({ windowId, ...input }) =>
           this.#windowForAgentRequest(windowId).agent.kerningAt(input),
+      },
+      text: {
+        runs: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.text("text.runs", input),
+        get: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.text("text.get", input),
+        create: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.text("text.create", input),
+        setText: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.text("text.setText", input),
+        setCaret: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.text("text.setCaret", input),
+        setOptions: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.text("text.setOptions", input),
+        delete: ({ windowId, ...input }) =>
+          this.#windowForAgentRequest(windowId).agent.text("text.delete", input),
       },
     });
     this.#sandbox = sandbox;

@@ -27,6 +27,7 @@ import type {
   AgentE2ECallMap,
   AgentEventMap,
   EditorCaptureBounds,
+  TextOperation,
 } from "../../shared/agent/protocol";
 import type { CommandId } from "../../shared/commands";
 import { Channel, electronPortTransport } from "../../shared/workspace/channel";
@@ -172,6 +173,14 @@ export class AgentClient {
     input: AgentCallMap["layers.render"]["request"],
   ): Promise<ShiftObservation<LayerSvg>> {
     return this.#call("layers.render", input);
+  }
+
+  /** Calls one of the window's proof-text capabilities, as `text.<operation>`. */
+  text<K extends TextOperation>(
+    operation: K,
+    input: AgentCallMap[K]["request"],
+  ): Promise<AgentCallMap[K]["response"]> {
+    return this.#call(operation, input);
   }
 
   /**

@@ -10,8 +10,7 @@ import {
 } from "../../types/text";
 import {
   Caret,
-  characterTextItem,
-  lineBreakTextItem,
+  typedTextItems,
   type CaretEdge,
   type CaretPlace,
   type CaretPosition,
@@ -75,6 +74,26 @@ export class TextEditing {
       active: true,
     });
     this.#goalX = null;
+  }
+
+  /**
+   * Shows the caret in a run at cluster `focus`, selecting from cluster
+   * `anchor`, as a click and a shift-click there place them.
+   *
+   * @remarks
+   * Session state like every caret move: never an undo step, even inside a
+   * capture. Clusters outside the run clamp to its ends.
+   *
+   * @param anchor - defaults to `focus`, a collapsed caret.
+   */
+  placeIn(nodeId: NodeId, focus: number, anchor: number = focus): void {
+    const node = this.#editor.scene.nodeOfKind(nodeId, "textRun");
+    if (!node) return;
+
+    const buffer = new TextBuffer(this.#editor.text.items(node));
+    this.#editor.history.withoutRecording(() =>
+      this.begin(nodeId, buffer.caretAt(focus), buffer.caretAt(anchor)),
+    );
   }
 
   /**
@@ -148,7 +167,7 @@ export class TextEditing {
     this.#edit("Insert text", (buffer) => buffer.splice(items));
   }
 
-  /** Inserts text as pasted: `/name` picks the glyph named `name`. */
+  /** Inserts text as pasted, read as proof text: `/name` picks the glyph named `name` (`Text.itemsFromText`). */
   insertText(text: string): void {
     this.insert(this.#editor.text.itemsFromText(text));
   }
@@ -158,11 +177,7 @@ export class TextEditing {
    * a line break.
    */
   typeText(text: string): void {
-    this.insert(
-      [...text.replaceAll("\r\n", "\n")].map((char) =>
-        char === "\n" ? lineBreakTextItem() : characterTextItem(char.codePointAt(0)!),
-      ),
-    );
+    this.insert(typedTextItems(text));
   }
   deleteBackward(): void {
     this.#edit("Delete text", (buffer) => buffer.delete(-1));

@@ -29,6 +29,15 @@ import type {
   ShiftReadInput,
   SourceSelector,
   InstanceSelector,
+  TextRunCreateInput,
+  TextRunDeleteInput,
+  TextRunGetInput,
+  TextRunSetCaretInput,
+  TextRunSetOptionsInput,
+  TextRunSetTextInput,
+  TextRunsInput,
+  TextRunSummary,
+  TextRunView,
 } from "@shift/runtime";
 import type { GlyphId, KerningPosition, NamedInstance, Source } from "@shift/types";
 import type { CommandId } from "../commands";
@@ -163,6 +172,34 @@ export type AgentCallMap = {
     };
     response: ShiftObservation<LayerSvg>;
   };
+  "text.runs": {
+    request: ShiftReadInput<TextRunsInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<TextRunSummary[]>;
+  };
+  "text.get": {
+    request: ShiftReadInput<TextRunGetInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<TextRunView>;
+  };
+  "text.create": {
+    request: ShiftReadInput<TextRunCreateInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<TextRunView>;
+  };
+  "text.setText": {
+    request: ShiftReadInput<TextRunSetTextInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<TextRunView>;
+  };
+  "text.setCaret": {
+    request: ShiftReadInput<TextRunSetCaretInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<TextRunView>;
+  };
+  "text.setOptions": {
+    request: ShiftReadInput<TextRunSetOptionsInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<TextRunView>;
+  };
+  "text.delete": {
+    request: ShiftReadInput<TextRunDeleteInput> & { ifFontRevision?: FontRevision };
+    response: ShiftObservation<null>;
+  };
   /**
    * Calls one agent reader's method with `args` once pending edits settle,
    * returning its plain result. Only the E2E read hook sends it.
@@ -172,6 +209,9 @@ export type AgentCallMap = {
     response: unknown;
   };
 };
+
+/** The agent lane's proof-text calls, `text.runs` to `text.delete`. */
+export type TextOperation = Extract<keyof AgentCallMap, `text.${string}`>;
 
 /** The agent-lane calls that change what the editor shows, each answering with its view. */
 export type EditorControlOperation =

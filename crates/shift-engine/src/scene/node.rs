@@ -102,7 +102,47 @@ impl Default for RunSettings {
     }
 }
 
+/// Why [`RunSettings`] cannot be laid out as given.
+#[derive(Clone, Debug, PartialEq, thiserror::Error)]
+pub enum RunSettingsError {
+    /// Not an OpenType feature tag: one to four printable ASCII characters.
+    #[error("{0:?} is not a feature tag: one to four printable ASCII characters, such as liga")]
+    FeatureTag(String),
+    /// Not a BCP 47 language tag, such as `en` or `sr-Latn`.
+    #[error("{0:?} is not a BCP 47 language tag, such as en or sr-Latn")]
+    Language(String),
+    /// Not an ISO 15924 script code: four letters, such as `Arab`.
+    #[error("{0:?} is not an ISO 15924 script code: four letters, such as Arab")]
+    Script(String),
+    /// A line height that is not a positive, finite number of ems.
+    #[error("a line height of {0} ems is not positive and finite")]
+    LineHeight(f64),
+}
+
 impl RunSettings {
+    /// Checks that each setting is one shaping can read: feature tags as
+    /// OpenType writes them, the language as BCP 47, the script as ISO
+    /// 15924, and a positive line height.
+    ///
+    /// # Errors
+    ///
+    /// Returns the [`RunSettingsError`] of the first setting that is not.
+    pub fn check(&self) -> Result<(), RunSettingsError> {
+        if let Some(tag) = self.features.keys().find(|tag| !is_feature_tag(tag)) {
+            return Err(RunSettingsError::FeatureTag(tag.clone()));
+        }
+        if let Some(language) = self.language.as_ref().filter(|tag| !is_language_tag(tag)) {
+            return Err(RunSettingsError::Language(language.clone()));
+        }
+        if let Some(script) = self.script.as_ref().filter(|code| !is_script_code(code)) {
+            return Err(RunSettingsError::Script(script.clone()));
+        }
+        if let Some(em) = self.line_height.filter(|em| !(em.is_finite() && *em > 0.0)) {
+            return Err(RunSettingsError::LineHeight(em));
+        }
+        Ok(())
+    }
+
     /// The options text with these settings is laid out with, each
     /// paragraph on one line: each forced feature switched on or off
     /// ([`FeatureSetting::switched`]), and no line height read as the font's
@@ -129,6 +169,32 @@ impl RunSettings {
 /// A run is shaped unless it says otherwise.
 fn shaped() -> bool {
     true
+}
+
+/// One to four printable ASCII characters, as an OpenType tag is written
+/// before it is padded with spaces.
+fn is_feature_tag(tag: &str) -> bool {
+    (1..=4).contains(&tag.len()) && tag.bytes().all(|byte| (0x21..=0x7e).contains(&byte))
+}
+
+/// A BCP 47 tag's shape: a primary language subtag of two, three, or five
+/// to eight letters, then subtags of one to eight letters or digits, joined
+/// by hyphens.
+fn is_language_tag(tag: &str) -> bool {
+    let mut subtags = tag.split('-');
+    let primary = subtags.next().unwrap_or_default();
+    let primary_ok = matches!(primary.len(), 2 | 3 | 5..=8)
+        && primary.bytes().all(|byte| byte.is_ascii_alphabetic());
+    primary_ok
+        && subtags.all(|subtag| {
+            (1..=8).contains(&subtag.len())
+                && subtag.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        })
+}
+
+/// Four ASCII letters, as ISO 15924 writes a script.
+fn is_script_code(code: &str) -> bool {
+    code.len() == 4 && code.bytes().all(|byte| byte.is_ascii_alphabetic())
 }
 
 /// A text run's items and settings, as the scene stores them: what its text

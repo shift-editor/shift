@@ -55,6 +55,15 @@ const capabilities: ShiftCapabilities = {
     resolve: (input) => host.call("shift.kerning.resolve", input),
     at: (input) => host.call("shift.kerning.at", input),
   },
+  text: {
+    runs: (input) => host.call("shift.text.runs", input),
+    get: (input) => host.call("shift.text.get", input),
+    create: (input) => host.call("shift.text.create", input),
+    setText: (input) => host.call("shift.text.setText", input),
+    setCaret: (input) => host.call("shift.text.setCaret", input),
+    setOptions: (input) => host.call("shift.text.setOptions", input),
+    delete: (input) => host.call("shift.text.delete", input),
+  },
 };
 const runtime = serveChannel<SandboxCallMap, SandboxEventMap>(transport, {
   "sandbox.execute": ({ code }) => executeShiftCode(capabilities, code),

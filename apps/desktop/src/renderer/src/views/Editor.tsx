@@ -19,6 +19,7 @@ import { getShiftHost } from "@/host/shiftHost";
 import { useSignalState } from "@shift/editor/signals";
 import { useSignalEffect } from "@/hooks/useSignalEffect";
 import { asGlyphId } from "@shift/types";
+import { UpdateStrip } from "@/components/chrome/UpdateStrip";
 
 export const Editor = () => {
   const { glyphId: glyphIdParam } = useParams();
@@ -192,6 +193,7 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
               dock={toolbarDock}
               onDockChange={onToolbarDockChange}
             />
+            <UpdateStrip className="right-3 bottom-3" />
           </ZoneContainer>
         </ResizablePanel>
         <ResizableHandle

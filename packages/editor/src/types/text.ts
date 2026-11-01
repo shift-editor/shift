@@ -1,5 +1,5 @@
 import type { Point2D } from "@shift/geo";
-import type { GlyphId, NodeId, RunId, SourceId, TextItemId } from "@shift/types";
+import type { GlyphId, GlyphName, NodeId, RunId, SourceId, TextItemId } from "@shift/types";
 import type { FeatureSubstitution, FontFeature, PlacedText, TextAlign } from "@shift/wasm/protocol";
 import type { PageNode } from "./node";
 import type { CaretEdge, Direction, TextItem } from "../lib/text/layout/types";
@@ -93,6 +93,22 @@ export interface RunPlacement {
   readonly glyphs: readonly GlyphId[];
 }
 
+/** Where `Text.addRun` puts a new run, and the items it holds. */
+export interface RunContent {
+  /** The page the run goes on. */
+  readonly page: PageNode;
+  /** The run's origin, in the page's (scene) space. */
+  readonly at: Point2D;
+  readonly items: readonly TextItem[];
+}
+
+/** Text parsed into items, and each `/name` in it that names no glyph in the font. */
+export interface ParsedText {
+  readonly items: TextItem[];
+  /** Names the text picks that the font lacks, in the order they appear. */
+  readonly unknownGlyphNames: readonly GlyphName[];
+}
+
 /** Stores document-scoped proof text content. */
 export interface TextRunRecord {
   readonly id: RunId;
@@ -148,3 +164,17 @@ export type TextRunSettings = Pick<
   TextRunRecord,
   "shaping" | "features" | "language" | "script" | "lineHeight" | "align"
 >;
+
+/**
+ * Some of a run's settings, to change together (`Text.setSettings`): a field
+ * left out keeps its value, and in `features` a tag left out keeps its
+ * setting while `null` returns it to the font's default.
+ */
+export interface TextRunSettingsChange {
+  readonly shaping?: boolean;
+  readonly features?: Readonly<Record<string, boolean | null>>;
+  readonly language?: string | null;
+  readonly script?: string | null;
+  readonly lineHeight?: number | null;
+  readonly align?: TextAlign | null;
+}

@@ -43,6 +43,8 @@ export type ShiftOptions = {
   /** Preserves native geometry unless exact visual baseline dimensions are requested. */
   windowSizing: "native" | "visual";
   scriptedDialogs: boolean;
+  /** Launches with a simulated update that is found a few seconds after start. */
+  simulatedUpdate: boolean;
   openFontPath: string | undefined;
   saveShiftPaths: readonly string[] | undefined;
   dirtyDocumentChoice: DirtyDocumentChoice;

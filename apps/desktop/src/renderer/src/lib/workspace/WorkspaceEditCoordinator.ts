@@ -2,7 +2,6 @@ import type { EditLocation } from "@shift/wasm/protocol";
 import type {
   StoredWorkspaceSnapshot,
   AppliedChange,
-  SaveState,
   FontIntent,
   GlyphId,
   GlyphLayerSnapshot,
@@ -37,7 +36,7 @@ import type {
   WorkspaceEditEvent,
   WorkspaceEditListener,
 } from "@shift/editor/types";
-import type { WorkspaceApplyStatus, WorkspaceEdit } from "@/types/workspace";
+import type { EditAcceptance, WorkspaceApplyStatus, WorkspaceEdit } from "@/types/workspace";
 import type { FontSessionClient } from "./FontSessionClient";
 import type { WindowEngine } from "../engine/WindowEngine";
 
@@ -91,6 +90,8 @@ export class WorkspaceEditCoordinator {
     readonly before: Map<LayerId, GlyphState>;
     /** The glyphs whose layer records its edits changed. */
     readonly relayered: Set<GlyphId>;
+    /** Whether it applied font intents, not only scene ones. */
+    changesFont: boolean;
   } | null = null;
   #openEdit: StagedEdit | null = null;
   /** The page the window shows, which each edit's undo step records as where it was made. */
@@ -147,7 +148,8 @@ export class WorkspaceEditCoordinator {
         this.#engine.cancelEdit();
         throw error;
       }
-      this.#enqueuePersist(this.#engine.endEdit(recording), undefined, id, []);
+      // A scene edit leaves the font as it was, so the authored revision stays.
+      this.#enqueuePersist(this.#engine.endEdit(recording), undefined, id, [], false);
     });
   }
 
@@ -206,6 +208,7 @@ export class WorkspaceEditCoordinator {
     this.#assertNoOpenEdit("edit");
     const transaction = this.#transaction;
     if (transaction) {
+      if (intents.length > 0) transaction.changesFont = true;
       for (const glyphId of this.#applyInEngine(intents, transaction.before)) {
         transaction.relayered.add(glyphId);
       }
@@ -259,7 +262,7 @@ export class WorkspaceEditCoordinator {
 
     const id = this.#mintPendingEditId();
     const before = new Map<LayerId, GlyphState>();
-    this.#transaction = { id, label, before, relayered: new Set() };
+    this.#transaction = { id, label, before, relayered: new Set(), changesFont: false };
     this.#engine.beginEdit(this.#shownPage());
     const records = this.#store.recordsCheckpoint();
 
@@ -270,9 +273,13 @@ export class WorkspaceEditCoordinator {
         if (!transaction) throw new Error("workspace transaction ended without an active edit");
 
         this.#transaction = null;
-        this.#enqueuePersist(this.#engine.endEdit(), transaction.label, transaction.id, [
-          ...transaction.relayered,
-        ]);
+        this.#enqueuePersist(
+          this.#engine.endEdit(),
+          transaction.label,
+          transaction.id,
+          [...transaction.relayered],
+          transaction.changesFont,
+        );
         return result;
       } catch (error) {
         // The workspace never saw the transaction: take it back in the engine
@@ -360,7 +367,7 @@ export class WorkspaceEditCoordinator {
         this.#store.publishLayers(edit.before.values().toArray());
         throw error;
       }
-      this.#enqueuePersist(this.#engine.endEdit(), label, edit.id, relayered);
+      this.#enqueuePersist(this.#engine.endEdit(), label, edit.id, relayered, intents.length > 0);
     });
   }
 
@@ -636,14 +643,11 @@ export class WorkspaceEditCoordinator {
         // An undo or redo is not a new edit: persist it without announcing it.
         const id = this.#mintPendingEditId();
         const saveState = replayed.matchesSaved ? "matchesSaved" : "unsaved";
-        const edit = this.#acceptEdit(
-          replayed.changeSet,
-          undefined,
-          id,
-          relayered,
-          "replay",
+        const edit = this.#acceptEdit(replayed.changeSet, undefined, id, relayered, {
+          origin: "replay",
           saveState,
-        );
+          changesFont: replayed.changesFont ?? true,
+        });
         const location = replayed.location ?? null;
         return this.#serialize(async () => ({ ...(await this.#commitEdit(edit)), location }));
       });
@@ -657,20 +661,25 @@ export class WorkspaceEditCoordinator {
     label: string | undefined,
     id: PendingEditId,
     relayered: readonly GlyphId[],
+    changesFont = true,
   ): void {
     if (!changeSet) return;
 
-    const edit = this.#acceptEdit(changeSet, label, id, relayered);
+    const edit = this.#acceptEdit(changeSet, label, id, relayered, { changesFont });
     void this.#serialize(() => this.#commitQueuedEdit(edit));
   }
 
+  /**
+   * Queues a change set for the workspace. Only an edit that changed the font
+   * advances the authored revision: a scene-only edit (proof text, pages,
+   * placed glyphs) is view state, which font revisions do not version.
+   */
   #acceptEdit(
     changeSet: Uint8Array,
     label: string | undefined,
     id: PendingEditId,
     relayered: readonly GlyphId[],
-    origin: WorkspaceEdit["origin"] = "edit",
-    saveState: SaveState = "unsaved",
+    { origin = "edit", saveState = "unsaved", changesFont = true }: EditAcceptance = {},
   ): WorkspaceEdit {
     const edit: WorkspaceEdit = {
       id,
@@ -683,7 +692,7 @@ export class WorkspaceEditCoordinator {
 
     batch(() => {
       this.#settledCell.set(false);
-      this.#advanceAuthoredRevision();
+      if (changesFont) this.#advanceAuthoredRevision();
       if (this.#applyStatus.peek() === "idle") {
         this.#applyStatus.set("queued");
       }

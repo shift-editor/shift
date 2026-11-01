@@ -100,6 +100,18 @@ export async function executeShiftCode(
   installAsyncJsonFunction(vm, "__shiftKerningAt", deadline, (input) =>
     validated.kerning.at(input as never),
   );
+  const textCalls = {
+    __shiftTextRuns: validated.text.runs,
+    __shiftTextGet: validated.text.get,
+    __shiftTextCreate: validated.text.create,
+    __shiftTextSetText: validated.text.setText,
+    __shiftTextSetCaret: validated.text.setCaret,
+    __shiftTextSetOptions: validated.text.setOptions,
+    __shiftTextDelete: validated.text.delete,
+  } satisfies Record<string, (input: never) => Promise<unknown>>;
+  for (const [name, call] of Object.entries(textCalls)) {
+    installAsyncJsonFunction(vm, name, deadline, (input) => call(input as never));
+  }
   installAsyncJsonFunction(vm, "__shiftReadOpen", deadline, async (target) => {
     const scope = await ShiftReadScope.open(validated, shiftInputSchemas.read.parse(target));
     const scopeId = scopes.size + 1;
@@ -162,6 +174,15 @@ export async function executeShiftCode(
         resolve: async (input) => JSON.parse(await __shiftResolveKerning(input)),
         at: async (input) => JSON.parse(await __shiftKerningAt(input)),
       }),
+      text: Object.freeze({
+        runs: async (input) => JSON.parse(await __shiftTextRuns(input)),
+        get: async (input) => JSON.parse(await __shiftTextGet(input)),
+        create: async (input) => JSON.parse(await __shiftTextCreate(input)),
+        setText: async (input) => JSON.parse(await __shiftTextSetText(input)),
+        setCaret: async (input) => JSON.parse(await __shiftTextSetCaret(input)),
+        setOptions: async (input) => JSON.parse(await __shiftTextSetOptions(input)),
+        delete: async (input) => JSON.parse(await __shiftTextDelete(input)),
+      }),
       read: async (target, callback) => {
         if (typeof callback !== "function") throw new TypeError("shift.read requires a callback");
         const { scopeId, fontRevision } = JSON.parse(await __shiftReadOpen(target));
@@ -195,6 +216,10 @@ export async function executeShiftCode(
             pairs: call("kerning.pairs"),
             resolve: call("kerning.resolve"),
             at: call("kerning.at"),
+          }),
+          text: Object.freeze({
+            runs: call("text.runs"),
+            get: call("text.get"),
           }),
         });
         try {
@@ -298,6 +323,17 @@ function validatedCapabilities(capabilities: ShiftCapabilities): ShiftCapabiliti
         capabilities.kerning.resolve(shiftInputSchemas["kerning.resolve"].parse(input)),
       at: (input) => capabilities.kerning.at(shiftInputSchemas["kerning.at"].parse(input)),
     },
+    text: {
+      runs: (input) => capabilities.text.runs(shiftInputSchemas["text.runs"].parse(input)),
+      get: (input) => capabilities.text.get(shiftInputSchemas["text.get"].parse(input)),
+      create: (input) => capabilities.text.create(shiftInputSchemas["text.create"].parse(input)),
+      setText: (input) => capabilities.text.setText(shiftInputSchemas["text.setText"].parse(input)),
+      setCaret: (input) =>
+        capabilities.text.setCaret(shiftInputSchemas["text.setCaret"].parse(input)),
+      setOptions: (input) =>
+        capabilities.text.setOptions(shiftInputSchemas["text.setOptions"].parse(input)),
+      delete: (input) => capabilities.text.delete(shiftInputSchemas["text.delete"].parse(input)),
+    },
   };
 }
 
@@ -341,6 +377,10 @@ function callReadScope(scope: ShiftReadScope, method: unknown, input: unknown): 
       return scope.kerning.resolve(args);
     case "kerning.at":
       return scope.kerning.at(args);
+    case "text.runs":
+      return scope.text.runs(args);
+    case "text.get":
+      return scope.text.get(args);
     default:
       throw new Error(`Unknown shift.read method: ${String(method)}`);
   }

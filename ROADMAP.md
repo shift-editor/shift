@@ -929,6 +929,7 @@ interface ShiftScriptContext {
 **MCP Server**
 
 - [x] Expose Shift as MCP server
+- [x] Agents write canvas proof text and the Text caret (`shift.text`)
 - [ ] Tools: getGlyph, movePoint, addContour, exportPreview
 - [ ] Claude can read/write font data
 - [x] Agents control what a window shows: tool, page, open glyph, camera, selection, and view commands (`shift.editor`, `shift.commands`)

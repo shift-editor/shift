@@ -94,6 +94,7 @@ impl TextLayout {
             stop.place(&mut hasher);
         }
         self.width.to_bits().hash(&mut hasher);
+        self.line_height.to_bits().hash(&mut hasher);
         self.unshaped.hash(&mut hasher);
         hasher.finish()
     }

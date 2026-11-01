@@ -4,7 +4,7 @@ import type {
   WorkspaceDocumentState,
   WorkspaceExportResult,
 } from "../workspace/lanes";
-import type { UpdateProgress } from "../update/types";
+import type { UpdateNotice } from "../update/types";
 import type { RecentDocument } from "../recents";
 import type { AgentConnectionsState } from "../agent/connections";
 import type { AgentConnection } from "../agent/protocol";
@@ -87,9 +87,11 @@ export type RendererToMain = {
   /** Runs a menu bar item for the sender window, as the native menu would. */
   "menu.activate": (itemId: string) => void;
   "errors.reportRenderer": (report: RendererErrorReport) => void;
+  /** Returns what the update strip shows now, for a window that has just loaded. */
+  "update.notice": () => UpdateNotice;
   "update.startDownload": () => void;
-  "update.cancelDownload": () => void;
   "update.restartToUpdate": () => void;
+  /** Hides the strip until the next update, or until Check for Updates finds this one again. */
   "update.later": () => void;
   "recents.list": () => RecentDocument[];
   /** Opens a recent file from the sender window, replacing it when it is the launcher. */
@@ -114,12 +116,8 @@ export type MainToRenderer = {
   "commands.runRenderer": (id: RendererCommandId) => void;
   /** Interface size changed via the View menu or its accelerators. */
   "ui.zoomChanged": (percent: number) => void;
-  /** Reports that an application update is available to download. */
-  "update.available": (version: string) => void;
-  /** Reports cumulative progress for the active application update download. */
-  "update.progress": (progress: UpdateProgress) => void;
-  /** Reports that the downloaded application version can be installed. */
-  "update.ready": (version: string) => void;
+  /** What the update strip shows changed: an update was found, downloaded further, finished, or put off. */
+  "update.noticeChanged": (notice: UpdateNotice) => void;
   /** Agent connections were allowed or disallowed, failed to start, or saw a request. */
   "agentConnections.changed": (state: AgentConnectionsState) => void;
   /** `config.toml` changed in Settings or in another program. */
