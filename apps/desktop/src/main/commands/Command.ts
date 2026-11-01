@@ -38,12 +38,31 @@ export class CommandRegistry {
   }
 
   /**
+   * Looks up a command by an ID from outside the app, such as an agent's request.
+   *
+   * @param id - Text that may or may not name a registered command.
+   * @returns the registered command, or `null` when no command has that ID.
+   */
+  find(id: string): Command | null {
+    return this.#commands.values().find((command) => command.id === id) ?? null;
+  }
+
+  /**
    * Returns a snapshot of registered commands.
    *
    * @returns a fresh array; mutating it does not change the registry.
    */
   list(): Command[] {
     return [...this.#commands.values()];
+  }
+
+  /**
+   * Returns the registered commands with one effect, in registration order.
+   *
+   * @returns a fresh array; mutating it does not change the registry.
+   */
+  withEffect(effect: CommandEffect): Command[] {
+    return this.#commands.where((command) => command.effect === effect);
   }
 
   /**
@@ -138,6 +157,20 @@ export type CommandContext = {
 };
 
 /**
+ * What running a command changes. Every command declares one, and it decides
+ * who besides the user may run it: agents may run only `view` commands.
+ *
+ * - `view`: what one window shows, or its session state: zoom, interface
+ *   size, selection, tabs, the settings dialog. Never font data or files.
+ * - `font`: the font's data, including Undo and Redo, which replay font edits.
+ * - `file`: files on disk: creating, opening, saving and exporting documents,
+ *   installing the command-line tool.
+ * - `app`: anything outside the window: other windows, the clipboard, the
+ *   browser, the file manager, updates.
+ */
+export type CommandEffect = "view" | "font" | "file" | "app";
+
+/**
  * Declarative app command owned by the main process.
  *
  * @remarks
@@ -153,6 +186,8 @@ export type Command = {
   label: string;
   /** Optional longer explanation for command palettes or accessibility hints. */
   description?: string;
+  /** What running the command changes, which decides whether an agent may run it. */
+  effect: CommandEffect;
   /** Returns whether the command can run in the current app context. */
   enabled?: (ctx: CommandContext) => boolean;
   /** Performs the command's main-process side effects. */

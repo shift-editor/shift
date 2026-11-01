@@ -46,6 +46,18 @@ export async function executeShiftCode(
   installAsyncJsonFunction(vm, "__shiftInspectEditor", deadline, (input) =>
     validated.editor.inspect(input as never),
   );
+  const controlCalls = {
+    __shiftListCommands: validated.commands.list,
+    __shiftRunCommand: validated.commands.run,
+    __shiftSetTool: validated.editor.setTool,
+    __shiftShowPage: validated.editor.showPage,
+    __shiftOpenGlyph: validated.editor.openGlyph,
+    __shiftSetView: validated.editor.setView,
+    __shiftSelect: validated.editor.select,
+  } satisfies Record<string, (input: never) => Promise<unknown>>;
+  for (const [name, call] of Object.entries(controlCalls)) {
+    installAsyncJsonFunction(vm, name, deadline, (input) => call(input as never));
+  }
   installAsyncJsonFunction(vm, "__shiftGetFont", deadline, (input) =>
     validated.font.get(input as never),
   );
@@ -121,8 +133,17 @@ export async function executeShiftCode(
       sessions: Object.freeze({
         list: async () => JSON.parse(await __shiftListSessions()),
       }),
+      commands: Object.freeze({
+        list: async (input) => JSON.parse(await __shiftListCommands(input)),
+        run: async (input) => JSON.parse(await __shiftRunCommand(input)),
+      }),
       editor: Object.freeze({
         inspect: async (input) => JSON.parse(await __shiftInspectEditor(input)),
+        setTool: async (input) => JSON.parse(await __shiftSetTool(input)),
+        showPage: async (input) => JSON.parse(await __shiftShowPage(input)),
+        openGlyph: async (input) => JSON.parse(await __shiftOpenGlyph(input)),
+        setView: async (input) => JSON.parse(await __shiftSetView(input)),
+        select: async (input) => JSON.parse(await __shiftSelect(input)),
       }),
       font: Object.freeze({
         get: async (input) => JSON.parse(await __shiftGetFont(input)),
@@ -250,9 +271,23 @@ function validatedCapabilities(capabilities: ShiftCapabilities): ShiftCapabiliti
   return {
     capture: (input) => capabilities.capture(shiftInputSchemas.capture.parse(input)),
     sessions: { list: () => capabilities.sessions.list() },
+    commands: {
+      list: (input) => capabilities.commands.list(shiftInputSchemas["commands.list"].parse(input)),
+      run: (input) => capabilities.commands.run(shiftInputSchemas["commands.run"].parse(input)),
+    },
     editor: {
       inspect: (input) =>
         capabilities.editor.inspect(shiftInputSchemas["editor.inspect"].parse(input)),
+      setTool: (input) =>
+        capabilities.editor.setTool(shiftInputSchemas["editor.setTool"].parse(input)),
+      showPage: (input) =>
+        capabilities.editor.showPage(shiftInputSchemas["editor.showPage"].parse(input)),
+      openGlyph: (input) =>
+        capabilities.editor.openGlyph(shiftInputSchemas["editor.openGlyph"].parse(input)),
+      setView: (input) =>
+        capabilities.editor.setView(shiftInputSchemas["editor.setView"].parse(input)),
+      select: (input) =>
+        capabilities.editor.select(shiftInputSchemas["editor.select"].parse(input)),
     },
     font: { get: (input) => capabilities.font.get(shiftInputSchemas["font.get"].parse(input)) },
     locations: {

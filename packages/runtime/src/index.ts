@@ -1,7 +1,6 @@
 export { shiftInputSchemas } from "./inputs";
 export { FontChangedError, ShiftReadScope } from "./read";
 export {
-  PageNotFoundError,
   ProofTextError,
   TextCaretError,
   TextRunNotFoundError,
@@ -18,13 +17,24 @@ export type {
   AuthoredPoint,
   AxisCoordinate,
   AxisSelector,
+  CommandId,
+  CommandListInput,
+  CommandRun,
+  CommandRunInput,
+  CommandSummary,
   DocumentSourceKind,
   DocumentState,
   EditorGlyph,
   EditorPage,
   EditorInspection,
+  EditorOpenGlyphInput,
+  EditorSelectInput,
+  EditorSetToolInput,
+  EditorSetViewInput,
+  EditorShowPageInput,
   EditorTool,
   EditorView,
+  EditorViewport,
   FontOverview,
   FontRevision,
   GlyphGetInput,
@@ -98,3 +108,15 @@ export type {
   TextRunSummary,
   TextRunView,
 } from "./capabilities";
+
+export {
+  CanvasHiddenError,
+  CommandDisabledError,
+  CommandNotFoundError,
+  CommandNotRunnableError,
+  GlyphNotFoundError,
+  LastTabError,
+  ObjectNotFoundError,
+  PageNotFoundError,
+  ToolNotFoundError,
+} from "./controlErrors";

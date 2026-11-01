@@ -316,10 +316,18 @@ export class WindowTabs {
    * overview is shown or nothing closable is: Close Tab then closes the window.
    */
   closeShown(location: WindowLocation): TabClose {
-    const shown = this.activeTab(location);
-    if (!shown || shown.kind === "glyphs") return { kind: "closeWindow" };
+    const shown = this.#closableTab(location);
+    if (!shown) return { kind: "closeWindow" };
 
     return { kind: "show", tab: this.close(shown.id) };
+  }
+
+  /**
+   * Whether Close Tab at `location` closes the window rather than a tab: only
+   * the pinned overview is shown, or nothing closable is.
+   */
+  closeShownClosesWindow(location: WindowLocation): boolean {
+    return this.#closableTab(location) === null;
   }
 
   /** The tabs as view memory keeps them, in order; the pinned overview is implied. */
@@ -361,6 +369,14 @@ export class WindowTabs {
     const selectionPage = scene.nodeOfKind(view.selectionPageId, "page");
     if (selectionPage) this.#selectionPageIdCell.set(selectionPage.id);
     return dropped;
+  }
+
+  /** The tab Close Tab closes at `location`; null when it is the pinned overview or none. */
+  #closableTab(location: WindowLocation): MovableTab | null {
+    const shown = this.activeTab(location);
+    if (!shown || shown.kind === "glyphs") return null;
+
+    return shown;
   }
 
   #openGlyph(glyphId: GlyphId): OpenedGlyph {

@@ -41,6 +41,7 @@ import { FONT_FOLDER_EXTENSIONS, OPEN_FONT_EXTENSIONS } from "../../shared/openF
 import { ShiftMcpServer } from "@shift/mcp";
 import type {
   EditorInspection,
+  EditorView,
   FontRevision,
   ShiftCapture,
   ShiftCaptureInput,
@@ -52,6 +53,7 @@ import type { CommandId } from "../../shared/commands";
 import { RecentDocuments } from "../recents/RecentDocuments";
 import { SandboxRuntimeProcess } from "../sandbox/SandboxRuntimeProcess";
 import { AgentConnections } from "../agent/AgentConnections";
+import { AgentCommands } from "../agent/AgentCommands";
 import { publishE2EHooks } from "../agent/e2eHooks";
 import { AppConfig } from "../config/AppConfig";
 import { configDirectory } from "../config/configDirectory";
@@ -97,6 +99,14 @@ export class App {
   readonly #updater: AppUpdater;
 
   #commands = new CommandRegistry();
+  /** The view commands agents may run, for the window each names. */
+  #agentCommands = new AgentCommands(this.#commands, (windowId) => {
+    const window = this.#windowForAgentRequest(windowId);
+    return {
+      context: () => this.#commandContext(window),
+      run: (command, ifFontRevision) => window.agent.runCommand(command, ifFontRevision),
+    };
+  });
   #agentConnections: AgentConnections | null = null;
   #config: AppConfig | null = null;
   #commandLineTool: CommandLineTool | null = null;
@@ -1116,8 +1126,22 @@ export class App {
       sessions: {
         list: () => Promise.resolve(this.#agentSessions()),
       },
+      commands: {
+        list: async ({ windowId }) => this.#agentCommands.list(windowId),
+        run: (input) => this.#agentCommands.run(input),
+      },
       editor: {
         inspect: ({ windowId, ifFontRevision }) => this.#inspectEditor(windowId, ifFontRevision),
+        setTool: ({ windowId, ...input }) =>
+          this.#controlEditor(windowId, (agent) => agent.controlEditor("editor.setTool", input)),
+        showPage: ({ windowId, ...input }) =>
+          this.#controlEditor(windowId, (agent) => agent.controlEditor("editor.showPage", input)),
+        openGlyph: ({ windowId, ...input }) =>
+          this.#controlEditor(windowId, (agent) => agent.controlEditor("editor.openGlyph", input)),
+        setView: ({ windowId, ...input }) =>
+          this.#controlEditor(windowId, (agent) => agent.controlEditor("editor.setView", input)),
+        select: ({ windowId, ...input }) =>
+          this.#controlEditor(windowId, (agent) => agent.controlEditor("editor.select", input)),
       },
       font: {
         get: ({ windowId, ifFontRevision }) =>
@@ -1289,17 +1313,26 @@ export class App {
     return sessions;
   }
 
-  async #inspectEditor(
+  #inspectEditor(
     windowId: number,
     ifFontRevision?: FontRevision,
   ): Promise<ShiftObservation<EditorInspection>> {
-    const window = this.#windows.windowForId(windowId);
-    if (!window) throw new Error(`Shift window ${windowId} is not open`);
+    return this.#controlEditor(windowId, (agent) => agent.inspectEditor(ifFontRevision));
+  }
 
+  /**
+   * Makes one editor call in window `windowId`'s renderer and pairs the view
+   * it answers with the window and font session it came from.
+   */
+  async #controlEditor(
+    windowId: number,
+    call: (agent: Window["agent"]) => Promise<ShiftObservation<EditorView>>,
+  ): Promise<ShiftObservation<EditorInspection>> {
+    const window = this.#windowForAgentRequest(windowId);
     const session = this.#workspaces.getForBrowserWindow(window.window);
     if (!session) throw new Error(`Shift window ${windowId} has no font session`);
 
-    const { fontRevision, value: editor } = await window.agent.inspectEditor(ifFontRevision);
+    const { fontRevision, value: editor } = await call(window.agent);
     return {
       fontRevision,
       value: {

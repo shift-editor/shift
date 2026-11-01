@@ -55,6 +55,7 @@ export {
   asNodeId,
   asRunId,
   asSegmentId,
+  asSelectableId,
   asSourceId,
   isPointId,
   isContourId,

@@ -11,25 +11,6 @@ export class TextRunNotFoundError extends Error {
   }
 }
 
-/**
- * Thrown when a page id names no page in the window's document, or, with no
- * id, when the window shows no page.
- */
-export class PageNotFoundError extends Error {
-  override readonly name = "PageNotFoundError";
-  /** The page asked for; null when the call meant the page shown. */
-  readonly pageId: NodeId | null;
-
-  constructor(pageId: NodeId | null) {
-    super(
-      pageId === null
-        ? "This window shows no page; pass a pageId from editor.inspect's pages"
-        : `No page ${pageId} in this document; editor.inspect lists its pages`,
-    );
-    this.pageId = pageId;
-  }
-}
-
 /** Thrown when text names a glyph, as `/name`, that the font does not have. */
 export class UnknownGlyphNameError extends Error {
   override readonly name = "UnknownGlyphNameError";

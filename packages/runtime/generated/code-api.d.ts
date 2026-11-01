@@ -432,6 +432,8 @@ export interface EditorView {
   externalLocation: AxisCoordinate[];
   selectionIds: SelectableId[];
   tool: EditorTool | null;
+  /** Where the canvas looks and how close. */
+  viewport: EditorViewport;
   dragging: boolean;
   editing: boolean;
   applyStatus: "idle" | "queued" | "applying" | null;
@@ -455,6 +457,76 @@ export interface EditorInspection extends EditorView {
   windowId: number;
   sessionId: string;
   mode: ShiftSessionMode;
+}
+/**
+ * The canvas camera.
+ *
+ * @remarks
+ * `center` is in the open glyph's units (font units, y up, as `layers.get`
+ * gives points) while a glyph is open, and in the shown page's units (y down)
+ * otherwise. It is null while the canvas has no size, such as before it is
+ * first shown.
+ */
+export interface EditorViewport {
+  /** Screen pixels per font unit. */
+  zoom: number;
+  /** The point at the middle of the canvas. */
+  center: Point2D | null;
+}
+/** A command's stable id, as `commands.list` gives it, such as `view.zoomIn`. */
+export type CommandId = string;
+/** One command an agent may run in a window, as its menu item shows it. */
+export interface CommandSummary {
+  id: CommandId;
+  /** The menu item's label. */
+  title: string;
+  /** Its keyboard shortcut as an Electron accelerator, such as `CmdOrCtrl+Plus`; null when it has none. */
+  shortcut: string | null;
+  /** Whether it can run in the window now, as its menu item is enabled. */
+  enabled: boolean;
+}
+/** The commands an agent may run in one window. */
+export interface CommandListInput {
+  windowId: number;
+}
+/** Runs one command for a window, as choosing its menu item there does. */
+export interface CommandRunInput extends ShiftTarget {
+  command: CommandId;
+}
+/** What running a command did. */
+export interface CommandRun {
+  /** True once the window ran it; a command that cannot run fails instead. */
+  ran: boolean;
+}
+/** Makes a tool the window's active tool, as its toolbar button does. */
+export interface EditorSetToolInput extends ShiftTarget {
+  /** The tool's id, as `EditorTool.id` gives it: `select`, `pen`, `hand`, `text`, `spacing`, `kerning`, `shape`. */
+  tool: string;
+}
+/** Shows one of the document's pages, as clicking it in the pages list does. */
+export interface EditorShowPageInput extends ShiftTarget {
+  /** A page id from `EditorView.pages`. */
+  pageId: NodeId;
+}
+/** Opens a glyph in its tab, as double-clicking it in the glyph overview does. */
+export type EditorOpenGlyphInput = ShiftTarget & {
+  glyph: GlyphSelector;
+};
+/**
+ * Moves the canvas camera. Give `zoom`, `center` or both.
+ *
+ * @remarks
+ * `zoom` is clamped to the editor's range, 0.01 to 32. `center` is in the
+ * units {@link EditorViewport.center} reports.
+ */
+export interface EditorSetViewInput extends ShiftTarget {
+  zoom?: number;
+  center?: Point2D;
+}
+/** Replaces the selection with these objects, in this order; an empty list clears it. */
+export interface EditorSelectInput extends ShiftTarget {
+  /** Ids from `layers.get` (points, contours, anchors, components) or the scene's nodes. */
+  ids: SelectableId[];
 }
 /** Current font facts from one explicitly targeted live session, including Home. */
 export interface FontOverview {
@@ -882,8 +954,30 @@ export interface ShiftCapabilities {
   sessions: {
     list(): Promise<ShiftSession[]>;
   };
+  /**
+   * The app commands an agent may run: those that change only what a window
+   * shows or its session state, never font data or files. Close Tab closes a
+   * tab only while another is open; with only the glyph overview left it fails
+   * with `LastTabError` instead of closing the window.
+   */
+  commands: {
+    list(input: CommandListInput): Promise<CommandSummary[]>;
+    run(input: CommandRunInput): Promise<CommandRun>;
+  };
+  /**
+   * Inspects the editor, and changes what it shows: the tool, page, open
+   * glyph, camera and selection. None of these change font data, mark the
+   * document unsaved or move `fontRevision`; opening a glyph that has no tab
+   * yet adds a glyph page, as the glyph overview does, and the document stays
+   * saved.
+   */
   editor: {
     inspect(input: ShiftTarget): Promise<ShiftObservation<EditorInspection>>;
+    setTool(input: EditorSetToolInput): Promise<ShiftObservation<EditorInspection>>;
+    showPage(input: EditorShowPageInput): Promise<ShiftObservation<EditorInspection>>;
+    openGlyph(input: EditorOpenGlyphInput): Promise<ShiftObservation<EditorInspection>>;
+    setView(input: EditorSetViewInput): Promise<ShiftObservation<EditorInspection>>;
+    select(input: EditorSelectInput): Promise<ShiftObservation<EditorInspection>>;
   };
   font: {
     get(input: ShiftTarget): Promise<ShiftObservation<FontOverview>>;

@@ -9,6 +9,9 @@ import {
 } from "@shared/workspace/channel";
 import type { FontSession } from "@/types/fontSession";
 import type { E2EHooks } from "@/testing/e2e/hooks";
+import type { WindowRouter } from "@/lib/tabs/WindowNavigation";
+import { AgentControl, type ControlCalls } from "./AgentControl";
+import { ShiftEditorControl } from "./ShiftEditorControl";
 import type { AppReaders } from "./AppReaders";
 import { ShiftFontReader } from "./ShiftFontReader";
 import { ShiftEditorReader } from "./ShiftEditorReader";
@@ -63,6 +66,7 @@ export class AgentBridge {
         "font.revision": ({ ifFontRevision }) => this.#readRevision(ifFontRevision),
         "editor.inspect": ({ ifFontRevision }) =>
           this.#observe(ifFontRevision, () => this.#editor.inspect(window.location.hash.slice(1))),
+        ...this.#controlCalls(),
         "font.get": ({ ifFontRevision }) =>
           this.#observe(ifFontRevision, () => this.#reader.getFont()),
         "locations.resolve": ({ location, ifFontRevision }) =>
@@ -123,6 +127,15 @@ export class AgentBridge {
     this.#requests = null;
   }
 
+  /** The calls that control the window: its commands, tool, page, open glyph, camera and selection. */
+  #controlCalls(): ControlCalls {
+    const { editor, font, tabs } = this.#session;
+    const control = new ShiftEditorControl(editor, font, tabs, HASH_ROUTER);
+    return new AgentControl(control, this.#editor, this.#revisions, HASH_ROUTER, (command) =>
+      this.#host.commands.run(command),
+    ).calls;
+  }
+
   /** @throws {Error} for a hook or method the E2E hooks do not have. */
   async #callHook(hook: string, method: string, args: unknown[]): Promise<unknown> {
     const { createE2EHooks } = await import("@/testing/e2e/hooks");
@@ -175,6 +188,14 @@ export class AgentBridge {
     return { x, y, width, height };
   }
 }
+
+/** The window's route as its hash router keeps it, for code outside React. */
+const HASH_ROUTER: WindowRouter = {
+  pathname: () => window.location.hash.slice(1),
+  navigate: (path) => {
+    window.location.hash = path;
+  },
+};
 
 function nextAgentPort(): { received: Promise<MessagePort>; cancel: () => void } {
   let cancel = () => {};

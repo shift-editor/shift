@@ -30,6 +30,7 @@ import {
 import type { TextItem } from "@shift/editor/text";
 import type { KerningPair, SpacingTool } from "@shift/editor/tools";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
+import { ShiftViewport } from "./ShiftViewport";
 
 /** One point handle the canvas draws, and how it is styled. */
 export interface DrawnHandle {
@@ -74,6 +75,7 @@ export interface MatchedPoint {
 export class ShiftEditorReader {
   readonly #editor: Editor;
   readonly #edits: WorkspaceEditCoordinator | null;
+  readonly #viewport: ShiftViewport;
 
   /**
    * @param edits - The workspace's edit coordinator; null for a session
@@ -82,6 +84,7 @@ export class ShiftEditorReader {
   constructor(editor: Editor, edits: WorkspaceEditCoordinator | null) {
     this.#editor = editor;
     this.#edits = edits;
+    this.#viewport = new ShiftViewport(editor);
   }
 
   /**
@@ -112,6 +115,7 @@ export class ShiftEditorReader {
       externalLocation: [...editor.externalLocation].map(([axisId, value]) => ({ axisId, value })),
       selectionIds: [...editor.selection.ids],
       tool: tool ? { id: tool.id, state: tool.state.type } : null,
+      viewport: this.#viewport.read(),
       dragging: editor.isDragging,
       editing: editor.isEditing,
       applyStatus: this.#edits?.applyStatusCell.peek() ?? null,

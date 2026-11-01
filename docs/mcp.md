@@ -15,7 +15,7 @@ Shift exposes the fonts **currently open in the desktop app** through a local [M
 | Shift Dev         | `shift-dev`         | `http://127.0.0.1:17463/mcp` |
 | Shift Nightly Dev | `shift-nightly-dev` | `http://127.0.0.1:17464/mcp` |
 
-There is no token. The server answers only on `127.0.0.1`, rejects requests whose `Host` is not local (DNS rebinding), and rejects browser requests from non-local origins, so a web page cannot reach it. Any program running on your computer can connect while the setting is on; turn it off when you don't need it. Agents can inspect, render, and capture fonts, but not change them: the only writes are the proof text on the canvas and its Text caret (see below).
+There is no token. The server answers only on `127.0.0.1`, rejects requests whose `Host` is not local (DNS rebinding), and rejects browser requests from non-local origins, so a web page cannot reach it. Any program running on your computer can connect while the setting is on; turn it off when you don't need it. Agents can inspect, render, and capture fonts, control what a Shift window shows, and write the proof text on the canvas and its Text caret (see below), but cannot change fonts or files.
 
 ### Claude Code
 
@@ -39,6 +39,14 @@ Add another `[mcp_servers.shift-nightly]` or `[mcp_servers.shift-dev]` entry wit
 ### Other MCP clients
 
 Add a **Streamable HTTP** server with the name and URL from the table. Configure it in your personal client settings; Shift does not modify another application's configuration. Keep each build's name distinct so the client doesn't silently switch fonts when you change apps.
+
+## What the connection can control
+
+Agents can control what a Shift window shows, through the same paths as its menus, toolbar, pages list and glyph overview. Nothing here changes a font or a file, marks the document unsaved, or moves `fontRevision`; fonts and files stay read-only over MCP. Opening a glyph in a new tab adds a glyph page, as opening it yourself does, and the document stays saved.
+
+- `shift.commands.list({ windowId })` lists the app commands an agent may run: the ones that change only the view or session state (Zoom In, Zoom Out, the interface size commands, Select All, Deselect, Close Tab, Settings), each with its menu `title`, its `shortcut`, and whether it is `enabled` now. `shift.commands.run({ windowId, command })` runs one as its menu item does; Close Tab closes the shown tab; with only the glyph overview left it fails with `LastTabError` and the window stays open, since agents do not close windows. Commands that edit font data (Undo and Redo included, since they replay font edits), touch files (Save, Save As, Export, Open, New) or act outside the window (Copy, other windows, help links, updates) are not listed, and running one fails with `CommandNotRunnableError`.
+- `shift.editor.setTool({ windowId, tool })` switches tools, `showPage({ windowId, pageId })` shows a page from `editor.inspect`'s `pages`, `openGlyph({ windowId, glyph })` opens a glyph (`{ name }` or `{ glyphId }`) in its tab, as double-clicking it in the overview does, `setView({ windowId, zoom?, center? })` zooms and centres the canvas, and `select({ windowId, ids })` replaces the selection (an empty list clears it). Each answers with the editor inspection afterwards. `editor.inspect` reports the camera as `viewport: { zoom, center }`; `center` is in the open glyph's units (font units, y up) while a glyph is open, and in the page's units otherwise.
+- With `ifFontRevision`, a call fails with `FontChangedError` and does nothing when the font has moved on. Other failures are typed: `CommandNotFoundError`, `CommandNotRunnableError`, `CommandDisabledError`, `ToolNotFoundError`, `PageNotFoundError`, `GlyphNotFoundError`, `ObjectNotFoundError`, `LastTabError`, and `CanvasHiddenError` (centring a canvas that is not shown yet).
 
 ## What the connection can read
 

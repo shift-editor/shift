@@ -4,6 +4,7 @@ import {
   asLayerId,
   asNamedInstanceId,
   asNodeId,
+  asSelectableId,
   asSourceId,
 } from "@shift/types";
 import * as z from "zod/v4";
@@ -66,6 +67,30 @@ export const shiftInputSchemas = {
     scale: z.number().min(0.25).max(4).optional().default(1),
   }),
   "editor.inspect": z.strictObject({ windowId, ifFontRevision }),
+  "commands.list": z.strictObject({ windowId }),
+  "commands.run": z.strictObject({ windowId, ifFontRevision, command: z.string().min(1).max(128) }),
+  "editor.setTool": z.strictObject({ windowId, ifFontRevision, tool: z.string().min(1).max(128) }),
+  "editor.showPage": z.strictObject({
+    windowId,
+    ifFontRevision,
+    pageId: z.string().min(1).max(256).transform(asNodeId),
+  }),
+  "editor.openGlyph": z.strictObject({ windowId, ifFontRevision, glyph: glyphSelector }),
+  "editor.setView": z
+    .strictObject({
+      windowId,
+      ifFontRevision,
+      zoom: z.number().positive().finite().optional(),
+      center: z.strictObject({ x: z.number().finite(), y: z.number().finite() }).optional(),
+    })
+    .refine(({ zoom, center }) => zoom !== undefined || center !== undefined, {
+      message: "editor.setView takes zoom, center or both",
+    }),
+  "editor.select": z.strictObject({
+    windowId,
+    ifFontRevision,
+    ids: z.array(z.string().min(1).max(512).transform(asSelectableId)).max(10_000),
+  }),
   "font.get": z.strictObject({ windowId, ifFontRevision }),
   read: z.strictObject({ windowId }),
   "locations.resolve": z.strictObject({ windowId, ifFontRevision, location }),
