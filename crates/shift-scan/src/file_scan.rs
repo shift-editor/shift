@@ -7,6 +7,7 @@ use syn::visit::{self, Visit};
 use syn::{Expr, FnArg, ImplItem, Type};
 
 use crate::chain::MethodChain;
+use crate::collect::{self, KnownType};
 use crate::finding::{Finding, Kind};
 
 /// A chain this long or longer is reported.
@@ -97,7 +98,7 @@ impl<'a> FileScan<'a> {
         }
     }
 
-    fn is_test(attrs: &[syn::Attribute]) -> bool {
+    pub(crate) fn is_test(attrs: &[syn::Attribute]) -> bool {
         attrs.iter().any(|attr| {
             attr.path().is_ident("test")
                 || (attr.path().is_ident("cfg")
@@ -144,6 +145,17 @@ impl<'a> FileScan<'a> {
         .fold(tokens.to_string(), |text, (spaced, tight)| {
             text.replace(spaced, tight)
         })
+    }
+
+    fn report_turbofish(&mut self, call: &syn::ExprMethodCall, known: KnownType) {
+        let detail = format!("`collect::<Vec<_>>()` {}", known.describe());
+        self.report(Kind::CollectTurbofish, call.method.span(), detail);
+    }
+
+    fn check_tail(&mut self, block: &syn::Block) {
+        if let Some(call) = collect::redundant_tail(block) {
+            self.report_turbofish(call, KnownType::Returned);
+        }
     }
 
     fn record_inherent_methods(&mut self, item: &syn::ItemImpl) {
@@ -254,6 +266,7 @@ impl<'ast> Visit<'ast> for FileScan<'_> {
                     .iter()
                     .any(|ending| subject.ends_with(ending))
         };
+        self.check_tail(&function.block);
         if let Some(subject) = subject.filter(is_method_subject) {
             let detail = format!("{} takes {subject} first", function.sig.ident);
             self.report(Kind::MethodCandidate, function.sig.ident.span(), detail);
@@ -283,11 +296,15 @@ impl<'ast> Visit<'ast> for FileScan<'_> {
 
     fn visit_impl_item_fn(&mut self, method: &'ast syn::ImplItemFn) {
         if !Self::is_test(&method.attrs) {
+            self.check_tail(&method.block);
             visit::visit_impl_item_fn(self, method);
         }
     }
 
     fn visit_expr(&mut self, expr: &'ast Expr) {
+        for (call, known) in collect::redundant_turbofish(expr) {
+            self.report_turbofish(call, known);
+        }
         if let Expr::MethodCall(call) = expr {
             let method = call.method.to_string();
             let maps_error = ["ok_or_else", "map_err"].contains(&method.as_str());

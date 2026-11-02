@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use syn::Item;
 use syn::visit::Visit;
 
+use crate::duplicate::{FnBodies, FnBody};
 use crate::file_scan::{FileScan, InherentMethods};
 use crate::finding::{Finding, Kind};
 
@@ -70,6 +71,17 @@ impl CrateScan {
             }
         }
         Ok(())
+    }
+
+    /// Every non-test function body, for comparing across crates.
+    pub(crate) fn bodies(&self) -> Vec<FnBody> {
+        let mut bodies = Vec::new();
+        for file in &self.files {
+            let mut collector = FnBodies::new(&file.path);
+            collector.visit_file(&file.syntax);
+            bodies.extend(collector.found);
+        }
+        bodies
     }
 
     /// Structs and enums declared at the top level of any file.
@@ -277,6 +289,41 @@ mod tests {
     #[test]
     fn test_modules_are_skipped() {
         let found = findings("struct Font; #[cfg(test)] mod tests { fn helper(font: &Font) {} }");
+        assert!(found.is_empty());
+    }
+
+    #[test]
+    fn a_collect_turbofish_where_the_type_is_known_is_reported() {
+        let found = findings(
+            "fn names(xs: &[X]) -> Vec<String> {
+                 let glyphs = Glyphs { ids: xs.iter().map(id).collect::<Vec<_>>() };
+                 store(xs.iter().collect::<Vec<_>>());
+                 let boxed = xs.iter().map(h).collect::<Result<Vec<_>, _>>()?.into_boxed_slice();
+                 xs.iter().map(name).collect::<Vec<_>>()
+             }",
+        );
+        let details: Vec<_> = found.into_iter().map(|(_, detail)| detail).collect();
+        assert_eq!(
+            details,
+            [
+                "`collect::<Vec<_>>()` as the return value, whose type `collect()` infers",
+                "`collect::<Vec<_>>()` as a field, whose type `collect()` infers",
+                "`collect::<Vec<_>>()` as an argument, whose type `collect()` infers",
+                "`collect::<Vec<_>>()` only to call `into_boxed_slice`: collect into `Box<[_]>`",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_collect_turbofish_the_type_needs_is_not_reported() {
+        let found = findings(
+            "fn f() {
+                 let ids = xs.iter().collect::<Vec<_>>();
+                 let text = xs.iter().map(name).collect::<Vec<_>>().join(\", \");
+                 let glyphs = Glyphs { ids: xs.iter().map(id).collect::<Result<Vec<_>, _>>()? };
+                 let direct: Box<[_]> = xs.iter().collect();
+             }",
+        );
         assert!(found.is_empty());
     }
 }
