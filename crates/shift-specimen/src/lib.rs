@@ -19,10 +19,6 @@
 //! name in the font itself, sized for the launcher's wide "Last opened" tile by
 //! the rules in [`NameBox`].
 
-// Library code returns errors instead of panicking: a panic kills the
-// WebAssembly engine. Tests may unwrap (clippy.toml).
-#![warn(clippy::unwrap_used, clippy::print_stdout)]
-
 use std::collections::HashMap;
 use std::fmt::Write as _;
 

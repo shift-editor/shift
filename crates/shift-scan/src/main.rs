@@ -119,6 +119,7 @@ fn run() -> Result<(), String> {
     }
     findings.retain(|finding| options.keeps(finding, changed.as_deref()));
     findings.sort();
+    #[expect(clippy::print_stdout, reason = "the findings are the report")]
     for finding in &findings {
         println!("{finding}");
     }

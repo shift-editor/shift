@@ -30,8 +30,6 @@
 //! engine in WebAssembly and the store reader in a native addon, the names a
 //! message uses travel with it: see [`CarriedNames`].
 
-#![warn(clippy::unwrap_used, clippy::print_stdout)]
-
 // The derives name `::pack`, which inside this crate is itself.
 extern crate self as pack;
 

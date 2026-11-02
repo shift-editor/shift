@@ -41,6 +41,7 @@
     "typecheck": "turbo run types generate:bridge-types && turbo run typecheck && tsgo --noEmit -p tsconfig.scripts.json",
     "lint": "turbo run lint",
     "lint:check": "turbo run lint:check",
+    "lint:rust-ratchet": "node scripts/clippy-ratchet.mjs",
     "lint:tailwind": "pnpm --filter @shift/desktop lint:tailwind",
     "deadcode": "knip --workspace apps/desktop --workspace \"packages/*\" --include files,exports",
     "deadcode:class": "knip -c knip.class.json --workspace apps/desktop --workspace \"packages/*\" --include classMembers --exclude files,dependencies,unlisted,unresolved,exports,nsExports,types,nsTypes,enumMembers,duplicates,catalog --no-exit-code",

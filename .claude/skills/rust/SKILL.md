@@ -108,6 +108,7 @@ let recompiles = self.units_per_em.recompiles(&next.units_per_em)
     || self.feature_source.recompiles(&next.feature_source)
     || self.axes.recompiles(&next.axes);
 ```
+
 - **A method, not a free function**, when the first argument is the owner: `font.master_layers(glyph)`, not `master_layers(font, glyph)`. Extension traits are fine across crates.
 - **Entity kinds are an enum.** `EntityKind::Glyph` with `Display`, never `kind: "glyph"` or a `kind: &str` parameter, so kinds can't drift and callers can match them.
 - **Repeated conversion shapes get one helper.** `.into_iter().map(Into::into).collect()` written ten times in a `From` impl becomes `convert_all(v)`; `changed.then(|| read()).transpose()?` becomes `if_changed(changed, read)?`.
@@ -143,6 +144,11 @@ An edit should cost what the edited thing costs, not what the font costs. A `Fon
 ## Rules the editor needs
 
 When the editor needs a shift-font rule synchronously, write it as a plain-data function in shift-font that native callers use, and export that function from `crates/shift-wasm`. Don't write a second Rust version for WebAssembly, and don't re-declare its types there: a `FontFeature` or `FeatureGroup` copied into `shift-wasm` beside `shift-text`'s is two enums to keep in sync. Derive the wire format on the original type, or convert with one `From`. The export only converts numbers to and from shift-font types; "Choosing a route" in `crates/shift-wasm/docs/DOCS.md` says what belongs there and what may stay in TypeScript.
+
+## The lint ratchet
+
+Clippy lints that still have hits are listed in `clippy-ratchet.json` with their hits per crate (`src` for library and binary code, `tests` for the rest), and `pnpm lint:rust-ratchet`, CI's clippy step, fails when a count differs from the file.
+To lower one, fix hits and run `pnpm lint:rust-ratchet --update`; a lint at 0 everywhere moves to `[workspace.lints.clippy]` in `Cargo.toml`.
 
 ## Review checklist
 

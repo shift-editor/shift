@@ -10,7 +10,7 @@ Shapes and lays out text, once, for every Shift host: bidi and script itemizatio
 
 **Architecture Invariant:** No part is compiled unless a consumer names it. Features build on each other, `layout` ⊃ `shaper-font` ⊃ `shape`, and the workspace dependency turns the defaults off. WHY: the editor's default WebAssembly module holds only layout's request and result types (through `shift-engine`), and must link neither HarfRust nor fea-rs and fontbe; the engine module links all three.
 
-**Architecture Invariant:** The crate reads no files, and its library code returns errors instead of panicking (`clippy::unwrap_used` in `lib.rs`, which CI's `-D warnings` makes an error). WHY: it builds for `wasm32-unknown-unknown`, where a panic ends the editing session.
+**Architecture Invariant:** The crate reads no files, and its library code returns errors instead of panicking (`clippy::unwrap_used`, held at 0 hits in library code by `pnpm lint:rust-ratchet`). WHY: it builds for `wasm32-unknown-unknown`, where a panic ends the editing session.
 
 ## Codemap
 

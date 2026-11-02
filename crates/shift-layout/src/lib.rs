@@ -21,10 +21,6 @@
 //! Without the `layout` feature the crate holds only the vocabulary, the
 //! types a document stores.
 
-// Library code returns errors instead of panicking: a panic kills the
-// WebAssembly engine. Tests may unwrap (clippy.toml).
-#![warn(clippy::unwrap_used, clippy::print_stdout)]
-
 #[cfg(feature = "layout")]
 mod engine;
 #[cfg(feature = "layout")]
