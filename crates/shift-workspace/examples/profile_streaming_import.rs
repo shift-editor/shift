@@ -1,3 +1,4 @@
+#![expect(clippy::print_stdout, reason = "a profile prints its timings")]
 use std::{
     env, fs,
     path::PathBuf,

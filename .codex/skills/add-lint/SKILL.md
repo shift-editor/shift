@@ -20,6 +20,7 @@ that flags the wrong thing teaches everyone to ignore it.
 | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------- |
 | Decidable in one TypeScript file, from syntax                                         | a rule in `scripts/oxlint/shift-plugin.mjs`, enabled in `.oxlintrc.json` | blocks in `pnpm lint:check` and CI |
 | Covered by an existing clippy lint                                                    | `[workspace.lints.clippy]` in `Cargo.toml`                               | blocks in clippy and CI            |
+| Covered by a clippy lint with too many hits to fix now                                | a key in `clippy-ratchet.json`                                           | blocks new hits per crate in CI    |
 | Covered by an oxlint built-in or a plugin rule (`@shadcn/lint` for the design system) | `.oxlintrc.json` (the root, or a package's for its own rules)            | blocks                             |
 | Needs other files, types, or a reviewer's judgement (TypeScript)                      | a kind in `scripts/scan/scan-ts.mjs`                                     | `pnpm scan:ts` reports             |
 | Rust structure clippy can't see (free functions, shared shapes, chains)               | a `Kind` in `crates/shift-scan`                                          | `pnpm scan:rust` reports           |
@@ -38,6 +39,11 @@ Run the new check over the tree first (`pnpm lint:check`, `pnpm scan:ts --kind <
   a blanket disable. A disable comment on one line says why that line is the exception.
 
 `lint:check` runs with `--deny-warnings`, so a `"warn"` rule blocks as well as `"error"`.
+
+A clippy lint with many hits is ratcheted rather than enabled: add `"<lint>": {}` to
+`clippy-ratchet.json` and run `pnpm lint:rust-ratchet --update`, which records today's hits per
+crate. CI then fails when any count changes; each fix lowers the file, and at 0 the lint moves to
+`Cargo.toml`.
 
 ## 4. Write it like the existing ones
 
