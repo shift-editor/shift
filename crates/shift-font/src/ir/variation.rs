@@ -195,11 +195,11 @@ impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis {
 
     fn try_from((mapping, axes): (&AxisMapping, &[Axis])) -> CoreResult<Self> {
         mapping.validate(axes)?;
-        let input_axes = resolve_axes(mapping.inputs(), axes, mapping)?;
-        let output_axes = resolve_axes(mapping.outputs(), axes, mapping)?;
+        let input_axes = mapping.resolve_axes(mapping.inputs(), axes)?;
+        let output_axes = mapping.resolve_axes(mapping.outputs(), axes)?;
         let tagged_axes = input_axes
             .iter()
-            .map(|axis| Ok((mapping_tag(axis, mapping)?, axis.id())))
+            .map(|axis| Ok((mapping.axis_tag(axis)?, axis.id())))
             .collect::<CoreResult<Vec<_>>>()?;
         let axis_order = tagged_axes.iter().map(|(tag, _)| *tag).collect::<Vec<_>>();
         let axis_ids_by_tag = tagged_axes.into_iter().collect::<HashMap<_, _>>();
@@ -217,10 +217,9 @@ impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis {
                 .collect();
             if let Some(previous) = sample_values.get(&input) {
                 if previous != &deltas {
-                    return Err(invalid_mapping(
-                        mapping,
-                        "normalized mapping point inputs have conflicting outputs",
-                    ));
+                    return Err(
+                        mapping.invalid("normalized mapping point inputs have conflicting outputs")
+                    );
                 }
                 continue;
             }
@@ -241,7 +240,7 @@ impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis {
         );
         let deltas = model
             .deltas_with_rounding::<f64, f64>(&sample_values, RoundingBehaviour::None)
-            .map_err(|error| invalid_mapping(mapping, error.to_string()))?;
+            .map_err(|error| mapping.invalid(error.to_string()))?;
 
         Ok(Self {
             mapping_id: mapping.id(),
@@ -404,26 +403,27 @@ impl AxisMappingBasis {
     }
 }
 
-fn resolve_axes<'a>(
-    ids: &[AxisId],
-    axes: &'a [Axis],
-    mapping: &AxisMapping,
-) -> CoreResult<Vec<&'a Axis>> {
-    ids.iter()
-        .map(|axis_id| {
-            axes.axis(*axis_id)
-                .ok_or_else(|| invalid_mapping(mapping, format!("unknown axis {axis_id}")))
-        })
-        .collect()
-}
+impl AxisMapping {
+    /// The axes `ids` name, in order.
+    fn resolve_axes<'a>(&self, ids: &[AxisId], axes: &'a [Axis]) -> CoreResult<Vec<&'a Axis>> {
+        ids.iter()
+            .map(|axis_id| {
+                axes.axis(*axis_id)
+                    .ok_or_else(|| self.invalid(format!("unknown axis {axis_id}")))
+            })
+            .collect()
+    }
 
-fn mapping_tag(axis: &Axis, mapping: &AxisMapping) -> CoreResult<Tag> {
-    Tag::from_str(axis.tag()).map_err(|_| {
-        invalid_mapping(
-            mapping,
-            format!("axis {} has invalid tag {:?}", axis.id(), axis.tag()),
-        )
-    })
+    /// The OpenType tag of input `axis`.
+    fn axis_tag(&self, axis: &Axis) -> CoreResult<Tag> {
+        Tag::from_str(axis.tag()).map_err(|_| {
+            self.invalid(format!(
+                "axis {} has invalid tag {:?}",
+                axis.id(),
+                axis.tag()
+            ))
+        })
+    }
 }
 
 fn normalized_input(location: &Location, axes: &[&Axis], tags: &[Tag]) -> NormalizedLocation {
@@ -434,13 +434,6 @@ fn normalized_input(location: &Location, axes: &[&Axis], tags: &[Tag]) -> Normal
             (*tag, NormalizedCoord::new(axis.normalize(value)))
         })
         .collect()
-}
-
-fn invalid_mapping(mapping: &AxisMapping, message: impl Into<String>) -> CoreError {
-    CoreError::InvalidAxisMapping {
-        mapping_id: mapping.id(),
-        message: message.into(),
-    }
 }
 
 #[cfg(test)]

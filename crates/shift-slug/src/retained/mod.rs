@@ -336,7 +336,7 @@ pub fn compile_page(input: &PageInput, band_count: u32) -> Result<RetainedAtlasP
             compiler.add_exact_variant(
                 *root,
                 exact.source_index,
-                exact_outline(&outline),
+                outline.exact(),
                 outline.advance,
             )?;
         }
@@ -362,6 +362,45 @@ enum ProjectedSegment {
 struct ProjectedOutline {
     advance: f32,
     segments: Vec<ProjectedSegment>,
+}
+
+impl From<ProjectedPoint> for Point {
+    fn from(value: ProjectedPoint) -> Self {
+        Self::new(lossy_f32(value.x), lossy_f32(value.y))
+    }
+}
+
+impl ProjectedSegment {
+    /// Whether `other` is a line, quadratic or cubic as this segment is.
+    fn same_kind(&self, other: &Self) -> bool {
+        matches!(
+            (self, other),
+            (Self::Line(_), Self::Line(_))
+                | (Self::Quadratic(_), Self::Quadratic(_))
+                | (Self::Cubic(_), Self::Cubic(_))
+        )
+    }
+
+    /// How many quadratics a cubic segment splits into; one for the others.
+    fn cubic_subdivision_count(&self) -> usize {
+        let Self::Cubic(points) = self else {
+            return 1;
+        };
+        let converted = points.map(Point::from);
+        Curve::cubic_subdivision_count(converted[0], converted[1], converted[2], converted[3])
+    }
+}
+
+impl ProjectedOutline {
+    /// The outline as quadratics, each cubic split as finely as it needs alone.
+    fn exact(&self) -> QuadraticOutline {
+        let subdivisions = self
+            .segments
+            .iter()
+            .map(ProjectedSegment::cubic_subdivision_count)
+            .collect::<Vec<_>>();
+        segments_to_outline(&self.segments, &subdivisions)
+    }
 }
 
 struct CompatibleCurves {
@@ -437,7 +476,7 @@ fn compatible_curves(
                 .segments
                 .iter()
                 .zip(&base.segments)
-                .any(|(left, right)| !same_segment_kind(left, right))
+                .any(|(left, right)| !left.same_kind(right))
         {
             return Err(SlugError::VariableTopologyMismatch { glyph_index });
         }
@@ -446,7 +485,7 @@ fn compatible_curves(
         .map(|index| {
             std::iter::once(&base.segments[index])
                 .chain(sources.iter().map(|(_, source)| &source.segments[index]))
-                .map(cubic_subdivision_count)
+                .map(ProjectedSegment::cubic_subdivision_count)
                 .max()
                 .unwrap_or(1)
         })
@@ -467,67 +506,34 @@ fn compatible_curves(
     })
 }
 
-fn exact_outline(outline: &ProjectedOutline) -> QuadraticOutline {
-    let subdivisions = outline
-        .segments
-        .iter()
-        .map(cubic_subdivision_count)
-        .collect::<Vec<_>>();
-    segments_to_outline(&outline.segments, &subdivisions)
-}
-
 fn segments_to_outline(segments: &[ProjectedSegment], subdivisions: &[usize]) -> QuadraticOutline {
     let mut outline = QuadraticOutline::default();
     for (segment, subdivision_count) in segments.iter().zip(subdivisions) {
         match segment {
             ProjectedSegment::Line(points) => outline.push(
-                Curve::from_line(point(points[0]), point(points[1])),
+                Curve::from_line(Point::from(points[0]), Point::from(points[1])),
                 CurveShape::Line,
             ),
             ProjectedSegment::Quadratic(points) => outline.push(
                 Curve {
-                    p0: point(points[0]),
-                    p1: point(points[1]),
-                    p2: point(points[2]),
+                    p0: Point::from(points[0]),
+                    p1: Point::from(points[1]),
+                    p2: Point::from(points[2]),
                 },
                 CurveShape::Quadratic,
             ),
             ProjectedSegment::Cubic(points) => {
                 outline.extend_quadratics(Curve::from_cubic_with_subdivisions(
-                    point(points[0]),
-                    point(points[1]),
-                    point(points[2]),
-                    point(points[3]),
+                    Point::from(points[0]),
+                    Point::from(points[1]),
+                    Point::from(points[2]),
+                    Point::from(points[3]),
                     *subdivision_count,
                 ));
             }
         }
     }
     outline
-}
-
-fn same_segment_kind(left: &ProjectedSegment, right: &ProjectedSegment) -> bool {
-    matches!(
-        (left, right),
-        (ProjectedSegment::Line(_), ProjectedSegment::Line(_))
-            | (
-                ProjectedSegment::Quadratic(_),
-                ProjectedSegment::Quadratic(_)
-            )
-            | (ProjectedSegment::Cubic(_), ProjectedSegment::Cubic(_))
-    )
-}
-
-fn cubic_subdivision_count(segment: &ProjectedSegment) -> usize {
-    let ProjectedSegment::Cubic(points) = segment else {
-        return 1;
-    };
-    let converted = points.map(point);
-    Curve::cubic_subdivision_count(converted[0], converted[1], converted[2], converted[3])
-}
-
-fn point(value: ProjectedPoint) -> Point {
-    Point::new(lossy_f32(value.x), lossy_f32(value.y))
 }
 
 #[cfg(test)]

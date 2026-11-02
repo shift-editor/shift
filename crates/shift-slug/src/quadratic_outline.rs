@@ -1,6 +1,6 @@
 //! A glyph's outline as Slug quadratics, each paired with how it was authored.
 
-use crate::{Curve, SlugError};
+use crate::{Curve, Point, SlugError};
 
 /// How a Slug quadratic was authored.
 ///
@@ -25,6 +25,13 @@ pub struct QuadraticOutline {
 }
 
 impl QuadraticOutline {
+    /// Adds the line from `start` to `end`, unless the two meet.
+    pub(crate) fn push_line(&mut self, start: Point, end: Point) {
+        if start != end {
+            self.push(Curve::from_line(start, end), CurveShape::Line);
+        }
+    }
+
     /// Pairs `curves` with `shapes`, one shape per curve.
     ///
     /// # Errors

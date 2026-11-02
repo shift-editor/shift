@@ -396,11 +396,12 @@ pub(super) fn add_intermediate_sources(
         .iter()
         .map(|master| master.axes_values.clone())
         .collect::<Vec<_>>();
-    let locations = glyphs_font
+    let intermediate_layers = glyphs_font
         .glyphs
         .values()
         .flat_map(|glyph| &glyph.layers)
-        .filter(|layer| layer.is_intermediate())
+        .filter(|layer| layer.is_intermediate());
+    let locations = intermediate_layers
         .map(|layer| layer.attributes.coordinates.clone())
         .filter(|location| !master_locations.contains(location))
         .collect::<BTreeSet<_>>();

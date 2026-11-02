@@ -450,8 +450,8 @@ impl<'a> SpecimenFont<'a> {
         let start = record.data_offset().to_u32() as usize;
         let end = start + record.data_length() as usize;
         let bytes = meta.offset_data().as_bytes().get(start..end)?;
-        let declared: Vec<DeclaredScript> = std::str::from_utf8(bytes)
-            .ok()?
+        let tags = std::str::from_utf8(bytes).ok()?;
+        let declared: Vec<DeclaredScript> = tags
             .split(',')
             .map(str::trim)
             .filter(|tag| !tag.is_empty())
@@ -613,7 +613,7 @@ impl<'a> SpecimenFont<'a> {
         ViewBox {
             x: ink.min_x - padding,
             y: ink.min_y - (height - ink_height) / 2.0,
-            width: ink.max_x - ink.min_x + 2.0 * padding,
+            width: ink.width() + 2.0 * padding,
             height,
         }
     }
@@ -635,6 +635,11 @@ impl Bounds {
             max_x: x,
             max_y: y,
         }
+    }
+
+    /// Horizontal extent, in the bounds' units.
+    fn width(&self) -> f64 {
+        self.max_x - self.min_x
     }
 
     fn union(self, other: Self) -> Self {

@@ -7,9 +7,7 @@
 
 use kurbo::{BezPath, Shape};
 
-use crate::{
-    Contour, CoreResult, Font, Glyph, GlyphId, GlyphLayer, LayerDifference, PointType, Source,
-};
+use crate::{Contour, CoreResult, Font, Glyph, GlyphId, GlyphLayer, PointType, Source};
 
 use super::polygon::Polygon;
 use super::{Check, Finding, designspace::number};
@@ -85,7 +83,7 @@ pub(super) fn check(
                             glyph.name(),
                             source.name(),
                             reference_source.name(),
-                            describe(difference)
+                            difference
                         ),
                     )
                     .in_source(source.id()),
@@ -101,7 +99,7 @@ pub(super) fn check(
                         glyph.name(),
                         source.name(),
                         reference_source.name(),
-                        describe(difference)
+                        difference
                     ),
                 )
                 .in_source(source.id()),
@@ -162,42 +160,6 @@ fn decomposes_alike(font: &Font, glyph: &Glyph, a: &Source, b: &Source) -> bool 
     matches!((outline(a), outline(b)), (Some(a), Some(b)) if !a.is_empty() && a == b)
 }
 
-fn describe(difference: &LayerDifference) -> String {
-    match difference {
-        LayerDifference::ContourCount { reference, source } => {
-            format!("{source} contours instead of {reference}")
-        }
-        LayerDifference::ContourClosed {
-            contour, reference, ..
-        } => {
-            let state = if *reference { "open" } else { "closed" };
-            format!("contour {} is {state}", contour + 1)
-        }
-        LayerDifference::PointCount {
-            contour,
-            reference,
-            source,
-        } => format!(
-            "contour {} has {source} points instead of {reference}",
-            contour + 1
-        ),
-        LayerDifference::PointType { contour, point, .. } => format!(
-            "point {} of contour {} is a different kind of point",
-            point + 1,
-            contour + 1
-        ),
-        LayerDifference::AnchorCount { reference, source } => {
-            format!("{source} anchors instead of {reference}")
-        }
-        LayerDifference::AnchorSequence { .. } => {
-            "the anchors are named or ordered differently".into()
-        }
-        LayerDifference::ComponentSequence { .. } => {
-            "the components are different or in a different order".into()
-        }
-    }
-}
-
 /// One master's layer compared with the reference layer, after their
 /// structures matched.
 struct Pair<'a> {
@@ -243,7 +205,7 @@ impl Pair<'_> {
     /// The first problem with one contour pair that keeps its place: a
     /// reversed direction, a moved start point, or turning inside out.
     fn contour_finding(&self, index: usize, a: &Contour, b: &Contour) -> Option<Finding> {
-        let (area_a, area_b) = (signed_area(a), signed_area(b));
+        let (area_a, area_b) = (a.signed_area(), b.signed_area());
         let collapsed = area_a.abs().min(area_b.abs()) < area_a.abs().max(area_b.abs()) * 0.01;
         if collapsed {
             return None;
@@ -267,7 +229,7 @@ impl Pair<'_> {
                 ),
             ));
         }
-        let t = inside_out(a, b, area_a)?;
+        let t = a.turns_inside_out_toward(b, area_a)?;
         Some(self.finding(
             Check::ContourInsideOut,
             index,
@@ -305,7 +267,7 @@ impl Pair<'_> {
                 if swapped.contains(&i) || swapped.contains(&j) {
                     continue;
                 }
-                if !same_structure(reference[i], reference[j]) {
+                if !reference[i].same_structure(reference[j]) {
                     continue;
                 }
 
@@ -331,8 +293,8 @@ impl Pair<'_> {
         }
 
         let a_contour = a;
-        let a = normalized(a);
-        let b_points = normalized(b);
+        let a = a.normalized();
+        let b_points = b.normalized();
         let types = b
             .points()
             .iter()
@@ -361,20 +323,8 @@ impl Pair<'_> {
         // A better-matching start alone isn't a fault: masters far apart in
         // shape match loosely either way. Report it only when the authored
         // order breaks the shape halfway.
-        broken_between(a_contour, b).then_some(shift)
+        a_contour.breaks_halfway_to(b).then_some(shift)
     }
-}
-
-/// Whether the contour, interpolated halfway from `a` to `b` in its
-/// authored point order, crosses itself or keeps less than 60% of the
-/// smaller end's ink: the twisting and collapse a misaligned start causes.
-fn broken_between(a: &Contour, b: &Contour) -> bool {
-    let middle = BezPath::from(&blend(a, b, 0.5));
-    let ends = BezPath::from(a)
-        .area()
-        .abs()
-        .min(BezPath::from(b).area().abs());
-    middle.area().abs() < ends * 0.6 || crosses_itself(&middle)
 }
 
 /// Whether a closed path's flattened outline crosses itself.
@@ -383,58 +333,71 @@ fn crosses_itself(path: &BezPath) -> bool {
     (4..=4000).contains(&polygon.len()) && polygon.crosses_itself()
 }
 
-/// Returns the first sample position at which the contour's area has the
-/// opposite sign from both ends.
-fn inside_out(a: &Contour, b: &Contour, area_a: f64) -> Option<f64> {
-    SAMPLES.into_iter().find(|&t| {
-        let between = blend(a, b, t);
-        signed_area(&between) * area_a < 0.0
-    })
-}
-
-fn blend(a: &Contour, b: &Contour, t: f64) -> Contour {
-    let mut contour = a.clone();
-    for (point, other) in contour.points_mut().iter_mut().zip(b.points()) {
-        point.set_position(
-            point.x() + (other.x() - point.x()) * t,
-            point.y() + (other.y() - point.y()) * t,
-        );
+impl Contour {
+    /// Whether the contour, interpolated halfway from this one to `b` in its
+    /// authored point order, crosses itself or keeps less than 60% of the
+    /// smaller end's ink: the twisting and collapse a misaligned start causes.
+    fn breaks_halfway_to(&self, b: &Self) -> bool {
+        let middle = BezPath::from(&self.blend(b, 0.5));
+        let ends = self.signed_area().abs().min(b.signed_area().abs());
+        middle.area().abs() < ends * 0.6 || crosses_itself(&middle)
     }
-    contour
-}
 
-fn signed_area(contour: &Contour) -> f64 {
-    BezPath::from(contour).area()
-}
+    /// Returns the first sample position on the way to `b` at which the
+    /// contour's area has the opposite sign from this end's `area`.
+    fn turns_inside_out_toward(&self, b: &Self, area: f64) -> Option<f64> {
+        SAMPLES
+            .into_iter()
+            .find(|&t| self.blend(b, t).signed_area() * area < 0.0)
+    }
 
-fn same_structure(a: &Contour, b: &Contour) -> bool {
-    a.is_closed() == b.is_closed()
-        && a.points().len() == b.points().len()
-        && a.points()
+    /// This contour's points moved the fraction `t` of the way to `b`'s.
+    fn blend(&self, b: &Self, t: f64) -> Self {
+        let mut contour = self.clone();
+        for (point, other) in contour.points_mut().iter_mut().zip(b.points()) {
+            point.set_position(
+                point.x() + (other.x() - point.x()) * t,
+                point.y() + (other.y() - point.y()) * t,
+            );
+        }
+        contour
+    }
+
+    fn signed_area(&self) -> f64 {
+        BezPath::from(self).area()
+    }
+
+    /// Whether `b` has the same closure and point types in the same order.
+    fn same_structure(&self, b: &Self) -> bool {
+        self.is_closed() == b.is_closed()
+            && self.points().len() == b.points().len()
+            && self
+                .points()
+                .iter()
+                .zip(b.points())
+                .all(|(p, q)| p.point_type() == q.point_type())
+    }
+
+    /// Returns the contour's points centred on their mean and scaled to unit
+    /// spread, so masters of different weight and width compare by shape.
+    fn normalized(&self) -> Vec<(f64, f64, PointType)> {
+        let points = self.points();
+        let count = points.len() as f64;
+        let (cx, cy) = points.iter().fold((0.0, 0.0), |(x, y), p| {
+            (x + p.x() / count, y + p.y() / count)
+        });
+        let spread = (points
             .iter()
-            .zip(b.points())
-            .all(|(p, q)| p.point_type() == q.point_type())
-}
-
-/// Returns the contour's points centred on their mean and scaled to unit
-/// spread, so masters of different weight and width compare by shape.
-fn normalized(contour: &Contour) -> Vec<(f64, f64, PointType)> {
-    let points = contour.points();
-    let count = points.len() as f64;
-    let (cx, cy) = points.iter().fold((0.0, 0.0), |(x, y), p| {
-        (x + p.x() / count, y + p.y() / count)
-    });
-    let spread = (points
-        .iter()
-        .map(|p| (p.x() - cx).powi(2) + (p.y() - cy).powi(2))
-        .sum::<f64>()
-        / count)
-        .sqrt()
-        .max(1e-9);
-    points
-        .iter()
-        .map(|p| ((p.x() - cx) / spread, (p.y() - cy) / spread, p.point_type()))
-        .collect()
+            .map(|p| (p.x() - cx).powi(2) + (p.y() - cy).powi(2))
+            .sum::<f64>()
+            / count)
+            .sqrt()
+            .max(1e-9);
+        points
+            .iter()
+            .map(|p| ((p.x() - cx) / spread, (p.y() - cy) / spread, p.point_type()))
+            .collect()
+    }
 }
 
 /// Where a contour sits and how big it is, relative to its whole layer.
@@ -473,7 +436,7 @@ fn descriptors(contours: &[&Contour]) -> Vec<Descriptor> {
             Descriptor {
                 x: (x - left) / width,
                 y: (y - bottom) / height,
-                size: (signed_area(contour).abs() / (width * height)).sqrt(),
+                size: (contour.signed_area().abs() / (width * height)).sqrt(),
             }
         })
         .collect()

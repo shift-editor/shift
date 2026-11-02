@@ -53,7 +53,7 @@ pub struct Itemized {
 /// so a space between two directions takes the script of the text it reads
 /// with.
 pub fn itemize<G>(units: &[Unit<G>], base: Option<TextDirection>) -> Itemized {
-    let text: String = units.iter().map(bidi_character).collect();
+    let text: String = units.iter().map(Unit::bidi_character).collect();
     let base_level = base.map(|direction| match direction {
         TextDirection::LeftToRight => Level::ltr(),
         TextDirection::RightToLeft => Level::rtl(),
@@ -103,13 +103,6 @@ pub fn visual_order(levels: &[u8]) -> Vec<usize> {
     BidiInfo::reorder_visual(&levels)
 }
 
-fn bidi_character<G>(unit: &Unit<G>) -> char {
-    match unit {
-        Unit::Character(character) => *character,
-        Unit::Glyph(_) => OBJECT_REPLACEMENT,
-    }
-}
-
 /// A stretch of a paragraph's units in one script.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ScriptRun {
@@ -130,7 +123,7 @@ fn script_runs<G>(units: &[Unit<G>]) -> Vec<ScriptRun> {
     let mut current: Option<Script> = None;
 
     for (index, unit) in units.iter().enumerate() {
-        let Some(script) = specific_script(unit) else {
+        let Some(script) = unit.specific_script() else {
             continue;
         };
         match current {
@@ -156,15 +149,26 @@ fn script_runs<G>(units: &[Unit<G>]) -> Vec<ScriptRun> {
     runs
 }
 
-/// Returns the script a unit belongs to, or `None` when it takes the script
-/// of its neighbours.
-fn specific_script<G>(unit: &Unit<G>) -> Option<Script> {
-    match unit {
-        Unit::Character(character) => match character.script() {
-            Script::Common | Script::Inherited | Script::Unknown => None,
-            script => Some(script),
-        },
-        Unit::Glyph(_) => None,
+impl<G> Unit<G> {
+    /// The character bidi analysis reads for this unit: an inserted glyph
+    /// reads as U+FFFC, an object that is neutral to direction.
+    fn bidi_character(&self) -> char {
+        match self {
+            Self::Character(character) => *character,
+            Self::Glyph(_) => OBJECT_REPLACEMENT,
+        }
+    }
+
+    /// Returns the script this unit belongs to, or `None` when it takes the
+    /// script of its neighbours.
+    fn specific_script(&self) -> Option<Script> {
+        match self {
+            Self::Character(character) => match character.script() {
+                Script::Common | Script::Inherited | Script::Unknown => None,
+                script => Some(script),
+            },
+            Self::Glyph(_) => None,
+        }
     }
 }
 

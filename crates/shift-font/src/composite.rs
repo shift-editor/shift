@@ -32,6 +32,23 @@ pub struct ResolvedContour {
     pub closed: bool,
 }
 
+impl ResolvedContour {
+    /// `contour`'s points placed by `transform`, keeping each point's type and
+    /// smoothness.
+    fn transformed(contour: &Contour, transform: Transform) -> Self {
+        let points = contour
+            .points()
+            .iter()
+            .map(|point| point.copied_to(transform.transform_point(point.position())))
+            .collect();
+
+        Self {
+            points,
+            closed: contour.is_closed(),
+        }
+    }
+}
+
 /// Stable ancestry for one component occurrence.
 ///
 /// IDs are ordered outermost to innermost. An empty path identifies the root
@@ -100,6 +117,12 @@ impl ComponentGlyph {
     /// Returns the unique ancestry path for this component occurrence.
     pub fn component_path(&self) -> &ComponentPath {
         &self.component_path
+    }
+
+    /// The error for an occurrence whose component its parent layer no longer
+    /// holds as resolved.
+    fn invalid(&self) -> CoreError {
+        CoreError::InvalidComponentId(self.component_id().to_string())
     }
 }
 
@@ -174,7 +197,7 @@ impl GlyphComponents {
             } else {
                 *resolved_transforms
                     .get(component.parent_path())
-                    .ok_or_else(|| invalid_component(component))?
+                    .ok_or_else(|| component.invalid())?
             };
             let transform = parent_transform.compose(local_transform);
             resolved_transforms.insert(component.component_path().clone(), transform);
@@ -205,7 +228,7 @@ impl GlyphComponents {
                     occurrence
                         .layer
                         .contours_iter()
-                        .map(|contour| transform_contour_points(contour, occurrence.transform)),
+                        .map(|contour| ResolvedContour::transformed(contour, occurrence.transform)),
                 );
             }
         }
@@ -261,10 +284,6 @@ fn layer_for_component<'a>(
         })
 }
 
-fn invalid_component(component: &ComponentGlyph) -> CoreError {
-    CoreError::InvalidComponentId(component.component_id().to_string())
-}
-
 /// Returns the translation that aligns a new component with earlier siblings.
 ///
 /// A `_name` anchor on `component_layer` aligns with the most recently placed
@@ -281,19 +300,6 @@ pub fn anchor_aligned_offset(
         .map(|(transform, layer)| (*transform, layer.anchors()))
         .collect();
     crate::anchor_attachment::aligned_offset(&placed, component_layer.anchors())
-}
-
-fn transform_contour_points(contour: &Contour, transform: Transform) -> ResolvedContour {
-    let points = contour
-        .points()
-        .iter()
-        .map(|point| point.copied_to(transform.transform_point(point.position())))
-        .collect();
-
-    ResolvedContour {
-        points,
-        closed: contour.is_closed(),
-    }
 }
 
 fn append_components(
@@ -345,9 +351,9 @@ fn explicit_transform_for_component(
     let component = parent_layer
         .components_iter()
         .find(|component| component.id() == component_glyph.component_id())
-        .ok_or_else(|| invalid_component(component_glyph))?;
+        .ok_or_else(|| component_glyph.invalid())?;
     if component.base_glyph_id() != component_glyph.base_glyph_id() {
-        return Err(invalid_component(component_glyph));
+        return Err(component_glyph.invalid());
     }
 
     Ok(component.matrix())
@@ -423,7 +429,7 @@ pub(crate) fn resolved_layer_geometry_from_layers(
     let relationships = GlyphComponents::from_layers(root_glyph_id, &view)?;
     let mut outline = root_layer
         .contours_iter()
-        .map(|contour| transform_contour_points(contour, Transform::identity()))
+        .map(|contour| ResolvedContour::transformed(contour, Transform::identity()))
         .collect::<Vec<_>>();
     let mut components = Vec::<ResolvedComponentGeometry>::new();
 
@@ -438,11 +444,9 @@ pub(crate) fn resolved_layer_geometry_from_layers(
                 outline: Vec::new(),
             });
         }
-        let direct = components
-            .last_mut()
-            .ok_or_else(|| invalid_component(component))?;
+        let direct = components.last_mut().ok_or_else(|| component.invalid())?;
         for contour in occurrence.layer.contours_iter() {
-            let contour = transform_contour_points(contour, occurrence.transform);
+            let contour = ResolvedContour::transformed(contour, occurrence.transform);
             direct.outline.push(contour.clone());
             outline.push(contour);
         }
@@ -513,24 +517,11 @@ pub fn resolved_contours_from_layers(
     let layer = layer_for_glyph(&view, root_glyph_id)?;
     let mut contours = layer
         .contours_iter()
-        .map(|contour| transform_contour_points(contour, Transform::identity()))
+        .map(|contour| ResolvedContour::transformed(contour, Transform::identity()))
         .collect::<Vec<_>>();
     let components = GlyphComponents::from_layers(root_glyph_id, &view)?;
     contours.extend(components.contours(&view, None)?);
     Ok(contours)
-}
-
-/// Builds a single SVG path string from root contours and resolved component
-/// contours.
-pub fn layer_to_svg_path(layer: &GlyphLayer, component_contours: &[ResolvedContour]) -> String {
-    let own = layer
-        .contours_iter()
-        .map(|contour| contour_to_svg_d(contour.points(), contour.is_closed()));
-    let components = component_contours
-        .iter()
-        .map(|contour| contour_to_svg_d(&contour.points, contour.closed));
-    let parts: Vec<_> = own.chain(components).filter(|d| !d.is_empty()).collect();
-    parts.join(" ")
 }
 
 /// Builds one SVG path string from already resolved contours in font units.
@@ -564,51 +555,6 @@ fn accumulate_contour_bbox(
         *max_x = max_x.max(ex);
         *max_y = max_y.max(ey);
         *any = true;
-    }
-}
-
-/// Computes a tight axis-aligned bounding box across root and component
-/// contours.
-///
-/// Returns `(min_x, min_y, max_x, max_y)` or `None` if no segments exist.
-pub fn layer_bbox(
-    layer: &GlyphLayer,
-    component_contours: &[ResolvedContour],
-) -> Option<(f64, f64, f64, f64)> {
-    let mut min_x = f64::MAX;
-    let mut min_y = f64::MAX;
-    let mut max_x = f64::MIN;
-    let mut max_y = f64::MIN;
-    let mut any = false;
-
-    for contour in layer.contours_iter() {
-        accumulate_contour_bbox(
-            contour.points(),
-            contour.is_closed(),
-            &mut min_x,
-            &mut min_y,
-            &mut max_x,
-            &mut max_y,
-            &mut any,
-        );
-    }
-
-    for contour in component_contours {
-        accumulate_contour_bbox(
-            &contour.points,
-            contour.closed,
-            &mut min_x,
-            &mut min_y,
-            &mut max_x,
-            &mut max_y,
-            &mut any,
-        );
-    }
-
-    if any {
-        Some((min_x, min_y, max_x, max_y))
-    } else {
-        None
     }
 }
 

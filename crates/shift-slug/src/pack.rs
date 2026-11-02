@@ -24,6 +24,43 @@ pub struct Section {
     pub length: usize,
 }
 
+impl Section {
+    /// The section of `count` items of `stride` bytes each that starts at the
+    /// first `alignment` boundary after this one ends.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::LengthOverflow`] when an offset or length passes
+    /// `usize`.
+    pub(crate) fn next(
+        self,
+        count: usize,
+        stride: usize,
+        alignment: usize,
+    ) -> Result<Self, SlugError> {
+        self.next_with_length(byte_length(count, stride)?, alignment)
+    }
+
+    /// The section of `length` bytes that starts at the first `alignment`
+    /// boundary after this one ends.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SlugError::LengthOverflow`] when the offset passes `usize`.
+    pub(crate) fn next_with_length(
+        self,
+        length: usize,
+        alignment: usize,
+    ) -> Result<Self, SlugError> {
+        let end = self.offset.checked_add(self.length).or_overflow()?;
+
+        Ok(Self {
+            offset: align(end, alignment)?,
+            length,
+        })
+    }
+}
+
 /// Byte ranges for one contiguous GPU atlas upload.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Layout {
@@ -52,9 +89,9 @@ impl Layout {
             length: byte_length(atlas.curves().len(), CURVE_BYTES)?,
         };
         let index_length = index_byte_length(atlas.curve_indices().len(), index_encoding)?;
-        let curve_indices = next_section_with_length(curves, index_length, alignment)?;
-        let glyphs = next_section(curve_indices, atlas.glyphs().len(), GLYPH_BYTES, alignment)?;
-        let bands = next_section(glyphs, atlas.bands().len(), BAND_BYTES, alignment)?;
+        let curve_indices = curves.next_with_length(index_length, alignment)?;
+        let glyphs = curve_indices.next(atlas.glyphs().len(), GLYPH_BYTES, alignment)?;
+        let bands = glyphs.next(atlas.bands().len(), BAND_BYTES, alignment)?;
         let total_length = bands.offset.checked_add(bands.length).or_overflow()?;
 
         Ok(Self {
@@ -247,28 +284,6 @@ fn index_byte_length(count: usize, encoding: CurveIndexEncoding) -> Result<usize
             byte_length(words, PACKED_INDEX_WORD_BYTES)
         }
     }
-}
-
-fn next_section(
-    previous: Section,
-    count: usize,
-    stride: usize,
-    alignment: usize,
-) -> Result<Section, SlugError> {
-    next_section_with_length(previous, byte_length(count, stride)?, alignment)
-}
-
-fn next_section_with_length(
-    previous: Section,
-    length: usize,
-    alignment: usize,
-) -> Result<Section, SlugError> {
-    let previous_end = previous.offset.checked_add(previous.length).or_overflow()?;
-
-    Ok(Section {
-        offset: align(previous_end, alignment)?,
-        length,
-    })
 }
 
 fn align(value: usize, alignment: usize) -> Result<usize, SlugError> {

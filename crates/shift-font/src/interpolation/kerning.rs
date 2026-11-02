@@ -71,15 +71,7 @@ impl Font {
             return Ok(KerningBlend::only(self.default_source_id()));
         };
         let weights = basis.weights_at(location, self.axes())?;
-        Ok(KerningBlend {
-            sources: basis
-                .source_ids()
-                .iter()
-                .zip(weights)
-                .filter(|(_, weight)| *weight != 0.0)
-                .map(|(source_id, weight)| (*source_id, weight))
-                .collect(),
-        })
+        Ok(KerningBlend::weighted(basis.source_ids(), weights))
     }
 
     /// Returns the sources kerning reads while `source_id` is edited: the
@@ -145,6 +137,18 @@ pub struct KerningBlend {
 }
 
 impl KerningBlend {
+    /// The sources of `source_ids` whose paired weight is not zero.
+    fn weighted(source_ids: &[SourceId], weights: impl IntoIterator<Item = f64>) -> Self {
+        Self {
+            sources: source_ids
+                .iter()
+                .copied()
+                .zip(weights)
+                .filter(|(_, weight)| *weight != 0.0)
+                .collect(),
+        }
+    }
+
     fn only(source_id: Option<SourceId>) -> Self {
         Self {
             sources: source_id

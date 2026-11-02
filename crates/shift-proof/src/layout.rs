@@ -8,7 +8,7 @@
 use crate::label::{label_height, label_width};
 use crate::numeric::ceil_pixels;
 use crate::palette::Rgb;
-use crate::shape::ShapedRun;
+use crate::shape::{PlacedGlyph, ShapedRun};
 use crate::text::break_offsets;
 use crate::{ProofError, ProofFont, ProofMetrics, ShapingOptions, TextDirection};
 
@@ -55,6 +55,20 @@ impl Row {
     /// Right edge of a horizontal row's text, in pixels.
     fn right(&self) -> f32 {
         self.origin_x + self.run.advance * self.scale
+    }
+
+    /// Splits a row into consecutive glyphs that are all missing or all not.
+    pub(crate) fn fill_runs(&self) -> Vec<(&[PlacedGlyph], bool)> {
+        let glyphs = &self.run.glyphs;
+        let mut runs = Vec::new();
+        let mut start = 0;
+        for index in 1..=glyphs.len() {
+            if index == glyphs.len() || glyphs[index].missing != glyphs[start].missing {
+                runs.push((&glyphs[start..index], glyphs[start].missing));
+                start = index;
+            }
+        }
+        runs
     }
 }
 

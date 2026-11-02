@@ -50,7 +50,7 @@ pub fn render_svg(page: &Page) -> String {
     }
 
     for row in &page.rows {
-        for (glyphs, missing) in fill_runs(row) {
+        for (glyphs, missing) in row.fill_runs() {
             let (class, fill) = if missing {
                 ("missing", MISSING)
             } else {
@@ -62,20 +62,6 @@ pub fn render_svg(page: &Page) -> String {
 
     svg.push_str("</svg>\n");
     svg
-}
-
-/// Splits a row into consecutive glyphs that are all missing or all not.
-pub(crate) fn fill_runs(row: &Row) -> Vec<(&[PlacedGlyph], bool)> {
-    let glyphs = &row.run.glyphs;
-    let mut runs = Vec::new();
-    let mut start = 0;
-    for index in 1..=glyphs.len() {
-        if index == glyphs.len() || glyphs[index].missing != glyphs[start].missing {
-            runs.push((&glyphs[start..index], glyphs[start].missing));
-            start = index;
-        }
-    }
-    runs
 }
 
 fn write_path(svg: &mut String, row: &Row, glyphs: &[PlacedGlyph], class: &str, fill: Rgb) {

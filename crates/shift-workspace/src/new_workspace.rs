@@ -54,3 +54,13 @@ impl NewWorkspace {
         }
     }
 }
+
+/// An empty font with the workspace's family name and units per em.
+impl From<NewWorkspace> for shift_font::Font {
+    fn from(new_workspace: NewWorkspace) -> Self {
+        let mut font = Self::new();
+        font.metadata_mut().family_name = Some(new_workspace.family_name);
+        font.metrics_mut().units_per_em = new_workspace.units_per_em as f64;
+        font
+    }
+}

@@ -16,7 +16,7 @@ use crate::{
     errors::{FormatBackendError, FormatBackendResult},
     font_source::VariationAxisKind,
     formats::ufo::{UfoKerning, load_header, read_glyph_paths},
-    import::{GlifGlyph, GlifGlyphStream, GlifLayer},
+    import::{GlifDirectory, GlifGlyphStream},
     kerning_import::KerningImport,
 };
 
@@ -193,17 +193,17 @@ fn stream_designspace(
         &ids,
     );
 
-    let (glyph_ids, glyphs) = build_glyph_directory(&ids, &directories);
+    let stream = GlifGlyphStream::from_sources(&ids, &directories);
     let mut report = import_kerning(
         &mut header,
         &default_kerning,
         &directories,
-        &glyph_ids,
+        stream.glyph_ids(),
         &ids,
     );
     ids.identify(&mut header)?;
     report.losses.extend(instance_loss);
-    Ok((header, GlifGlyphStream::new(glyph_ids, glyphs), report))
+    Ok((header, stream, report))
 }
 
 fn stream_axisless_designspace(
@@ -305,16 +305,16 @@ fn stream_axisless_designspace(
         &ids,
     );
 
-    let (glyph_ids, glyphs) = build_glyph_directory(&ids, &directories);
+    let stream = GlifGlyphStream::from_sources(&ids, &directories);
     let report = import_kerning(
         &mut header,
         &default_kerning,
         &directories,
-        &glyph_ids,
+        stream.glyph_ids(),
         &ids,
     );
     ids.identify(&mut header)?;
-    Ok((header, GlifGlyphStream::new(glyph_ids, glyphs), report))
+    Ok((header, stream, report))
 }
 
 fn register_designspace_sources(
@@ -414,39 +414,20 @@ fn add_axes(
     Ok(())
 }
 
-fn build_glyph_directory(
-    source_ids: &SourceIds,
-    directories: &[SourceDirectory],
-) -> (HashMap<String, GlyphId>, Vec<GlifGlyph>) {
-    let names = directories
-        .iter()
-        .flat_map(|directory| directory.glyphs.keys().cloned())
-        .collect::<BTreeSet<_>>();
-    let glyph_ids = names
-        .iter()
-        .map(|name| (name.clone(), source_ids.glyph_id(name)))
-        .collect::<HashMap<_, _>>();
-    let glyphs = names
-        .into_iter()
-        .map(|name| {
-            let layers = directories
-                .iter()
-                .enumerate()
-                .filter_map(|(index, directory)| {
-                    let path = directory.glyphs.get(&name)?;
-                    Some(GlifLayer {
-                        source_id: directory.source_id,
-                        layer_id: source_ids.layer_id(&name, &index.to_string()),
-                        path: path.clone(),
-                    })
-                })
-                .collect();
-            GlifGlyph {
-                id: glyph_ids[&name],
-                name,
-                layers,
-            }
-        })
-        .collect();
-    (glyph_ids, glyphs)
+impl GlifGlyphStream {
+    /// The glyphs of every source directory, in name order.
+    fn from_sources(source_ids: &SourceIds, directories: &[SourceDirectory]) -> Self {
+        let names = directories
+            .iter()
+            .flat_map(|directory| directory.glyphs.keys().cloned())
+            .collect::<BTreeSet<_>>();
+        let directories = directories
+            .iter()
+            .map(|directory| GlifDirectory {
+                source_id: directory.source_id,
+                glyphs: &directory.glyphs,
+            })
+            .collect::<Vec<_>>();
+        Self::from_directories(source_ids, names.into_iter().collect(), &directories)
+    }
 }

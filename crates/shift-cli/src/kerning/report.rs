@@ -1,5 +1,6 @@
 //! Stable kerning reports and their plain-text rendering.
 
+use crate::Report;
 use std::path::PathBuf;
 
 use serde::Serialize;
@@ -111,8 +112,8 @@ pub(crate) struct PairRow {
     pub values: Vec<Option<f64>>,
 }
 
-impl KerningListReport {
-    pub(crate) fn render(&self) -> String {
+impl Report for KerningListReport {
+    fn render(&self) -> String {
         let mut lines = vec![self.document.display().to_string(), String::new()];
         if self.pairs.is_empty() {
             lines.push("No kerning pairs.".to_string());
@@ -179,8 +180,8 @@ impl GroupReport {
     }
 }
 
-impl KerningGroupsReport {
-    pub(crate) fn render(&self) -> String {
+impl Report for KerningGroupsReport {
+    fn render(&self) -> String {
         let mut lines = vec![self.document.display().to_string(), String::new()];
         if self.groups.is_empty() {
             lines.push("No kerning groups.".to_string());
@@ -263,8 +264,8 @@ pub(crate) struct AxisValue {
     pub value: f64,
 }
 
-impl KerningResolutionReport {
-    pub(crate) fn render(&self) -> String {
+impl Report for KerningResolutionReport {
+    fn render(&self) -> String {
         let side = |sides: &GlyphSides| match &sides.group {
             Some(group) => format!("{} ({})", sides.glyph.label(), group.label()),
             None => sides.glyph.label().to_string(),

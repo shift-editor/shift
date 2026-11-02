@@ -429,7 +429,7 @@ impl VariableAtlas {
         }
         let glyph = self.glyph(glyph_index)?;
         if glyph.component_index().is_some() {
-            return component::resolve_component_glyph(self, glyph, weights);
+            return self.resolve_component_glyph(glyph, weights);
         }
         let curve_range = glyph.curve_range()?;
         let curve_start = curve_range.start;
@@ -536,57 +536,35 @@ impl VariableAtlas {
             offset: 0,
             length: byte_length(self.base_curves.len(), CURVE_BYTES)?,
         };
-        let curve_deltas =
-            next_section(base_curves, self.curve_deltas.len(), CURVE_BYTES, alignment)?;
-        let sparse_deltas = next_section(
-            curve_deltas,
-            self.sparse_deltas.len(),
-            size_of::<u32>(),
-            alignment,
-        )?;
-        let glyphs = next_section(
-            sparse_deltas,
-            self.glyphs.len(),
-            VARIABLE_GLYPH_BYTES,
-            alignment,
-        )?;
-        let sources = next_section(glyphs, self.sources.len(), VARIABLE_SOURCE_BYTES, alignment)?;
-        let source_advances = next_section(
-            sources,
-            self.source_advances.len(),
-            size_of::<f32>(),
-            alignment,
-        )?;
-        let component_glyphs = next_section(
-            source_advances,
+        let curve_deltas = base_curves.next(self.curve_deltas.len(), CURVE_BYTES, alignment)?;
+        let sparse_deltas =
+            curve_deltas.next(self.sparse_deltas.len(), size_of::<u32>(), alignment)?;
+        let glyphs = sparse_deltas.next(self.glyphs.len(), VARIABLE_GLYPH_BYTES, alignment)?;
+        let sources = glyphs.next(self.sources.len(), VARIABLE_SOURCE_BYTES, alignment)?;
+        let source_advances =
+            sources.next(self.source_advances.len(), size_of::<f32>(), alignment)?;
+        let component_glyphs = source_advances.next(
             self.component_glyphs.len(),
             VARIABLE_COMPONENT_GLYPH_BYTES,
             alignment,
         )?;
-        let component_parts = next_section(
-            component_glyphs,
+        let component_parts = component_glyphs.next(
             self.component_parts.len(),
             component::VARIABLE_COMPONENT_PART_BYTES,
             alignment,
         )?;
-        let components = next_section(
-            component_parts,
+        let components = component_parts.next(
             self.components.len(),
             component::VARIABLE_COMPONENT_BYTES,
             alignment,
         )?;
-        let component_sources = next_section(
-            components,
+        let component_sources = components.next(
             self.component_sources.len(),
             component::VARIABLE_COMPONENT_SOURCE_BYTES,
             alignment,
         )?;
-        let line_bits = next_section(
-            component_sources,
-            self.line_bits.len(),
-            size_of::<u32>(),
-            alignment,
-        )?;
+        let line_bits =
+            component_sources.next(self.line_bits.len(), size_of::<u32>(), alignment)?;
         let total_length = line_bits
             .offset
             .checked_add(line_bits.length)
@@ -683,13 +661,13 @@ impl VariableAtlas {
             writer.write(&advance.to_le_bytes());
         }
         writer.pad_to(layout.component_glyphs.offset)?;
-        component::write_component_glyphs(&mut writer, &self.component_glyphs);
+        writer.write_component_glyphs(&self.component_glyphs);
         writer.pad_to(layout.component_parts.offset)?;
-        component::write_component_parts(&mut writer, &self.component_parts);
+        writer.write_component_parts(&self.component_parts);
         writer.pad_to(layout.components.offset)?;
-        component::write_components(&mut writer, &self.components);
+        writer.write_components(&self.components);
         writer.pad_to(layout.component_sources.offset)?;
-        component::write_component_sources(&mut writer, &self.component_sources);
+        writer.write_component_sources(&self.component_sources);
         writer.pad_to(layout.line_bits.offset)?;
         for word in &self.line_bits {
             writer.write(&word.to_le_bytes());
@@ -1158,7 +1136,7 @@ pub(crate) fn pack_component_glyphs(values: &[VariableComponentGlyph]) -> Vec<u8
     let mut writer = PackedChunkWriter::new(DEFAULT_PACK_CHUNK_BYTES, |chunk| {
         bytes.extend_from_slice(chunk.bytes);
     });
-    component::write_component_glyphs(&mut writer, values);
+    writer.write_component_glyphs(values);
     writer.finish();
     bytes
 }
@@ -1258,24 +1236,6 @@ fn command_topology(commands: &[OutlineCommand<f32>]) -> Vec<CommandKind> {
             OutlineCommand::Close => CommandKind::Close,
         })
         .collect()
-}
-
-fn next_section(
-    previous: Section,
-    count: usize,
-    stride: usize,
-    alignment: usize,
-) -> Result<Section, SlugError> {
-    let previous_end = previous.offset.checked_add(previous.length).or_overflow()?;
-    let offset = previous_end
-        .checked_add(alignment - 1)
-        .map(|value| value & !(alignment - 1))
-        .or_overflow()?;
-
-    Ok(Section {
-        offset,
-        length: byte_length(count, stride)?,
-    })
 }
 
 fn byte_length(count: usize, stride: usize) -> Result<usize, SlugError> {

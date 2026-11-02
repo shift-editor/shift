@@ -14,6 +14,23 @@ struct Names {
     names: Vec<String>,
 }
 
+impl Names {
+    /// Returns the id of `name`, adding it the first time.
+    fn intern(&mut self, name: &str) -> u32 {
+        if let Some(&id) = self.ids.get(name) {
+            return id;
+        }
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "usize is 32 bits on wasm32, the only target that interns names"
+        )]
+        let id = self.names.len() as u32;
+        self.names.push(name.to_string());
+        self.ids.insert(name.to_string(), id);
+        id
+    }
+}
+
 thread_local! {
     static NAMES: RefCell<Names> = RefCell::new(Names::default());
 }
@@ -21,27 +38,13 @@ thread_local! {
 /// Returns the id of a name, interning it the first time.
 #[wasm_bindgen(js_name = internName)]
 pub fn intern_name(name: &str) -> u32 {
-    NAMES.with_borrow_mut(|table| intern(table, name))
+    NAMES.with_borrow_mut(|table| table.intern(name))
 }
 
 /// Returns the name an id stands for; empty for an unknown id.
 #[wasm_bindgen(js_name = nameOf)]
 pub fn name_of(id: u32) -> String {
     NAMES.with_borrow(|table| table.names.get(id as usize).cloned().unwrap_or_default())
-}
-
-fn intern(table: &mut Names, name: &str) -> u32 {
-    if let Some(&id) = table.ids.get(name) {
-        return id;
-    }
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "usize is 32 bits on wasm32, the only target that interns names"
-    )]
-    let id = table.names.len() as u32;
-    table.names.push(name.to_string());
-    table.ids.insert(name.to_string(), id);
-    id
 }
 
 /// Runs `call` with lookups between names and ids.
@@ -55,6 +58,6 @@ impl pack::Names for Names {
     }
 
     fn id(&mut self, name: &str) -> u32 {
-        intern(self, name)
+        self.intern(name)
     }
 }

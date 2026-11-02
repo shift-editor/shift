@@ -29,14 +29,14 @@ use miette::IntoDiagnostic;
 use serde::Serialize;
 use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter};
 use shift_store::ShiftStore;
-use skill::{SkillReport, install_skill, show_skill, skill_status};
+use skill::{install_skill, show_skill, skill_status};
 
 fn main() -> miette::Result<()> {
     match Cli::parse().command {
         Command::Inspect(args) => inspect(&args),
         Command::Check(args) => {
             let report = check::check(&args)?;
-            write_report(&report, args.json, check::CheckReport::render)?;
+            write_report(&report, args.json)?;
             if report.has_errors() {
                 std::process::exit(1);
             }
@@ -48,7 +48,7 @@ fn main() -> miette::Result<()> {
         }
         Command::Proof(args) => {
             let summary = proof::proof(&args)?;
-            write_report(&summary, args.json, proof::ProofSummary::render)
+            write_report(&summary, args.json)
         }
         Command::Font { command } => match command {
             FontCommand::Create(args) => {
@@ -57,13 +57,7 @@ fn main() -> miette::Result<()> {
             }
             FontCommand::Info(args) => {
                 let json = args.json;
-                let report = font_info(args)?;
-                let output = if json {
-                    serde_json::to_string_pretty(&report).into_diagnostic()?
-                } else {
-                    report.render()
-                };
-                write_stdout(&output)
+                write_report(&font_info(args)?, json)
             }
             FontCommand::Set(args) => {
                 let json = args.mutation.json;
@@ -129,29 +123,25 @@ fn main() -> miette::Result<()> {
         Command::Kerning { command } => kerning_command(command),
         Command::Skill { command } => match command {
             SkillCommand::Show(args) => write_stdout(show_skill(&args)?.trim_end()),
-            SkillCommand::Install(args) => write_skill_report(&install_skill(&args)?, args.json),
-            SkillCommand::Status(args) => write_skill_report(&skill_status(&args)?, args.json),
+            SkillCommand::Install(args) => write_report(&install_skill(&args)?, args.json),
+            SkillCommand::Status(args) => write_report(&skill_status(&args)?, args.json),
         },
     }
 }
 
-#[allow(
-    clippy::redundant_closure_for_method_calls,
-    reason = "each report type is private to its module"
-)]
 fn kerning_command(command: KerningCommand) -> miette::Result<()> {
     match command {
         KerningCommand::List(args) => {
             let json = args.json;
-            write_report(&list_kerning(args)?, json, |report| report.render())
+            write_report(&list_kerning(args)?, json)
         }
         KerningCommand::Groups(args) => {
             let json = args.json;
-            write_report(&kerning_groups(args)?, json, |report| report.render())
+            write_report(&kerning_groups(args)?, json)
         }
         KerningCommand::Get(args) => {
             let json = args.json;
-            write_report(&get_kerning(args)?, json, |report| report.render())
+            write_report(&get_kerning(args)?, json)
         }
         KerningCommand::Set(args) => {
             let json = args.mutation.json;
@@ -186,15 +176,17 @@ fn kerning_command(command: KerningCommand) -> miette::Result<()> {
     }
 }
 
-fn write_report<T: Serialize>(
-    report: &T,
-    json: bool,
-    render: impl FnOnce(&T) -> String,
-) -> miette::Result<()> {
+/// A command's result, printed as text or, with `--json`, as JSON.
+trait Report: Serialize {
+    /// The report as text for a terminal.
+    fn render(&self) -> String;
+}
+
+fn write_report(report: &impl Report, json: bool) -> miette::Result<()> {
     let output = if json {
         serde_json::to_string_pretty(report).into_diagnostic()?
     } else {
-        render(report)
+        report.render()
     };
     write_stdout(&output)
 }
@@ -204,7 +196,7 @@ fn write_authoring_result(
     json: bool,
 ) -> miette::Result<()> {
     match result {
-        Ok(report) => write_authoring_report(&report, json),
+        Ok(report) => write_report(&report, json),
         Err(error) if json => {
             let mut messages = vec![error.to_string()];
             let error_ref: &(dyn std::error::Error + Send + Sync + 'static) = error.as_ref();
@@ -226,15 +218,6 @@ fn write_authoring_result(
         }
         Err(error) => Err(error),
     }
-}
-
-fn write_authoring_report(report: &AuthoringReport, json: bool) -> miette::Result<()> {
-    let output = if json {
-        serde_json::to_string_pretty(&report).into_diagnostic()?
-    } else {
-        report.render()
-    };
-    write_stdout(&output)
 }
 
 fn compile(args: CompileArgs) -> miette::Result<FontExportResult> {
@@ -299,15 +282,6 @@ fn render_mode() -> RenderMode {
     } else {
         RenderMode::Plain
     }
-}
-
-fn write_skill_report(report: &SkillReport, json: bool) -> miette::Result<()> {
-    let output = if json {
-        serde_json::to_string_pretty(report).into_diagnostic()?
-    } else {
-        report.render()
-    };
-    write_stdout(&output)
 }
 
 fn write_stdout(output: &str) -> miette::Result<()> {

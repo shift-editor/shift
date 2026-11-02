@@ -465,7 +465,7 @@ impl Font {
                     .get(&axis.id())
                     .unwrap_or_else(|| previous.default());
                 let is_default = self.default_source_id().as_ref() == Some(&source.id());
-                validate_source_axis(&axis, source, value, is_default)?;
+                axis.validate_master_value(source, value, is_default)?;
                 if source.location().get(&axis.id()).is_none()
                     && previous.default() != axis.default()
                 {
@@ -850,12 +850,7 @@ impl Font {
     /// names, invalid axis references, non-finite values, or incomplete master
     /// metric values.
     pub fn replace_source(&mut self, source: Source) -> CoreResult<Source> {
-        validate_source(
-            &source,
-            self.sources(),
-            self.axes(),
-            self.metric_definitions(),
-        )?;
+        source.validate(self.sources(), self.axes(), self.metric_definitions())?;
         let index = self
             .sources()
             .iter()
@@ -1647,138 +1642,6 @@ fn validate_metric_definitions(definitions: &[MetricDefinition]) -> CoreResult<(
     Ok(())
 }
 
-fn validate_source(
-    source: &Source,
-    sources: &[Source],
-    axes: &[Axis],
-    definitions: &[MetricDefinition],
-) -> CoreResult<()> {
-    let name = source.name().trim();
-    if name.is_empty() {
-        return Err(CoreError::InvalidSourceName(name.to_string()));
-    }
-    if sources
-        .iter()
-        .any(|current| current.id() != source.id() && current.name() == name)
-    {
-        return Err(CoreError::DuplicateSourceName(name.to_string()));
-    }
-    if let Some(existing) = sources.iter().find(|current| {
-        current.id() != source.id()
-            && current.is_master()
-            && source.is_master()
-            && current.location().is_equivalent_to(source.location(), axes)
-    }) {
-        return Err(CoreError::DuplicateSourceLocation {
-            first: existing.id(),
-            second: source.id(),
-        });
-    }
-
-    validate_source_values(source, axes, definitions)
-}
-
-fn validate_source_values(
-    source: &Source,
-    axes: &[Axis],
-    definitions: &[MetricDefinition],
-) -> CoreResult<()> {
-    for (axis_id, value) in source.location() {
-        if !axes.contains_axis(*axis_id) {
-            return Err(CoreError::AxisNotFound(*axis_id));
-        }
-        if !value.is_finite() {
-            return Err(CoreError::InvalidSourceName(format!(
-                "{} has a non-finite location",
-                source.name()
-            )));
-        }
-    }
-    if source.is_master() {
-        for definition in definitions {
-            let metric_id = definition.id();
-            let Some(value) = source.metric_value(metric_id) else {
-                return Err(CoreError::InvalidSourceMetric {
-                    source_id: source.id(),
-                    metric_id,
-                    message: "master source is missing a value".to_string(),
-                });
-            };
-            if !value.position.is_finite() || !value.overshoot.is_finite() {
-                return Err(CoreError::InvalidSourceMetric {
-                    source_id: source.id(),
-                    metric_id,
-                    message: "position and overshoot must be finite".to_string(),
-                });
-            }
-            if definition.kind() == MetricKind::Baseline && value.position != 0.0 {
-                return Err(CoreError::InvalidSourceMetric {
-                    source_id: source.id(),
-                    metric_id,
-                    message: "baseline position must be zero".to_string(),
-                });
-            }
-        }
-    }
-    for metric_id in source.metric_values().keys() {
-        if !definitions
-            .iter()
-            .any(|definition| definition.id() == *metric_id)
-        {
-            return Err(CoreError::InvalidSourceMetric {
-                source_id: source.id(),
-                metric_id: *metric_id,
-                message: "metric definition does not exist".to_string(),
-            });
-        }
-    }
-    for value in [
-        source.italic_angle(),
-        source.line_gap(),
-        source.underline_position(),
-        source.underline_thickness(),
-    ]
-    .into_iter()
-    .flatten()
-    {
-        if !value.is_finite() {
-            return Err(CoreError::InvalidSourceName(format!(
-                "{} has a non-finite source metric",
-                source.name()
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn validate_source_axis(
-    axis: &Axis,
-    source: &Source,
-    value: f64,
-    is_default: bool,
-) -> CoreResult<()> {
-    if !axis.accepts(value) {
-        return Err(CoreError::InvalidAxis {
-            axis_id: axis.id(),
-            message: format!(
-                "master {} ({}) value {value} is outside the replacement axis",
-                source.name(),
-                source.id()
-            ),
-        });
-    }
-    if is_default && value != axis.default() {
-        return Err(CoreError::InvalidAxis {
-            axis_id: axis.id(),
-            message: format!(
-                "default master {} must remain at the axis origin; explicit relocation is required",
-                source.name()
-            ),
-        });
-    }
-    Ok(())
-}
-
 fn validate_axis_mappings(axes: &[Axis], mappings: &[AxisMapping]) -> CoreResult<()> {
     let mut mapping_ids = HashSet::new();
     let mut mapping_names = HashSet::new();
@@ -1800,12 +1663,9 @@ fn validate_axis_mappings(axes: &[Axis], mappings: &[AxisMapping]) -> CoreResult
         if mapping.is_independent() {
             for output in mapping.outputs() {
                 if let Some(owner) = independent_outputs.insert(*output, mapping.id()) {
-                    return Err(CoreError::InvalidAxisMapping {
-                        mapping_id: mapping.id(),
-                        message: format!(
-                            "output axis {output} is already controlled by mapping {owner}"
-                        ),
-                    });
+                    return Err(mapping.invalid(format!(
+                        "output axis {output} is already controlled by mapping {owner}"
+                    )));
                 }
             }
 
@@ -1813,12 +1673,9 @@ fn validate_axis_mappings(axes: &[Axis], mappings: &[AxisMapping]) -> CoreResult
         }
 
         if let Some(owner) = cross_axis_mapping.replace(mapping.id()) {
-            return Err(CoreError::InvalidAxisMapping {
-                mapping_id: mapping.id(),
-                message: format!(
-                    "only one cross-axis mapping group is supported; mapping {owner} already defines it"
-                ),
-            });
+            return Err(mapping.invalid(format!(
+                "only one cross-axis mapping group is supported; mapping {owner} already defines it"
+            )));
         }
     }
 

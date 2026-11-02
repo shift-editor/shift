@@ -3,6 +3,7 @@
 //!
 //! Runs the same checks the editor runs live, over a whole source.
 
+use crate::Report;
 use std::path::{Path, PathBuf};
 
 use miette::{IntoDiagnostic, Result, WrapErr, miette};
@@ -43,8 +44,10 @@ impl CheckReport {
             .iter()
             .any(|finding| finding.severity == Severity::Error)
     }
+}
 
-    pub(crate) fn render(&self) -> String {
+impl Report for CheckReport {
+    fn render(&self) -> String {
         let mut lines = Vec::new();
         for finding in &self.findings {
             let severity = match finding.severity {

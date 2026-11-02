@@ -1,5 +1,6 @@
 //! The report `shift proof` prints after writing an image.
 
+use crate::Report;
 use serde::Serialize;
 use shift_proof::{ImageFormat, ProofMode, ProofReport};
 
@@ -12,8 +13,49 @@ pub(crate) struct ProofSummary {
 }
 
 impl ProofSummary {
+    fn shaping(&self) -> Vec<String> {
+        let report = &self.report;
+        let mut shaping: Vec<String> = report.features.iter().map(ToString::to_string).collect();
+        if let Some(script) = &report.script {
+            shaping.push(format!("script {script}"));
+        }
+        if let Some(language) = &report.language {
+            shaping.push(format!("language {language}"));
+        }
+        if let Some(direction) = report.direction {
+            shaping.push(format!("direction {direction}"));
+        }
+        shaping
+    }
+
+    fn missing_line(&self) -> String {
+        let report = &self.report;
+        if report.missing_characters.is_empty() {
+            return "missing  none".to_string();
+        }
+
+        let missing: Vec<String> = report
+            .missing_characters
+            .iter()
+            .map(|missing| {
+                let character = match missing.character.as_str() {
+                    " " => "space",
+                    other => other,
+                };
+                format!("{character} {}", missing.unicode)
+            })
+            .collect();
+        format!(
+            "missing  {} characters (drawn red): {}",
+            report.missing_characters.len(),
+            missing.join(", ")
+        )
+    }
+}
+
+impl Report for ProofSummary {
     /// Formats the report as short plain-text lines for terminals.
-    pub(crate) fn render(&self) -> String {
+    fn render(&self) -> String {
         let report = &self.report;
         let format = match report.format {
             ImageFormat::Png => "png",
@@ -68,44 +110,5 @@ impl ProofSummary {
             ));
         }
         lines.join("\n")
-    }
-
-    fn shaping(&self) -> Vec<String> {
-        let report = &self.report;
-        let mut shaping: Vec<String> = report.features.iter().map(ToString::to_string).collect();
-        if let Some(script) = &report.script {
-            shaping.push(format!("script {script}"));
-        }
-        if let Some(language) = &report.language {
-            shaping.push(format!("language {language}"));
-        }
-        if let Some(direction) = report.direction {
-            shaping.push(format!("direction {direction}"));
-        }
-        shaping
-    }
-
-    fn missing_line(&self) -> String {
-        let report = &self.report;
-        if report.missing_characters.is_empty() {
-            return "missing  none".to_string();
-        }
-
-        let missing: Vec<String> = report
-            .missing_characters
-            .iter()
-            .map(|missing| {
-                let character = match missing.character.as_str() {
-                    " " => "space",
-                    other => other,
-                };
-                format!("{character} {}", missing.unicode)
-            })
-            .collect();
-        format!(
-            "missing  {} characters (drawn red): {}",
-            report.missing_characters.len(),
-            missing.join(", ")
-        )
     }
 }

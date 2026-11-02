@@ -115,7 +115,7 @@ impl FontProjection<'_> {
             let transform = component.matrix();
             parts.extend(base.iter().map(|part| {
                 part.iter()
-                    .map(|contour| placed(contour, transform, placement))
+                    .map(|contour| contour.placed(transform, placement))
                     .collect()
             }));
         }
@@ -401,26 +401,22 @@ pub(super) enum Placement {
     Decomposed,
 }
 
-fn placed(
-    contour: &ResolvedContour,
-    transform: Transform,
-    placement: Placement,
-) -> ResolvedContour {
-    let shape = ContourShape {
-        point_count: contour.points.len(),
-        closed: contour.closed,
-    };
-    let reversing = placement == Placement::Decomposed && transform.mirrors();
-    let points = (0..shape.point_count)
-        .filter_map(|index| {
-            contour
-                .points
-                .get(placed_point_index(index, shape, reversing))
-        })
-        .map(|point| point.copied_to(transform.transform_point(point.position())))
-        .collect();
-    ResolvedContour {
-        points,
-        closed: contour.closed,
+impl ResolvedContour {
+    /// This contour placed by `transform`, reversed where `placement` says a
+    /// compiler would reverse it.
+    fn placed(&self, transform: Transform, placement: Placement) -> Self {
+        let shape = ContourShape {
+            point_count: self.points.len(),
+            closed: self.closed,
+        };
+        let reversing = placement == Placement::Decomposed && transform.mirrors();
+        let points = (0..shape.point_count)
+            .filter_map(|index| self.points.get(placed_point_index(index, shape, reversing)))
+            .map(|point| point.copied_to(transform.transform_point(point.position())))
+            .collect();
+        Self {
+            points,
+            closed: self.closed,
+        }
     }
 }

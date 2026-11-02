@@ -92,25 +92,24 @@ fn instance_list_file(path: &Path) -> std::path::PathBuf {
 }
 
 fn declared_family(instance: &Plist) -> Option<String> {
-    let from_properties = instance
-        .get("properties")
-        .and_then(Plist::as_array)
-        .into_iter()
-        .flatten()
-        .find(|property| property.get("key").and_then(Plist::as_str) == Some("familyNames"))
+    let from_properties = named_entry(instance, "properties", "key", "familyNames")
         .and_then(|property| property.get("values")?.as_array())
         .and_then(default_language_value);
     let from_parameter = || {
-        instance
-            .get("customParameters")
-            .and_then(Plist::as_array)
-            .into_iter()
-            .flatten()
-            .find(|parameter| parameter.get("name").and_then(Plist::as_str) == Some("familyName"))
+        named_entry(instance, "customParameters", "name", "familyName")
             .and_then(|parameter| parameter.get("value")?.as_str())
             .map(str::to_string)
     };
     from_properties.or_else(from_parameter)
+}
+
+/// The first dictionary in `instance`'s `list` array whose `field` is `name`.
+fn named_entry<'a>(instance: &'a Plist, list: &str, field: &str, name: &str) -> Option<&'a Plist> {
+    instance
+        .get(list)?
+        .as_array()?
+        .iter()
+        .find(|entry| entry.get(field).and_then(Plist::as_str) == Some(name))
 }
 
 /// Picks the `dflt` value of a localized name, or the first one.

@@ -245,7 +245,7 @@ impl Font {
             if !source_ids.insert(source.id()) {
                 return Err(CoreError::DuplicateSourceId(source.id()));
             }
-            validate_source_values(source, self.axes(), self.metric_definitions())?;
+            source.validate_values(self.axes(), self.metric_definitions())?;
         }
 
         match self.default_source_id() {

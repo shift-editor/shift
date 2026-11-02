@@ -77,6 +77,37 @@ pub struct ProofRequest {
     pub format: ImageFormat,
 }
 
+impl ProofRequest {
+    /// The sizes to set, in pixels per em: those requested, or the mode's
+    /// default when none are.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProofError::SizeOutOfRange`] for a size that isn't positive,
+    /// finite and at most [`MAX_SIZE`], and [`ProofError::MultipleGridSizes`]
+    /// for a grid at more than one size.
+    fn checked_sizes(&self) -> Result<Vec<f32>, ProofError> {
+        let sizes = match (self.sizes.is_empty(), self.mode) {
+            (true, ProofMode::Text) => vec![DEFAULT_TEXT_SIZE],
+            (true, ProofMode::Grid) => vec![DEFAULT_GRID_SIZE],
+            (false, _) => self.sizes.clone(),
+        };
+        let out_of_range = sizes
+            .iter()
+            .find(|size| !size.is_finite() || **size <= 0.0 || **size > MAX_SIZE);
+        if let Some(size) = out_of_range {
+            return Err(ProofError::SizeOutOfRange {
+                size: *size,
+                max: MAX_SIZE,
+            });
+        }
+        if self.mode == ProofMode::Grid && sizes.len() > 1 {
+            return Err(ProofError::MultipleGridSizes);
+        }
+        Ok(sizes)
+    }
+}
+
 /// An encoded proof image and the report describing it.
 pub struct Proof {
     /// PNG or SVG bytes, per [`ProofRequest::format`].
@@ -98,7 +129,7 @@ pub struct Proof {
 /// invalid, a grid is given several sizes, or the page is too large to
 /// rasterize.
 pub fn render_proof(font_data: &[u8], request: &ProofRequest) -> Result<Proof, ProofError> {
-    let sizes = sizes(request)?;
+    let sizes = request.checked_sizes()?;
     if request.width == Some(0) {
         return Err(ProofError::ZeroWidth);
     }
@@ -159,25 +190,4 @@ pub fn render_proof(font_data: &[u8], request: &ProofRequest) -> Result<Proof, P
         image,
         report: build_report(&fonts, &page, &lines, context),
     })
-}
-
-fn sizes(request: &ProofRequest) -> Result<Vec<f32>, ProofError> {
-    let sizes = match (request.sizes.is_empty(), request.mode) {
-        (true, ProofMode::Text) => vec![DEFAULT_TEXT_SIZE],
-        (true, ProofMode::Grid) => vec![DEFAULT_GRID_SIZE],
-        (false, _) => request.sizes.clone(),
-    };
-    let out_of_range = sizes
-        .iter()
-        .find(|size| !size.is_finite() || **size <= 0.0 || **size > MAX_SIZE);
-    if let Some(size) = out_of_range {
-        return Err(ProofError::SizeOutOfRange {
-            size: *size,
-            max: MAX_SIZE,
-        });
-    }
-    if request.mode == ProofMode::Grid && sizes.len() > 1 {
-        return Err(ProofError::MultipleGridSizes);
-    }
-    Ok(sizes)
 }

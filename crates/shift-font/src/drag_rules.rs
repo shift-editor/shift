@@ -417,6 +417,34 @@ impl DragContour {
         }
         usize::try_from(index.rem_euclid(count)).ok()
     }
+
+    /// The pattern of `window` points centred on `point`.
+    fn pattern_at(&self, point: PointRef, window: usize, selected: &HashSet<PointRef>) -> Vec<u8> {
+        let half = isize::try_from(window / 2).unwrap_or_default();
+        (-half..=half)
+            .map(|offset| {
+                let Some(index) = self.index_at(point.point, offset) else {
+                    return b'N';
+                };
+                let Some(found) = self.points.get(index) else {
+                    return b'N';
+                };
+                let other = PointRef {
+                    contour: point.contour,
+                    point: index,
+                };
+                if offset != 0 && selected.contains(&other) {
+                    b'@'
+                } else if found.is_handle() {
+                    b'H'
+                } else if found.smooth {
+                    b'S'
+                } else {
+                    b'C'
+                }
+            })
+            .collect()
+    }
 }
 
 /// A point by its contour's index and its index in the contour.
@@ -548,7 +576,7 @@ impl PreparedDrag {
         let (pattern, found) = WINDOW_SIZES
             .iter()
             .filter_map(|&window| {
-                let pattern = pattern_at(contour, point, window, selected);
+                let pattern = contour.pattern_at(point, window, selected);
                 let found = table.patterns.get(&pattern)?;
                 Some((pattern, *found))
             })
@@ -703,39 +731,6 @@ fn maintain_collinearity(smooth: Point, end: Point, handle: Point, delta: Vec2) 
         return None;
     }
     Some(smooth + axis * t.abs())
-}
-
-/// The pattern of `window` points centred on `point`.
-fn pattern_at(
-    contour: &DragContour,
-    point: PointRef,
-    window: usize,
-    selected: &HashSet<PointRef>,
-) -> Vec<u8> {
-    let half = isize::try_from(window / 2).unwrap_or_default();
-    (-half..=half)
-        .map(|offset| {
-            let Some(index) = contour.index_at(point.point, offset) else {
-                return b'N';
-            };
-            let Some(found) = contour.points.get(index) else {
-                return b'N';
-            };
-            let other = PointRef {
-                contour: point.contour,
-                point: index,
-            };
-            if offset != 0 && selected.contains(&other) {
-                b'@'
-            } else if found.is_handle() {
-                b'H'
-            } else if found.smooth {
-                b'S'
-            } else {
-                b'C'
-            }
-        })
-        .collect()
 }
 
 fn point_in(contours: &[DragContour], point: PointRef) -> Option<&DragPoint> {

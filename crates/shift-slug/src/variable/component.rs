@@ -188,216 +188,196 @@ impl VariableAtlasBuilder {
     }
 }
 
-pub(super) fn resolve_component_glyph(
-    atlas: &VariableAtlas,
-    glyph: VariableGlyph,
-    weights: &[f32],
-) -> Result<Vec<Curve>, SlugError> {
-    let descriptor = atlas
-        .component_glyphs
-        .get(glyph.component_index().or_overflow()?)
-        .or_overflow()?;
-    let component_start = descriptor.component_start as usize;
-    let component_end = component_start
-        .checked_add(descriptor.component_count as usize)
-        .or_overflow()?;
-    let components = atlas
-        .components
-        .get(component_start..component_end)
-        .or_overflow()?;
-    let resolved_transforms = resolve_transforms(atlas, components, weights)?;
+impl VariableAtlas {
+    pub(super) fn resolve_component_glyph(
+        &self,
+        glyph: VariableGlyph,
+        weights: &[f32],
+    ) -> Result<Vec<Curve>, SlugError> {
+        let descriptor = self
+            .component_glyphs
+            .get(glyph.component_index().or_overflow()?)
+            .or_overflow()?;
+        let component_start = descriptor.component_start as usize;
+        let component_end = component_start
+            .checked_add(descriptor.component_count as usize)
+            .or_overflow()?;
+        let components = self
+            .components
+            .get(component_start..component_end)
+            .or_overflow()?;
+        let resolved_transforms = self.resolve_transforms(components, weights)?;
 
-    let part_start = descriptor.part_start as usize;
-    let part_end = part_start
-        .checked_add(descriptor.part_count as usize)
-        .or_overflow()?;
-    let parts = atlas
-        .component_parts
-        .get(part_start..part_end)
-        .or_overflow()?;
-    let mut output = vec![Curve::default(); glyph.curve_count as usize];
-    for part in parts {
-        let direct_glyph = atlas.glyph(part.glyph_index)?;
-        let transform = if part.component_index == ROOT_COMPONENT {
-            Affine::identity()
-        } else {
-            *resolved_transforms
-                .get(part.component_index as usize)
-                .or_overflow()?
-        };
-        let curves = atlas.resolve_glyph_with_weights(part.glyph_index, weights)?;
-        let output_start = part.output_curve_start as usize;
-        let output_end = output_start.checked_add(curves.len()).or_overflow()?;
-        let destination = output.get_mut(output_start..output_end).or_overflow()?;
-        for (local_curve, (destination, curve)) in destination.iter_mut().zip(curves).enumerate() {
-            let transformed = transform.curve(curve);
-            *destination = if atlas.curve_is_line(direct_glyph.curve_start as usize + local_curve) {
-                Curve::from_line(transformed.p0, transformed.p2)
+        let part_start = descriptor.part_start as usize;
+        let part_end = part_start
+            .checked_add(descriptor.part_count as usize)
+            .or_overflow()?;
+        let parts = self
+            .component_parts
+            .get(part_start..part_end)
+            .or_overflow()?;
+        let mut output = vec![Curve::default(); glyph.curve_count as usize];
+        for part in parts {
+            let direct_glyph = self.glyph(part.glyph_index)?;
+            let transform = if part.component_index == ROOT_COMPONENT {
+                Affine::identity()
             } else {
-                transformed
+                *resolved_transforms
+                    .get(part.component_index as usize)
+                    .or_overflow()?
             };
+            let curves = self.resolve_glyph_with_weights(part.glyph_index, weights)?;
+            let output_start = part.output_curve_start as usize;
+            let output_end = output_start.checked_add(curves.len()).or_overflow()?;
+            let destination = output.get_mut(output_start..output_end).or_overflow()?;
+            for (local_curve, (destination, curve)) in
+                destination.iter_mut().zip(curves).enumerate()
+            {
+                let transformed = transform.curve(curve);
+                *destination =
+                    if self.curve_is_line(direct_glyph.curve_start as usize + local_curve) {
+                        Curve::from_line(transformed.p0, transformed.p2)
+                    } else {
+                        transformed
+                    };
+            }
         }
-    }
-    Ok(output)
-}
-
-fn resolve_transforms(
-    atlas: &VariableAtlas,
-    components: &[VariableComponent],
-    weights: &[f32],
-) -> Result<Vec<Affine>, SlugError> {
-    let mut resolved_transforms: Vec<Affine> = Vec::with_capacity(components.len());
-    for component in components {
-        let local = component_affine(atlas, *component, weights)?;
-        let parent = if component.parent_component == ROOT_COMPONENT {
-            Affine::identity()
-        } else {
-            *resolved_transforms
-                .get(component.parent_component as usize)
-                .or_overflow()?
-        };
-        resolved_transforms.push(parent.compose(local));
-    }
-    Ok(resolved_transforms)
-}
-
-fn component_affine(
-    atlas: &VariableAtlas,
-    component: VariableComponent,
-    weights: &[f32],
-) -> Result<Affine, SlugError> {
-    let start = component.source_start as usize;
-    let end = start
-        .checked_add(component.source_count as usize)
-        .or_overflow()?;
-    let sources = atlas.component_sources.get(start..end).or_overflow()?;
-    if sources.is_empty() {
-        return Err(SlugError::LengthOverflow);
+        Ok(output)
     }
 
-    let mut values = [0.0_f32; 9];
-    for source in sources {
-        let weight = weight_at(weights, source.weight_index)?;
-        for (value, source_value) in values.iter_mut().zip([
-            source.translate_x,
-            source.translate_y,
-            source.rotation,
-            source.scale_x,
-            source.scale_y,
-            source.skew_x,
-            source.skew_y,
-            source.center_x,
-            source.center_y,
-        ]) {
-            *value += source_value * weight;
+    fn resolve_transforms(
+        &self,
+        components: &[VariableComponent],
+        weights: &[f32],
+    ) -> Result<Vec<Affine>, SlugError> {
+        let mut resolved_transforms: Vec<Affine> = Vec::with_capacity(components.len());
+        for component in components {
+            let local = self.component_affine(*component, weights)?;
+            let parent = if component.parent_component == ROOT_COMPONENT {
+                Affine::identity()
+            } else {
+                *resolved_transforms
+                    .get(component.parent_component as usize)
+                    .or_overflow()?
+            };
+            resolved_transforms.push(parent.compose(local));
         }
+        Ok(resolved_transforms)
     }
 
-    let radians = std::f32::consts::PI / 180.0;
-    let (sin_rotation, cos_rotation) = (values[2] * radians).sin_cos();
-    let tan_skew_x = (values[5] * radians).tan();
-    let tan_skew_y = (values[6] * radians).tan();
-    let xx = values[3] * cos_rotation + values[4] * tan_skew_x * sin_rotation;
-    let xy = values[3] * sin_rotation - values[4] * tan_skew_x * cos_rotation;
-    let yx = -values[4] * sin_rotation + values[3] * tan_skew_y * cos_rotation;
-    let yy = values[4] * cos_rotation + values[3] * tan_skew_y * sin_rotation;
-    let dx = values[0] + values[7] - (xx * values[7] + yx * values[8]);
-    let dy = values[1] + values[8] - (xy * values[7] + yy * values[8]);
-    Ok(Affine {
-        xx,
-        xy,
-        yx,
-        yy,
-        dx,
-        dy,
-    })
+    fn component_affine(
+        &self,
+        component: VariableComponent,
+        weights: &[f32],
+    ) -> Result<Affine, SlugError> {
+        let start = component.source_start as usize;
+        let end = start
+            .checked_add(component.source_count as usize)
+            .or_overflow()?;
+        let sources = self.component_sources.get(start..end).or_overflow()?;
+        if sources.is_empty() {
+            return Err(SlugError::LengthOverflow);
+        }
+
+        let mut values = [0.0_f32; 9];
+        for source in sources {
+            let weight = weight_at(weights, source.weight_index)?;
+            for (value, source_value) in values.iter_mut().zip([
+                source.translate_x,
+                source.translate_y,
+                source.rotation,
+                source.scale_x,
+                source.scale_y,
+                source.skew_x,
+                source.skew_y,
+                source.center_x,
+                source.center_y,
+            ]) {
+                *value += source_value * weight;
+            }
+        }
+
+        let radians = std::f32::consts::PI / 180.0;
+        let (sin_rotation, cos_rotation) = (values[2] * radians).sin_cos();
+        let tan_skew_x = (values[5] * radians).tan();
+        let tan_skew_y = (values[6] * radians).tan();
+        let xx = values[3] * cos_rotation + values[4] * tan_skew_x * sin_rotation;
+        let xy = values[3] * sin_rotation - values[4] * tan_skew_x * cos_rotation;
+        let yx = -values[4] * sin_rotation + values[3] * tan_skew_y * cos_rotation;
+        let yy = values[4] * cos_rotation + values[3] * tan_skew_y * sin_rotation;
+        let dx = values[0] + values[7] - (xx * values[7] + yx * values[8]);
+        let dy = values[1] + values[8] - (xy * values[7] + yy * values[8]);
+        Ok(Affine {
+            xx,
+            xy,
+            yx,
+            yy,
+            dx,
+            dy,
+        })
+    }
 }
 
-pub(super) fn write_component_glyphs<F>(
-    writer: &mut PackedChunkWriter<F>,
-    values: &[VariableComponentGlyph],
-) where
+impl<F> PackedChunkWriter<F>
+where
     F: FnMut(PackedVariableChunk<'_>),
 {
-    for value in values {
-        write_words(
-            writer,
-            &[
+    pub(super) fn write_component_glyphs(&mut self, values: &[VariableComponentGlyph]) {
+        for value in values {
+            self.write_words(&[
                 value.part_start,
                 value.part_count,
                 value.component_start,
                 value.component_count,
                 value.root_glyph_index.get(),
                 value._padding,
-            ],
-        );
+            ]);
+        }
     }
-}
 
-pub(super) fn write_component_parts<F>(
-    writer: &mut PackedChunkWriter<F>,
-    values: &[VariableComponentPart],
-) where
-    F: FnMut(PackedVariableChunk<'_>),
-{
-    for value in values {
-        write_words(
-            writer,
-            &[
+    pub(super) fn write_component_parts(&mut self, values: &[VariableComponentPart]) {
+        for value in values {
+            self.write_words(&[
                 value.glyph_index.get(),
                 value.component_index,
                 value.output_curve_start,
                 value._padding,
-            ],
-        );
+            ]);
+        }
     }
-}
 
-pub(super) fn write_components<F>(writer: &mut PackedChunkWriter<F>, values: &[VariableComponent])
-where
-    F: FnMut(PackedVariableChunk<'_>),
-{
-    for value in values {
-        write_words(
-            writer,
-            &[
+    pub(super) fn write_components(&mut self, values: &[VariableComponent]) {
+        for value in values {
+            self.write_words(&[
                 value.parent_component,
                 value.source_start,
                 value.source_count,
-            ],
-        );
-    }
-}
-
-pub(super) fn write_component_sources<F>(
-    writer: &mut PackedChunkWriter<F>,
-    values: &[VariableComponentSource],
-) where
-    F: FnMut(PackedVariableChunk<'_>),
-{
-    for value in values {
-        writer.write(&value.weight_index.to_le_bytes());
-        for number in [
-            value.translate_x,
-            value.translate_y,
-            value.rotation,
-            value.scale_x,
-            value.scale_y,
-            value.skew_x,
-            value.skew_y,
-            value.center_x,
-            value.center_y,
-        ] {
-            writer.write(&number.to_le_bytes());
+            ]);
         }
     }
-}
 
-fn write_words<F>(writer: &mut PackedChunkWriter<F>, values: &[u32])
-where
-    F: FnMut(PackedVariableChunk<'_>),
-{
-    for value in values {
-        writer.write(&value.to_le_bytes());
+    pub(super) fn write_component_sources(&mut self, values: &[VariableComponentSource]) {
+        for value in values {
+            self.write(&value.weight_index.to_le_bytes());
+            for number in [
+                value.translate_x,
+                value.translate_y,
+                value.rotation,
+                value.scale_x,
+                value.scale_y,
+                value.skew_x,
+                value.skew_y,
+                value.center_x,
+                value.center_y,
+            ] {
+                self.write(&number.to_le_bytes());
+            }
+        }
+    }
+
+    fn write_words(&mut self, values: &[u32]) {
+        for value in values {
+            self.write(&value.to_le_bytes());
+        }
     }
 }

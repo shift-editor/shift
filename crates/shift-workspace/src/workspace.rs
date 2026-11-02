@@ -116,7 +116,7 @@ impl FontWorkspace {
         let mut store = ShiftStore::open(store_path)?;
         store.set_font_info(&new_workspace.font_info())?;
 
-        let font = new_font(new_workspace);
+        let font = shift_font::Font::from(new_workspace);
         store.replace_font_state(&font)?;
         store.set_workspace_state(&WorkspaceState::untitled(None))?;
 
@@ -849,13 +849,6 @@ fn font_info_from_font(font: &shift_font::Font) -> shift_store::FontInfo {
         units_per_em: metrics.units_per_em,
         default_source_id: font.default_source_id().map(|id| id.to_string()),
     }
-}
-
-fn new_font(new_workspace: NewWorkspace) -> shift_font::Font {
-    let mut font = shift_font::Font::new();
-    font.metadata_mut().family_name = Some(new_workspace.family_name);
-    font.metrics_mut().units_per_em = new_workspace.units_per_em as f64;
-    font
 }
 
 fn source_from_workspace_state(state: &WorkspaceState) -> Result<WorkspaceSource, WorkspaceError> {
