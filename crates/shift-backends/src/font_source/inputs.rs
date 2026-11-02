@@ -11,12 +11,12 @@ use skrifa::raw::types::F2Dot14;
 use super::atlas::{
     AtlasAxis, AtlasRegion, RegionAxis, RegionRegistry, SourceAtlasError, validate_roots,
 };
-use super::interpolation::piecewise_map;
 use super::segments::{ContourSegments, PointSegment};
 use super::{
     FontDirectory, FontReadError, FontSource, GlyphIndex, GlyphPointKind, GlyphProjection,
     GlyphShape, SourceIndex, VariationAxisKind, VariationRegion,
 };
+use shift_font::piecewise_map;
 
 #[derive(Clone, Copy, Debug)]
 struct ProjectedPoint {

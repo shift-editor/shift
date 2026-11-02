@@ -18,7 +18,6 @@ pub use error::FontReadError;
 pub(crate) use error::malformed;
 pub(crate) use geometry::inferred_smooth_point_indices;
 pub use inputs::variable_glyph_inputs;
-pub(crate) use interpolation::piecewise_map;
 pub use segments::ContourSegmentError;
 pub(crate) use types::DirectoryGlyphInput;
 pub use types::{
