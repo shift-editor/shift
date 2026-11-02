@@ -476,7 +476,7 @@ export class SessionEngine implements FontEngine {
    */
   protected async replace(store: EngineStore): Promise<void> {
     const { EngineSession } = await loadEngine();
-    const session = openSession(EngineSession, store);
+    const session = EngineSession.over(store);
     batch(() => {
       this.close();
       this.#session = session;
@@ -530,17 +530,5 @@ export class SessionEngine implements FontEngine {
   #require(): EngineSession {
     if (!this.#session) throw new Error("the editing engine is not open");
     return this.#session;
-  }
-}
-
-/** A session over `store`, opened as its kind says. */
-function openSession(sessions: typeof EngineSession, store: EngineStore): EngineSession {
-  switch (store.kind) {
-    case "reader":
-      return sessions.open(store.directory, store.request, store.scene);
-    case "resident":
-      return sessions.openResident(store.font, store.scene);
-    case "compiled":
-      return sessions.openResident(store.header);
   }
 }
