@@ -1,4 +1,5 @@
-//! The segments of a contour whose point kinds are explicit.
+//! Contours whose point kinds are explicit: normalizing them, and walking
+//! their segments.
 
 use super::GlyphPointKind;
 
@@ -18,6 +19,83 @@ impl<T> KindedPoint for (GlyphPointKind, T) {
     fn kind(&self) -> GlyphPointKind {
         self.0
     }
+}
+
+/// A point that can stand for the on-curve point a quadratic outline implies
+/// between two of its controls.
+pub(crate) trait ImpliedPoint: KindedPoint + Clone {
+    /// The on-curve point halfway between `first` and `second`.
+    fn implied_between(first: &Self, second: &Self) -> Self;
+}
+
+/// `points` starting on-curve, with the on-curve point a quadratic outline
+/// implies between each pair of adjacent quadratic controls inserted.
+///
+/// A closed contour is rotated to start at its first on-curve point. A closed
+/// contour of quadratic controls alone starts at the point implied between its
+/// last and first controls.
+///
+/// # Errors
+///
+/// Returns [`ContourSegmentError::Empty`] for no points,
+/// [`ContourSegmentError::DoesNotBeginOnCurve`] for an open contour that
+/// starts with a control, and [`ContourSegmentError::OffCurveNotQuadratic`] for
+/// a closed contour of controls that are not all quadratic.
+pub(crate) fn normalize_points<T: ImpliedPoint>(
+    points: &[T],
+    closed: bool,
+) -> Result<Vec<T>, ContourSegmentError> {
+    let (Some(first), Some(last)) = (points.first(), points.last()) else {
+        return Err(ContourSegmentError::Empty);
+    };
+    let first_on = points
+        .iter()
+        .position(|point| point.kind() == GlyphPointKind::OnCurve);
+    let (start, indexes, all_off_curve): (T, Vec<usize>, bool) = match (closed, first_on) {
+        (false, Some(0)) => (first.clone(), (1..points.len()).collect(), false),
+        (false, _) => return Err(ContourSegmentError::DoesNotBeginOnCurve),
+        (true, Some(start)) => (
+            points[start].clone(),
+            (1..points.len())
+                .map(|offset| (start + offset) % points.len())
+                .collect(),
+            false,
+        ),
+        (true, None) => {
+            if points
+                .iter()
+                .any(|point| point.kind() != GlyphPointKind::QuadraticControl)
+            {
+                return Err(ContourSegmentError::OffCurveNotQuadratic);
+            }
+            (
+                T::implied_between(last, first),
+                (0..points.len()).collect(),
+                true,
+            )
+        }
+    };
+
+    let mut normalized = Vec::with_capacity(points.len() * 2);
+    normalized.push(start);
+    for (position, index) in indexes.iter().copied().enumerate() {
+        let point = &points[index];
+        normalized.push(point.clone());
+        let next = match index + 1 {
+            next if next < points.len() => Some(next),
+            _ if closed => Some(0),
+            _ => None,
+        };
+        let closes_all_off_curve = all_off_curve && position + 1 == indexes.len();
+        if let Some(next) = next
+            && point.kind() == GlyphPointKind::QuadraticControl
+            && points[next].kind() == GlyphPointKind::QuadraticControl
+            && !closes_all_off_curve
+        {
+            normalized.push(T::implied_between(point, &points[next]));
+        }
+    }
+    Ok(normalized)
 }
 
 /// One segment of a contour, as indexes into its points.
@@ -52,6 +130,12 @@ impl PointSegment {
 /// Why a contour's points do not form segments.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ContourSegmentError {
+    #[error("contour has no points")]
+    Empty,
+
+    #[error("closed contour without an endpoint contains non-quadratic controls")]
+    OffCurveNotQuadratic,
+
     #[error("contour does not begin on-curve")]
     DoesNotBeginOnCurve,
 
@@ -186,6 +270,85 @@ mod tests {
     ) -> Result<Vec<PointSegment>, ContourSegmentError> {
         let points: Vec<_> = kinds.iter().map(|kind| (*kind, ())).collect();
         ContourSegments::new(&points, closed)?.collect()
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    struct Kinded(GlyphPointKind, f64);
+
+    impl KindedPoint for Kinded {
+        fn kind(&self) -> GlyphPointKind {
+            self.0
+        }
+    }
+
+    impl ImpliedPoint for Kinded {
+        fn implied_between(first: &Self, second: &Self) -> Self {
+            Self(On, (first.1 + second.1) * 0.5)
+        }
+    }
+
+    fn normalized(points: &[(GlyphPointKind, f64)], closed: bool) -> Vec<(GlyphPointKind, f64)> {
+        let points: Vec<_> = points.iter().map(|(kind, x)| Kinded(*kind, *x)).collect();
+        normalize_points(&points, closed)
+            .expect("normalizes")
+            .into_iter()
+            .map(|Kinded(kind, x)| (kind, x))
+            .collect()
+    }
+
+    #[test]
+    fn normalizing_rotates_a_closed_contour_to_its_first_on_curve_point() {
+        assert_eq!(
+            normalized(&[(Q, 0.0), (On, 1.0), (On, 2.0)], true),
+            [(On, 1.0), (On, 2.0), (Q, 0.0)]
+        );
+    }
+
+    #[test]
+    fn normalizing_inserts_implied_points_between_quadratic_controls() {
+        assert_eq!(
+            normalized(&[(On, 0.0), (Q, 2.0), (Q, 4.0), (On, 6.0)], false),
+            [(On, 0.0), (Q, 2.0), (On, 3.0), (Q, 4.0), (On, 6.0)]
+        );
+        // The wrap from the last control to the first point is only implied
+        // when the contour is closed.
+        assert_eq!(
+            normalized(&[(On, 0.0), (Q, 2.0), (Q, 4.0)], true),
+            [(On, 0.0), (Q, 2.0), (On, 3.0), (Q, 4.0)]
+        );
+    }
+
+    #[test]
+    fn normalizing_starts_a_contour_of_controls_between_its_last_and_first() {
+        assert_eq!(
+            normalized(&[(Q, 0.0), (Q, 2.0), (Q, 4.0)], true),
+            [
+                (On, 2.0),
+                (Q, 0.0),
+                (On, 1.0),
+                (Q, 2.0),
+                (On, 3.0),
+                (Q, 4.0)
+            ]
+        );
+    }
+
+    #[test]
+    fn normalizing_rejects_contours_it_cannot_start() {
+        let reject = |points: &[(GlyphPointKind, f64)], closed| {
+            let points: Vec<_> = points.iter().map(|(kind, x)| Kinded(*kind, *x)).collect();
+            normalize_points(&points, closed).expect_err("rejects")
+        };
+
+        assert_eq!(reject(&[], true), ContourSegmentError::Empty);
+        assert_eq!(
+            reject(&[(Q, 0.0), (On, 1.0)], false),
+            ContourSegmentError::DoesNotBeginOnCurve
+        );
+        assert_eq!(
+            reject(&[(C, 0.0), (C, 1.0)], true),
+            ContourSegmentError::OffCurveNotQuadratic
+        );
     }
 
     #[test]

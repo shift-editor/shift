@@ -19,7 +19,9 @@ use crate::font_source::{
 use super::inputs::tuple_region;
 use super::variable::{approximate_hypot, component_transform, infer_tuple_deltas};
 use crate::font_source::malformed;
-use crate::font_source::segments::{ContourSegments, KindedPoint, PointSegment};
+use crate::font_source::segments::{
+    ContourSegments, ImpliedPoint, KindedPoint, PointSegment, normalize_points,
+};
 use crate::numeric::lossy_f32;
 
 pub(super) struct VariableCurves {
@@ -202,40 +204,7 @@ fn push_cubic(
 }
 
 fn normalize_contour(points: &[VariablePoint]) -> Result<VariableContour, SourceAtlasError> {
-    if points.is_empty() {
-        return Err(invalid_geometry("binary atlas contour has no points"));
-    }
-    let first_on = points
-        .iter()
-        .position(|point| point.kind == GlyphPointKind::OnCurve);
-    let (start, indexes, all_off_curve) = match first_on {
-        Some(start) => (
-            points[start].clone(),
-            (1..points.len())
-                .map(|offset| (start + offset) % points.len())
-                .collect::<Vec<_>>(),
-            false,
-        ),
-        None => (
-            VariablePoint::midpoint(points.last().expect("contour is non-empty"), &points[0]),
-            (0..points.len()).collect(),
-            true,
-        ),
-    };
-    let mut normalized = Vec::with_capacity(points.len() * 2);
-    normalized.push(start);
-    for (position, index) in indexes.iter().copied().enumerate() {
-        let point = &points[index];
-        normalized.push(point.clone());
-        let next = (index + 1) % points.len();
-        let closes_all_off_curve = all_off_curve && position + 1 == indexes.len();
-        if point.kind == GlyphPointKind::QuadraticControl
-            && !closes_all_off_curve
-            && points[next].kind == GlyphPointKind::QuadraticControl
-        {
-            normalized.push(VariablePoint::midpoint(point, &points[next]));
-        }
-    }
+    let mut normalized = normalize_points(points, true)?;
     for index in inferred_smooth_point_indices(
         &normalized,
         true,
@@ -343,8 +312,8 @@ pub(super) struct VariablePoint {
     pub(super) provenance: PointProvenance,
 }
 
-impl VariablePoint {
-    pub(super) fn midpoint(first: &Self, second: &Self) -> Self {
+impl ImpliedPoint for VariablePoint {
+    fn implied_between(first: &Self, second: &Self) -> Self {
         Self {
             position: VariablePosition::midpoint(&first.position, &second.position),
             kind: GlyphPointKind::OnCurve,
