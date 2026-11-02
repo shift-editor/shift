@@ -27,7 +27,7 @@ mod traits;
 pub use errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
 pub use export::{ExportError, ExportFormat, FontExportRequest, FontExportResult, FontExporter};
 pub use font_source::{
-    AffineTransform, AuthoredReadError, AuthoredSource, AxisIndex, DesignspaceFont, DirectoryGlyph,
+    AuthoredReadError, AuthoredSource, AxisIndex, ContourError, DesignspaceFont, DirectoryGlyph,
     DirectoryInstance, DirectoryMapping, DirectoryMappingPoint, DirectorySource, FontDirectory,
     FontImporter, FontMetrics, FontReadError, FontSource, GlyphAnchor, GlyphComponent, GlyphDelta,
     GlyphIndex, GlyphMetrics, GlyphPoint, GlyphPointKind, GlyphProjection, GlyphShape,

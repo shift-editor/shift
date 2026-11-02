@@ -17,9 +17,8 @@ use crate::font_source::projection::{
     ProjectionLayer, empty_projection_layer, project_layers, resolve_projection_closure,
 };
 use crate::font_source::{
-    AffineTransform, FontDirectory, FontImporter, FontReadError, FontSource, GlyphAnchor,
-    GlyphIndex, GlyphMetrics, GlyphPointKind, PointProvenance, ProjectedGlyph, SourceIndex,
-    malformed,
+    FontDirectory, FontImporter, FontReadError, FontSource, GlyphAnchor, GlyphIndex, GlyphMetrics,
+    GlyphPointKind, PointProvenance, ProjectedGlyph, SourceIndex, malformed,
 };
 use crate::{BackendError, BackendResult, FontFormat, FontImport};
 
@@ -232,7 +231,7 @@ fn convert_glyphs_layer(
                     })?;
                 components.push(SourceComponent {
                     glyph: base,
-                    transform: AffineTransform::from_values(component.transform.as_coeffs()),
+                    transform: component.transform.into(),
                 });
             }
         }

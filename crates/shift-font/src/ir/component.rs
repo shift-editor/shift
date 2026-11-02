@@ -339,14 +339,7 @@ impl Transform {
 
     /// Compose transforms as `self ∘ other` (apply `other`, then `self`).
     pub fn compose(self, other: Self) -> Self {
-        Self {
-            xx: self.xx * other.xx + self.yx * other.xy,
-            xy: self.xy * other.xx + self.yy * other.xy,
-            yx: self.xx * other.yx + self.yx * other.yy,
-            yy: self.xy * other.yx + self.yy * other.yy,
-            dx: self.xx * other.dx + self.yx * other.dy + self.dx,
-            dy: self.xy * other.dx + self.yy * other.dy + self.dy,
-        }
+        (kurbo::Affine::from(self) * kurbo::Affine::from(other)).into()
     }
 
     pub fn is_identity(&self) -> bool {
@@ -366,6 +359,12 @@ impl Transform {
 impl From<Transform> for kurbo::Affine {
     fn from(transform: Transform) -> Self {
         Self::new(transform.to_values())
+    }
+}
+
+impl From<kurbo::Affine> for Transform {
+    fn from(affine: kurbo::Affine) -> Self {
+        Self::from_values(affine.as_coeffs())
     }
 }
 
@@ -548,6 +547,30 @@ mod tests {
 
         assert_eq!(x, 18.0);
         assert_eq!(y, 35.0);
+    }
+
+    #[test]
+    fn transform_compose_applies_inner_then_outer_with_shear() {
+        let outer = Transform::from_values([0.0, 1.0, -1.0, 0.0, 10.0, 20.0]);
+        let inner = Transform::from_values([2.0, 0.5, 0.25, 3.0, -4.0, 6.0]);
+        let point = kurbo::Point::new(7.0, -3.0);
+
+        let composed = outer.compose(inner).transform_point(point);
+
+        assert_eq!(
+            composed,
+            outer.transform_point(inner.transform_point(point))
+        );
+    }
+
+    #[test]
+    fn singular_transform_collapses_points() {
+        let singular = Transform::scale(0.0, 0.0);
+
+        assert_eq!(
+            singular.transform_point(kurbo::Point::new(4.0, 5.0)),
+            kurbo::Point::ZERO
+        );
     }
 
     #[test]

@@ -228,19 +228,11 @@ pub(crate) fn referenced_glyph_ids_for_glyphs_from_conn(
              WHERE l.glyph_id IN (SELECT value FROM json_each(?1))
          )",
     )?;
-    let mut result = BTreeSet::new();
-    for count_batch in glyph_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
-        #[cfg(test)]
-        COMPONENT_CLOSURE_QUERY_COUNT.with(|count| count.set(count.get() + 1));
-
-        let rows = stmt.query_map([serde_json::to_string(count_batch)?], |row| {
-            row.get::<_, font::GlyphId>(0)
-        })?;
-        for row in rows {
-            result.insert(row?);
-        }
-    }
-    Ok(result.into_iter().collect())
+    #[cfg(test)]
+    COMPONENT_CLOSURE_QUERY_COUNT.with(|count| {
+        count.set(count.get() + glyph_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT).len());
+    });
+    glyph_ids_by_batch(&mut stmt, glyph_ids)
 }
 
 pub(crate) fn referenced_glyph_closure_from_conn(
@@ -293,16 +285,7 @@ pub(crate) fn composites_of_from_conn(
          FROM glyph_layers AS owner
          WHERE owner.id IN users",
     )?;
-    let mut result = BTreeSet::new();
-    for count_batch in glyph_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
-        let rows = stmt.query_map([serde_json::to_string(count_batch)?], |row| {
-            row.get::<_, font::GlyphId>(0)
-        })?;
-        for row in rows {
-            result.insert(row?);
-        }
-    }
-    Ok(result.into_iter().collect())
+    glyph_ids_by_batch(&mut stmt, glyph_ids)
 }
 
 pub(crate) fn dependent_glyph_ids_for_layers_from_conn(
@@ -328,9 +311,23 @@ pub(crate) fn dependent_glyph_ids_for_layers_from_conn(
          FROM glyph_layers AS owner
          WHERE owner.id IN users",
     )?;
+    glyph_ids_by_batch(&mut stmt, layer_ids)
+}
+
+/// Runs `stmt` once per batch of `ids`, binding each batch as one JSON array,
+/// and returns the distinct glyph ids its first column selects, in identity
+/// order.
+///
+/// # Errors
+///
+/// Returns [`StoreError`] when a batch does not serialize or the query fails.
+fn glyph_ids_by_batch<Id: serde::Serialize>(
+    stmt: &mut rusqlite::CachedStatement<'_>,
+    ids: &[Id],
+) -> Result<Vec<font::GlyphId>, StoreError> {
     let mut result = BTreeSet::new();
-    for count_batch in layer_ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
-        let rows = stmt.query_map([serde_json::to_string(count_batch)?], |row| {
+    for batch in ids.chunks(MAX_COMPONENT_QUERY_BATCH_COUNT) {
+        let rows = stmt.query_map([serde_json::to_string(batch)?], |row| {
             row.get::<_, font::GlyphId>(0)
         })?;
         for row in rows {

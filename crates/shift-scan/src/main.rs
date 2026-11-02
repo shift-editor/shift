@@ -1,7 +1,9 @@
 //! Reports Rust structure worth a reviewer's look, read from the syntax tree:
 //! free functions that read as methods, method names several types share
 //! (maybe a trait), long method chains, cheap lazy closures repeated within a
-//! file, and conversions that copy fields one by one.
+//! file, conversions that copy fields one by one, function bodies alike one
+//! elsewhere in the workspace, and `collect::<Vec<_>>()` where the type is
+//! already fixed.
 //!
 //! It reports and never fails: some free functions are right as they are.
 //! Clippy covers what it can decide alone; this covers what needs a reviewer.
@@ -14,7 +16,9 @@
 //! keeps findings in files changed since `<rev>`, for reviewing one branch.
 
 mod chain;
+mod collect;
 mod crate_scan;
+mod duplicate;
 mod file_scan;
 mod finding;
 
@@ -22,6 +26,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
 use crate_scan::CrateScan;
+use duplicate::DuplicateBodies;
 use finding::{Finding, Kind};
 
 /// What to scan and what to keep, from the command line.
@@ -113,10 +118,13 @@ fn run() -> Result<(), String> {
     let options = Options::parse(std::env::args().skip(1))?;
     let changed = options.changed_files()?;
     let mut findings = Vec::new();
+    let mut bodies = Vec::new();
     for dir in options.crate_dirs().map_err(|error| error.to_string())? {
         let scan = CrateScan::read(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
         findings.extend(scan.findings());
+        bodies.extend(scan.bodies());
     }
+    findings.extend(DuplicateBodies::new(bodies).findings());
     findings.retain(|finding| options.keeps(finding, changed.as_deref()));
     findings.sort();
     for finding in &findings {

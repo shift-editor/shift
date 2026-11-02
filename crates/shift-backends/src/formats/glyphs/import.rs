@@ -46,22 +46,11 @@ impl GlyphStream for GlyphsGlyphStream {
     }
 
     fn next_batch(&mut self, limit: ImportBatchLimit) -> FormatBackendResult<Vec<Glyph>> {
-        if self.next_glyph == self.glyph_names.len() {
-            return Ok(Vec::new());
-        }
-
-        let mut end = self.next_glyph;
-        let mut layer_count = 0;
-        while end < self.glyph_names.len() && end - self.next_glyph < limit.max_glyphs() {
-            let glyph = &self.source.glyphs[self.glyph_names[end].as_str()];
-            let next_layers = imported_layer_count(glyph, &self.sources);
-            if end > self.next_glyph && layer_count + next_layers > limit.max_layers() {
-                break;
-            }
-
-            layer_count += next_layers;
-            end += 1;
-        }
+        let pending = &self.glyph_names[self.next_glyph..];
+        let end = self.next_glyph
+            + limit.batch_len(pending, |name| {
+                imported_layer_count(&self.source.glyphs[name.as_str()], &self.sources)
+            });
 
         let glyphs = self.glyph_names[self.next_glyph..end]
             .par_iter()

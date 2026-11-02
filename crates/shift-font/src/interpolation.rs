@@ -584,7 +584,9 @@ fn interpolation_basis(
         })
         .collect();
     if let Entry::Vacant(entry) = points.entry(default_location) {
-        entry.insert(virtual_default_coefficients(sources)?);
+        entry.insert(virtual_default_coefficients(
+            sources.iter().map(|(_, location)| location),
+        )?);
     }
     let model = VariationModel::new(
         points
@@ -603,17 +605,23 @@ fn interpolation_basis(
     })
 }
 
-/// Derives a virtual default only when two masters bracket it on one axis.
+/// Weights that derive a virtual default from two sources that bracket it on
+/// one axis, one weight per location in `locations`.
 ///
 /// OpenType's variation model requires a value at the normalized origin. A
 /// sparse glyph may omit the font's default master while still providing a
-/// well-defined one-axis interpolation on opposite sides of it. More complex
-/// sparse layouts remain nonviable and use the caller's static master fallback.
-fn virtual_default_coefficients(sources: &[(SourceId, NormalizedLocation)]) -> Option<Vec<f64>> {
+/// well-defined one-axis interpolation on opposite sides of it: the nearest
+/// source on each side of the origin, among sources off the origin on exactly
+/// one axis. More complex sparse layouts return `None`, and callers use their
+/// static master fallback.
+pub fn virtual_default_coefficients<'a>(
+    locations: impl ExactSizeIterator<Item = &'a NormalizedLocation>,
+) -> Option<Vec<f64>> {
+    let count = locations.len();
     let mut negative: Option<(usize, Tag, f64)> = None;
     let mut positive: Option<(usize, Tag, f64)> = None;
 
-    for (index, (_, location)) in sources.iter().enumerate() {
+    for (index, location) in locations.enumerate() {
         let nonzero = location
             .iter()
             .filter_map(|(tag, coordinate)| {
@@ -648,7 +656,7 @@ fn virtual_default_coefficients(sources: &[(SourceId, NormalizedLocation)]) -> O
     }
 
     let span = positive_value - negative_value;
-    let mut coefficients = vec![0.0; sources.len()];
+    let mut coefficients = vec![0.0; count];
     coefficients[negative_index] = positive_value / span;
     coefficients[positive_index] = -negative_value / span;
     Some(coefficients)
@@ -671,9 +679,49 @@ fn normalized_location(
 
 #[cfg(test)]
 mod tests {
-    use super::blend_values;
+    use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
+    use fontdrasil::types::Tag;
+
+    use super::{blend_values, virtual_default_coefficients};
     use crate::test_support::sample_variable_font;
     use crate::{DesignLocation, GlyphInterpolationValues};
+
+    fn location(coordinates: &[(&str, f64)]) -> NormalizedLocation {
+        coordinates
+            .iter()
+            .map(|(tag, value)| {
+                (
+                    Tag::new_checked(tag.as_bytes()).expect("valid tag"),
+                    NormalizedCoord::new(*value),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn virtual_default_blends_the_nearest_sources_on_each_side() {
+        let locations = [
+            location(&[("wght", -1.0)]),
+            location(&[("wght", -0.5)]),
+            location(&[("wght", 0.25), ("wdth", 1.0)]),
+            location(&[("wght", 1.0)]),
+        ];
+
+        assert_eq!(
+            virtual_default_coefficients(locations.iter()),
+            Some(vec![0.0, 2.0 / 3.0, 0.0, 1.0 / 3.0])
+        );
+    }
+
+    #[test]
+    fn virtual_default_needs_one_axis_bracketed_from_both_sides() {
+        let one_side = [location(&[("wght", 0.5)]), location(&[("wght", 1.0)])];
+        let two_axes = [location(&[("wght", -1.0)]), location(&[("wdth", 1.0)])];
+
+        assert_eq!(virtual_default_coefficients(one_side.iter()), None);
+        assert_eq!(virtual_default_coefficients(two_axes.iter()), None);
+        assert_eq!(virtual_default_coefficients([].iter()), None);
+    }
 
     #[test]
     fn values_blend_by_weight_and_need_matching_sources() {
