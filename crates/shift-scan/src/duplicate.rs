@@ -19,7 +19,6 @@
 //! read the same, and string literals lose their text.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
-use std::fmt::Write as _;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 
@@ -267,7 +266,6 @@ impl DuplicateBodies {
         for ((left, right), shared) in shingles {
             let union =
                 self.bodies[left].shingles.len() + self.bodies[right].shingles.len() - shared;
-            #[allow(clippy::cast_precision_loss, reason = "counts of a few thousand")]
             let similarity = shared as f64 / union as f64;
             if similarity >= SAME_TOKENS {
                 likeness.insert((left, right), Likeness::SameTokens { similarity });
@@ -277,7 +275,6 @@ impl DuplicateBodies {
         for ((left, right), shared) in arithmetic {
             let of =
                 self.bodies[left].arithmetic.len() + self.bodies[right].arithmetic.len() - shared;
-            #[allow(clippy::cast_precision_loss, reason = "counts of a few dozen")]
             let overlap = shared as f64 / of as f64;
             if shared >= MIN_SHARED_ARITHMETIC && overlap >= SAME_ARITHMETIC {
                 likeness
@@ -321,15 +318,13 @@ impl DuplicateBodies {
             .into_iter()
             .map(|(index, others)| {
                 let body = &self.bodies[index];
-                let mut detail = format!("{} is alike", body.name);
-                for (other, how) in others {
-                    let _ = write!(
-                        detail,
-                        "; {} ({})",
-                        self.bodies[other].place(),
-                        how.describe()
-                    );
-                }
+                let places: Vec<_> = others
+                    .into_iter()
+                    .map(|(other, how)| {
+                        format!("{} ({})", self.bodies[other].place(), how.describe())
+                    })
+                    .collect();
+                let detail = format!("{} is alike; {}", body.name, places.join("; "));
                 Finding {
                     path: body.path.clone(),
                     line: body.line,
