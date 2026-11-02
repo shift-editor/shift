@@ -2,8 +2,9 @@ use shift_slug::length::OrOverflow;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use rayon::prelude::*;
+use shift_font::AxisRange;
 use shift_slug::retained::{
-    ExactVariant, GlyphInput, GlyphSegment, GlyphShape as RetainedGlyphShape, PageInput,
+    ExactVariant, GlyphInput, PageInput, ProjectedOutline, ProjectedPoint, ProjectedSegment,
 };
 use skrifa::raw::types::F2Dot14;
 
@@ -15,25 +16,6 @@ use super::{
     AffineTransform, FontDirectory, FontReadError, FontSource, GlyphIndex, GlyphPointKind,
     GlyphProjection, GlyphShape, SourceIndex, VariationAxisKind, VariationRegion,
 };
-
-#[derive(Clone, Copy, Debug)]
-struct ProjectedPoint {
-    x: f64,
-    y: f64,
-}
-
-#[derive(Clone, Debug)]
-enum ProjectedSegment {
-    Line([ProjectedPoint; 2]),
-    Quadratic([ProjectedPoint; 3]),
-    Cubic([ProjectedPoint; 4]),
-}
-
-#[derive(Clone, Debug)]
-struct ProjectedOutline {
-    advance: f64,
-    segments: Vec<ProjectedSegment>,
-}
 
 #[derive(Clone, Copy)]
 enum ProjectionEvaluation<'a> {
@@ -136,7 +118,7 @@ pub fn variable_glyph_inputs<S: FontSource + ?Sized>(
             registry.regions(),
             ProjectionEvaluation::Base,
         )?;
-        let (shape, base_values) = outline_input(&base);
+        let (shape, base_values) = base.shape_and_values();
         let samples = source_weights
             .iter()
             .map(|weight| {
@@ -147,7 +129,7 @@ pub fn variable_glyph_inputs<S: FontSource + ?Sized>(
                     registry.regions(),
                     ProjectionEvaluation::Region(*weight),
                 )?;
-                let (sample_shape, values) = outline_input(&outline);
+                let (sample_shape, values) = outline.shape_and_values();
                 if sample_shape != shape {
                     return Err(invalid(
                         "source atlas compatible variation changed curve topology",
@@ -185,7 +167,7 @@ pub fn variable_glyph_inputs<S: FontSource + ?Sized>(
                     registry.regions(),
                     ProjectionEvaluation::Source(exact_source, &normalized),
                 )?;
-                let (shape, values) = outline_input(&outline);
+                let (shape, values) = outline.shape_and_values();
                 Ok(ExactVariant {
                     source_index: exact_source.to_u32(),
                     shape,
@@ -213,45 +195,17 @@ pub fn variable_glyph_inputs<S: FontSource + ?Sized>(
 }
 
 fn empty_glyph_input() -> GlyphInput {
-    let (shape, base_values) = outline_input(&ProjectedOutline {
+    let (shape, base_values) = ProjectedOutline {
         advance: 0.0,
         segments: Vec::new(),
-    });
+    }
+    .shape_and_values();
     GlyphInput {
         shape,
         base_values,
         samples: Vec::new(),
         exact_variants: Vec::new(),
     }
-}
-
-fn outline_input(outline: &ProjectedOutline) -> (RetainedGlyphShape, Box<[f64]>) {
-    let mut values = vec![outline.advance];
-    let segments = outline
-        .segments
-        .iter()
-        .map(|segment| match segment {
-            ProjectedSegment::Line(points) => {
-                for point in points {
-                    values.extend([point.x, point.y]);
-                }
-                GlyphSegment::Line
-            }
-            ProjectedSegment::Quadratic(points) => {
-                for point in points {
-                    values.extend([point.x, point.y]);
-                }
-                GlyphSegment::Quadratic
-            }
-            ProjectedSegment::Cubic(points) => {
-                for point in points {
-                    values.extend([point.x, point.y]);
-                }
-                GlyphSegment::Cubic
-            }
-        })
-        .collect();
-    (RetainedGlyphShape::new(segments), values.into_boxed_slice())
 }
 
 fn atlas_axes(directory: &FontDirectory) -> Result<Vec<AtlasAxis>, SourceAtlasError> {
@@ -304,13 +258,12 @@ fn atlas_axes(directory: &FontDirectory) -> Result<Vec<AtlasAxis>, SourceAtlasEr
             if !minimum.is_finite() || !mapped_default.is_finite() || !maximum.is_finite() {
                 return Err(invalid("source atlas axis has non-finite design bounds").into());
             }
-            Ok(AtlasAxis::new(
-                mapping,
+            let range = AxisRange {
                 minimum,
-                mapped_default,
+                default: mapped_default,
                 maximum,
-                Vec::new(),
-            ))
+            };
+            Ok(AtlasAxis::new(mapping, range, Vec::new()))
         })
         .collect()
 }
