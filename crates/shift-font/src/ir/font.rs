@@ -1297,12 +1297,7 @@ impl Font {
     /// [`CoreError::DuplicateGlyphName`] when another glyph has the name. The font is unchanged on
     /// failure.
     pub fn rename_glyph(&mut self, glyph_id: GlyphId, name: GlyphName) -> CoreResult<()> {
-        let mut state = (*self.state).clone();
-        let glyph = state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?;
-        Arc::make_mut(glyph).set_name(name);
-        state.rebuild_index()?;
-        self.state = Arc::new(state);
-        Ok(())
+        self.edit_indexed_glyph(glyph_id, |glyph| glyph.set_name(name))
     }
 
     /// Replaces a glyph's Unicode code points.
@@ -1311,9 +1306,24 @@ impl Font {
     ///
     /// Returns [`CoreError::GlyphNotFound`] when the glyph is missing.
     pub fn set_glyph_unicodes(&mut self, glyph_id: GlyphId, unicodes: Vec<u32>) -> CoreResult<()> {
+        self.edit_indexed_glyph(glyph_id, |glyph| glyph.set_unicodes(unicodes))
+    }
+
+    /// Applies `edit` to a glyph's indexed identity (its name or code points)
+    /// and re-indexes the font.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::GlyphNotFound`] when the glyph is missing, and the
+    /// index's error when the edit breaks it. The font is unchanged on failure.
+    fn edit_indexed_glyph(
+        &mut self,
+        glyph_id: GlyphId,
+        edit: impl FnOnce(&mut Glyph),
+    ) -> CoreResult<()> {
         let mut state = (*self.state).clone();
         let glyph = state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?;
-        Arc::make_mut(glyph).set_unicodes(unicodes);
+        edit(Arc::make_mut(glyph));
         state.rebuild_index()?;
         self.state = Arc::new(state);
         Ok(())
@@ -2429,6 +2439,30 @@ mod tests {
         assert_eq!(font.glyph_id_by_name("A"), None);
         assert_eq!(font.glyph_id_by_name("A.alt"), Some(glyph_id));
         assert_eq!(font.glyph(glyph_id).unwrap().name(), "A.alt");
+    }
+
+    #[test]
+    fn identity_edits_reindex_and_leave_the_font_unchanged_on_failure() {
+        let mut font = Font::new();
+        let a = font.insert_glyph(Glyph::with_unicode("A", 0x41)).unwrap();
+        let b = font.insert_glyph(Glyph::new("B")).unwrap();
+
+        font.set_glyph_unicodes(a, vec![0x61]).unwrap();
+        assert_eq!(font.glyphs_by_unicode(0x41).count(), 0);
+        assert_eq!(
+            font.glyphs_by_unicode(0x61)
+                .map(Glyph::id)
+                .collect::<Vec<_>>(),
+            vec![a]
+        );
+
+        let before = font.clone();
+        assert!(font.rename_glyph(b, GlyphName::from("A")).is_err());
+        assert!(
+            font.set_glyph_unicodes(GlyphId::from_raw("missing"), vec![0x42])
+                .is_err()
+        );
+        assert_eq!(font, before);
     }
 
     #[test]
