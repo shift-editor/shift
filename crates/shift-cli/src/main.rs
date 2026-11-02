@@ -5,6 +5,7 @@ mod format;
 mod glyph_inspect;
 mod inspect;
 mod kerning;
+mod pack;
 mod proof;
 mod selector;
 mod skill;
@@ -62,6 +63,10 @@ fn main() -> miette::Result<()> {
             FontCommand::Set(args) => {
                 let json = args.mutation.json;
                 write_authoring_result(set_font(&args), json)
+            }
+            FontCommand::Pack(args) => {
+                pack::pack_font(&args)?;
+                write_stdout(&args.output.display().to_string())
             }
         },
         Command::Axis { command } => match command {
