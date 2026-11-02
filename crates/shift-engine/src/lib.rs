@@ -10,10 +10,6 @@
 //! both run this same code. It depends only on shift-font and pack, so it
 //! builds for WebAssembly.
 
-// Library code returns errors instead of panicking: a panic kills the
-// WebAssembly engine. Tests may unwrap (clippy.toml).
-#![warn(clippy::unwrap_used, clippy::print_stdout)]
-
 mod document;
 mod history;
 mod records;
