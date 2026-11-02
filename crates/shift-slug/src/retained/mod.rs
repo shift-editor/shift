@@ -322,9 +322,9 @@ pub fn compile_page(input: &PageInput, band_count: u32) -> Result<RetainedAtlasP
             .sources
             .into_iter()
             .zip(&samples)
-            .map(|((weight, curves), (_, outline))| (weight, curves, outline.advance))
+            .map(|((weight, curves), (_, outline))| (weight, curves, lossy_f32(outline.advance)))
             .collect();
-        compiler.add_glyph(*root, curves.base, base.advance, sources)?;
+        compiler.add_glyph(*root, curves.base, lossy_f32(base.advance), sources)?;
 
         for exact in &glyph.exact_variants {
             let outline = outline(
@@ -337,7 +337,7 @@ pub fn compile_page(input: &PageInput, band_count: u32) -> Result<RetainedAtlasP
                 *root,
                 exact.source_index,
                 outline.exact(),
-                outline.advance,
+                lossy_f32(outline.advance),
             )?;
         }
     }
@@ -345,23 +345,28 @@ pub fn compile_page(input: &PageInput, band_count: u32) -> Result<RetainedAtlasP
     Ok(compiler.finish())
 }
 
+/// A point of a [`ProjectedOutline`], in font units.
 #[derive(Clone, Copy, Debug)]
-struct ProjectedPoint {
-    x: f64,
-    y: f64,
+pub struct ProjectedPoint {
+    pub x: f64,
+    pub y: f64,
 }
 
+/// One segment of a [`ProjectedOutline`], from its start point to its end
+/// point through any control points.
 #[derive(Clone, Debug)]
-enum ProjectedSegment {
+pub enum ProjectedSegment {
     Line([ProjectedPoint; 2]),
     Quadratic([ProjectedPoint; 3]),
     Cubic([ProjectedPoint; 4]),
 }
 
+/// A glyph outline at one location, flattened to segments with components
+/// resolved, and its advance in font units.
 #[derive(Clone, Debug)]
-struct ProjectedOutline {
-    advance: f32,
-    segments: Vec<ProjectedSegment>,
+pub struct ProjectedOutline {
+    pub advance: f64,
+    pub segments: Vec<ProjectedSegment>,
 }
 
 impl From<ProjectedPoint> for Point {
@@ -392,6 +397,29 @@ impl ProjectedSegment {
 }
 
 impl ProjectedOutline {
+    /// Returns the outline's structure and its values: the advance, then
+    /// each segment's points as `x, y` pairs in order. [`compile_page`] reads
+    /// them back.
+    pub fn shape_and_values(&self) -> (GlyphShape, Box<[f64]>) {
+        let mut values = vec![self.advance];
+        let segments = self
+            .segments
+            .iter()
+            .map(|segment| {
+                let (kind, points) = match segment {
+                    ProjectedSegment::Line(points) => (GlyphSegment::Line, points.as_slice()),
+                    ProjectedSegment::Quadratic(points) => {
+                        (GlyphSegment::Quadratic, points.as_slice())
+                    }
+                    ProjectedSegment::Cubic(points) => (GlyphSegment::Cubic, points.as_slice()),
+                };
+                values.extend(points.iter().flat_map(|point| [point.x, point.y]));
+                kind
+            })
+            .collect();
+        (GlyphShape::new(segments), values.into_boxed_slice())
+    }
+
     /// The outline as quadratics, each cubic split as finely as it needs alone.
     fn exact(&self) -> QuadraticOutline {
         let subdivisions = self
@@ -421,8 +449,8 @@ fn outline(
             actual: values.len(),
         });
     }
-    let advance = lossy_f32(values[0]);
-    if !values[0].is_finite() || !advance.is_finite() {
+    let advance = values[0];
+    if !advance.is_finite() || !lossy_f32(advance).is_finite() {
         return Err(SlugError::NonFiniteVariableAdvance {
             glyph_index,
             source_index,
