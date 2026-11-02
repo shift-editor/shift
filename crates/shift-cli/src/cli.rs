@@ -9,7 +9,7 @@ use crate::inspect::InspectView;
 use crate::proof::ProofArgs;
 
 mod font;
-pub(crate) use font::{FontInfoArgs, SetFontArgs};
+pub(crate) use font::{FontInfoArgs, PackFontArgs, SetFontArgs};
 mod kerning;
 pub(crate) use kerning::{
     AssignKerningGroupArgs, CreateKerningGroupArgs, DeleteKerningGroupArgs, GetKerningArgs,
@@ -121,6 +121,10 @@ pub(crate) enum FontCommand {
 
     /// Set naming, attribution, license metadata, and one master's metrics atomically.
     Set(Box<SetFontArgs>),
+
+    /// Write a font, or a few of its glyphs, as the SDK's memory sessions open it:
+    /// shift-font's `Font` with every layer, as named MessagePack.
+    Pack(PackFontArgs),
 }
 
 #[derive(Debug, Subcommand)]

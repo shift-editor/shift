@@ -1294,6 +1294,38 @@ impl Font {
         self.data().glyphs.len()
     }
 
+    /// This font with only `kept` and the glyphs their components use,
+    /// transitively, in the font's order, and with no kerning or feature
+    /// code, which may name glyphs it leaves out: a font that shows a few
+    /// glyphs, as a memory session opens one.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::GlyphNotFound`] when the font has no glyph in
+    /// `kept`.
+    pub fn subset(&self, kept: impl IntoIterator<Item = GlyphId>) -> CoreResult<Self> {
+        let mut closure = BTreeSet::new();
+        let mut frontier: Vec<GlyphId> = kept.into_iter().collect();
+        while let Some(glyph_id) = frontier.pop() {
+            self.require_glyph(glyph_id)?;
+            if closure.insert(glyph_id) {
+                frontier.extend(self.component_glyph_ids_of_glyphs([&glyph_id]));
+            }
+        }
+        let mut subset = self.clone();
+        let dropped: Vec<GlyphId> = self
+            .glyphs()
+            .map(Glyph::id)
+            .filter(|glyph_id| !closure.contains(glyph_id))
+            .collect();
+        for glyph_id in dropped {
+            subset.remove_glyph(glyph_id);
+        }
+        *subset.kerning_mut() = Kerning::new();
+        *subset.features_mut() = FeatureData::default();
+        Ok(subset)
+    }
+
     /// Renames a glyph.
     ///
     /// # Errors
@@ -1839,6 +1871,40 @@ mod tests {
     };
     use std::sync::Arc;
     use std::time::{Duration, Instant};
+
+    #[test]
+    fn a_subset_keeps_the_glyphs_asked_for_and_the_glyphs_their_components_use() {
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let glyph = |name: &str, components: &[(GlyphId, &str)]| {
+            let mut glyph = Glyph::new(name);
+            let mut layer = GlyphLayer::with_width(LayerId::new(), source_id, 500.0);
+            for (base, base_name) in components {
+                layer.add_component(Component::new(*base, *base_name));
+            }
+            glyph.set_layer(layer);
+            glyph
+        };
+        let a = font.insert_glyph(glyph("a", &[])).unwrap();
+        let acute = font.insert_glyph(glyph("acute", &[])).unwrap();
+        let aacute = font
+            .insert_glyph(glyph("aacute", &[(a, "a"), (acute, "acute")]))
+            .unwrap();
+        font.insert_glyph(glyph("b", &[])).unwrap();
+        font.features_mut()
+            .set_fea_source(Some("feature liga { sub b by a; } liga;".into()));
+
+        let subset = font.subset([aacute]).unwrap();
+
+        let names: Vec<&str> = subset.glyphs().map(Glyph::name).collect();
+        assert_eq!(names, ["a", "acute", "aacute"]);
+        assert_eq!(subset.glyph(aacute), font.glyph(aacute));
+        assert_eq!(subset.features(), &FeatureData::default());
+        assert!(matches!(
+            font.subset([GlyphId::new()]),
+            Err(CoreError::GlyphNotFound(_))
+        ));
+    }
 
     #[derive(Clone, Copy)]
     struct PerfFontMark {

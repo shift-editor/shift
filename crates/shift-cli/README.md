@@ -303,6 +303,19 @@ blank. Supplied attribution and license text, including newlines, are stored ver
 the CLI does not generate a license or verify licensing compliance. UPM and glyph geometry
 are never rescaled by `font set`.
 
+
+### Pack a font for the SDK
+
+```sh
+shift font pack Lab.shift --output lab.font
+shift font pack Inter-Roman.glyphspackage --glyph a --glyph aacute --output inter-a.font
+```
+
+`font pack` reads a `.shift` document, a UFO, designspace, Glyphs or compiled font and
+writes it as the SDK's memory sessions open it: shift-font's `Font` with every layer, as
+named MessagePack (`MemoryFontSource.font`). Each `--glyph` keeps that glyph and the glyphs
+its components use; with any, the packed font has no kerning or feature code, which could
+name glyphs it leaves out. With none, the whole font is packed as it is.
 ### Axis edits
 
 ```sh
