@@ -4,7 +4,7 @@ use shift_store::{SHIFT_DOCUMENT_SCHEMA_VERSION, ShiftStore};
 /// Rewrites current tables into the empty version 1 shape, where glyphs had
 /// no categories and kerning pairs had no source and named glyphs and
 /// prefixed groups.
-const V1_TABLES: &str = r#"
+const V1_TABLES: &str = r"
 ALTER TABLE glyphs DROP COLUMN category;
 ALTER TABLE glyphs DROP COLUMN sub_category;
 ALTER TABLE glyphs DROP COLUMN left_metrics_key;
@@ -44,10 +44,10 @@ CREATE TABLE kerning_pairs (
 );
 
 PRAGMA user_version = 1;
-"#;
+";
 
 /// Version 1 kerning rows as a 0.1 release wrote them.
-const V1_KERNING_ROWS: &str = r#"
+const V1_KERNING_ROWS: &str = r"
 INSERT INTO kerning_groups (side, name) VALUES
     (1, 'public.kern1.A'),
     (2, 'public.kern2.A'),
@@ -64,7 +64,7 @@ INSERT INTO kerning_pairs (
     (0, 'group', 'public.kern1.A', 'group', 'public.kern2.A', -80),
     (1, 'glyph', 'A', 'glyph', 'acute', -15),
     (2, 'glyph', 'missing', 'group', 'public.kern2.A', -5);
-"#;
+";
 
 fn write_version_1_document(path: &std::path::Path) {
     drop(ShiftStore::create_document(path, &sample_font()).expect("create document"));
