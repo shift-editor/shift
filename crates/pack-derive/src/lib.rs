@@ -135,6 +135,22 @@ fn names(input: &DeriveInput) -> syn::Result<(&syn::Ident, String)> {
     ))
 }
 
+/// Calls `parse` with each option inside the `#[pack(…)]` attributes.
+fn parse_pack_attributes(
+    attributes: &[Attribute],
+    mut parse: impl FnMut(syn::meta::ParseNestedMeta<'_>) -> syn::Result<()>,
+) -> syn::Result<()> {
+    for attribute in attributes.iter().filter(|a| a.path().is_ident("pack")) {
+        attribute.parse_nested_meta(&mut parse)?;
+    }
+    Ok(())
+}
+
+/// The string of an option written `name = "…"`.
+fn string_value(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<String> {
+    Ok(meta.value()?.parse::<LitStr>()?.value())
+}
+
 /// A derived type's `#[pack(…)]` attributes.
 #[derive(Default)]
 struct TypeOptions {
@@ -146,18 +162,16 @@ struct TypeOptions {
 impl TypeOptions {
     fn of(attributes: &[Attribute]) -> syn::Result<Self> {
         let mut options = Self::default();
-        for attribute in attributes.iter().filter(|a| a.path().is_ident("pack")) {
-            attribute.parse_nested_meta(|meta| {
-                if meta.path.is_ident("rename") {
-                    options.rename = Some(meta.value()?.parse::<LitStr>()?.value());
-                } else if meta.path.is_ident("transparent") {
-                    options.transparent = true;
-                } else {
-                    return Err(meta.error("expected `rename = \"…\"` or `transparent`"));
-                }
-                Ok(())
-            })?;
-        }
+        parse_pack_attributes(attributes, |meta| {
+            if meta.path.is_ident("rename") {
+                options.rename = Some(string_value(&meta)?);
+            } else if meta.path.is_ident("transparent") {
+                options.transparent = true;
+            } else {
+                return Err(meta.error("expected `rename = \"…\"` or `transparent`"));
+            }
+            Ok(())
+        })?;
         Ok(options)
     }
 }
@@ -754,24 +768,22 @@ struct FieldOptions {
 impl FieldOptions {
     fn of(attributes: &[Attribute]) -> syn::Result<Self> {
         let mut options = Self::default();
-        for attribute in attributes.iter().filter(|a| a.path().is_ident("pack")) {
-            attribute.parse_nested_meta(|meta| {
-                if meta.path.is_ident("rename") {
-                    options.rename = Some(meta.value()?.parse::<LitStr>()?.value());
-                } else if meta.path.is_ident("id") {
-                    options.id = Some(meta.value()?.parse::<LitStr>()?.value());
-                } else if meta.path.is_ident("numbers") {
-                    options.numbers = true;
-                } else if meta.path.is_ident("skip") {
-                    options.skip = true;
-                } else {
-                    return Err(
-                        meta.error("expected `rename = \"…\"`, `id = \"…\"`, `numbers` or `skip`")
-                    );
-                }
-                Ok(())
-            })?;
-        }
+        parse_pack_attributes(attributes, |meta| {
+            if meta.path.is_ident("rename") {
+                options.rename = Some(string_value(&meta)?);
+            } else if meta.path.is_ident("id") {
+                options.id = Some(string_value(&meta)?);
+            } else if meta.path.is_ident("numbers") {
+                options.numbers = true;
+            } else if meta.path.is_ident("skip") {
+                options.skip = true;
+            } else {
+                return Err(
+                    meta.error("expected `rename = \"…\"`, `id = \"…\"`, `numbers` or `skip`")
+                );
+            }
+            Ok(())
+        })?;
         Ok(options)
     }
 
