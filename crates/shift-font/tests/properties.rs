@@ -3,9 +3,11 @@
 //! proptest generates, and a failure shrinks to the smallest case it finds.
 
 use proptest::prelude::*;
+use shift_font::variation::unmap_location_with_bases;
 use shift_font::{
-    Axis, AxisRange, Contour, DecomposedTransform, DesignLocation, Font, Glyph, GlyphLayer,
-    LayerId, PointType, Source, SourceId, Transform, kurbo, piecewise_map,
+    Axis, AxisMapping, AxisMappingPoint, AxisRange, Contour, DecomposedTransform, DesignLocation,
+    ExternalLocation, Font, Glyph, GlyphLayer, LayerId, Location, PointType, Source, SourceId,
+    Transform, kurbo, piecewise_map,
 };
 
 /// A finite coordinate, sometimes exactly zero or negative zero.
@@ -367,6 +369,75 @@ proptest! {
                     source.location()
                 );
             }
+        }
+    }
+}
+
+/// A user-to-design map for one axis: increasing, through the axis's
+/// minimum, default and maximum.
+fn axis_map() -> impl Strategy<Value = (AxisSetup, [f64; 3])> {
+    (axis_setup(), -500.0..500.0f64, 1.0..500.0f64, 1.0..500.0f64).prop_map(
+        |(setup, low, below, above)| {
+            let design = [low, low + below, low + below + above];
+            (setup, design)
+        },
+    )
+}
+
+proptest! {
+    /// With every axis mapped on its own, unmapping a mapped location gives
+    /// the user location back, axis by axis.
+    #[test]
+    fn unmapping_a_mapped_location_gives_it_back(
+        maps in prop::collection::vec(axis_map(), 2),
+        fractions in prop::collection::vec(0.0..=1.0f64, 2),
+    ) {
+        let mut font = Font::new();
+        let mut ids = Vec::new();
+        for ((setup, _), tag) in maps.iter().zip(["wght", "wdth"]) {
+            let axis = Axis::new(tag.into(), tag.into(), setup.minimum, setup.default, setup.maximum);
+            ids.push(axis.id());
+            font.add_axis(axis).expect("a valid axis");
+        }
+        let mappings = maps
+            .iter()
+            .zip(&ids)
+            .map(|((setup, design), id)| {
+                let users = [setup.minimum, setup.default, setup.maximum];
+                let mut points = Vec::new();
+                for (user, design) in users.into_iter().zip(*design) {
+                    if points.iter().any(|point: &AxisMappingPoint| point.input.get(*id) == Some(user)) {
+                        continue;
+                    }
+                    points.push(AxisMappingPoint {
+                        description: None,
+                        input: Location::from([(*id, user)]),
+                        output: Location::from([(*id, design)]),
+                    });
+                }
+                AxisMapping::new(format!("{id:?}"), vec![*id], vec![*id], points)
+            })
+            .collect();
+        font.set_axis_mappings(mappings).expect("valid mappings");
+
+        let user: ExternalLocation = maps
+            .iter()
+            .zip(&ids)
+            .zip(&fractions)
+            .map(|(((setup, _), id), fraction)| (*id, setup.minimum + fraction * (setup.maximum - setup.minimum)))
+            .collect();
+        let design = font.mapped_location(&user).expect("maps");
+        let bases = font.axis_mapping_bases().expect("compiles");
+        let unmapped = unmap_location_with_bases(&design, font.axes(), &bases);
+
+        for (axis, setup) in font.axes().iter().zip(maps.iter().map(|(setup, _)| setup)) {
+            let (wanted, got) = (user.value_on(axis), unmapped.value_on(axis));
+            prop_assert!(
+                (wanted - got).abs() <= 1e-6 * (1.0 + setup.maximum.abs() + setup.minimum.abs()),
+                "{}: user {wanted} maps to {:?} and unmaps to {got}",
+                axis.tag(),
+                design.value_on(axis)
+            );
         }
     }
 }
