@@ -1,3 +1,4 @@
+use crate::font_source::segments::ContourSegments;
 use crate::font_source::{
     FontReadError, GlyphAnchor, GlyphIndex, GlyphPoint, GlyphPointKind, PointProvenance,
 };
@@ -210,40 +211,8 @@ impl GlyphPoint {
 }
 
 fn validate_contour_points(points: &[GlyphPoint], closed: bool) -> Result<(), FontReadError> {
-    if points[0].kind != GlyphPointKind::OnCurve {
-        return Err(invalid_segment(
-            "normalized contour does not begin on-curve",
-        ));
-    }
-    let limit = if closed {
-        points.len() + 1
-    } else {
-        points.len()
-    };
-    let mut cursor = 1;
-    while cursor < limit {
-        match points[cursor % points.len()].kind {
-            GlyphPointKind::OnCurve => cursor += 1,
-            GlyphPointKind::QuadraticControl => {
-                if cursor + 1 >= limit
-                    || points[(cursor + 1) % points.len()].kind != GlyphPointKind::OnCurve
-                {
-                    return Err(invalid_segment(
-                        "quadratic control is not followed by an endpoint",
-                    ));
-                }
-                cursor += 2;
-            }
-            GlyphPointKind::CubicControl => {
-                if cursor + 2 >= limit
-                    || points[(cursor + 1) % points.len()].kind != GlyphPointKind::CubicControl
-                    || points[(cursor + 2) % points.len()].kind != GlyphPointKind::OnCurve
-                {
-                    return Err(invalid_segment("invalid cubic point sequence"));
-                }
-                cursor += 3;
-            }
-        }
+    for segment in ContourSegments::new(points, closed)? {
+        segment?;
     }
     Ok(())
 }

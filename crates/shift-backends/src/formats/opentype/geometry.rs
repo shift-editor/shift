@@ -12,13 +12,14 @@ use skrifa::raw::types::{GlyphId, Point as RawPoint};
 
 use crate::font_source::atlas::{RegionRegistry, SourceAtlasError};
 use crate::font_source::{
-    FontReadError, GlyphIndex, GlyphPointKind, PointProvenance, TrueTypePointIndex,
-    inferred_smooth_point_indices,
+    ContourSegmentError, FontReadError, GlyphIndex, GlyphPointKind, PointProvenance,
+    TrueTypePointIndex, inferred_smooth_point_indices,
 };
 
 use super::inputs::tuple_region;
 use super::variable::{approximate_hypot, component_transform, infer_tuple_deltas};
 use crate::font_source::malformed;
+use crate::font_source::segments::{ContourSegments, KindedPoint, PointSegment};
 use crate::numeric::lossy_f32;
 
 pub(super) struct VariableCurves {
@@ -71,74 +72,38 @@ fn curves_from_geometry(
 
     for contour in &geometry.contours {
         let points = &contour.points;
-        if points.is_empty() || points[0].kind != GlyphPointKind::OnCurve {
-            return Err(invalid_geometry(
-                "normalized binary atlas contour does not begin on-curve",
-            ));
-        }
-        let mut current = &points[0].position;
-        let mut cursor = 1;
-        while cursor <= points.len() {
-            let point = &points[cursor % points.len()];
-            match point.kind {
-                GlyphPointKind::OnCurve => {
-                    push_line(&mut base, &mut sources, current, &point.position);
-                    current = &point.position;
-                    cursor += 1;
+        let at = |index: usize| &points[index].position;
+        for segment in ContourSegments::new(points, true)? {
+            match segment {
+                Ok(PointSegment::Line { start, end }) => {
+                    push_line(&mut base, &mut sources, at(start), at(end));
                 }
-                GlyphPointKind::QuadraticControl => {
-                    if cursor + 1 > points.len() {
-                        return Err(invalid_geometry(
-                            "quadratic control is missing its endpoint",
-                        ));
-                    }
-                    let endpoint = &points[(cursor + 1) % points.len()];
-                    if endpoint.kind != GlyphPointKind::OnCurve {
-                        return Err(invalid_geometry(
-                            "quadratic control is not followed by an endpoint",
-                        ));
-                    }
-                    push_quadratic(
-                        &mut base,
-                        &mut sources,
-                        current,
-                        &point.position,
-                        &endpoint.position,
-                    );
-                    current = &endpoint.position;
-                    cursor += 2;
+                Ok(PointSegment::Quadratic {
+                    start,
+                    control,
+                    end,
+                }) => push_quadratic(&mut base, &mut sources, at(start), at(control), at(end)),
+                Ok(PointSegment::Cubic { .. }) | Err(ContourSegmentError::CubicWithoutEndpoint)
+                    if !allow_cubic =>
+                {
+                    return Err(SourceAtlasError::UnsupportedBinary {
+                        details: "cubic glyf contours are not supported",
+                    });
                 }
-                GlyphPointKind::CubicControl => {
-                    if !allow_cubic {
-                        return Err(SourceAtlasError::UnsupportedBinary {
-                            details: "cubic glyf contours are not supported",
-                        });
-                    }
-                    if cursor + 2 > points.len() {
-                        return Err(invalid_geometry(
-                            "cubic controls are missing their endpoint",
-                        ));
-                    }
-                    let second = &points[cursor + 1];
-                    let endpoint = &points[(cursor + 2) % points.len()];
-                    if second.kind != GlyphPointKind::CubicControl
-                        || endpoint.kind != GlyphPointKind::OnCurve
-                    {
-                        return Err(invalid_geometry(
-                            "cubic controls are not followed by an endpoint",
-                        ));
-                    }
-                    push_cubic(
-                        &mut base,
-                        &mut sources,
-                        current,
-                        &point.position,
-                        &second.position,
-                        &endpoint.position,
-                    );
-                    current = &endpoint.position;
-                    cursor += 3;
-                }
+                Ok(PointSegment::Cubic {
+                    start,
+                    first,
+                    second,
+                    end,
+                }) => push_cubic(
+                    &mut base,
+                    &mut sources,
+                    at(start),
+                    at(first),
+                    at(second),
+                    at(end),
+                ),
+                Err(error) => return Err(error.into()),
             }
         }
     }
@@ -386,6 +351,12 @@ impl VariablePoint {
             smooth: false,
             provenance: PointProvenance::Implied,
         }
+    }
+}
+
+impl KindedPoint for VariablePoint {
+    fn kind(&self) -> GlyphPointKind {
+        self.kind
     }
 }
 
