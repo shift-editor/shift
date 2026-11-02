@@ -1,0 +1,56 @@
+[package]
+name = "shift-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+shift-backends = { path = "../crates/shift-backends" }
+shift-font = { path = "../crates/shift-font" }
+
+# Kept out of the main workspace: fuzz builds use their own flags.
+[workspace]
+members = ["."]
+
+# The main workspace's patch, so shift-text builds against the same harfrust.
+[patch.crates-io]
+harfrust = { git = "https://github.com/shift-editor/harfrust", rev = "b90075ae7ad1903405852216ddd3a64123ba1673" }
+
+[[bin]]
+name = "glif"
+path = "fuzz_targets/glif.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "glyphs"
+path = "fuzz_targets/glyphs.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "designspace"
+path = "fuzz_targets/designspace.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "opentype"
+path = "fuzz_targets/opentype.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "proof_text"
+path = "fuzz_targets/proof_text.rs"
+test = false
+doc = false
+bench = false
