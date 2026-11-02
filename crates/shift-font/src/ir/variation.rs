@@ -46,6 +46,18 @@ impl AxisRange {
 
         snap((value - self.default) / extent)
     }
+
+    /// Maps a normalized `value` back into the range's space: the inverse of
+    /// [`Self::normalize`] on a side with extent.
+    pub fn denormalize(&self, value: f64) -> f64 {
+        if value < 0.0 {
+            self.default + value * (self.default - self.minimum)
+        } else if value > 0.0 {
+            self.default + value * (self.maximum - self.default)
+        } else {
+            self.default
+        }
+    }
 }
 
 /// One axis's design-space bounds used to normalize authored source locations.
