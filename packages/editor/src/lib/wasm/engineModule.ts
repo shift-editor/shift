@@ -68,6 +68,7 @@ import type {
 
 export { initEngine, svgPaths, typedText } from "@shift/wasm/engine";
 export type { ContourPoints } from "@shift/wasm/protocol";
+import type { EngineStore } from "../../types/engine";
 import type { KerningPlace } from "../../types/font";
 import { unkerned } from "../model/Kerning";
 
@@ -123,6 +124,25 @@ export class EngineSession {
     this.#reads = engineReads(handle);
     this.#intents = engineEdits(handle);
     released.register(this, handle, this);
+  }
+
+  /**
+   * Opens a session over `store`, as its kind says: a store's directory read
+   * through its `StoreRequest`, or a whole font or a compiled font's header,
+   * resident.
+   *
+   * @throws When the directory, font or header does not decode to a font, or
+   * the scene to scene nodes.
+   */
+  static over(store: EngineStore): EngineSession {
+    switch (store.kind) {
+      case "reader":
+        return EngineSession.open(store.directory, store.request, store.scene);
+      case "resident":
+        return EngineSession.openResident(store.font, store.scene);
+      case "compiled":
+        return EngineSession.openResident(store.header);
+    }
   }
 
   /**

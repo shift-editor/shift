@@ -2,7 +2,7 @@
 
 use miette::{IntoDiagnostic, WrapErr, miette};
 use shift_backends::font_loader::FontLoader;
-use shift_font::{Font, GlyphId};
+use shift_font::GlyphId;
 
 use crate::cli::PackFontArgs;
 
@@ -17,31 +17,25 @@ use crate::cli::PackFontArgs;
 /// `args.glyphs`, or the packed font cannot be written.
 pub(crate) fn pack_font(args: &PackFontArgs) -> miette::Result<()> {
     let path = args.path.to_string_lossy();
-    let font = FontLoader::new()
+    let mut font = FontLoader::new()
         .read_font(&path)
         .into_diagnostic()
         .wrap_err_with(|| format!("cannot read {path}"))?;
-    let font = kept_glyphs(&font, &args.glyphs)?;
+    if !args.glyphs.is_empty() {
+        let kept = args
+            .glyphs
+            .iter()
+            .map(|name| {
+                font.glyph_id_by_name(name)
+                    .ok_or_else(|| miette!("the font has no glyph named {name}"))
+            })
+            .collect::<miette::Result<Vec<GlyphId>>>()?;
+        font = font.subset(kept).into_diagnostic()?;
+    }
     let bytes = rmp_serde::to_vec_named(&font).into_diagnostic()?;
     std::fs::write(&args.output, bytes)
         .into_diagnostic()
         .wrap_err_with(|| format!("cannot write {}", args.output.display()))
-}
-
-/// `font` with only the glyphs `names` names and their components; `font`
-/// itself when `names` is empty.
-fn kept_glyphs(font: &Font, names: &[String]) -> miette::Result<Font> {
-    if names.is_empty() {
-        return Ok(font.clone());
-    }
-    let glyph_ids = names
-        .iter()
-        .map(|name| {
-            font.glyph_id_by_name(name)
-                .ok_or_else(|| miette!("the font has no glyph named {name}"))
-        })
-        .collect::<miette::Result<Vec<GlyphId>>>()?;
-    font.subset(glyph_ids).into_diagnostic()
 }
 
 #[cfg(test)]
@@ -50,6 +44,8 @@ mod tests {
 
     use shift_font::Glyph;
     use shift_font::test_support::fixtures;
+
+    use shift_font::Font;
 
     use super::*;
 
