@@ -28,10 +28,16 @@ impl KnownType {
     }
 }
 
-/// The turbofished `collect` in `expr` at a position whose type is known,
-/// with the position. `?` hides the type from inference, so it is followed
+/// A turbofished `collect` at a position whose type is known.
+pub(crate) struct Turbofish<'a> {
+    pub(crate) call: &'a ExprMethodCall,
+    pub(crate) known: KnownType,
+}
+
+/// The turbofished `collect`s directly inside `expr` at a position whose
+/// type is known. `?` hides the type from inference, so it is followed
 /// only to `into_boxed_slice`.
-pub(crate) fn redundant_turbofish(expr: &Expr) -> Vec<(&ExprMethodCall, KnownType)> {
+pub(crate) fn redundant_turbofish(expr: &Expr) -> Vec<Turbofish<'_>> {
     let positions: Vec<(&Expr, KnownType)> = match expr {
         Expr::Struct(literal) => literal
             .fields
@@ -64,7 +70,12 @@ pub(crate) fn redundant_turbofish(expr: &Expr) -> Vec<(&ExprMethodCall, KnownTyp
     };
     positions
         .into_iter()
-        .filter_map(|(value, known)| Some((collects_vec(value)?, known)))
+        .filter_map(|(value, known)| {
+            Some(Turbofish {
+                call: collects_vec(value)?,
+                known,
+            })
+        })
         .collect()
 }
 
