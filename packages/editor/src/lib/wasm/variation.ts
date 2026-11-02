@@ -151,17 +151,18 @@ export class FontVariation {
    * normalized by its own range: shift-font's `VariationBasis::evaluate`.
    * The basis crosses to the session once, the first time it is evaluated.
    *
-   * @returns null when the basis's regions name an axis the font lacks.
+   * @throws When the basis's regions name an axis the font lacks.
    */
-  variationAdjustments(basis: VariationBasis, location: DesignAxisLocation): Float64Array | null {
+  variationAdjustments(basis: VariationBasis, location: DesignAxisLocation): Float64Array {
     let variation = this.#compiled.get(basis);
     if (variation === undefined) {
       variation = this.#variation.variationNumber(basis);
       this.#compiled.set(basis, variation);
     }
     const axes = this.#axesCell.peek();
-    const values = this.#variation.variationAt(variation, locationValues(axes, location));
-    return values && Float64Array.from(values);
+    return Float64Array.from(
+      this.#variation.variationAt(variation, locationValues(axes, location)),
+    );
   }
 
   /** Whether `read` was read at `values` against the font's current inputs. */

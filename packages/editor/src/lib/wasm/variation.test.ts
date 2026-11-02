@@ -32,7 +32,7 @@ const released: EngineVariation = {
   designLocation: () => [],
   externalLocation: () => [],
   variationNumber: () => 0,
-  variationAt: () => null,
+  variationAt: () => [],
 };
 
 describe("the engine's variation reader on a released session", () => {

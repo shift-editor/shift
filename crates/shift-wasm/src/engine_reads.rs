@@ -205,9 +205,18 @@ pub trait EngineReads {
     fn variation_number(&self, basis: VariationBasis) -> usize;
     /// The values of the compiled basis interned as `variation` at a design
     /// location, each axis normalized by its own range, over the session's
-    /// axes: `VariationBasis::evaluate`. Null for a number never interned,
-    /// or a basis whose regions name an axis the session lacks.
-    fn variation_at(&self, variation: usize, location: Vec<f64>) -> Option<Vec<f64>>;
+    /// axes: `VariationBasis::evaluate`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CompiledVariationError::NotInterned`] for a number the
+    /// session never gave, and [`CompiledVariationError::Unevaluable`] when
+    /// the basis's regions name an axis the session lacks.
+    fn variation_at(
+        &self,
+        variation: usize,
+        location: Vec<f64>,
+    ) -> Result<Vec<f64>, CompiledVariationError>;
     /// The document's pages, in list order.
     fn scene_pages(&self) -> Vec<SceneNode>;
     /// Every node of the document's scene, each root (pages first among
@@ -282,6 +291,18 @@ pub struct FontHeader {
     pub named_instances: Vec<NamedInstance>,
     /// Tracked Hyperglot language ids; `None` when the font stores no list.
     pub language_ids: Option<Vec<String>>,
+}
+
+/// Why [`EngineReads::variation_at`] could not evaluate a compiled basis.
+/// Details are text: shift-font's errors cannot cross to the editor.
+#[derive(Clone, Debug, PartialEq, Eq, Pack, thiserror::Error)]
+pub enum CompiledVariationError {
+    /// The session never interned a basis as `variation`.
+    #[error("no compiled variation {variation} was interned")]
+    NotInterned { variation: usize },
+    /// The basis cannot be evaluated over the session's axes.
+    #[error("the compiled variation cannot be evaluated: {detail}")]
+    Unevaluable { detail: String },
 }
 
 /// Why [`EngineReads::font_header`] or [`EngineReads::glyph_snapshots`]
@@ -433,7 +454,8 @@ mod exports {
     use wasm_bindgen::prelude::*;
 
     use super::{
-        AnchorId, Axis, ComponentId, Counterparts, CounterpartsReadError, EditablePair,
+        AnchorId, Axis, CompiledVariationError, ComponentId, Counterparts, CounterpartsReadError,
+        EditablePair,
         EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag, FontFeature,
         FontHeader, FontRecordsError, GlyphIdentityChange, GlyphSnapshot, InterpolatedMetrics,
         KerningSnapshot, LayerId, LayoutError, NodeId, PageLayout, PageLayoutError,
@@ -476,14 +498,26 @@ mod exports {
         }
 
         /// The values of the basis numbered `number` at `location`, as
-        /// numbers in `axes` order; none for a number never interned or a
-        /// basis `axes` cannot evaluate.
-        fn at(&self, number: usize, axes: &[Axis], location: &[f64]) -> Option<Vec<f64>> {
+        /// numbers in `axes` order.
+        ///
+        /// # Errors
+        ///
+        /// As [`EngineReads::variation_at`].
+        fn at(
+            &self,
+            number: usize,
+            axes: &[Axis],
+            location: &[f64],
+        ) -> Result<Vec<f64>, CompiledVariationError> {
             let bases = self.0.borrow();
-            let basis = bases.get(number)?;
+            let basis = bases
+                .get(number)
+                .ok_or(CompiledVariationError::NotInterned { variation: number })?;
             basis
                 .evaluate(&to_location(axes, location), axes, None)
-                .ok()
+                .map_err(|error| CompiledVariationError::Unevaluable {
+                    detail: error.to_string(),
+                })
         }
     }
 
@@ -943,7 +977,11 @@ mod exports {
             self.compiled.intern(basis.into())
         }
 
-        fn variation_at(&self, variation: usize, location: Vec<f64>) -> Option<Vec<f64>> {
+        fn variation_at(
+            &self,
+            variation: usize,
+            location: Vec<f64>,
+        ) -> Result<Vec<f64>, CompiledVariationError> {
             self.compiled
                 .at(variation, self.session.font().axes(), &location)
         }
@@ -1596,10 +1634,13 @@ mod exports {
                 ]
             });
 
-            assert_eq!(default, Some(vec![0.0, 0.0]));
-            assert_eq!(halfway, Some(vec![5.0, -2.0]));
-            assert_eq!(heaviest, Some(vec![10.0, -4.0]));
-            assert_eq!(missing, None);
+            assert_eq!(default, Ok(vec![0.0, 0.0]));
+            assert_eq!(halfway, Ok(vec![5.0, -2.0]));
+            assert_eq!(heaviest, Ok(vec![10.0, -4.0]));
+            assert!(matches!(
+                missing,
+                Err(CompiledVariationError::NotInterned { .. })
+            ));
         }
 
         #[test]

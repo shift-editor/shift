@@ -405,10 +405,10 @@ export class EngineSession {
    * `VariationBasis::evaluate`.
    *
    * @param location - Design coordinates in the font's axis order, NaN for an axis default.
-   * @returns null for a number this session never gave, or a basis whose
-   * regions name an axis the font lacks.
+   * @throws For a number this session never gave, or a basis whose regions
+   * name an axis the font lacks.
    */
-  variationAt(variation: number, location: readonly number[]): readonly number[] | null {
+  variationAt(variation: number, location: readonly number[]): readonly number[] {
     return this.#reads.variationAt(variation, location);
   }
 
