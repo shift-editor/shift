@@ -302,8 +302,8 @@ impl<'ast> Visit<'ast> for FileScan<'_> {
     }
 
     fn visit_expr(&mut self, expr: &'ast Expr) {
-        for (call, known) in collect::redundant_turbofish(expr) {
-            self.report_turbofish(call, known);
+        for turbofish in collect::redundant_turbofish(expr) {
+            self.report_turbofish(turbofish.call, turbofish.known);
         }
         if let Expr::MethodCall(call) = expr {
             let method = call.method.to_string();
