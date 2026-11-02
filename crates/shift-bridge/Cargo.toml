@@ -11,10 +11,9 @@ crate-type = ["cdylib"]
 [dependencies]
 pack = { workspace = true }
 shift-engine = { workspace = true }
-shift-font = { workspace = true }
+shift-font = { workspace = true, features = ["pack"] }
 shift-slug = { workspace = true }
 shift-specimen = { workspace = true }
-shift-wire = { workspace = true, features = ["napi", "pack"] }
 shift-backends = { workspace = true }
 shift-config = { workspace = true }
 shift-store = { workspace = true }

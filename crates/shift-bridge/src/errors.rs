@@ -33,7 +33,7 @@ pub enum BridgeError {
   Workspace(#[from] WorkspaceError),
 
   #[error(transparent)]
-  Wire(#[from] shift_wire::values::WireError),
+  Wire(#[from] shift_font::wire::values::WireError),
 
   #[error(transparent)]
   Store(#[from] shift_store::StoreError),
@@ -115,7 +115,7 @@ macro_rules! through_bridge_error {
       shift_backends::FontReadError,
       shift_backends::SourceAtlasError,
       shift_workspace::WorkspaceError,
-      shift_wire::values::WireError,
+      shift_font::wire::values::WireError,
       shift_store::StoreError,
       rmp_serde::encode::Error,
       rmp_serde::decode::Error,

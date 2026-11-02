@@ -29,7 +29,7 @@ Stable IDs are identity. Names and Unicode values are editable metadata.
 
 ## Boundaries
 
-`shift-font` should not expose TypeScript-facing wire contracts. Those belong in `shift-wire`.
+TypeScript-facing wire contracts live apart from the domain model, in `shift_font::wire`; the napi twins of those that still cross as napi objects live in `shift-bridge`.
 
 `shift-font` should not perform SQLite persistence. Durable working-store reads and writes belong in `shift-store` and are coordinated by `shift-workspace`.
 

@@ -14,13 +14,13 @@ The native addon the utility process calls: three `#[pack::interface]` traits on
 
 **Architecture Invariant:** Mutation echoes select complete renderer projections from `FontChangeSet::impact()`. The bridge translates those domain impacts into transport fields; it does not reconstruct transitive font coupling by matching individual change variants.
 
-**Architecture Invariant:** The utility process calls the addon through three traits split by area, each a `#[pack::interface]` in `src/bridge/`: `NativeWorkspace` (open, save, close, persist, the font's records other than its axes, sources and kerning, which the window reads from its engine, and `apply`, which writes a store from intents directly for tests and tools that seed one; the editor edits in its window's engine and persists the change set), `NativeAtlas` (Slug atlas generations and source catalog pages), `NativeSource` (a font file opened for browsing; its snapshot carries shift-font's own `Axis`, `Source` and `KerningSide`, the types the engine reads and the intents take); the window compiles its own shaper font, in its engine module. Each has one napi export, `<area>_request(method, numbers, blobs)`, which `reply::answer` decodes with the trait's `<trait>_request` and encodes the result of; names travel with each message (`pack::CarriedNames`). napi is the transport only: the generated `@shift/types/native-protocol` classes, built by `@shift/bridge`'s `createBridge`, are the API. **WHY:** One declaration per call, both sides generated, instead of a napi signature, a `shift-wire` twin and a scraped declaration per method.
+**Architecture Invariant:** The utility process calls the addon through three traits split by area, each a `#[pack::interface]` in `src/bridge/`: `NativeWorkspace` (open, save, close, persist, the font's records other than its axes, sources and kerning, which the window reads from its engine, and `apply`, which writes a store from intents directly for tests and tools that seed one; the editor edits in its window's engine and persists the change set), `NativeAtlas` (Slug atlas generations and source catalog pages), `NativeSource` (a font file opened for browsing; its snapshot carries shift-font's own `Axis`, `Source` and `KerningSide`, the types the engine reads and the intents take); the window compiles its own shaper font, in its engine module. Each has one napi export, `<area>_request(method, numbers, blobs)`, which `reply::answer` decodes with the trait's `<trait>_request` and encodes the result of; names travel with each message (`pack::CarriedNames`). napi is the transport only: the generated `@shift/types/native-protocol` classes, built by `@shift/bridge`'s `createBridge`, are the API. **WHY:** One declaration per call, both sides generated, instead of a napi signature, a wire twin and a scraped declaration per method.
 
 **Architecture Invariant:** A trait method returns `Result<T, Native<Area>Error>`. Each variant carries the Rust error's text as `detail`, so the generated TypeScript throws a `PackError` whose `kind` names the failure (`noWorkspace`, `needsSaveAs`, `invalidInput`, `failed`, …) and whose message ends with the text callers saw before. Internally failures stay `BridgeError`; `through_bridge_error!` lets a trait method use `?` on anything `BridgeError` wraps.
 
-**Architecture Invariant:** Values cross in pack's packed numbers: the `shift-wire` types derive `Pack` behind its `pack` feature, with `#[pack(id = …)]` typing a `String` id as its brand and `#[pack(numbers)]` sending glyph values as a `Float64Array`. Byte payloads (the encoded directory, persisted change sets, the shaper font) cross whole as `pack::Bytes` in the side blob list. An absent value reads as `null` in TypeScript.
+**Architecture Invariant:** Values cross in pack's packed numbers: the `shift_font::wire` types derive `Pack` behind shift-font's `pack` feature, with `#[pack(id = …)]` typing a `String` id as its brand and `#[pack(numbers)]` sending glyph values as a `Float64Array`. Byte payloads (the encoded directory, persisted change sets, the shaper font) cross whole as `pack::Bytes` in the side blob list. An absent value reads as `null` in TypeScript.
 
-**Architecture Invariant:** What the traits do not carry stays a napi method, exposed as `ShiftBridge.napi`: the Slug atlas streams (`ReadableStream<Buffer>`), the async export and specimen tasks, and the reads phase f moves into the window's engine (`getGlyphSnapshots`, `resolveLayers`, `getGlyphProjections`, `getGlyphPreviews`, `mapLocation`). Their DTOs are the remaining `shift-wire::bridges::napi` twins. `shift-bridge` and `shift-wire` are the only crates that may link the NAPI runtime — enforced by `scripts/check-invariants.py` (`napi-boundary`).
+**Architecture Invariant:** What the traits do not carry stays a napi method, exposed as `ShiftBridge.napi`: the Slug atlas streams (`ReadableStream<Buffer>`), the async export and specimen tasks, and the reads phase f moves into the window's engine (`getGlyphSnapshots`, `resolveLayers`, `getGlyphProjections`, `getGlyphPreviews`, `mapLocation`). Their DTOs are the remaining napi twins, in `wire_napi.rs`. `shift-bridge` is the only crate that may link the NAPI runtime — enforced by `scripts/check-invariants.py` (`napi-boundary`).
 
 **Architecture Invariant:** Export explicitly acquires all persisted layers before taking a clone/COW `FontSaveSnapshot`. **WHY:** Async export gets a complete stable view while ordinary workspace open remains directory-first and lazy.
 
@@ -49,9 +49,10 @@ crates/shift-bridge/
     input.rs     -- boundary parsing/adaptation helpers
     layer_reader.rs -- `LayerReader` NAPI class: shift-engine's `StoreReader` (layers, bases, composites) over a read-only store, for the renderer's preload
     source_reader.rs -- `SourceReader` NAPI class: the same `StoreReader` over a UFO, designspace or Glyphs file, glyph by glyph, for a preview's engine
+    wire_napi.rs -- napi twins of `shift_font::wire`'s shapes, for the calls that still cross as napi objects
   scripts/
     profile-slug-atlas.mjs -- release source/native-document page and stream profiler
-  Cargo.toml     -- cdylib crate; depends on shift-font, shift-wire, shift-backends, napi
+  Cargo.toml     -- cdylib crate; depends on shift-font, shift-backends, napi
 ```
 
 ## Key Types
@@ -64,7 +65,7 @@ crates/shift-bridge/
 - `BridgeError` -- typed bridge error enum converted once at the NAPI boundary.
 - `AppliedChange` -- replace-grade mutation response returned by persist and apply.
 - `FontReplacement` -- selective complete font projections, with the changed glyph records as `glyphChanges`, in name order; a collection is `null` when the edit left it alone.
-- Intents are shift-font's own `FontIntent` and payload structs, which derive `Pack` behind shift-font's `pack` feature; no copy of them lives in `shift-wire`. `shift_wire::values` keeps only the id parsing and the napi `Location` and `PointType` the remaining napi calls take.
+- Intents are shift-font's own `FontIntent` and payload structs, which derive `Pack` behind shift-font's `pack` feature; no copy of them lives in `shift_font::wire`. `shift_font::wire::values` keeps only the id parsing and the napi `Location` and `PointType` the remaining napi calls take.
 - `LanguagesReplacement` -- tracked Hyperglot language list replacement stored in the font lib under `com.shift.languages`; the replacement wrapper's `languageIds` is `null` when the key is absent, so `getLanguageIds()` and the echo distinguish "no list" from an empty list.
 - `LayerReplaced` -- one replaced glyph layer in an applied change.
 - `AxisMapping` -- authoring DTO used by mapping replacement and mapped-location queries; axes are shift-font's own `Axis`.
@@ -109,7 +110,7 @@ On the Mini release build, OpenSans-CondensedItalic (3,431 glyphs, 3,063 compone
 ### Adding a new mutation intent
 
 1. Add the domain operation to the relevant model object in `shift-font`, exposed as a `FontIntent` variant.
-2. Give its payload struct `#[cfg_attr(feature = "pack", derive(pack::Pack))]`; its TypeScript type is generated from it. Nothing is added in `shift-wire`.
+2. Give its payload struct `#[cfg_attr(feature = "pack", derive(pack::Pack))]`; its TypeScript type is generated from it. Nothing is added in `shift_font::wire`.
 3. Do not add a per-intent method — every mutation flows through the single shared `apply` path.
 4. Carry `LayerId` in the payload when the operation targets glyph outline state; the shared `apply` path returns the replacement state as `AppliedChange`.
 5. Run `cargo check -p shift-bridge` and rebuild the native module before regenerating bridge types.
@@ -148,7 +149,7 @@ SHIFT_PROFILE_SLUG_ATLAS=1 node crates/shift-bridge/scripts/profile-slug-atlas.m
 ## Related
 
 - `shift-font` -- font/glyph/layer data model and model-level mutation logic.
-- `shift-wire` -- canonical bridge DTOs (deriving `Pack`) and the remaining NAPI twins.
+- `shift_font::wire` -- canonical bridge DTOs (deriving `Pack`); their remaining napi twins are `wire_napi.rs`.
 - `pack` / `@shift/pack` -- the packed encoding, the interface macro and the TypeScript generator.
 - `shift-workspace` -- open editable font workspace and source/store coordination.
 - `shift-backends` -- imported font loading and font export.

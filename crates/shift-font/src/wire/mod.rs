@@ -1,19 +1,14 @@
-//! document state types shared by edit logic and bridge bindings.
+//! The shapes the native workspace's bridge and the editor's WebAssembly carry
+//! across to TypeScript: document state types shared by edit logic and bridge
+//! bindings.
 //!
 //! These types split stable glyph structure from mutable numeric values. The
 //! values layout is canonical and must stay in lockstep with every consumer.
 
-// Library code returns errors instead of panicking: a panic kills the
-// WebAssembly engine. Tests may unwrap (clippy.toml).
-#![warn(clippy::unwrap_used, clippy::print_stdout)]
-
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
-use shift_font::composite::{
-    ComponentGlyph as IrComponentGlyph, GlyphComponents as IrGlyphComponents,
-};
-use shift_font::{
+use crate::composite::{ComponentGlyph as IrComponentGlyph, GlyphComponents as IrGlyphComponents};
+use crate::{
     Anchor as IrAnchor, AnchorId, AxisId, AxisMapping as IrAxisMapping,
     AxisMappingBasis as IrAxisMappingBasis, AxisMappingId, Component as IrComponent,
     ComponentAlignment, ComponentId, Contour as IrContour, ContourId, Font as IrFont,
@@ -27,8 +22,8 @@ use shift_font::{
     SourceMetricField as IrSourceMetricField,
     SourceMetricInterpolation as IrSourceMetricInterpolation, VariationBasis as IrVariationBasis,
 };
+use serde::{Deserialize, Serialize};
 
-pub mod bridges;
 pub mod replacement;
 pub mod state;
 pub mod values;
@@ -101,7 +96,7 @@ impl Default for FontMetrics {
     /// A new font's em.
     fn default() -> Self {
         Self {
-            units_per_em: shift_font::FontMetrics::default().units_per_em,
+            units_per_em: crate::FontMetrics::default().units_per_em,
         }
     }
 }
@@ -315,8 +310,8 @@ pub struct FontSnapshot {
     pub metric_definitions: Vec<MetricDefinition>,
     pub source_metrics_interpolation: Option<SourceMetricsInterpolationSnapshot>,
     pub glyphs: Vec<GlyphEntry>,
-    pub sources: Vec<shift_font::Source>,
-    pub axes: Vec<shift_font::Axis>,
+    pub sources: Vec<crate::Source>,
+    pub axes: Vec<crate::Axis>,
     pub axis_mappings: Vec<AxisMapping>,
     pub axis_mapping_bases: Vec<AxisMappingBasis>,
     pub named_instances: Vec<NamedInstance>,
@@ -418,15 +413,15 @@ impl From<VariationBasis> for IrVariationBasis {
                 .into_iter()
                 .map(|delta| {
                     let supports = delta.region.into_iter().map(|support| {
-                        shift_font::AxisSupport::new(
+                        crate::AxisSupport::new(
                             support.axis_id,
                             support.lower,
                             support.peak,
                             support.upper,
                         )
                     });
-                    shift_font::VariationDelta::new(
-                        shift_font::InterpolationRegion::new(supports.collect()),
+                    crate::VariationDelta::new(
+                        crate::InterpolationRegion::new(supports.collect()),
                         delta.values,
                     )
                 })
@@ -446,8 +441,8 @@ pub struct DesignNormalization {
     pub maximum: f64,
 }
 
-impl From<&shift_font::DesignNormalization> for DesignNormalization {
-    fn from(normalization: &shift_font::DesignNormalization) -> Self {
+impl From<&crate::DesignNormalization> for DesignNormalization {
+    fn from(normalization: &crate::DesignNormalization) -> Self {
         Self {
             axis_id: normalization.axis_id,
             minimum: normalization.range.minimum,
@@ -963,8 +958,8 @@ pub struct KerningGroup {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct KerningPairValue {
-    pub first: shift_font::KerningSide,
-    pub second: shift_font::KerningSide,
+    pub first: crate::KerningSide,
+    pub second: crate::KerningSide,
     pub amount: f64,
 }
 

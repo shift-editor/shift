@@ -26,8 +26,9 @@
 //! changesets, geometry helpers, component resolution, and variation helpers.
 //!
 //! Canonical document persistence belongs to `shift-store`; workspace and recovery
-//! orchestration belongs to `shift-workspace`. Transport belongs to `shift-bridge`
-//! and `shift-wire`. UI interaction belongs to the TypeScript editor.
+//! orchestration belongs to `shift-workspace`. Transport belongs to `shift-bridge`;
+//! the shapes it and the editor's WebAssembly carry are [`wire`]'s. UI
+//! interaction belongs to the TypeScript editor.
 //!
 // Library code returns errors instead of panicking: a panic kills the
 // WebAssembly engine. Tests may unwrap (clippy.toml).
@@ -65,6 +66,7 @@ mod string_enum;
 pub mod svg_path;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
+pub mod wire;
 
 pub use axis_map::piecewise_map;
 pub use changes::*;

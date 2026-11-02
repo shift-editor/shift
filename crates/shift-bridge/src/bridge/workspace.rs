@@ -3,15 +3,15 @@
 //! font's records.
 
 use pack::{Bytes, Pack};
-use shift_font::{
-  FontChangeImpact, FontChangeSet, FontIntent, FontIntentSet, Glyph, GlyphId, GlyphRecordChanges,
-  GlyphRecords, LayerId, OpenTypeCategories,
-};
-use shift_wire::replacement::FontReplacement;
-use shift_wire::{
+use shift_font::wire::replacement::FontReplacement;
+use shift_font::wire::{
   AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphChangedEntities,
   GlyphLayerSnapshot, GlyphStructure, MetricDefinition, NamedInstance,
   SourceMetricsInterpolationSnapshot,
+};
+use shift_font::{
+  FontChangeImpact, FontChangeSet, FontIntent, FontIntentSet, Glyph, GlyphId, GlyphRecordChanges,
+  GlyphRecords, LayerId, OpenTypeCategories,
 };
 use shift_workspace::{
   AcquireScope, DocumentIdentity as StoreDocumentIdentity, FontWorkspace, NewWorkspace,
@@ -733,7 +733,7 @@ impl Bridge {
         structure: touched
           .structural
           .then(|| GlyphStructure::from(touched.layer.as_ref())),
-        values: shift_wire::values_from_layer(touched.layer.as_ref()),
+        values: shift_font::wire::values_from_layer(touched.layer.as_ref()),
         changed: GlyphChangedEntities::default(),
       })
       .collect();

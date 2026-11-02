@@ -36,11 +36,11 @@ use shift_font::{
 use shift_text::layout::{LayoutError, TextLayout};
 
 pub use crate::page_layout::{NodeBox, PageLayout, PageLayoutError, PageLayoutRequest, RunLines};
-pub use shift_text::shape::{FeatureDefault, FeatureGroup, FontFeature};
-use shift_wire::{
+use shift_font::wire::{
     AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphSnapshot, KerningSnapshot,
     MetricDefinition, NamedInstance, SourceMetricsInterpolationSnapshot, VariationBasis,
 };
+pub use shift_text::shape::{FeatureDefault, FeatureGroup, FontFeature};
 
 /// What the editor reads from one engine session's font. Glyphs and sources
 /// are named by the numbers the session interned for them; `glyphs` lists
@@ -453,14 +453,14 @@ mod exports {
     use shift_font::ir::variation::{map_location_with_bases, unmap_location_with_bases};
     use shift_font::linked_metrics::SideLink;
     use shift_font::naming::new_anchor_name;
+    use shift_font::wire::values::{self, WireParse};
+    use shift_font::wire::{self as wire, GlyphLayerSnapshot, GlyphState};
     use shift_font::{
         AxisMapping, AxisMappingBasis, AxisRole, DesignLocation, ExternalLocation, Font,
         FontChangeImpact, FontCopyId, Glyph, GlyphId, GlyphRecords, InterpolationBasis, Kerning,
         KerningSide, Location, MissingKerningOrigin, ResolvedKerning, SourceId, VariationBasis,
     };
     use shift_text::layout::FeatureSetting;
-    use shift_wire::values::{self, WireParse};
-    use shift_wire::{self as wire, GlyphLayerSnapshot, GlyphState};
     use wasm_bindgen::prelude::*;
 
     use super::{
@@ -1351,7 +1351,7 @@ mod exports {
 
         use super::*;
         use crate::engine::{engine_open_resident, engine_release};
-        use shift_wire::VariationBasis as WireBasis;
+        use shift_font::wire::VariationBasis as WireBasis;
 
         fn axis(
             id: &str,
