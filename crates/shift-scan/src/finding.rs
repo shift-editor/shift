@@ -163,7 +163,8 @@ impl Kind {
             Self::TestSetupCopy => "test-setup-copy",
         }
     }
-    /// Where this kind's hits are. Every kind looks at one or the other.
+    /// Where this kind's hits are. Listed in full, so a new kind has to
+    /// choose.
     pub(crate) fn scope(self) -> Scope {
         match self {
             Self::LargeInlineTests
@@ -173,7 +174,32 @@ impl Kind {
             | Self::RepeatedTestHelper
             | Self::WeakErrorAssert
             | Self::TestSetupCopy => Scope::Tests,
-            _ => Scope::Src,
+            Self::MethodCandidate
+            | Self::TraitCandidate
+            | Self::LongChain
+            | Self::RepeatedErrorMapping
+            | Self::FieldCopyConversion
+            | Self::DuplicateBody
+            | Self::CollectTurbofish
+            | Self::DuplicateType
+            | Self::TypeNameCollision
+            | Self::GetPrefix
+            | Self::IterSuffix
+            | Self::CtorWithPrefix
+            | Self::IdParamName
+            | Self::GenericSuffix
+            | Self::StringlyError
+            | Self::InlineNotFound
+            | Self::TupleReturn
+            | Self::PanickingConversion
+            | Self::NapiWithoutCatchUnwind
+            | Self::ParallelFirstError
+            | Self::LeakedStatic
+            | Self::UnguardedRecursion
+            | Self::OwnedIdAccessor
+            | Self::LinearLookup
+            | Self::CrateHeader
+            | Self::TestOnlyPub => Scope::Src,
         }
     }
 
