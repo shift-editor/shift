@@ -60,6 +60,7 @@ map_unwrap_or = "warn"
 # Write the short form: no else after an exit, no negated if/else, no
 # ceremony around iterators and strings.
 redundant_else = "warn"
+if_not_else = "warn"
 # `Arc::clone(&x)` shows a reference-count bump, not a deep copy.
 clone_on_ref_ptr = "warn"
 # The rustdoc skill requires `# Errors` on every public fallible function.
