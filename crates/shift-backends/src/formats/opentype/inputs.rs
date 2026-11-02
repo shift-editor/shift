@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use shift_font::AxisRange;
 use shift_slug::retained::PageCompiler;
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::prelude::{LocationRef, Size};
@@ -500,6 +501,11 @@ fn atlas_axes(source: &OpenTypeFont) -> Result<Vec<AtlasAxis>, SourceAtlasError>
                     details: "binary variation axes must be continuous",
                 });
             };
+            let range = AxisRange {
+                minimum: *minimum,
+                default: *default,
+                maximum: *maximum,
+            };
             let normalized_mapping = source
                 .directory
                 .independent_mapping(axis.index)
@@ -509,49 +515,21 @@ fn atlas_axes(source: &OpenTypeFont) -> Result<Vec<AtlasAxis>, SourceAtlasError>
                         .iter()
                         .filter_map(|point| {
                             Some((
-                                normalize_user_coordinate(
-                                    *point.input.first()?,
-                                    *minimum,
-                                    *default,
-                                    *maximum,
-                                ),
-                                normalize_user_coordinate(
-                                    *point.output.first()?,
-                                    *minimum,
-                                    *default,
-                                    *maximum,
-                                ),
+                                f2dot14_bits(&range, *point.input.first()?),
+                                f2dot14_bits(&range, *point.output.first()?),
                             ))
                         })
                         .collect()
                 })
                 .unwrap_or_default();
-            Ok(AtlasAxis::new(
-                Vec::new(),
-                *minimum,
-                *default,
-                *maximum,
-                normalized_mapping,
-            ))
+            Ok(AtlasAxis::new(Vec::new(), range, normalized_mapping))
         })
         .collect()
 }
 
-fn normalize_user_coordinate(value: f64, minimum: f64, default: f64, maximum: f64) -> i16 {
-    let normalized = if value == default {
-        0.0
-    } else if value < default {
-        if default == minimum {
-            0.0
-        } else {
-            (value - default) / (default - minimum)
-        }
-    } else if maximum == default {
-        0.0
-    } else {
-        (value - default) / (maximum - default)
-    };
-    F2Dot14::from_f32(crate::numeric::lossy_f32(normalized)).to_bits()
+/// `value` normalized over `range`, as an F2Dot14 coordinate's bits.
+fn f2dot14_bits(range: &AxisRange, value: f64) -> i16 {
+    F2Dot14::from_f32(crate::numeric::lossy_f32(range.normalize(value))).to_bits()
 }
 
 pub(super) fn tuple_region(tuple: &TupleVariation<'_, GlyphDelta>) -> AtlasRegion {

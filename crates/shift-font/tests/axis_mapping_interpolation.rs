@@ -58,9 +58,9 @@ fn design_values_below_a_minimum_default_keep_their_range() {
     let normalization = &font.design_normalization().unwrap()[0];
     assert_eq!(
         (
-            normalization.minimum,
-            normalization.default,
-            normalization.maximum
+            normalization.range.minimum,
+            normalization.range.default,
+            normalization.range.maximum
         ),
         (62.0, 62.0, 158.0)
     );

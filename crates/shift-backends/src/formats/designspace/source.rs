@@ -13,6 +13,7 @@ use crate::formats::ufo::glif::{
     RetainedUfoLayer, glyph_directory, project_glif_glyph, retained_layer,
 };
 use crate::{BackendError, BackendResult, FontFormat, FontImport};
+use shift_font::AxisRange;
 
 use super::{DesignspaceAxisExt, DesignspaceDocumentExt, stream_retained};
 
@@ -96,9 +97,11 @@ impl DesignspaceFont {
                 }
                 InterpolationAxis {
                     tag: axis.tag.clone(),
-                    minimum: design_values.iter().copied().fold(default, f64::min),
-                    default,
-                    maximum: design_values.iter().copied().fold(default, f64::max),
+                    range: AxisRange {
+                        minimum: design_values.iter().copied().fold(default, f64::min),
+                        default,
+                        maximum: design_values.iter().copied().fold(default, f64::max),
+                    },
                 }
             })
             .collect::<Vec<_>>();

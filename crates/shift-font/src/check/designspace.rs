@@ -27,8 +27,11 @@ pub(super) fn check(font: &Font) -> CoreResult<Vec<Finding>> {
 fn default_master(font: &Font, normalization: &[DesignNormalization]) -> Option<Finding> {
     let at_default = |source: &Source| {
         font.axes().iter().zip(normalization).all(|(axis, bounds)| {
-            let value = source.location().get(&axis.id()).unwrap_or(bounds.default);
-            (value - bounds.default).abs() <= SAME
+            let value = source
+                .location()
+                .get(&axis.id())
+                .unwrap_or(bounds.range.default);
+            (value - bounds.range.default).abs() <= SAME
         })
     };
 
@@ -40,7 +43,7 @@ fn default_master(font: &Font, normalization: &[DesignNormalization]) -> Option<
         .axes()
         .iter()
         .zip(normalization)
-        .map(|(axis, bounds)| format!("{} {}", axis.tag(), number(bounds.default)))
+        .map(|(axis, bounds)| format!("{} {}", axis.tag(), number(bounds.range.default)))
         .collect::<Vec<_>>()
         .join(", ");
     Some(Finding::font(
@@ -85,7 +88,7 @@ fn outside_axes<'a>(
             .zip(normalization)
             .filter_map(move |(axis, bounds)| {
                 let value = master.location().get(&axis.id())?;
-                if value >= bounds.minimum - SAME && value <= bounds.maximum + SAME {
+                if value >= bounds.range.minimum - SAME && value <= bounds.range.maximum + SAME {
                     return None;
                 }
 
@@ -97,8 +100,8 @@ fn outside_axes<'a>(
                             master.name(),
                             axis.tag(),
                             number(value),
-                            number(bounds.minimum),
-                            number(bounds.maximum)
+                            number(bounds.range.minimum),
+                            number(bounds.range.maximum)
                         ),
                     )
                     .in_source(master.id()),
@@ -116,24 +119,29 @@ fn beyond_masters<'a>(
     axes.filter_map(|(axis, bounds)| {
         let values = masters
             .iter()
-            .map(|master| master.location().get(&axis.id()).unwrap_or(bounds.default))
+            .map(|master| {
+                master
+                    .location()
+                    .get(&axis.id())
+                    .unwrap_or(bounds.range.default)
+            })
             .collect::<Vec<_>>();
-        let lowest = values.iter().copied().fold(bounds.default, f64::min);
-        let highest = values.iter().copied().fold(bounds.default, f64::max);
+        let lowest = values.iter().copied().fold(bounds.range.default, f64::min);
+        let highest = values.iter().copied().fold(bounds.range.default, f64::max);
 
         let mut ends = Vec::new();
-        if lowest - bounds.minimum > SAME {
+        if lowest - bounds.range.minimum > SAME {
             ends.push(format!(
                 "below {} (the axis goes to {})",
                 number(lowest),
-                number(bounds.minimum)
+                number(bounds.range.minimum)
             ));
         }
-        if bounds.maximum - highest > SAME {
+        if bounds.range.maximum - highest > SAME {
             ends.push(format!(
                 "above {} (the axis goes to {})",
                 number(highest),
-                number(bounds.maximum)
+                number(bounds.range.maximum)
             ));
         }
         if ends.is_empty() {

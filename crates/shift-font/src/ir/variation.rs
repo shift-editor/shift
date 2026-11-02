@@ -13,6 +13,41 @@ use crate::{
     DesignLocation, ExternalLocation, Font, Location, VariationBasis,
 };
 
+/// An axis's minimum, default and maximum in one coordinate space, and the
+/// rule that maps a coordinate in that space to `-1..=1`.
+///
+/// The space is the caller's: user coordinates for an axis's authored range,
+/// design coordinates for [`DesignNormalization`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AxisRange {
+    pub minimum: f64,
+    pub default: f64,
+    pub maximum: f64,
+}
+
+impl AxisRange {
+    /// Maps `value` to `-1..=1`: the default to `0`, the minimum to `-1` and
+    /// the maximum to `1`, linearly on each side.
+    ///
+    /// A side with no extent (the default at the minimum or maximum) maps to
+    /// `0`. A value within a relative `1e-9` of the default maps to exactly
+    /// `0`, and a result within `1e-9` of `-1`, `0` or `1` snaps to it.
+    /// Values outside the range are not clamped.
+    pub fn normalize(&self, value: f64) -> f64 {
+        let tolerance = 1e-9 * (1.0 + self.default.abs());
+        let extent = if value < self.default {
+            self.default - self.minimum
+        } else {
+            self.maximum - self.default
+        };
+        if extent.abs() < tolerance || (value - self.default).abs() < tolerance {
+            return 0.0;
+        }
+
+        snap((value - self.default) / extent)
+    }
+}
+
 /// One axis's design-space bounds used to normalize authored source locations.
 ///
 /// These bounds are derived from compiled independent mappings, not from the
@@ -20,25 +55,14 @@ use crate::{
 #[derive(Clone, Debug, PartialEq)]
 pub struct DesignNormalization {
     pub axis_id: AxisId,
-    pub minimum: f64,
-    pub default: f64,
-    pub maximum: f64,
+    pub range: AxisRange,
 }
 
 impl DesignNormalization {
-    /// Normalizes a design coordinate around the mapped default without clamping.
+    /// Normalizes a design coordinate around the mapped default without
+    /// clamping; see [`AxisRange::normalize`].
     pub fn normalize(&self, value: f64) -> f64 {
-        let tolerance = 1e-9 * (1.0 + self.default.abs());
-        let range = if value < self.default {
-            self.default - self.minimum
-        } else {
-            self.maximum - self.default
-        };
-        if range.abs() < tolerance || (value - self.default).abs() < tolerance {
-            return 0.0;
-        }
-
-        snap((value - self.default) / range)
+        self.range.normalize(value)
     }
 }
 
@@ -111,9 +135,11 @@ impl Font {
 
                 Ok(DesignNormalization {
                     axis_id: axis.id(),
-                    minimum: values.iter().copied().fold(default, f64::min),
-                    default,
-                    maximum: values.iter().copied().fold(default, f64::max),
+                    range: AxisRange {
+                        minimum: values.iter().copied().fold(default, f64::min),
+                        default,
+                        maximum: values.iter().copied().fold(default, f64::max),
+                    },
                 })
             })
             .collect()
@@ -441,6 +467,47 @@ mod tests {
     use super::*;
     use crate::{AxisId, AxisMappingPoint};
 
+    const WEIGHT: AxisRange = AxisRange {
+        minimum: 100.0,
+        default: 400.0,
+        maximum: 900.0,
+    };
+
+    #[test]
+    fn axis_range_maps_its_bounds_to_minus_one_zero_and_one() {
+        assert_eq!(WEIGHT.normalize(100.0), -1.0);
+        assert_eq!(WEIGHT.normalize(400.0), 0.0);
+        assert_eq!(WEIGHT.normalize(900.0), 1.0);
+        assert_eq!(WEIGHT.normalize(250.0), -0.5);
+        assert_eq!(WEIGHT.normalize(650.0), 0.5);
+    }
+
+    #[test]
+    fn axis_range_maps_a_side_with_no_extent_to_the_default() {
+        let one_sided = AxisRange {
+            minimum: 400.0,
+            default: 400.0,
+            maximum: 900.0,
+        };
+
+        assert_eq!(one_sided.normalize(300.0), 0.0);
+        assert_eq!(one_sided.normalize(900.0), 1.0);
+    }
+
+    #[test]
+    fn axis_range_does_not_clamp_values_outside_it() {
+        assert_eq!(WEIGHT.normalize(1400.0), 2.0);
+        assert_eq!(WEIGHT.normalize(-200.0), -2.0);
+    }
+
+    #[test]
+    fn axis_range_snaps_rounding_error_to_the_default_and_bounds() {
+        assert_eq!(WEIGHT.normalize(400.0 + 1e-10), 0.0);
+        assert_eq!(WEIGHT.normalize(900.0 - 1e-10), 1.0);
+        assert_eq!(WEIGHT.normalize(100.0 + 1e-10), -1.0);
+        assert!(WEIGHT.normalize(400.0 + 1e-3) > 0.0);
+    }
+
     #[test]
     fn maps_independent_axes_before_cross_axis_mappings() {
         let weight = Axis::weight();
@@ -518,9 +585,10 @@ mod tests {
             )])
             .unwrap();
             let normalization = font.design_normalization().unwrap();
-            assert!((normalization[0].minimum - minimum).abs() < 1e-9);
-            assert!((normalization[0].default - default).abs() < 1e-9);
-            assert!((normalization[0].maximum - maximum).abs() < 1e-9);
+            let range = normalization[0].range;
+            assert!((range.minimum - minimum).abs() < 1e-9);
+            assert!((range.default - default).abs() < 1e-9);
+            assert!((range.maximum - maximum).abs() < 1e-9);
             assert!((normalization[0].normalize(minimum) + 1.0).abs() < 1e-9);
             assert!(normalization[0].normalize(default).abs() < 1e-9);
             assert!((normalization[0].normalize(maximum) - 1.0).abs() < 1e-9);
@@ -538,9 +606,7 @@ mod tests {
         let normalization = font.design_normalization().unwrap();
         for (axis, normalization) in [weight, width].iter().zip(normalization) {
             assert_eq!(normalization.axis_id, axis.id());
-            assert_eq!(normalization.minimum, axis.minimum());
-            assert_eq!(normalization.default, axis.default());
-            assert_eq!(normalization.maximum, axis.maximum());
+            assert_eq!(normalization.range, axis.kind().range());
         }
     }
 

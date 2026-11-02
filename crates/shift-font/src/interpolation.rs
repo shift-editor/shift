@@ -120,7 +120,11 @@ impl InterpolationRegion {
                     .iter()
                     .find(|normalization| normalization.axis_id == axis.id())
                     .require(&support.axis_id)?;
-                normalization.normalize(location.get(axis.id()).unwrap_or(normalization.default))
+                normalization.normalize(
+                    location
+                        .get(axis.id())
+                        .unwrap_or(normalization.range.default),
+                )
             } else {
                 axis.normalize(location.value_on(axis))
             }
@@ -663,7 +667,9 @@ fn normalized_location(
         .zip(design_normalization)
         .filter_map(|(axis, normalization)| {
             let tag = Tag::from_str(axis.tag()).ok()?;
-            let value = location.get(&axis.id()).unwrap_or(normalization.default);
+            let value = location
+                .get(&axis.id())
+                .unwrap_or(normalization.range.default);
             Some((tag, NormalizedCoord::new(normalization.normalize(value))))
         })
         .collect()

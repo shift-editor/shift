@@ -1,3 +1,4 @@
+use super::variation::AxisRange;
 use crate::entity::{AxisId, AxisLabelId, AxisMappingId};
 use crate::error::{CoreError, CoreResult};
 use crate::source::Source;
@@ -108,31 +109,18 @@ impl AxisKind {
         }
     }
 
-    /// Maps a user-space `value` to `-1..=1`, with the default at `0`, the
-    /// minimum at `-1` and the maximum at `1`, linearly on each side.
-    ///
-    /// A side with no extent (the default at the minimum or maximum) maps to
-    /// `0`. Values outside the range are not clamped.
-    pub fn normalize(&self, value: f64) -> f64 {
-        let minimum = self.minimum();
-        let default = self.default();
-        let maximum = self.maximum();
-
-        if value < default {
-            if (default - minimum).abs() < f64::EPSILON {
-                0.0
-            } else {
-                (value - default) / (default - minimum)
-            }
-        } else if value > default {
-            if (maximum - default).abs() < f64::EPSILON {
-                0.0
-            } else {
-                (value - default) / (maximum - default)
-            }
-        } else {
-            0.0
+    /// Returns the minimum, default and maximum in user space.
+    pub fn range(&self) -> AxisRange {
+        AxisRange {
+            minimum: self.minimum(),
+            default: self.default(),
+            maximum: self.maximum(),
         }
+    }
+
+    /// Maps a user-space `value` to `-1..=1`; see [`AxisRange::normalize`].
+    pub fn normalize(&self, value: f64) -> f64 {
+        self.range().normalize(value)
     }
 
     /// Maps a normalized `value` back to user space: the inverse of

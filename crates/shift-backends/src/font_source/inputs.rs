@@ -2,6 +2,7 @@ use shift_slug::length::OrOverflow;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use rayon::prelude::*;
+use shift_font::AxisRange;
 use shift_slug::retained::{
     ExactVariant, GlyphInput, GlyphSegment, GlyphShape as RetainedGlyphShape, PageInput,
 };
@@ -304,13 +305,12 @@ fn atlas_axes(directory: &FontDirectory) -> Result<Vec<AtlasAxis>, SourceAtlasEr
             if !minimum.is_finite() || !mapped_default.is_finite() || !maximum.is_finite() {
                 return Err(invalid("source atlas axis has non-finite design bounds").into());
             }
-            Ok(AtlasAxis::new(
-                mapping,
+            let range = AxisRange {
                 minimum,
-                mapped_default,
+                default: mapped_default,
                 maximum,
-                Vec::new(),
-            ))
+            };
+            Ok(AtlasAxis::new(mapping, range, Vec::new()))
         })
         .collect()
 }
