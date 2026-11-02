@@ -5,6 +5,7 @@ pub(crate) mod geometry;
 pub(crate) mod inputs;
 pub(crate) mod interpolation;
 pub(crate) mod projection;
+pub(crate) mod segments;
 mod types;
 
 pub use crate::formats::designspace::DesignspaceFont;
@@ -18,6 +19,7 @@ pub(crate) use error::malformed;
 pub(crate) use geometry::inferred_smooth_point_indices;
 pub use inputs::variable_glyph_inputs;
 pub(crate) use interpolation::piecewise_map;
+pub use segments::ContourSegmentError;
 pub(crate) use types::DirectoryGlyphInput;
 pub use types::{
     AxisIndex, DirectoryGlyph, DirectoryInstance, DirectoryMapping, DirectoryMappingPoint,

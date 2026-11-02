@@ -18,6 +18,12 @@ pub enum SourceAtlasError {
     UnsupportedBinary { details: &'static str },
 }
 
+impl From<super::ContourSegmentError> for SourceAtlasError {
+    fn from(error: super::ContourSegmentError) -> Self {
+        Self::Read(error.into())
+    }
+}
+
 pub(crate) fn validate_roots(
     directory: &FontDirectory,
     roots: &[GlyphIndex],
