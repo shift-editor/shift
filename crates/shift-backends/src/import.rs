@@ -35,6 +35,24 @@ impl ImportBatchLimit {
     pub fn max_layers(self) -> usize {
         self.max_layers
     }
+
+    /// How many of the `pending` glyphs the next batch takes.
+    ///
+    /// A batch takes at most [`Self::max_glyphs`] glyphs and stops before the
+    /// glyph that would take it past [`Self::max_layers`] layers. It always
+    /// takes a first pending glyph, however many layers that glyph has, so a
+    /// stream makes progress.
+    pub(crate) fn batch_len<T>(self, pending: &[T], layer_count: impl Fn(&T) -> usize) -> usize {
+        let mut layers = 0;
+        for (taken, glyph) in pending.iter().take(self.max_glyphs).enumerate() {
+            let next_layers = layer_count(glyph);
+            if taken > 0 && layers + next_layers > self.max_layers {
+                return taken;
+            }
+            layers += next_layers;
+        }
+        pending.len().min(self.max_glyphs)
+    }
 }
 
 impl Default for ImportBatchLimit {
@@ -133,20 +151,8 @@ impl GlyphStream for GlifGlyphStream {
     }
 
     fn next_batch(&mut self, limit: ImportBatchLimit) -> FormatBackendResult<Vec<Glyph>> {
-        if self.next_glyph == self.glyphs.len() {
-            return Ok(Vec::new());
-        }
-
-        let mut end = self.next_glyph;
-        let mut layer_count = 0;
-        while end < self.glyphs.len() && end - self.next_glyph < limit.max_glyphs() {
-            let next_layers = self.glyphs[end].layers.len();
-            if end > self.next_glyph && layer_count + next_layers > limit.max_layers() {
-                break;
-            }
-            layer_count += next_layers;
-            end += 1;
-        }
+        let pending = &self.glyphs[self.next_glyph..];
+        let end = self.next_glyph + limit.batch_len(pending, |glyph| glyph.layers.len());
         let glyph_ids = &self.glyph_ids;
         let glyphs = self.glyphs[self.next_glyph..end]
             .par_iter()
@@ -350,5 +356,28 @@ impl FontImport {
         } = self;
         collect_streamed_font(header, stream.as_mut())
             .map_err(|source| BackendError::load(format, path, source))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ImportBatchLimit;
+
+    #[test]
+    fn a_batch_stops_at_the_glyph_or_layer_limit() {
+        let layers = [2, 2, 2, 2];
+
+        assert_eq!(ImportBatchLimit::new(3, 100).batch_len(&layers, |n| *n), 3);
+        assert_eq!(ImportBatchLimit::new(10, 5).batch_len(&layers, |n| *n), 2);
+        assert_eq!(ImportBatchLimit::new(10, 100).batch_len(&layers, |n| *n), 4);
+    }
+
+    #[test]
+    fn a_batch_always_takes_its_first_glyph() {
+        assert_eq!(ImportBatchLimit::new(10, 1).batch_len(&[5, 1], |n| *n), 1);
+        assert_eq!(
+            ImportBatchLimit::new(10, 1).batch_len::<usize>(&[], |n| *n),
+            0
+        );
     }
 }
