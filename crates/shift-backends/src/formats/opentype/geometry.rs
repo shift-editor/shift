@@ -1,3 +1,4 @@
+use shift_font::Transform;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
@@ -11,8 +12,8 @@ use skrifa::raw::types::{GlyphId, Point as RawPoint};
 
 use crate::font_source::atlas::{RegionRegistry, SourceAtlasError};
 use crate::font_source::{
-    AffineTransform, FontReadError, GlyphIndex, GlyphPointKind, PointProvenance,
-    TrueTypePointIndex, inferred_smooth_point_indices,
+    FontReadError, GlyphIndex, GlyphPointKind, PointProvenance, TrueTypePointIndex,
+    inferred_smooth_point_indices,
 };
 
 use super::inputs::tuple_region;
@@ -322,19 +323,18 @@ impl VariablePosition {
         Point::new(lossy_f32(self.x + delta.0), lossy_f32(self.y + delta.1))
     }
 
-    fn transformed(&self, transform: AffineTransform) -> Self {
-        let mut transformed = Self::new(
-            transform.xx * self.x + transform.yx * self.y,
-            transform.xy * self.x + transform.yy * self.y,
-        );
+    /// The position and its deltas under `transform`'s linear part: a
+    /// glyf component's offset is added separately, as a variable position.
+    fn transformed(&self, transform: Transform) -> Self {
+        let linear = kurbo::Affine::from(transform).with_translation(kurbo::Vec2::ZERO);
+        let map = |x: f64, y: f64| {
+            let kurbo::Point { x, y } = linear * kurbo::Point::new(x, y);
+            (x, y)
+        };
+        let (x, y) = map(self.x, self.y);
+        let mut transformed = Self::new(x, y);
         for (weight, (x, y)) in &self.deltas {
-            transformed.add_delta(
-                *weight,
-                (
-                    transform.xx * x + transform.yx * y,
-                    transform.xy * x + transform.yy * y,
-                ),
-            );
+            transformed.add_delta(*weight, map(*x, *y));
         }
         transformed
     }
@@ -403,7 +403,7 @@ pub(super) struct VariableGeometry {
 #[derive(Clone, Debug)]
 pub(super) struct VariableComponent {
     pub(super) glyph: GlyphIndex,
-    pub(super) transform: AffineTransform,
+    pub(super) transform: Transform,
     pub(super) translation: VariablePosition,
 }
 
@@ -741,7 +741,7 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
 
 fn transform_and_translate(
     point: &VariablePosition,
-    transform: AffineTransform,
+    transform: Transform,
     translation: &VariablePosition,
 ) -> VariablePosition {
     let mut point = point.transformed(transform);
