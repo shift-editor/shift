@@ -337,7 +337,7 @@ fn convert_commands(
     let mut contour = None;
 
     for (command_index, command) in commands.into_iter().enumerate() {
-        ensure_finite(command, command_index)?;
+        command.ensure_finite(command_index)?;
 
         match command {
             OutlineCommand::Move { x, y } => {
@@ -354,7 +354,7 @@ fn convert_commands(
                     .as_mut()
                     .ok_or(SlugError::DrawingCommandWithoutContour { command_index })?;
                 let next = Point::new(x, y);
-                push_line(&mut outline, contour.current, next);
+                outline.push_line(contour.current, next);
                 contour.current = next;
                 contour.has_segment = true;
             }
@@ -415,7 +415,7 @@ fn convert_commands(
                 if !active.has_segment {
                     return Err(SlugError::CloseWithoutDrawingSegment { command_index });
                 }
-                push_line(&mut outline, active.current, active.start);
+                outline.push_line(active.current, active.start);
                 contour = None;
             }
         }
@@ -436,43 +436,42 @@ fn close_open_contour(contour: &mut Option<Contour>, outline: &mut QuadraticOutl
         return;
     };
     if active.has_segment {
-        push_line(outline, active.current, active.start);
+        outline.push_line(active.current, active.start);
     }
 }
 
-fn push_line(outline: &mut QuadraticOutline, start: Point, end: Point) {
-    if start != end {
-        outline.push(Curve::from_line(start, end), CurveShape::Line);
-    }
-}
+impl OutlineCommand<f32> {
+    /// Checks that every coordinate of this command is finite.
+    ///
+    /// # Errors
+    ///
+    /// Returns the error for a non-finite command at `command_index`.
+    fn ensure_finite(self, command_index: usize) -> Result<(), SlugError> {
+        let finite = match self {
+            Self::Move { x, y } | Self::Line { x, y } => Point::new(x, y).is_finite(),
+            Self::Quad { cx, cy, x, y } => {
+                Point::new(cx, cy).is_finite() && Point::new(x, y).is_finite()
+            }
+            Self::Cubic {
+                c1x,
+                c1y,
+                c2x,
+                c2y,
+                x,
+                y,
+            } => {
+                Point::new(c1x, c1y).is_finite()
+                    && Point::new(c2x, c2y).is_finite()
+                    && Point::new(x, y).is_finite()
+            }
+            Self::Close => true,
+        };
 
-fn ensure_finite(command: OutlineCommand<f32>, command_index: usize) -> Result<(), SlugError> {
-    let finite = match command {
-        OutlineCommand::Move { x, y } | OutlineCommand::Line { x, y } => {
-            Point::new(x, y).is_finite()
+        if finite {
+            Ok(())
+        } else {
+            Err(SlugError::NonFiniteCoordinate { command_index })
         }
-        OutlineCommand::Quad { cx, cy, x, y } => {
-            Point::new(cx, cy).is_finite() && Point::new(x, y).is_finite()
-        }
-        OutlineCommand::Cubic {
-            c1x,
-            c1y,
-            c2x,
-            c2y,
-            x,
-            y,
-        } => {
-            Point::new(c1x, c1y).is_finite()
-                && Point::new(c2x, c2y).is_finite()
-                && Point::new(x, y).is_finite()
-        }
-        OutlineCommand::Close => true,
-    };
-
-    if finite {
-        Ok(())
-    } else {
-        Err(SlugError::NonFiniteCoordinate { command_index })
     }
 }
 
