@@ -3,9 +3,9 @@
 // A lint with no hits goes in `[workspace.lints.clippy]`, where CI's
 // `-D warnings` blocks it. A lint with hits can't go there yet, so it is listed
 // in `clippy-ratchet.json` with today's hits per crate, and this script fails
-// when any count rises. Fix some hits, run `pnpm lint:rust-ratchet --update`,
-// and commit the lower numbers; once a lint is at 0 everywhere, move it to
-// `Cargo.toml`.
+// when any count differs: a rise is new hits, a fall is a baseline to lower.
+// Fix some hits, run `pnpm lint:rust-ratchet --update`, and commit the lower
+// numbers; once a lint is at 0 everywhere, move it to `Cargo.toml`.
 //
 // One `cargo clippy --workspace --all-targets` run checks everything, with the
 // ratcheted lints added as warnings. It fails like `-D warnings` on any other
@@ -99,7 +99,8 @@ function checkedOnce(target) {
  * @param {object[]} messages `compiler-message` records from the `--all-targets` run
  * @param {Set<string>} lints the ratcheted lints
  * @param {Map<string, string>} names package id to package name
- * @returns {Record<string, Record<string, {src: number, tests: number}>>}
+ * @returns {Record<string, Record<string, {src: number, tests: number, places: object}>>}
+ *   hit counts, and each hit's `file:line` by scope
  */
 export function countHits(messages, lints, names) {
   const reports = new Map();
@@ -115,11 +116,14 @@ export function countHits(messages, lints, names) {
     const { target } = record;
     const isSrc =
       target.kind.some((kind) => SRC_KINDS.has(kind)) && (checkedOnce(target) || times > 1);
+    const scope = isSrc ? "src" : "tests";
     const lint = lintOf(record);
     const crate = names.get(record.package_id) ?? record.package_id;
+    const span = record.message.spans.find((candidate) => candidate.is_primary);
     counts[lint] ??= {};
-    counts[lint][crate] ??= { src: 0, tests: 0 };
-    counts[lint][crate][isSrc ? "src" : "tests"] += 1;
+    counts[lint][crate] ??= { src: 0, tests: 0, places: { src: [], tests: [] } };
+    counts[lint][crate][scope] += 1;
+    if (span) counts[lint][crate].places[scope].push(`${span.file_name}:${span.line_start}`);
   }
   return counts;
 }
@@ -127,8 +131,9 @@ export function countHits(messages, lints, names) {
 /**
  * Compares counts with the baseline.
  *
- * @returns {{ rose: string[], fell: string[], cleared: string[] }} one line per
- *   lint, crate and scope whose count rose or fell, and the lints with no hits left
+ * @returns {{ rose: object[], fell: object[], cleared: string[] }} each lint,
+ *   crate and scope whose count rose or fell (`{ lint, crate, scope, line }`),
+ *   and the lints with no hits left
  */
 export function compare(baseline, counts) {
   const rose = [];
@@ -144,9 +149,14 @@ export function compare(baseline, counts) {
         const before = was[crate]?.[scope] ?? 0;
         const after = now[crate]?.[scope] ?? 0;
         total += after;
-        const line = `clippy::${lint} in ${crate} (${scope}): ${before} -> ${after}`;
-        if (after > before) rose.push(line);
-        if (after < before) fell.push(line);
+        const change = {
+          lint,
+          crate,
+          scope,
+          line: `clippy::${lint} in ${crate} (${scope}): ${before} -> ${after}`,
+        };
+        if (after > before) rose.push(change);
+        if (after < before) fell.push(change);
       }
     }
     if (total === 0) cleared.push(lint);
@@ -210,11 +220,15 @@ function main() {
 
   if (update) {
     writeFileSync(BASELINE, formatBaseline(baselineOf(lintList, counts)));
-    for (const line of [...rose, ...fell]) console.log(line);
+    for (const change of [...rose, ...fell]) console.log(change.line);
     console.log(`Updated ${BASELINE}`);
   } else {
-    for (const line of rose) console.error(`rose: ${line}`);
-    for (const line of fell) console.error(`fell: ${line}`);
+    for (const change of rose) {
+      console.error(`rose: ${change.line}`);
+      const places = counts[change.lint][change.crate].places[change.scope].sort();
+      for (const place of places) console.error(`  ${place}`);
+    }
+    for (const change of fell) console.error(`fell: ${change.line}`);
   }
 
   for (const lint of cleared) {
