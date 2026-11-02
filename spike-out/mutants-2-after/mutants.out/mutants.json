@@ -1,0 +1,738 @@
+[
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace - with + in DecomposedTransform::from_matrix\n@@ -215,17 +215,17 @@\n     /// Decompose a raw affine matrix into components.\n     ///\n     /// Note: This assumes no transformation center (t_center = 0, 0).\n     /// For matrices with skew, decomposition may not perfectly roundtrip.\n     pub fn from_matrix(m: &Transform) -> Self {\n         let scale_x = (m.xx * m.xx + m.xy * m.xy).sqrt();\n         let scale_y = (m.yx * m.yx + m.yy * m.yy).sqrt();\n \n-        let det = m.xx * m.yy - m.xy * m.yx;\n+        let det = m.xx * m.yy + /* ~ changed by cargo-mutants ~ */ m.xy * m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n         let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n             libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n         } else {\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:223:31: replace - with + in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 223
+      },
+      "start": {
+        "column": 31,
+        "line": 223
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace * with + in DecomposedTransform::from_matrix\n@@ -215,17 +215,17 @@\n     /// Decompose a raw affine matrix into components.\n     ///\n     /// Note: This assumes no transformation center (t_center = 0, 0).\n     /// For matrices with skew, decomposition may not perfectly roundtrip.\n     pub fn from_matrix(m: &Transform) -> Self {\n         let scale_x = (m.xx * m.xx + m.xy * m.xy).sqrt();\n         let scale_y = (m.yx * m.yx + m.yy * m.yy).sqrt();\n \n-        let det = m.xx * m.yy - m.xy * m.yx;\n+        let det = m.xx + /* ~ changed by cargo-mutants ~ */ m.yy - m.xy * m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n         let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n             libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n         } else {\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:223:24: replace * with + in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 25,
+        "line": 223
+      },
+      "start": {
+        "column": 24,
+        "line": 223
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace * with / in DecomposedTransform::from_matrix\n@@ -215,17 +215,17 @@\n     /// Decompose a raw affine matrix into components.\n     ///\n     /// Note: This assumes no transformation center (t_center = 0, 0).\n     /// For matrices with skew, decomposition may not perfectly roundtrip.\n     pub fn from_matrix(m: &Transform) -> Self {\n         let scale_x = (m.xx * m.xx + m.xy * m.xy).sqrt();\n         let scale_y = (m.yx * m.yx + m.yy * m.yy).sqrt();\n \n-        let det = m.xx * m.yy - m.xy * m.yx;\n+        let det = m.xx / /* ~ changed by cargo-mutants ~ */ m.yy - m.xy * m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n         let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n             libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n         } else {\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:223:24: replace * with / in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 25,
+        "line": 223
+      },
+      "start": {
+        "column": 24,
+        "line": 223
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace * with / in DecomposedTransform::from_matrix\n@@ -215,17 +215,17 @@\n     /// Decompose a raw affine matrix into components.\n     ///\n     /// Note: This assumes no transformation center (t_center = 0, 0).\n     /// For matrices with skew, decomposition may not perfectly roundtrip.\n     pub fn from_matrix(m: &Transform) -> Self {\n         let scale_x = (m.xx * m.xx + m.xy * m.xy).sqrt();\n         let scale_y = (m.yx * m.yx + m.yy * m.yy).sqrt();\n \n-        let det = m.xx * m.yy - m.xy * m.yx;\n+        let det = m.xx * m.yy - m.xy / /* ~ changed by cargo-mutants ~ */ m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n         let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n             libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n         } else {\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:223:38: replace * with / in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 39,
+        "line": 223
+      },
+      "start": {
+        "column": 38,
+        "line": 223
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ delete - in DecomposedTransform::from_matrix\n@@ -216,17 +216,17 @@\n     ///\n     /// Note: This assumes no transformation center (t_center = 0, 0).\n     /// For matrices with skew, decomposition may not perfectly roundtrip.\n     pub fn from_matrix(m: &Transform) -> Self {\n         let scale_x = (m.xx * m.xx + m.xy * m.xy).sqrt();\n         let scale_y = (m.yx * m.yx + m.yy * m.yy).sqrt();\n \n         let det = m.xx * m.yy - m.xy * m.yx;\n-        let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n+        let scale_y = if det < 0.0 {  /* ~ changed by cargo-mutants ~ */scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n         let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n             libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n         } else {\n             0.0\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "UnaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:224:38: delete - in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 39,
+        "line": 224
+      },
+      "start": {
+        "column": 38,
+        "line": 224
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace > with == in DecomposedTransform::from_matrix\n@@ -221,17 +221,17 @@\n         let scale_y = (m.yx * m.yx + m.yy * m.yy).sqrt();\n \n         let det = m.xx * m.yy - m.xy * m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n-        let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n+        let skew_x = if scale_x.abs() == /* ~ changed by cargo-mutants ~ */ f64::EPSILON && scale_y.abs() > f64::EPSILON {\n             libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n         } else {\n             0.0\n         };\n \n         Self {\n             translate_x: m.dx,\n             translate_y: m.dy,\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:229:39: replace > with == in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 40,
+        "line": 229
+      },
+      "start": {
+        "column": 39,
+        "line": 229
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace > with >= in DecomposedTransform::from_matrix\n@@ -221,17 +221,17 @@\n         let scale_y = (m.yx * m.yx + m.yy * m.yy).sqrt();\n \n         let det = m.xx * m.yy - m.xy * m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n-        let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n+        let skew_x = if scale_x.abs() >= /* ~ changed by cargo-mutants ~ */ f64::EPSILON && scale_y.abs() > f64::EPSILON {\n             libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n         } else {\n             0.0\n         };\n \n         Self {\n             translate_x: m.dx,\n             translate_y: m.dy,\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:229:39: replace > with >= in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": ">=",
+    "span": {
+      "end": {
+        "column": 40,
+        "line": 229
+      },
+      "start": {
+        "column": 39,
+        "line": 229
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace > with == in DecomposedTransform::from_matrix\n@@ -221,17 +221,17 @@\n         let scale_y = (m.yx * m.yx + m.yy * m.yy).sqrt();\n \n         let det = m.xx * m.yy - m.xy * m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n-        let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n+        let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() == /* ~ changed by cargo-mutants ~ */ f64::EPSILON {\n             libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n         } else {\n             0.0\n         };\n \n         Self {\n             translate_x: m.dx,\n             translate_y: m.dy,\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:229:71: replace > with == in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 72,
+        "line": 229
+      },
+      "start": {
+        "column": 71,
+        "line": 229
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace > with < in DecomposedTransform::from_matrix\n@@ -221,17 +221,17 @@\n         let scale_y = (m.yx * m.yx + m.yy * m.yy).sqrt();\n \n         let det = m.xx * m.yy - m.xy * m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n-        let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n+        let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() < /* ~ changed by cargo-mutants ~ */ f64::EPSILON {\n             libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n         } else {\n             0.0\n         };\n \n         Self {\n             translate_x: m.dx,\n             translate_y: m.dy,\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:229:71: replace > with < in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": "<",
+    "span": {
+      "end": {
+        "column": 72,
+        "line": 229
+      },
+      "start": {
+        "column": 71,
+        "line": 229
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace > with >= in DecomposedTransform::from_matrix\n@@ -221,17 +221,17 @@\n         let scale_y = (m.yx * m.yx + m.yy * m.yy).sqrt();\n \n         let det = m.xx * m.yy - m.xy * m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n-        let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n+        let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() >= /* ~ changed by cargo-mutants ~ */ f64::EPSILON {\n             libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n         } else {\n             0.0\n         };\n \n         Self {\n             translate_x: m.dx,\n             translate_y: m.dy,\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:229:71: replace > with >= in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": ">=",
+    "span": {
+      "end": {
+        "column": 72,
+        "line": 229
+      },
+      "start": {
+        "column": 71,
+        "line": 229
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace / with % in DecomposedTransform::from_matrix\n@@ -222,17 +222,17 @@\n \n         let det = m.xx * m.yy - m.xy * m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n         let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n-            libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n+            libm::atan((m.xx * m.yx + m.xy * m.yy) % /* ~ changed by cargo-mutants ~ */ (scale_x * scale_y)).to_degrees()\n         } else {\n             0.0\n         };\n \n         Self {\n             translate_x: m.dx,\n             translate_y: m.dy,\n             rotation,\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:230:52: replace / with % in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": "%",
+    "span": {
+      "end": {
+        "column": 53,
+        "line": 230
+      },
+      "start": {
+        "column": 52,
+        "line": 230
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace / with * in DecomposedTransform::from_matrix\n@@ -222,17 +222,17 @@\n \n         let det = m.xx * m.yy - m.xy * m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n         let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n-            libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n+            libm::atan((m.xx * m.yx + m.xy * m.yy) * /* ~ changed by cargo-mutants ~ */ (scale_x * scale_y)).to_degrees()\n         } else {\n             0.0\n         };\n \n         Self {\n             translate_x: m.dx,\n             translate_y: m.dy,\n             rotation,\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:230:52: replace / with * in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 53,
+        "line": 230
+      },
+      "start": {
+        "column": 52,
+        "line": 230
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace + with - in DecomposedTransform::from_matrix\n@@ -222,17 +222,17 @@\n \n         let det = m.xx * m.yy - m.xy * m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n         let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n-            libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n+            libm::atan((m.xx * m.yx - /* ~ changed by cargo-mutants ~ */ m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n         } else {\n             0.0\n         };\n \n         Self {\n             translate_x: m.dx,\n             translate_y: m.dy,\n             rotation,\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:230:37: replace + with - in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": "-",
+    "span": {
+      "end": {
+        "column": 38,
+        "line": 230
+      },
+      "start": {
+        "column": 37,
+        "line": 230
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace + with * in DecomposedTransform::from_matrix\n@@ -222,17 +222,17 @@\n \n         let det = m.xx * m.yy - m.xy * m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n         let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n-            libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n+            libm::atan((m.xx * m.yx * /* ~ changed by cargo-mutants ~ */ m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n         } else {\n             0.0\n         };\n \n         Self {\n             translate_x: m.dx,\n             translate_y: m.dy,\n             rotation,\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:230:37: replace + with * in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": "*",
+    "span": {
+      "end": {
+        "column": 38,
+        "line": 230
+      },
+      "start": {
+        "column": 37,
+        "line": 230
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace * with / in DecomposedTransform::from_matrix\n@@ -222,17 +222,17 @@\n \n         let det = m.xx * m.yy - m.xy * m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n         let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n-            libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n+            libm::atan((m.xx * m.yx + m.xy / /* ~ changed by cargo-mutants ~ */ m.yy) / (scale_x * scale_y)).to_degrees()\n         } else {\n             0.0\n         };\n \n         Self {\n             translate_x: m.dx,\n             translate_y: m.dy,\n             rotation,\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:230:44: replace * with / in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 45,
+        "line": 230
+      },
+      "start": {
+        "column": 44,
+        "line": 230
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace * with + in DecomposedTransform::from_matrix\n@@ -222,17 +222,17 @@\n \n         let det = m.xx * m.yy - m.xy * m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n         let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n-            libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n+            libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x + /* ~ changed by cargo-mutants ~ */ scale_y)).to_degrees()\n         } else {\n             0.0\n         };\n \n         Self {\n             translate_x: m.dx,\n             translate_y: m.dy,\n             rotation,\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:230:63: replace * with + in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 64,
+        "line": 230
+      },
+      "start": {
+        "column": 63,
+        "line": 230
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace * with / in DecomposedTransform::from_matrix\n@@ -222,17 +222,17 @@\n \n         let det = m.xx * m.yy - m.xy * m.yx;\n         let scale_y = if det < 0.0 { -scale_y } else { scale_y };\n \n         let rotation = libm::atan2(m.xy, m.xx).to_degrees();\n \n         // A collapsed axis has no direction to measure skew against; 0/0 would be NaN.\n         let skew_x = if scale_x.abs() > f64::EPSILON && scale_y.abs() > f64::EPSILON {\n-            libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x * scale_y)).to_degrees()\n+            libm::atan((m.xx * m.yx + m.xy * m.yy) / (scale_x / /* ~ changed by cargo-mutants ~ */ scale_y)).to_degrees()\n         } else {\n             0.0\n         };\n \n         Self {\n             translate_x: m.dx,\n             translate_y: m.dy,\n             rotation,\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::from_matrix",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 246
+        },
+        "start": {
+          "column": 5,
+          "line": 215
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:230:63: replace * with / in DecomposedTransform::from_matrix",
+    "package": "shift-font",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 64,
+        "line": 230
+      },
+      "start": {
+        "column": 63,
+        "line": 230
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ delete field translate_x from struct Self expression in DecomposedTransform::translation\n@@ -247,17 +247,17 @@\n \n     pub fn transform_point(self, point: kurbo::Point) -> kurbo::Point {\n         self.to_matrix().transform_point(point)\n     }\n \n     /// A placement that only moves by `offset`.\n     pub fn translation(offset: kurbo::Vec2) -> Self {\n         Self {\n-            translate_x: offset.x,\n+             /* ~ changed by cargo-mutants ~ */\n             translate_y: offset.y,\n             ..Default::default()\n         }\n     }\n \n     /// The translation part of the placement.\n     pub fn offset(&self) -> kurbo::Vec2 {\n         kurbo::Vec2::new(self.translate_x, self.translate_y)\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::translation",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 259
+        },
+        "start": {
+          "column": 5,
+          "line": 252
+        }
+      }
+    },
+    "genre": "StructField",
+    "name": "crates/shift-font/src/ir/component.rs:255:13: delete field translate_x from struct Self expression in DecomposedTransform::translation",
+    "package": "shift-font",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 35,
+        "line": 255
+      },
+      "start": {
+        "column": 13,
+        "line": 255
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ delete field translate_y from struct Self expression in DecomposedTransform::translation\n@@ -248,17 +248,17 @@\n     pub fn transform_point(self, point: kurbo::Point) -> kurbo::Point {\n         self.to_matrix().transform_point(point)\n     }\n \n     /// A placement that only moves by `offset`.\n     pub fn translation(offset: kurbo::Vec2) -> Self {\n         Self {\n             translate_x: offset.x,\n-            translate_y: offset.y,\n+             /* ~ changed by cargo-mutants ~ */\n             ..Default::default()\n         }\n     }\n \n     /// The translation part of the placement.\n     pub fn offset(&self) -> kurbo::Vec2 {\n         kurbo::Vec2::new(self.translate_x, self.translate_y)\n     }\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "DecomposedTransform::translation",
+      "return_type": "-> Self",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 259
+        },
+        "start": {
+          "column": 5,
+          "line": 252
+        }
+      }
+    },
+    "genre": "StructField",
+    "name": "crates/shift-font/src/ir/component.rs:256:13: delete field translate_y from struct Self expression in DecomposedTransform::translation",
+    "package": "shift-font",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 35,
+        "line": 256
+      },
+      "start": {
+        "column": 13,
+        "line": 256
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace < with <= in Transform::mirrors\n@@ -274,17 +274,17 @@\n         Self::from_values(self.to_values().map(Canonical::canonical))\n     }\n }\n \n impl Transform {\n     /// Returns whether this transform mirrors, so a decomposed placement\n     /// reverses closed contours.\n     pub fn mirrors(&self) -> bool {\n-        self.xx * self.yy - self.xy * self.yx < 0.0\n+        self.xx * self.yy - self.xy * self.yx <= /* ~ changed by cargo-mutants ~ */ 0.0\n     }\n \n     /// Number of values in one matrix's numeric encoding.\n     pub const VALUE_COUNT: usize = 6;\n \n     /// Serialized field names in numeric encoding order.\n     ///\n     /// Source glyph shapes that carry component matrices store each matrix as\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "Transform::mirrors",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 283
+        },
+        "start": {
+          "column": 5,
+          "line": 279
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:282:47: replace < with <= in Transform::mirrors",
+    "package": "shift-font",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 48,
+        "line": 282
+      },
+      "start": {
+        "column": 47,
+        "line": 282
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace - with + in Transform::mirrors\n@@ -274,17 +274,17 @@\n         Self::from_values(self.to_values().map(Canonical::canonical))\n     }\n }\n \n impl Transform {\n     /// Returns whether this transform mirrors, so a decomposed placement\n     /// reverses closed contours.\n     pub fn mirrors(&self) -> bool {\n-        self.xx * self.yy - self.xy * self.yx < 0.0\n+        self.xx * self.yy + /* ~ changed by cargo-mutants ~ */ self.xy * self.yx < 0.0\n     }\n \n     /// Number of values in one matrix's numeric encoding.\n     pub const VALUE_COUNT: usize = 6;\n \n     /// Serialized field names in numeric encoding order.\n     ///\n     /// Source glyph shapes that carry component matrices store each matrix as\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "Transform::mirrors",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 283
+        },
+        "start": {
+          "column": 5,
+          "line": 279
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:282:27: replace - with + in Transform::mirrors",
+    "package": "shift-font",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 28,
+        "line": 282
+      },
+      "start": {
+        "column": 27,
+        "line": 282
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace * with / in Transform::mirrors\n@@ -274,17 +274,17 @@\n         Self::from_values(self.to_values().map(Canonical::canonical))\n     }\n }\n \n impl Transform {\n     /// Returns whether this transform mirrors, so a decomposed placement\n     /// reverses closed contours.\n     pub fn mirrors(&self) -> bool {\n-        self.xx * self.yy - self.xy * self.yx < 0.0\n+        self.xx / /* ~ changed by cargo-mutants ~ */ self.yy - self.xy * self.yx < 0.0\n     }\n \n     /// Number of values in one matrix's numeric encoding.\n     pub const VALUE_COUNT: usize = 6;\n \n     /// Serialized field names in numeric encoding order.\n     ///\n     /// Source glyph shapes that carry component matrices store each matrix as\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "Transform::mirrors",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 283
+        },
+        "start": {
+          "column": 5,
+          "line": 279
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:282:17: replace * with / in Transform::mirrors",
+    "package": "shift-font",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 18,
+        "line": 282
+      },
+      "start": {
+        "column": 17,
+        "line": 282
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/component.rs\n+++ replace * with + in Transform::mirrors\n@@ -274,17 +274,17 @@\n         Self::from_values(self.to_values().map(Canonical::canonical))\n     }\n }\n \n impl Transform {\n     /// Returns whether this transform mirrors, so a decomposed placement\n     /// reverses closed contours.\n     pub fn mirrors(&self) -> bool {\n-        self.xx * self.yy - self.xy * self.yx < 0.0\n+        self.xx * self.yy - self.xy + /* ~ changed by cargo-mutants ~ */ self.yx < 0.0\n     }\n \n     /// Number of values in one matrix's numeric encoding.\n     pub const VALUE_COUNT: usize = 6;\n \n     /// Serialized field names in numeric encoding order.\n     ///\n     /// Source glyph shapes that carry component matrices store each matrix as\n",
+    "file": "crates/shift-font/src/ir/component.rs",
+    "function": {
+      "function_name": "Transform::mirrors",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 283
+        },
+        "start": {
+          "column": 5,
+          "line": 279
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/component.rs:282:37: replace * with + in Transform::mirrors",
+    "package": "shift-font",
+    "replacement": "+",
+    "span": {
+      "end": {
+        "column": 38,
+        "line": 282
+      },
+      "start": {
+        "column": 37,
+        "line": 282
+      }
+    }
+  }
+]

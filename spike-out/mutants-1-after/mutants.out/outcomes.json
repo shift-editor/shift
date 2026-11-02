@@ -1,0 +1,1241 @@
+{
+  "outcomes": [
+    {
+      "scenario": "Baseline",
+      "summary": "Success",
+      "log_path": "log/baseline.log",
+      "diff_path": null,
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 2.997499667,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 20.629671917,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:37:30: replace * with / in AxisRange::normalize",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisRange::normalize",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 29,
+                "column": 5
+              },
+              "end": {
+                "line": 48,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 37,
+              "column": 30
+            },
+            "end": {
+              "line": 37,
+              "column": 31
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_37_col_30.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_37_col_30.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.651006166,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 23.972567125,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:38:31: replace < with <= in AxisRange::normalize",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisRange::normalize",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 29,
+                "column": 5
+              },
+              "end": {
+                "line": 48,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 38,
+              "column": 31
+            },
+            "end": {
+              "line": 38,
+              "column": 32
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_38_col_31.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_38_col_31.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.484270917,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 24.300870041,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:43:25: replace < with <= in AxisRange::normalize",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisRange::normalize",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 29,
+                "column": 5
+              },
+              "end": {
+                "line": 48,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 43,
+              "column": 25
+            },
+            "end": {
+              "line": 43,
+              "column": 26
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_43_col_25.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_43_col_25.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.502854666,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 24.427659167,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:43:69: replace < with == in AxisRange::normalize",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisRange::normalize",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 29,
+                "column": 5
+              },
+              "end": {
+                "line": 48,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 43,
+              "column": 69
+            },
+            "end": {
+              "line": 43,
+              "column": 70
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_43_col_69.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_43_col_69.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.526006292,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 23.974861125,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:43:69: replace < with <= in AxisRange::normalize",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisRange::normalize",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 29,
+                "column": 5
+              },
+              "end": {
+                "line": 48,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 43,
+              "column": 69
+            },
+            "end": {
+              "line": 43,
+              "column": 70
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_43_col_69_001.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_43_col_69_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.653445666,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 24.696441958,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:53:18: replace < with <= in AxisRange::denormalize",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisRange::denormalize",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 50,
+                "column": 5
+              },
+              "end": {
+                "line": 60,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 53,
+              "column": 18
+            },
+            "end": {
+              "line": 53,
+              "column": 19
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_53_col_18.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_53_col_18.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.576896041,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.428090916,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:55:25: replace > with >= in AxisRange::denormalize",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisRange::denormalize",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 50,
+                "column": 5
+              },
+              "end": {
+                "line": 60,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 55,
+              "column": 25
+            },
+            "end": {
+              "line": 55,
+              "column": 26
+            }
+          },
+          "replacement": ">=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_55_col_25.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_55_col_25.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.514388042,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 24.836007625,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:89:40: replace < with <= in snap",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "snap",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 81,
+                "column": 1
+              },
+              "end": {
+                "line": 94,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 89,
+              "column": 40
+            },
+            "end": {
+              "line": 89,
+              "column": 41
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_89_col_40.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_89_col_40.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.788417833,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.111364875,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:188:9: replace AxisMappingBasis::mapping_id -> AxisMappingId with Default::default()",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisMappingBasis::mapping_id",
+            "return_type": "-> AxisMappingId",
+            "span": {
+              "start": {
+                "line": 186,
+                "column": 5
+              },
+              "end": {
+                "line": 189,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 188,
+              "column": 9
+            },
+            "end": {
+              "line": 188,
+              "column": 24
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_188_col_9.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_188_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.519589125,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.36404525,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:193:9: replace AxisMappingBasis::input_axis_ids -> &[AxisId] with Vec::leak(Vec::new())",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisMappingBasis::input_axis_ids",
+            "return_type": "-> &[AxisId]",
+            "span": {
+              "start": {
+                "line": 191,
+                "column": 5
+              },
+              "end": {
+                "line": 194,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 193,
+              "column": 9
+            },
+            "end": {
+              "line": 193,
+              "column": 29
+            }
+          },
+          "replacement": "Vec::leak(Vec::new())",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_193_col_9.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_193_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.052822,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 24.966978625,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:193:9: replace AxisMappingBasis::input_axis_ids -> &[AxisId] with Vec::leak(vec![Default::default()])",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisMappingBasis::input_axis_ids",
+            "return_type": "-> &[AxisId]",
+            "span": {
+              "start": {
+                "line": 191,
+                "column": 5
+              },
+              "end": {
+                "line": 194,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 193,
+              "column": 9
+            },
+            "end": {
+              "line": 193,
+              "column": 29
+            }
+          },
+          "replacement": "Vec::leak(vec![Default::default()])",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_193_col_9_001.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_193_col_9_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.177267541,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.488667209,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:208:40: replace && with || in AxisMappingBasis::is_independent",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisMappingBasis::is_independent",
+            "return_type": "-> bool",
+            "span": {
+              "start": {
+                "line": 206,
+                "column": 5
+              },
+              "end": {
+                "line": 209,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 208,
+              "column": 40
+            },
+            "end": {
+              "line": 208,
+              "column": 42
+            }
+          },
+          "replacement": "||",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_208_col_40.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_208_col_40.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 4.154103416,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.402990416,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:371:54: replace && with || in unmap_location_with_bases",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "unmap_location_with_bases",
+            "return_type": "-> ExternalLocation",
+            "span": {
+              "start": {
+                "line": 347,
+                "column": 1
+              },
+              "end": {
+                "line": 376,
+                "column": 2
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 371,
+              "column": 54
+            },
+            "end": {
+              "line": 371,
+              "column": 56
+            }
+          },
+          "replacement": "||",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_371_col_54.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_371_col_54.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.5563655,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.457430167,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:405:70: delete ! in AxisMappingBasis::inverse_candidates",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisMappingBasis::inverse_candidates",
+            "return_type": "-> Vec<f64>",
+            "span": {
+              "start": {
+                "line": 403,
+                "column": 5
+              },
+              "end": {
+                "line": 441,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 405,
+              "column": 70
+            },
+            "end": {
+              "line": 405,
+              "column": 71
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_405_col_70.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_405_col_70.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.61254025,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.616587208,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:431:35: replace < with == in AxisMappingBasis::inverse_candidates",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisMappingBasis::inverse_candidates",
+            "return_type": "-> Vec<f64>",
+            "span": {
+              "start": {
+                "line": 403,
+                "column": 5
+              },
+              "end": {
+                "line": 441,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 431,
+              "column": 35
+            },
+            "end": {
+              "line": 431,
+              "column": 36
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_431_col_35.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_431_col_35.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.589149667,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.479506959,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:431:35: replace < with <= in AxisMappingBasis::inverse_candidates",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisMappingBasis::inverse_candidates",
+            "return_type": "-> Vec<f64>",
+            "span": {
+              "start": {
+                "line": 403,
+                "column": 5
+              },
+              "end": {
+                "line": 441,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 431,
+              "column": 35
+            },
+            "end": {
+              "line": 431,
+              "column": 36
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_431_col_35_001.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_431_col_35_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.524945166,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.549476042,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:435:28: replace && with || in AxisMappingBasis::inverse_candidates",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisMappingBasis::inverse_candidates",
+            "return_type": "-> Vec<f64>",
+            "span": {
+              "start": {
+                "line": 403,
+                "column": 5
+              },
+              "end": {
+                "line": 441,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 435,
+              "column": 28
+            },
+            "end": {
+              "line": 435,
+              "column": 30
+            }
+          },
+          "replacement": "||",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_435_col_28.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_435_col_28.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.605726083,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.338218083,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:435:22: replace > with >= in AxisMappingBasis::inverse_candidates",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisMappingBasis::inverse_candidates",
+            "return_type": "-> Vec<f64>",
+            "span": {
+              "start": {
+                "line": 403,
+                "column": 5
+              },
+              "end": {
+                "line": 441,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 435,
+              "column": 22
+            },
+            "end": {
+              "line": 435,
+              "column": 23
+            }
+          },
+          "replacement": ">=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_435_col_22.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_435_col_22.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.576442125,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.642312583,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/variation.rs:435:37: replace < with <= in AxisMappingBasis::inverse_candidates",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/variation.rs",
+          "function": {
+            "function_name": "AxisMappingBasis::inverse_candidates",
+            "return_type": "-> Vec<f64>",
+            "span": {
+              "start": {
+                "line": 403,
+                "column": 5
+              },
+              "end": {
+                "line": 441,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 435,
+              "column": 37
+            },
+            "end": {
+              "line": 435,
+              "column": 38
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__variation.rs_line_435_col_37.log",
+      "diff_path": "diff/crates__shift-font__src__ir__variation.rs_line_435_col_37.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.563119292,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.582636292,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    }
+  ],
+  "total_mutants": 19,
+  "missed": 19,
+  "caught": 0,
+  "timeout": 0,
+  "unviable": 0,
+  "success": 0,
+  "start_time": "2026-11-02T20:45:20.378603Z",
+  "end_time": "2026-11-02T20:54:50.302329Z",
+  "cargo_mutants_version": "27.1.0"
+}

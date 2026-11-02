@@ -1,0 +1,4 @@
+crates/shift-font/src/ir/component.rs:342:36: replace * with + in Transform::compose
+crates/shift-font/src/ir/component.rs:342:36: replace * with / in Transform::compose
+crates/shift-font/src/ir/component.rs:355:35: replace * with + in Transform::transform_point
+crates/shift-font/src/ir/component.rs:355:35: replace * with / in Transform::transform_point

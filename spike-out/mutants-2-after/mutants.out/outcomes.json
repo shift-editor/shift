@@ -1,0 +1,1493 @@
+{
+  "outcomes": [
+    {
+      "scenario": "Baseline",
+      "summary": "Success",
+      "log_path": "log/baseline.log",
+      "diff_path": null,
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.627101667,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.109200916,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:223:31: replace - with + in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 223,
+              "column": 31
+            },
+            "end": {
+              "line": 223,
+              "column": 32
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_223_col_31.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_223_col_31.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.569345291,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.574199875,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:223:24: replace * with + in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 223,
+              "column": 24
+            },
+            "end": {
+              "line": 223,
+              "column": 25
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_223_col_24.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_223_col_24.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.620784375,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.806051208,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:223:24: replace * with / in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 223,
+              "column": 24
+            },
+            "end": {
+              "line": 223,
+              "column": 25
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_223_col_24_001.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_223_col_24_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.5898415420000003,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.796819,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:223:38: replace * with / in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 223,
+              "column": 38
+            },
+            "end": {
+              "line": 223,
+              "column": 39
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_223_col_38.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_223_col_38.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.607085833,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.907773125,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:224:38: delete - in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 224,
+              "column": 38
+            },
+            "end": {
+              "line": 224,
+              "column": 39
+            }
+          },
+          "replacement": "",
+          "genre": "UnaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_224_col_38.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_224_col_38.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.6438467919999997,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 24.237638875,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:229:39: replace > with == in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 229,
+              "column": 39
+            },
+            "end": {
+              "line": 229,
+              "column": 40
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_229_col_39.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_229_col_39.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.699219125,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.372806666,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:229:39: replace > with >= in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 229,
+              "column": 39
+            },
+            "end": {
+              "line": 229,
+              "column": 40
+            }
+          },
+          "replacement": ">=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_229_col_39_001.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_229_col_39_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.6310014170000002,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.0918995,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:229:71: replace > with == in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 229,
+              "column": 71
+            },
+            "end": {
+              "line": 229,
+              "column": 72
+            }
+          },
+          "replacement": "==",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_229_col_71.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_229_col_71.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.693508666,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 22.313463583,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:229:71: replace > with < in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 229,
+              "column": 71
+            },
+            "end": {
+              "line": 229,
+              "column": 72
+            }
+          },
+          "replacement": "<",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_229_col_71_001.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_229_col_71_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.71284175,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 26.012897791,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:229:71: replace > with >= in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 229,
+              "column": 71
+            },
+            "end": {
+              "line": 229,
+              "column": 72
+            }
+          },
+          "replacement": ">=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_229_col_71_002.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_229_col_71_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.708082,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 25.768875833,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:230:52: replace / with % in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 230,
+              "column": 52
+            },
+            "end": {
+              "line": 230,
+              "column": 53
+            }
+          },
+          "replacement": "%",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_230_col_52.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_230_col_52.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.677101666,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 26.151948792,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:230:52: replace / with * in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 230,
+              "column": 52
+            },
+            "end": {
+              "line": 230,
+              "column": 53
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_230_col_52_001.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_230_col_52_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.650639875,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 26.348487292,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:230:37: replace + with - in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 230,
+              "column": 37
+            },
+            "end": {
+              "line": 230,
+              "column": 38
+            }
+          },
+          "replacement": "-",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_230_col_37.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_230_col_37.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.67971075,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 26.601755125,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:230:37: replace + with * in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 230,
+              "column": 37
+            },
+            "end": {
+              "line": 230,
+              "column": 38
+            }
+          },
+          "replacement": "*",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_230_col_37_001.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_230_col_37_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.701858333,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 26.408471709,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:230:44: replace * with / in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 230,
+              "column": 44
+            },
+            "end": {
+              "line": 230,
+              "column": 45
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_230_col_44.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_230_col_44.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.685668167,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 26.592928333,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:230:63: replace * with + in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 230,
+              "column": 63
+            },
+            "end": {
+              "line": 230,
+              "column": 64
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_230_col_63.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_230_col_63.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.698879833,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 26.634996125,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:230:63: replace * with / in DecomposedTransform::from_matrix",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::from_matrix",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 215,
+                "column": 5
+              },
+              "end": {
+                "line": 246,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 230,
+              "column": 63
+            },
+            "end": {
+              "line": 230,
+              "column": 64
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_230_col_63_001.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_230_col_63_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.646669333,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 26.364360375,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:255:13: delete field translate_x from struct Self expression in DecomposedTransform::translation",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::translation",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 252,
+                "column": 5
+              },
+              "end": {
+                "line": 259,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 255,
+              "column": 13
+            },
+            "end": {
+              "line": 255,
+              "column": 35
+            }
+          },
+          "replacement": "",
+          "genre": "StructField"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_255_col_13.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_255_col_13.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.687751791,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 31.286324333,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:256:13: delete field translate_y from struct Self expression in DecomposedTransform::translation",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "DecomposedTransform::translation",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 252,
+                "column": 5
+              },
+              "end": {
+                "line": 259,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 256,
+              "column": 13
+            },
+            "end": {
+              "line": 256,
+              "column": 35
+            }
+          },
+          "replacement": "",
+          "genre": "StructField"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_256_col_13.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_256_col_13.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.70195375,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 26.51667175,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:282:47: replace < with <= in Transform::mirrors",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "Transform::mirrors",
+            "return_type": "-> bool",
+            "span": {
+              "start": {
+                "line": 279,
+                "column": 5
+              },
+              "end": {
+                "line": 283,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 282,
+              "column": 47
+            },
+            "end": {
+              "line": 282,
+              "column": 48
+            }
+          },
+          "replacement": "<=",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_282_col_47.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_282_col_47.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.648069333,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 26.682816083,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:282:27: replace - with + in Transform::mirrors",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "Transform::mirrors",
+            "return_type": "-> bool",
+            "span": {
+              "start": {
+                "line": 279,
+                "column": 5
+              },
+              "end": {
+                "line": 283,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 282,
+              "column": 27
+            },
+            "end": {
+              "line": 282,
+              "column": 28
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_282_col_27.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_282_col_27.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.750221416,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 26.411335125,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:282:17: replace * with / in Transform::mirrors",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "Transform::mirrors",
+            "return_type": "-> bool",
+            "span": {
+              "start": {
+                "line": 279,
+                "column": 5
+              },
+              "end": {
+                "line": 283,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 282,
+              "column": 17
+            },
+            "end": {
+              "line": 282,
+              "column": 18
+            }
+          },
+          "replacement": "/",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_282_col_17.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_282_col_17.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.697873542,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 26.596339667,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "crates/shift-font/src/ir/component.rs:282:37: replace * with + in Transform::mirrors",
+          "package": "shift-font",
+          "file": "crates/shift-font/src/ir/component.rs",
+          "function": {
+            "function_name": "Transform::mirrors",
+            "return_type": "-> bool",
+            "span": {
+              "start": {
+                "line": 279,
+                "column": 5
+              },
+              "end": {
+                "line": 283,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 282,
+              "column": 37
+            },
+            "end": {
+              "line": 282,
+              "column": 38
+            }
+          },
+          "replacement": "+",
+          "genre": "BinaryOperator"
+        }
+      },
+      "summary": "MissedMutant",
+      "log_path": "log/crates__shift-font__src__ir__component.rs_line_282_col_37.log",
+      "diff_path": "diff/crates__shift-font__src__ir__component.rs_line_282_col_37.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 3.7175067090000002,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 26.740410083,
+          "process_status": "Success",
+          "argv": [
+            "/nix/store/xkl65n5mkksi61cry1xgg06ms430axpv-cargo-1.93.0-aarch64-apple-darwin/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=shift-font@0.1.0"
+          ]
+        }
+      ]
+    }
+  ],
+  "total_mutants": 23,
+  "missed": 23,
+  "caught": 0,
+  "timeout": 0,
+  "unviable": 0,
+  "success": 0,
+  "start_time": "2026-11-02T20:54:50.576969Z",
+  "end_time": "2026-11-02T21:06:44.987449Z",
+  "cargo_mutants_version": "27.1.0"
+}

@@ -1,0 +1,41 @@
+crates/shift-font/src/ir/component.rs:220:9: replace DecomposedTransform::from_matrix -> Self with Default::default()
+crates/shift-font/src/ir/component.rs:220:36: replace + with - in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:220:36: replace + with * in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:220:29: replace * with + in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:220:29: replace * with / in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:220:43: replace * with + in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:220:43: replace * with / in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:221:36: replace + with - in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:221:36: replace + with * in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:221:29: replace * with + in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:221:29: replace * with / in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:221:43: replace * with + in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:221:43: replace * with / in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:223:31: replace - with / in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:223:38: replace * with + in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:224:30: replace < with == in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:224:30: replace < with > in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:224:30: replace < with <= in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:229:54: replace && with || in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:229:39: replace > with < in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:230:30: replace * with + in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:230:30: replace * with / in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:230:44: replace * with + in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:249:9: replace DecomposedTransform::transform_point -> kurbo::Point with Default::default()
+crates/shift-font/src/ir/component.rs:282:9: replace Transform::mirrors -> bool with true
+crates/shift-font/src/ir/component.rs:282:9: replace Transform::mirrors -> bool with false
+crates/shift-font/src/ir/component.rs:282:47: replace < with == in Transform::mirrors
+crates/shift-font/src/ir/component.rs:282:47: replace < with > in Transform::mirrors
+crates/shift-font/src/ir/component.rs:282:27: replace - with / in Transform::mirrors
+crates/shift-font/src/ir/component.rs:282:17: replace * with + in Transform::mirrors
+crates/shift-font/src/ir/component.rs:282:37: replace * with / in Transform::mirrors
+crates/shift-font/src/ir/component.rs:326:13: delete field dx from struct Self expression in Transform::translate
+crates/shift-font/src/ir/component.rs:327:13: delete field dy from struct Self expression in Transform::translate
+crates/shift-font/src/ir/component.rs:334:13: delete field xx from struct Self expression in Transform::scale
+crates/shift-font/src/ir/component.rs:335:13: delete field yy from struct Self expression in Transform::scale
+crates/shift-font/src/ir/component.rs:342:9: replace Transform::compose -> Self with Default::default()
+crates/shift-font/src/ir/component.rs:355:9: replace Transform::transform_point -> kurbo::Point with Default::default()
+crates/shift-font/src/ir/component.rs:342:36: replace * with + in Transform::compose
+crates/shift-font/src/ir/component.rs:342:36: replace * with / in Transform::compose
+crates/shift-font/src/ir/component.rs:355:35: replace * with + in Transform::transform_point
+crates/shift-font/src/ir/component.rs:355:35: replace * with / in Transform::transform_point

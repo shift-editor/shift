@@ -1,0 +1,23 @@
+crates/shift-font/src/ir/component.rs:223:31: replace - with + in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:223:24: replace * with + in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:223:24: replace * with / in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:223:38: replace * with / in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:224:38: delete - in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:229:39: replace > with == in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:229:39: replace > with >= in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:229:71: replace > with == in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:229:71: replace > with < in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:229:71: replace > with >= in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:230:52: replace / with % in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:230:52: replace / with * in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:230:37: replace + with - in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:230:37: replace + with * in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:230:44: replace * with / in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:230:63: replace * with + in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:230:63: replace * with / in DecomposedTransform::from_matrix
+crates/shift-font/src/ir/component.rs:255:13: delete field translate_x from struct Self expression in DecomposedTransform::translation
+crates/shift-font/src/ir/component.rs:256:13: delete field translate_y from struct Self expression in DecomposedTransform::translation
+crates/shift-font/src/ir/component.rs:282:47: replace < with <= in Transform::mirrors
+crates/shift-font/src/ir/component.rs:282:27: replace - with + in Transform::mirrors
+crates/shift-font/src/ir/component.rs:282:17: replace * with / in Transform::mirrors
+crates/shift-font/src/ir/component.rs:282:37: replace * with + in Transform::mirrors
