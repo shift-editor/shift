@@ -16,7 +16,7 @@ use crate::{
     errors::{FormatBackendError, FormatBackendResult},
     font_source::VariationAxisKind,
     formats::ufo::{UfoKerning, load_header, read_glyph_paths},
-    import::GlifGlyphStream,
+    import::{GlifDirectory, GlifGlyphStream},
     kerning_import::KerningImport,
 };
 
@@ -423,7 +423,10 @@ impl GlifGlyphStream {
             .collect::<BTreeSet<_>>();
         let directories = directories
             .iter()
-            .map(|directory| (directory.source_id, &directory.glyphs))
+            .map(|directory| GlifDirectory {
+                source_id: directory.source_id,
+                glyphs: &directory.glyphs,
+            })
             .collect::<Vec<_>>();
         Self::from_directories(source_ids, names.into_iter().collect(), &directories)
     }

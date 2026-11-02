@@ -11,7 +11,7 @@ use shift_font::{Font, Source, SourceId};
 use crate::{
     ImportReport,
     errors::{FormatBackendError, FormatBackendResult},
-    import::GlifGlyphStream,
+    import::{GlifDirectory, GlifGlyphStream},
     kerning_import::KerningImport,
 };
 
@@ -73,7 +73,10 @@ impl GlifGlyphStream {
             .collect();
         let directories = layers
             .iter()
-            .map(|layer| (layer.source_id, &layer.glyphs))
+            .map(|layer| GlifDirectory {
+                source_id: layer.source_id,
+                glyphs: &layer.glyphs,
+            })
             .collect::<Vec<_>>();
         Self::from_directories(source_ids, names, &directories)
     }

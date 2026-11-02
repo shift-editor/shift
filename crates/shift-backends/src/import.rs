@@ -50,6 +50,12 @@ pub(crate) struct GlifLayer {
     pub(crate) path: PathBuf,
 }
 
+/// One source's folder of GLIF files, by glyph name.
+pub(crate) struct GlifDirectory<'a> {
+    pub(crate) source_id: SourceId,
+    pub(crate) glyphs: &'a BTreeMap<String, PathBuf>,
+}
+
 #[derive(Clone)]
 pub(crate) struct GlifGlyph {
     pub(crate) id: GlyphId,
@@ -70,7 +76,7 @@ impl GlifGlyphStream {
     pub(crate) fn from_directories(
         source_ids: &SourceIds,
         names: Vec<String>,
-        directories: &[(SourceId, &BTreeMap<String, PathBuf>)],
+        directories: &[GlifDirectory<'_>],
     ) -> Self {
         let glyph_ids = names
             .iter()
@@ -82,10 +88,10 @@ impl GlifGlyphStream {
                 let layers = directories
                     .iter()
                     .enumerate()
-                    .filter_map(|(index, (source_id, glyphs))| {
-                        let path = glyphs.get(&name)?;
+                    .filter_map(|(index, directory)| {
+                        let path = directory.glyphs.get(&name)?;
                         Some(GlifLayer {
-                            source_id: *source_id,
+                            source_id: directory.source_id,
                             layer_id: source_ids.layer_id(&name, &index.to_string()),
                             path: path.clone(),
                         })
