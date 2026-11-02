@@ -1,0 +1,610 @@
+[
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace * with / in AxisRange::normalize\n@@ -29,17 +29,17 @@\n     /// Maps `value` to `-1..=1`: the default to `0`, the minimum to `-1` and\n     /// the maximum to `1`, linearly on each side.\n     ///\n     /// A side with no extent (the default at the minimum or maximum) maps to\n     /// `0`. A value within a relative `1e-9` of the default maps to exactly\n     /// `0`, and a result within `1e-9` of `-1`, `0` or `1` snaps to it.\n     /// Values outside the range are not clamped.\n     pub fn normalize(&self, value: f64) -> f64 {\n-        let tolerance = 1e-9 * (1.0 + self.default.abs());\n+        let tolerance = 1e-9 / /* ~ changed by cargo-mutants ~ */ (1.0 + self.default.abs());\n         let extent = if value < self.default {\n             self.default - self.minimum\n         } else {\n             self.maximum - self.default\n         };\n         if extent.abs() < tolerance || (value - self.default).abs() < tolerance {\n             return 0.0;\n         }\n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisRange::normalize",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 48
+        },
+        "start": {
+          "column": 5,
+          "line": 29
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:37:30: replace * with / in AxisRange::normalize",
+    "package": "shift-font",
+    "replacement": "/",
+    "span": {
+      "end": {
+        "column": 31,
+        "line": 37
+      },
+      "start": {
+        "column": 30,
+        "line": 37
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace < with <= in AxisRange::normalize\n@@ -30,17 +30,17 @@\n     /// the maximum to `1`, linearly on each side.\n     ///\n     /// A side with no extent (the default at the minimum or maximum) maps to\n     /// `0`. A value within a relative `1e-9` of the default maps to exactly\n     /// `0`, and a result within `1e-9` of `-1`, `0` or `1` snaps to it.\n     /// Values outside the range are not clamped.\n     pub fn normalize(&self, value: f64) -> f64 {\n         let tolerance = 1e-9 * (1.0 + self.default.abs());\n-        let extent = if value < self.default {\n+        let extent = if value <= /* ~ changed by cargo-mutants ~ */ self.default {\n             self.default - self.minimum\n         } else {\n             self.maximum - self.default\n         };\n         if extent.abs() < tolerance || (value - self.default).abs() < tolerance {\n             return 0.0;\n         }\n \n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisRange::normalize",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 48
+        },
+        "start": {
+          "column": 5,
+          "line": 29
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:38:31: replace < with <= in AxisRange::normalize",
+    "package": "shift-font",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 32,
+        "line": 38
+      },
+      "start": {
+        "column": 31,
+        "line": 38
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace < with <= in AxisRange::normalize\n@@ -35,17 +35,17 @@\n     /// Values outside the range are not clamped.\n     pub fn normalize(&self, value: f64) -> f64 {\n         let tolerance = 1e-9 * (1.0 + self.default.abs());\n         let extent = if value < self.default {\n             self.default - self.minimum\n         } else {\n             self.maximum - self.default\n         };\n-        if extent.abs() < tolerance || (value - self.default).abs() < tolerance {\n+        if extent.abs() <= /* ~ changed by cargo-mutants ~ */ tolerance || (value - self.default).abs() < tolerance {\n             return 0.0;\n         }\n \n         snap((value - self.default) / extent)\n     }\n \n     /// Maps a normalized `value` back into the range's space: the inverse of\n     /// [`Self::normalize`] on a side with extent.\n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisRange::normalize",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 48
+        },
+        "start": {
+          "column": 5,
+          "line": 29
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:43:25: replace < with <= in AxisRange::normalize",
+    "package": "shift-font",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 26,
+        "line": 43
+      },
+      "start": {
+        "column": 25,
+        "line": 43
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace < with == in AxisRange::normalize\n@@ -35,17 +35,17 @@\n     /// Values outside the range are not clamped.\n     pub fn normalize(&self, value: f64) -> f64 {\n         let tolerance = 1e-9 * (1.0 + self.default.abs());\n         let extent = if value < self.default {\n             self.default - self.minimum\n         } else {\n             self.maximum - self.default\n         };\n-        if extent.abs() < tolerance || (value - self.default).abs() < tolerance {\n+        if extent.abs() < tolerance || (value - self.default).abs() == /* ~ changed by cargo-mutants ~ */ tolerance {\n             return 0.0;\n         }\n \n         snap((value - self.default) / extent)\n     }\n \n     /// Maps a normalized `value` back into the range's space: the inverse of\n     /// [`Self::normalize`] on a side with extent.\n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisRange::normalize",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 48
+        },
+        "start": {
+          "column": 5,
+          "line": 29
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:43:69: replace < with == in AxisRange::normalize",
+    "package": "shift-font",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 70,
+        "line": 43
+      },
+      "start": {
+        "column": 69,
+        "line": 43
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace < with <= in AxisRange::normalize\n@@ -35,17 +35,17 @@\n     /// Values outside the range are not clamped.\n     pub fn normalize(&self, value: f64) -> f64 {\n         let tolerance = 1e-9 * (1.0 + self.default.abs());\n         let extent = if value < self.default {\n             self.default - self.minimum\n         } else {\n             self.maximum - self.default\n         };\n-        if extent.abs() < tolerance || (value - self.default).abs() < tolerance {\n+        if extent.abs() < tolerance || (value - self.default).abs() <= /* ~ changed by cargo-mutants ~ */ tolerance {\n             return 0.0;\n         }\n \n         snap((value - self.default) / extent)\n     }\n \n     /// Maps a normalized `value` back into the range's space: the inverse of\n     /// [`Self::normalize`] on a side with extent.\n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisRange::normalize",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 48
+        },
+        "start": {
+          "column": 5,
+          "line": 29
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:43:69: replace < with <= in AxisRange::normalize",
+    "package": "shift-font",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 70,
+        "line": 43
+      },
+      "start": {
+        "column": 69,
+        "line": 43
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace < with <= in AxisRange::denormalize\n@@ -45,17 +45,17 @@\n         }\n \n         snap((value - self.default) / extent)\n     }\n \n     /// Maps a normalized `value` back into the range's space: the inverse of\n     /// [`Self::normalize`] on a side with extent.\n     pub fn denormalize(&self, value: f64) -> f64 {\n-        if value < 0.0 {\n+        if value <= /* ~ changed by cargo-mutants ~ */ 0.0 {\n             self.default + value * (self.default - self.minimum)\n         } else if value > 0.0 {\n             self.default + value * (self.maximum - self.default)\n         } else {\n             self.default\n         }\n     }\n }\n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisRange::denormalize",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 60
+        },
+        "start": {
+          "column": 5,
+          "line": 50
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:53:18: replace < with <= in AxisRange::denormalize",
+    "package": "shift-font",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 19,
+        "line": 53
+      },
+      "start": {
+        "column": 18,
+        "line": 53
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace > with >= in AxisRange::denormalize\n@@ -47,17 +47,17 @@\n         snap((value - self.default) / extent)\n     }\n \n     /// Maps a normalized `value` back into the range's space: the inverse of\n     /// [`Self::normalize`] on a side with extent.\n     pub fn denormalize(&self, value: f64) -> f64 {\n         if value < 0.0 {\n             self.default + value * (self.default - self.minimum)\n-        } else if value > 0.0 {\n+        } else if value >= /* ~ changed by cargo-mutants ~ */ 0.0 {\n             self.default + value * (self.maximum - self.default)\n         } else {\n             self.default\n         }\n     }\n }\n \n /// One axis's design-space bounds used to normalize authored source locations.\n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisRange::denormalize",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 60
+        },
+        "start": {
+          "column": 5,
+          "line": 50
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:55:25: replace > with >= in AxisRange::denormalize",
+    "package": "shift-font",
+    "replacement": ">=",
+    "span": {
+      "end": {
+        "column": 26,
+        "line": 55
+      },
+      "start": {
+        "column": 25,
+        "line": 55
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace < with <= in snap\n@@ -81,17 +81,17 @@\n /// Snaps a normalized coordinate to `0` or `±1` when it misses by rounding.\n ///\n /// Mapped defaults and extremes are computed through compiled mapping bases,\n /// so a master authored exactly at the default can normalize to `1e-15`. The\n /// variation model treats only an exact `0` as the default location.\n fn snap(normalized: f64) -> f64 {\n     const TOLERANCE: f64 = 1e-9;\n     for anchor in [-1.0, 0.0, 1.0] {\n-        if (normalized - anchor).abs() < TOLERANCE {\n+        if (normalized - anchor).abs() <= /* ~ changed by cargo-mutants ~ */ TOLERANCE {\n             return anchor;\n         }\n     }\n     normalized\n }\n \n impl Font {\n     /// Derives design-space normalization in authoring-axis order.\n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "snap",
+      "return_type": "-> f64",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 94
+        },
+        "start": {
+          "column": 1,
+          "line": 81
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:89:40: replace < with <= in snap",
+    "package": "shift-font",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 41,
+        "line": 89
+      },
+      "start": {
+        "column": 40,
+        "line": 89
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace AxisMappingBasis::mapping_id -> AxisMappingId with Default::default()\n@@ -180,17 +180,17 @@\n             input_axis_ids,\n             output_axis_ids,\n             basis,\n         }\n     }\n \n     /// Returns the authored mapping identity that produced this basis.\n     pub fn mapping_id(&self) -> AxisMappingId {\n-        self.mapping_id\n+        Default::default() /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// Returns the mapping's ordered input axes.\n     pub fn input_axis_ids(&self) -> &[AxisId] {\n         &self.input_axis_ids\n     }\n \n     /// Returns the mapping's ordered output axes.\n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisMappingBasis::mapping_id",
+      "return_type": "-> AxisMappingId",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 189
+        },
+        "start": {
+          "column": 5,
+          "line": 186
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/shift-font/src/ir/variation.rs:188:9: replace AxisMappingBasis::mapping_id -> AxisMappingId with Default::default()",
+    "package": "shift-font",
+    "replacement": "Default::default()",
+    "span": {
+      "end": {
+        "column": 24,
+        "line": 188
+      },
+      "start": {
+        "column": 9,
+        "line": 188
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace AxisMappingBasis::input_axis_ids -> &[AxisId] with Vec::leak(Vec::new())\n@@ -185,17 +185,17 @@\n \n     /// Returns the authored mapping identity that produced this basis.\n     pub fn mapping_id(&self) -> AxisMappingId {\n         self.mapping_id\n     }\n \n     /// Returns the mapping's ordered input axes.\n     pub fn input_axis_ids(&self) -> &[AxisId] {\n-        &self.input_axis_ids\n+        Vec::leak(Vec::new()) /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// Returns the mapping's ordered output axes.\n     pub fn output_axis_ids(&self) -> &[AxisId] {\n         &self.output_axis_ids\n     }\n \n     /// Returns the Fontdrasil-compiled numeric contribution basis.\n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisMappingBasis::input_axis_ids",
+      "return_type": "-> &[AxisId]",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 194
+        },
+        "start": {
+          "column": 5,
+          "line": 191
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/shift-font/src/ir/variation.rs:193:9: replace AxisMappingBasis::input_axis_ids -> &[AxisId] with Vec::leak(Vec::new())",
+    "package": "shift-font",
+    "replacement": "Vec::leak(Vec::new())",
+    "span": {
+      "end": {
+        "column": 29,
+        "line": 193
+      },
+      "start": {
+        "column": 9,
+        "line": 193
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace AxisMappingBasis::input_axis_ids -> &[AxisId] with Vec::leak(vec![Default::default()])\n@@ -185,17 +185,17 @@\n \n     /// Returns the authored mapping identity that produced this basis.\n     pub fn mapping_id(&self) -> AxisMappingId {\n         self.mapping_id\n     }\n \n     /// Returns the mapping's ordered input axes.\n     pub fn input_axis_ids(&self) -> &[AxisId] {\n-        &self.input_axis_ids\n+        Vec::leak(vec![Default::default()]) /* ~ changed by cargo-mutants ~ */\n     }\n \n     /// Returns the mapping's ordered output axes.\n     pub fn output_axis_ids(&self) -> &[AxisId] {\n         &self.output_axis_ids\n     }\n \n     /// Returns the Fontdrasil-compiled numeric contribution basis.\n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisMappingBasis::input_axis_ids",
+      "return_type": "-> &[AxisId]",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 194
+        },
+        "start": {
+          "column": 5,
+          "line": 191
+        }
+      }
+    },
+    "genre": "FnValue",
+    "name": "crates/shift-font/src/ir/variation.rs:193:9: replace AxisMappingBasis::input_axis_ids -> &[AxisId] with Vec::leak(vec![Default::default()])",
+    "package": "shift-font",
+    "replacement": "Vec::leak(vec![Default::default()])",
+    "span": {
+      "end": {
+        "column": 29,
+        "line": 193
+      },
+      "start": {
+        "column": 9,
+        "line": 193
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace && with || in AxisMappingBasis::is_independent\n@@ -200,17 +200,17 @@\n \n     /// Returns the Fontdrasil-compiled numeric contribution basis.\n     pub fn basis(&self) -> &VariationBasis {\n         &self.basis\n     }\n \n     /// Whether the mapping maps one axis onto itself.\n     pub fn is_independent(&self) -> bool {\n-        self.input_axis_ids.len() == 1 && self.output_axis_ids == self.input_axis_ids\n+        self.input_axis_ids.len() == 1 || /* ~ changed by cargo-mutants ~ */ self.output_axis_ids == self.input_axis_ids\n     }\n \n     /// Maps a location through this basis, returning its output axes only.\n     ///\n     /// # Errors\n     ///\n     /// Returns [`crate::CoreError::AxisNotFound`] when an output or region axis\n     /// is missing from `axes`.\n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisMappingBasis::is_independent",
+      "return_type": "-> bool",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 209
+        },
+        "start": {
+          "column": 5,
+          "line": 206
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:208:40: replace && with || in AxisMappingBasis::is_independent",
+    "package": "shift-font",
+    "replacement": "||",
+    "span": {
+      "end": {
+        "column": 42,
+        "line": 208
+      },
+      "start": {
+        "column": 40,
+        "line": 208
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace && with || in unmap_location_with_bases\n@@ -363,17 +363,17 @@\n     bases: &[AxisMappingBasis],\n ) -> ExternalLocation {\n     axes.iter()\n         .filter(|axis| axis.role() == AxisRole::External)\n         .map(|axis| {\n             let target = design.value_on(axis);\n             let mapping = bases\n                 .iter()\n-                .find(|basis| basis.is_independent() && basis.output_axis_ids() == [axis.id()]);\n+                .find(|basis| basis.is_independent() || /* ~ changed by cargo-mutants ~ */ basis.output_axis_ids() == [axis.id()]);\n             let value = mapping.map_or(target, |basis| basis.unmap_independent(axis, axes, target));\n             (axis.id(), value)\n         })\n         .collect()\n }\n \n impl AxisMappingBasis {\n     /// The value on `axis` that this independent mapping takes closest to `target`.\n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "unmap_location_with_bases",
+      "return_type": "-> ExternalLocation",
+      "span": {
+        "end": {
+          "column": 2,
+          "line": 376
+        },
+        "start": {
+          "column": 1,
+          "line": 347
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:371:54: replace && with || in unmap_location_with_bases",
+    "package": "shift-font",
+    "replacement": "||",
+    "span": {
+      "end": {
+        "column": 56,
+        "line": 371
+      },
+      "start": {
+        "column": 54,
+        "line": 371
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ delete ! in AxisMappingBasis::inverse_candidates\n@@ -397,17 +397,17 @@\n         self.evaluate(&Location::from([(axis.id(), value)]), axes)\n             .ok()\n             .and_then(|mapped| mapped.get(axis.id()))\n             .unwrap_or(value)\n     }\n \n     /// The values on `axis` the inverse chooses among, ascending.\n     fn inverse_candidates(&self, axis: &Axis, axes: &[Axis], target: f64) -> Vec<f64> {\n-        if let Some(values) = axis.discrete_values().filter(|values| !values.is_empty()) {\n+        if let Some(values) = axis.discrete_values().filter(|values|  /* ~ changed by cargo-mutants ~ */values.is_empty()) {\n             let mut sorted = values.to_vec();\n             sorted.sort_by(f64::total_cmp);\n             return sorted;\n         }\n \n         let supports = self\n             .basis()\n             .deltas()\n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisMappingBasis::inverse_candidates",
+      "return_type": "-> Vec<f64>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 441
+        },
+        "start": {
+          "column": 5,
+          "line": 403
+        }
+      }
+    },
+    "genre": "UnaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:405:70: delete ! in AxisMappingBasis::inverse_candidates",
+    "package": "shift-font",
+    "replacement": "",
+    "span": {
+      "end": {
+        "column": 71,
+        "line": 405
+      },
+      "start": {
+        "column": 70,
+        "line": 405
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace < with == in AxisMappingBasis::inverse_candidates\n@@ -423,17 +423,17 @@\n         breakpoints.sort_by(f64::total_cmp);\n         breakpoints.dedup();\n \n         let mut candidates = breakpoints.clone();\n         for pair in breakpoints.windows(2) {\n             let (left, right) = (pair[0], pair[1]);\n             let left_mapped = self.map_one(axis, axes, left);\n             let mapped_range = self.map_one(axis, axes, right) - left_mapped;\n-            if mapped_range.abs() < f64::EPSILON {\n+            if mapped_range.abs() == /* ~ changed by cargo-mutants ~ */ f64::EPSILON {\n                 continue;\n             }\n             let ratio = (target - left_mapped) / mapped_range;\n             if ratio > 0.0 && ratio < 1.0 {\n                 candidates.push(left + ratio * (right - left));\n             }\n         }\n         candidates.sort_by(f64::total_cmp);\n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisMappingBasis::inverse_candidates",
+      "return_type": "-> Vec<f64>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 441
+        },
+        "start": {
+          "column": 5,
+          "line": 403
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:431:35: replace < with == in AxisMappingBasis::inverse_candidates",
+    "package": "shift-font",
+    "replacement": "==",
+    "span": {
+      "end": {
+        "column": 36,
+        "line": 431
+      },
+      "start": {
+        "column": 35,
+        "line": 431
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace < with <= in AxisMappingBasis::inverse_candidates\n@@ -423,17 +423,17 @@\n         breakpoints.sort_by(f64::total_cmp);\n         breakpoints.dedup();\n \n         let mut candidates = breakpoints.clone();\n         for pair in breakpoints.windows(2) {\n             let (left, right) = (pair[0], pair[1]);\n             let left_mapped = self.map_one(axis, axes, left);\n             let mapped_range = self.map_one(axis, axes, right) - left_mapped;\n-            if mapped_range.abs() < f64::EPSILON {\n+            if mapped_range.abs() <= /* ~ changed by cargo-mutants ~ */ f64::EPSILON {\n                 continue;\n             }\n             let ratio = (target - left_mapped) / mapped_range;\n             if ratio > 0.0 && ratio < 1.0 {\n                 candidates.push(left + ratio * (right - left));\n             }\n         }\n         candidates.sort_by(f64::total_cmp);\n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisMappingBasis::inverse_candidates",
+      "return_type": "-> Vec<f64>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 441
+        },
+        "start": {
+          "column": 5,
+          "line": 403
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:431:35: replace < with <= in AxisMappingBasis::inverse_candidates",
+    "package": "shift-font",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 36,
+        "line": 431
+      },
+      "start": {
+        "column": 35,
+        "line": 431
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace && with || in AxisMappingBasis::inverse_candidates\n@@ -427,17 +427,17 @@\n         for pair in breakpoints.windows(2) {\n             let (left, right) = (pair[0], pair[1]);\n             let left_mapped = self.map_one(axis, axes, left);\n             let mapped_range = self.map_one(axis, axes, right) - left_mapped;\n             if mapped_range.abs() < f64::EPSILON {\n                 continue;\n             }\n             let ratio = (target - left_mapped) / mapped_range;\n-            if ratio > 0.0 && ratio < 1.0 {\n+            if ratio > 0.0 || /* ~ changed by cargo-mutants ~ */ ratio < 1.0 {\n                 candidates.push(left + ratio * (right - left));\n             }\n         }\n         candidates.sort_by(f64::total_cmp);\n         candidates\n     }\n }\n \n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisMappingBasis::inverse_candidates",
+      "return_type": "-> Vec<f64>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 441
+        },
+        "start": {
+          "column": 5,
+          "line": 403
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:435:28: replace && with || in AxisMappingBasis::inverse_candidates",
+    "package": "shift-font",
+    "replacement": "||",
+    "span": {
+      "end": {
+        "column": 30,
+        "line": 435
+      },
+      "start": {
+        "column": 28,
+        "line": 435
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace > with >= in AxisMappingBasis::inverse_candidates\n@@ -427,17 +427,17 @@\n         for pair in breakpoints.windows(2) {\n             let (left, right) = (pair[0], pair[1]);\n             let left_mapped = self.map_one(axis, axes, left);\n             let mapped_range = self.map_one(axis, axes, right) - left_mapped;\n             if mapped_range.abs() < f64::EPSILON {\n                 continue;\n             }\n             let ratio = (target - left_mapped) / mapped_range;\n-            if ratio > 0.0 && ratio < 1.0 {\n+            if ratio >= /* ~ changed by cargo-mutants ~ */ 0.0 && ratio < 1.0 {\n                 candidates.push(left + ratio * (right - left));\n             }\n         }\n         candidates.sort_by(f64::total_cmp);\n         candidates\n     }\n }\n \n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisMappingBasis::inverse_candidates",
+      "return_type": "-> Vec<f64>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 441
+        },
+        "start": {
+          "column": 5,
+          "line": 403
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:435:22: replace > with >= in AxisMappingBasis::inverse_candidates",
+    "package": "shift-font",
+    "replacement": ">=",
+    "span": {
+      "end": {
+        "column": 23,
+        "line": 435
+      },
+      "start": {
+        "column": 22,
+        "line": 435
+      }
+    }
+  },
+  {
+    "diff": "--- crates/shift-font/src/ir/variation.rs\n+++ replace < with <= in AxisMappingBasis::inverse_candidates\n@@ -427,17 +427,17 @@\n         for pair in breakpoints.windows(2) {\n             let (left, right) = (pair[0], pair[1]);\n             let left_mapped = self.map_one(axis, axes, left);\n             let mapped_range = self.map_one(axis, axes, right) - left_mapped;\n             if mapped_range.abs() < f64::EPSILON {\n                 continue;\n             }\n             let ratio = (target - left_mapped) / mapped_range;\n-            if ratio > 0.0 && ratio < 1.0 {\n+            if ratio > 0.0 && ratio <= /* ~ changed by cargo-mutants ~ */ 1.0 {\n                 candidates.push(left + ratio * (right - left));\n             }\n         }\n         candidates.sort_by(f64::total_cmp);\n         candidates\n     }\n }\n \n",
+    "file": "crates/shift-font/src/ir/variation.rs",
+    "function": {
+      "function_name": "AxisMappingBasis::inverse_candidates",
+      "return_type": "-> Vec<f64>",
+      "span": {
+        "end": {
+          "column": 6,
+          "line": 441
+        },
+        "start": {
+          "column": 5,
+          "line": 403
+        }
+      }
+    },
+    "genre": "BinaryOperator",
+    "name": "crates/shift-font/src/ir/variation.rs:435:37: replace < with <= in AxisMappingBasis::inverse_candidates",
+    "package": "shift-font",
+    "replacement": "<=",
+    "span": {
+      "end": {
+        "column": 38,
+        "line": 435
+      },
+      "start": {
+        "column": 37,
+        "line": 435
+      }
+    }
+  }
+]

@@ -1,0 +1,166 @@
+crates/shift-font/src/ir/variation.rs:198:9: replace AxisMappingBasis::output_axis_ids -> &[AxisId] with Vec::leak(Vec::new())
+crates/shift-font/src/ir/variation.rs:198:9: replace AxisMappingBasis::output_axis_ids -> &[AxisId] with Vec::leak(vec![Default::default()])
+crates/shift-font/src/ir/variation.rs:208:9: replace AxisMappingBasis::is_independent -> bool with true
+crates/shift-font/src/ir/variation.rs:208:9: replace AxisMappingBasis::is_independent -> bool with false
+crates/shift-font/src/ir/variation.rs:208:35: replace == with != in AxisMappingBasis::is_independent
+crates/shift-font/src/ir/variation.rs:208:64: replace == with != in AxisMappingBasis::is_independent
+crates/shift-font/src/ir/variation.rs:224:39: replace + with - in AxisMappingBasis::evaluate
+crates/shift-font/src/ir/variation.rs:224:39: replace + with * in AxisMappingBasis::evaluate
+crates/shift-font/src/ir/variation.rs:253:28: replace - with + in <impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis>::try_from
+crates/shift-font/src/ir/variation.rs:253:28: replace - with / in <impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis>::try_from
+crates/shift-font/src/ir/variation.rs:257:29: replace != with == in <impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis>::try_from
+crates/shift-font/src/ir/variation.rs:337:46: delete ! in map_location_with_bases
+crates/shift-font/src/ir/variation.rs:365:5: replace unmap_location_with_bases -> ExternalLocation with Default::default()
+crates/shift-font/src/ir/variation.rs:366:36: replace == with != in unmap_location_with_bases
+crates/shift-font/src/ir/variation.rs:371:81: replace == with != in unmap_location_with_bases
+crates/shift-font/src/ir/variation.rs:381:9: replace AxisMappingBasis::unmap_independent -> f64 with 0.0
+crates/shift-font/src/ir/variation.rs:381:9: replace AxisMappingBasis::unmap_independent -> f64 with 1.0
+crates/shift-font/src/ir/variation.rs:381:9: replace AxisMappingBasis::unmap_independent -> f64 with -1.0
+crates/shift-font/src/ir/variation.rs:381:67: replace - with + in AxisMappingBasis::unmap_independent
+crates/shift-font/src/ir/variation.rs:381:67: replace - with / in AxisMappingBasis::unmap_independent
+crates/shift-font/src/ir/variation.rs:387:46: replace match guard best_error <= candidate_error with true in AxisMappingBasis::unmap_independent
+crates/shift-font/src/ir/variation.rs:387:46: replace match guard best_error <= candidate_error with false in AxisMappingBasis::unmap_independent
+crates/shift-font/src/ir/variation.rs:387:57: replace <= with > in AxisMappingBasis::unmap_independent
+crates/shift-font/src/ir/variation.rs:397:9: replace AxisMappingBasis::map_one -> f64 with 0.0
+crates/shift-font/src/ir/variation.rs:397:9: replace AxisMappingBasis::map_one -> f64 with 1.0
+crates/shift-font/src/ir/variation.rs:397:9: replace AxisMappingBasis::map_one -> f64 with -1.0
+crates/shift-font/src/ir/variation.rs:405:9: replace AxisMappingBasis::inverse_candidates -> Vec<f64> with vec![]
+crates/shift-font/src/ir/variation.rs:405:9: replace AxisMappingBasis::inverse_candidates -> Vec<f64> with vec![0.0]
+crates/shift-font/src/ir/variation.rs:405:9: replace AxisMappingBasis::inverse_candidates -> Vec<f64> with vec![1.0]
+crates/shift-font/src/ir/variation.rs:405:9: replace AxisMappingBasis::inverse_candidates -> Vec<f64> with vec![-1.0]
+crates/shift-font/src/ir/variation.rs:416:49: replace == with != in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:430:64: replace - with + in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:430:64: replace - with / in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:431:35: replace < with > in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:434:48: replace / with % in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:434:48: replace / with * in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:434:33: replace - with + in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:434:33: replace - with / in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:435:22: replace > with == in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:435:22: replace > with < in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:435:37: replace < with == in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:435:37: replace < with > in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:436:38: replace + with - in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:436:38: replace + with * in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:436:46: replace * with + in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:436:46: replace * with / in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:436:55: replace - with + in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:436:55: replace - with / in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:468:5: replace normalized_input -> NormalizedLocation with Default::default()
+crates/shift-font/src/ir/variation.rs:203:9: replace AxisMappingBasis::basis -> &VariationBasis with Box::leak(Box::new(Default::default()))
+crates/shift-font/src/ir/variation.rs:218:9: replace AxisMappingBasis::evaluate -> CoreResult<Location> with CoreResult::new()
+crates/shift-font/src/ir/variation.rs:218:9: replace AxisMappingBasis::evaluate -> CoreResult<Location> with CoreResult::from_iter([Default::default()])
+crates/shift-font/src/ir/variation.rs:218:9: replace AxisMappingBasis::evaluate -> CoreResult<Location> with CoreResult::new(Default::default())
+crates/shift-font/src/ir/variation.rs:218:9: replace AxisMappingBasis::evaluate -> CoreResult<Location> with CoreResult::from(Default::default())
+crates/shift-font/src/ir/variation.rs:235:9: replace <impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis>::try_from -> CoreResult<Self> with CoreResult::new()
+crates/shift-font/src/ir/variation.rs:235:9: replace <impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis>::try_from -> CoreResult<Self> with CoreResult::from_iter([Default::default()])
+crates/shift-font/src/ir/variation.rs:235:9: replace <impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis>::try_from -> CoreResult<Self> with CoreResult::new(Default::default())
+crates/shift-font/src/ir/variation.rs:235:9: replace <impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis>::try_from -> CoreResult<Self> with CoreResult::from(Default::default())
+crates/shift-font/src/ir/variation.rs:303:5: replace map_location -> CoreResult<DesignLocation> with CoreResult::new()
+crates/shift-font/src/ir/variation.rs:303:5: replace map_location -> CoreResult<DesignLocation> with CoreResult::from_iter([Default::default()])
+crates/shift-font/src/ir/variation.rs:303:5: replace map_location -> CoreResult<DesignLocation> with CoreResult::new(Default::default())
+crates/shift-font/src/ir/variation.rs:303:5: replace map_location -> CoreResult<DesignLocation> with CoreResult::from(Default::default())
+crates/shift-font/src/ir/variation.rs:320:5: replace map_location_with_bases -> CoreResult<DesignLocation> with CoreResult::new()
+crates/shift-font/src/ir/variation.rs:320:5: replace map_location_with_bases -> CoreResult<DesignLocation> with CoreResult::from_iter([Default::default()])
+crates/shift-font/src/ir/variation.rs:320:5: replace map_location_with_bases -> CoreResult<DesignLocation> with CoreResult::new(Default::default())
+crates/shift-font/src/ir/variation.rs:320:5: replace map_location_with_bases -> CoreResult<DesignLocation> with CoreResult::from(Default::default())
+crates/shift-font/src/ir/variation.rs:447:9: replace AxisMapping::resolve_axes -> CoreResult<Vec<&'a Axis>> with CoreResult::new()
+crates/shift-font/src/ir/variation.rs:447:9: replace AxisMapping::resolve_axes -> CoreResult<Vec<&'a Axis>> with CoreResult::from_iter([vec![]])
+crates/shift-font/src/ir/variation.rs:447:9: replace AxisMapping::resolve_axes -> CoreResult<Vec<&'a Axis>> with CoreResult::new(vec![])
+crates/shift-font/src/ir/variation.rs:447:9: replace AxisMapping::resolve_axes -> CoreResult<Vec<&'a Axis>> with CoreResult::from(vec![])
+crates/shift-font/src/ir/variation.rs:447:9: replace AxisMapping::resolve_axes -> CoreResult<Vec<&'a Axis>> with CoreResult::from_iter([vec![Box::leak(Box::new(Default::default()))]])
+crates/shift-font/src/ir/variation.rs:447:9: replace AxisMapping::resolve_axes -> CoreResult<Vec<&'a Axis>> with CoreResult::new(vec![Box::leak(Box::new(Default::default()))])
+crates/shift-font/src/ir/variation.rs:447:9: replace AxisMapping::resolve_axes -> CoreResult<Vec<&'a Axis>> with CoreResult::from(vec![Box::leak(Box::new(Default::default()))])
+crates/shift-font/src/ir/variation.rs:457:9: replace AxisMapping::axis_tag -> CoreResult<Tag> with CoreResult::new()
+crates/shift-font/src/ir/variation.rs:457:9: replace AxisMapping::axis_tag -> CoreResult<Tag> with CoreResult::from_iter([Default::default()])
+crates/shift-font/src/ir/variation.rs:457:9: replace AxisMapping::axis_tag -> CoreResult<Tag> with CoreResult::new(Default::default())
+crates/shift-font/src/ir/variation.rs:457:9: replace AxisMapping::axis_tag -> CoreResult<Tag> with CoreResult::from(Default::default())
+crates/shift-font/src/axis_map.rs:11:5: replace piecewise_map -> f64 with 0.0
+crates/shift-font/src/axis_map.rs:11:5: replace piecewise_map -> f64 with 1.0
+crates/shift-font/src/axis_map.rs:11:5: replace piecewise_map -> f64 with -1.0
+crates/shift-font/src/axis_map.rs:16:14: replace <= with > in piecewise_map
+crates/shift-font/src/axis_map.rs:17:37: replace - with + in piecewise_map
+crates/shift-font/src/axis_map.rs:17:37: replace - with / in piecewise_map
+crates/shift-font/src/axis_map.rs:17:22: replace + with - in piecewise_map
+crates/shift-font/src/axis_map.rs:17:22: replace + with * in piecewise_map
+crates/shift-font/src/axis_map.rs:24:18: replace <= with > in piecewise_map
+crates/shift-font/src/axis_map.rs:25:27: replace == with != in piecewise_map
+crates/shift-font/src/axis_map.rs:30:17: replace + with - in piecewise_map
+crates/shift-font/src/axis_map.rs:30:17: replace + with * in piecewise_map
+crates/shift-font/src/axis_map.rs:30:71: replace / with % in piecewise_map
+crates/shift-font/src/axis_map.rs:30:71: replace / with * in piecewise_map
+crates/shift-font/src/axis_map.rs:30:48: replace * with + in piecewise_map
+crates/shift-font/src/axis_map.rs:30:48: replace * with / in piecewise_map
+crates/shift-font/src/axis_map.rs:30:33: replace - with + in piecewise_map
+crates/shift-font/src/axis_map.rs:30:33: replace - with / in piecewise_map
+crates/shift-font/src/axis_map.rs:30:57: replace - with + in piecewise_map
+crates/shift-font/src/axis_map.rs:30:57: replace - with / in piecewise_map
+crates/shift-font/src/axis_map.rs:30:86: replace - with + in piecewise_map
+crates/shift-font/src/axis_map.rs:30:86: replace - with / in piecewise_map
+crates/shift-font/src/axis_map.rs:34:25: replace - with + in piecewise_map
+crates/shift-font/src/axis_map.rs:34:25: replace - with / in piecewise_map
+crates/shift-font/src/axis_map.rs:34:11: replace + with - in piecewise_map
+crates/shift-font/src/axis_map.rs:34:11: replace + with * in piecewise_map
+crates/shift-font/src/ir/variation.rs:37:9: replace AxisRange::normalize -> f64 with 0.0
+crates/shift-font/src/ir/variation.rs:37:9: replace AxisRange::normalize -> f64 with 1.0
+crates/shift-font/src/ir/variation.rs:37:9: replace AxisRange::normalize -> f64 with -1.0
+crates/shift-font/src/ir/variation.rs:37:30: replace * with + in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:37:37: replace + with - in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:37:37: replace + with * in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:38:31: replace < with == in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:38:31: replace < with > in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:39:26: replace - with + in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:39:26: replace - with / in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:41:26: replace - with + in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:41:26: replace - with / in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:43:37: replace || with && in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:43:25: replace < with == in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:43:25: replace < with > in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:43:69: replace < with > in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:43:47: replace - with + in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:43:47: replace - with / in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:47:37: replace / with % in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:47:37: replace / with * in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:47:21: replace - with + in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:47:21: replace - with / in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:53:9: replace AxisRange::denormalize -> f64 with 0.0
+crates/shift-font/src/ir/variation.rs:53:9: replace AxisRange::denormalize -> f64 with 1.0
+crates/shift-font/src/ir/variation.rs:53:9: replace AxisRange::denormalize -> f64 with -1.0
+crates/shift-font/src/ir/variation.rs:53:18: replace < with == in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:53:18: replace < with > in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:54:26: replace + with - in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:54:26: replace + with * in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:54:34: replace * with + in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:54:34: replace * with / in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:54:50: replace - with + in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:54:50: replace - with / in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:55:25: replace > with == in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:55:25: replace > with < in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:56:26: replace + with - in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:56:26: replace + with * in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:56:34: replace * with + in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:56:34: replace * with / in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:56:50: replace - with + in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:56:50: replace - with / in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:77:9: replace DesignNormalization::normalize -> f64 with 0.0
+crates/shift-font/src/ir/variation.rs:77:9: replace DesignNormalization::normalize -> f64 with 1.0
+crates/shift-font/src/ir/variation.rs:77:9: replace DesignNormalization::normalize -> f64 with -1.0
+crates/shift-font/src/ir/variation.rs:87:5: replace snap -> f64 with 0.0
+crates/shift-font/src/ir/variation.rs:87:5: replace snap -> f64 with 1.0
+crates/shift-font/src/ir/variation.rs:87:5: replace snap -> f64 with -1.0
+crates/shift-font/src/ir/variation.rs:88:20: delete - in snap
+crates/shift-font/src/ir/variation.rs:89:40: replace < with == in snap
+crates/shift-font/src/ir/variation.rs:89:40: replace < with > in snap
+crates/shift-font/src/ir/variation.rs:89:24: replace - with + in snap
+crates/shift-font/src/ir/variation.rs:89:24: replace - with / in snap
+crates/shift-font/src/ir/variation.rs:118:58: replace && with || in Font::design_normalization
+crates/shift-font/src/ir/variation.rs:118:86: replace == with != in Font::design_normalization
+crates/shift-font/src/ir/variation.rs:127:50: replace != with == in Font::design_normalization
+crates/shift-font/src/ir/variation.rs:131:37: delete - in Font::design_normalization
+crates/shift-font/src/ir/variation.rs:110:9: replace Font::design_normalization -> CoreResult<Vec<DesignNormalization>> with CoreResult::new()
+crates/shift-font/src/ir/variation.rs:110:9: replace Font::design_normalization -> CoreResult<Vec<DesignNormalization>> with CoreResult::from_iter([vec![]])
+crates/shift-font/src/ir/variation.rs:110:9: replace Font::design_normalization -> CoreResult<Vec<DesignNormalization>> with CoreResult::new(vec![])
+crates/shift-font/src/ir/variation.rs:110:9: replace Font::design_normalization -> CoreResult<Vec<DesignNormalization>> with CoreResult::from(vec![])
+crates/shift-font/src/ir/variation.rs:110:9: replace Font::design_normalization -> CoreResult<Vec<DesignNormalization>> with CoreResult::from_iter([vec![Default::default()]])
+crates/shift-font/src/ir/variation.rs:110:9: replace Font::design_normalization -> CoreResult<Vec<DesignNormalization>> with CoreResult::new(vec![Default::default()])
+crates/shift-font/src/ir/variation.rs:110:9: replace Font::design_normalization -> CoreResult<Vec<DesignNormalization>> with CoreResult::from(vec![Default::default()])
