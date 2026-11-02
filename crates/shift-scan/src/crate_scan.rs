@@ -6,8 +6,16 @@ use syn::Item;
 use syn::visit::Visit;
 
 use crate::duplicate::{FnBodies, FnBody};
+use crate::errors;
 use crate::file_scan::{FileScan, InherentMethods};
 use crate::finding::{Finding, Kind};
+use crate::layout;
+use crate::runtime;
+use crate::signature;
+use crate::syntax;
+use crate::test_code::{self, Role, TestCode};
+use crate::test_only_pub::NameUses;
+use crate::types::{TypeShape, TypeShapes};
 
 /// Types this many or more must share a method for it to suggest a trait.
 const TRAIT_TYPES: usize = 3;
@@ -22,6 +30,21 @@ const GENERIC_METHODS: [&str; 8] = [
 struct SourceFile {
     path: PathBuf,
     syntax: syn::File,
+    /// The file without its test items, for the kinds about library code.
+    code: syn::File,
+    role: Role,
+}
+
+impl SourceFile {
+    fn new(path: PathBuf, syntax: syn::File, role: Role) -> Self {
+        let code = syntax::without_tests(&syntax);
+        Self {
+            path,
+            syntax,
+            code,
+            role,
+        }
+    }
 }
 
 /// The source files of one crate: a method candidate's type and a trait
@@ -32,17 +55,22 @@ pub(crate) struct CrateScan {
 }
 
 impl CrateScan {
-    /// Parses every `.rs` file under `root`, skipping `tests/`, `benches/`
-    /// and test modules kept in their own files. A file that fails to parse is
-    /// skipped and named on stderr.
+    /// Parses every `.rs` file under `root` (a crate's `src`) and the crate's
+    /// `tests/`, skipping `benches/`. A file that fails to parse is skipped
+    /// and named on stderr.
     pub(crate) fn read(root: &Path) -> io::Result<Self> {
         let mut paths = Vec::new();
-        Self::collect(root, &mut paths)?;
+        Self::collect(root, Role::Library, &mut paths)?;
+        if let Some(tests) = root.parent().map(|crate_dir| crate_dir.join("tests"))
+            && tests.is_dir()
+        {
+            Self::collect(&tests, Role::IntegrationTests, &mut paths)?;
+        }
         let mut files = Vec::new();
-        for path in paths {
+        for (path, role) in paths {
             let text = std::fs::read_to_string(&path)?;
             match syn::parse_file(&text) {
-                Ok(syntax) => files.push(SourceFile { path, syntax }),
+                Ok(syntax) => files.push(SourceFile::new(path, syntax, role)),
                 Err(error) => eprintln!("shift-scan: skipped {}: {error}", path.display()),
             }
         }
@@ -52,31 +80,47 @@ impl CrateScan {
         })
     }
 
-    fn collect(dir: &Path, paths: &mut Vec<PathBuf>) -> io::Result<()> {
-        for entry in std::fs::read_dir(dir)? {
-            let path = entry?.path();
+    /// Gathers the `.rs` files under `dir`. Under `src`, a `tests/` directory
+    /// and files named `tests.rs`, `*_tests.rs` or `test_support.rs` are
+    /// unit tests.
+    fn collect(dir: &Path, role: Role, paths: &mut Vec<(PathBuf, Role)>) -> io::Result<()> {
+        let mut entries: Vec<_> = std::fs::read_dir(dir)?
+            .map(|entry| entry.map(|entry| entry.path()))
+            .collect::<io::Result<_>>()?;
+        entries.sort();
+        for path in entries {
             let name = path
                 .file_name()
                 .and_then(|name| name.to_str())
                 .unwrap_or_default();
             if path.is_dir() {
-                if !["target", "tests", "benches"].contains(&name) {
-                    Self::collect(&path, paths)?;
+                if !["target", "benches"].contains(&name) {
+                    let inner = match role {
+                        Role::Library if name == "tests" => Role::UnitTests,
+                        role => role,
+                    };
+                    Self::collect(&path, inner, paths)?;
                 }
-            } else if name.ends_with(".rs")
-                && !name.ends_with("tests.rs")
-                && name != "test_support.rs"
-            {
-                paths.push(path);
+            } else if name.ends_with(".rs") {
+                let unit_tests = name.ends_with("tests.rs") || name == "test_support.rs";
+                let file_role = match role {
+                    Role::Library if unit_tests => Role::UnitTests,
+                    role => role,
+                };
+                paths.push((path, file_role));
             }
         }
         Ok(())
     }
 
+    fn library_files(&self) -> impl Iterator<Item = &SourceFile> {
+        self.files.iter().filter(|file| file.role == Role::Library)
+    }
+
     /// Every non-test function body, for comparing across crates.
     pub(crate) fn bodies(&self) -> Vec<FnBody> {
         let mut bodies = Vec::new();
-        for file in &self.files {
+        for file in self.library_files() {
             let mut collector = FnBodies::new(&file.path);
             collector.visit_file(&file.syntax);
             bodies.extend(collector.found);
@@ -84,10 +128,61 @@ impl CrateScan {
         bodies
     }
 
+    /// Every test helper's body, for comparing across test files.
+    pub(crate) fn test_helper_bodies(&self) -> Vec<FnBody> {
+        self.files
+            .iter()
+            .flat_map(|file| TestCode::of(&file.path, &file.syntax, file.role).helper_bodies())
+            .collect()
+    }
+
+    /// The names this crate's library and test code define and use.
+    pub(crate) fn name_uses(&self) -> NameUses {
+        let mut uses = NameUses::default();
+        for file in &self.files {
+            uses.add_file(&file.path, &file.syntax, &file.code, file.role);
+        }
+        uses
+    }
+
+    /// Function names only non-`pub` definitions in library code have.
+    fn private_fns(&self) -> BTreeSet<String> {
+        let mut visibility = PrivateFns::default();
+        for file in self.library_files() {
+            visibility.visit_file(&file.code);
+        }
+        visibility
+            .private
+            .difference(&visibility.visible)
+            .cloned()
+            .collect()
+    }
+
+    /// The kinds about test code that one crate decides.
+    fn test_findings(&self) -> Vec<Finding> {
+        let private = self.private_fns();
+        let mut findings = Vec::new();
+        let mut setups = Vec::new();
+        for file in &self.files {
+            let code = TestCode::of(&file.path, &file.syntax, file.role);
+            findings.extend(code.findings(&private));
+            setups.extend(code.setups());
+        }
+        findings.extend(test_code::setup_copies(setups));
+        findings
+    }
+
+    /// Every library struct and enum, for comparing across crates.
+    pub(crate) fn type_shapes(&self) -> Vec<TypeShape> {
+        self.library_files()
+            .flat_map(|file| TypeShapes::of(&file.path, &file.code))
+            .collect()
+    }
+
     /// Structs and enums declared at the top level of any file.
     fn crate_types(&self) -> BTreeSet<String> {
         let mut types = BTreeSet::new();
-        for file in &self.files {
+        for file in self.library_files() {
             for item in &file.syntax.items {
                 match item {
                     Item::Struct(item) => types.insert(item.ident.to_string()),
@@ -103,13 +198,19 @@ impl CrateScan {
         let crate_types = self.crate_types();
         let mut inherent_methods = InherentMethods::new();
         let mut findings = Vec::new();
-        for file in &self.files {
+        for file in self.library_files() {
             let mut scan = FileScan::new(&file.path, &crate_types, &mut inherent_methods);
             scan.visit_file(&file.syntax);
             findings.extend(scan.findings);
             findings.extend(Self::repeated_error_mappings(scan.error_mappings));
+            findings.extend(signature::findings(&file.path, &file.code));
+            findings.extend(errors::findings(&file.path, &file.code));
+            findings.extend(runtime::findings(&file.path, &file.code));
+            findings.extend(layout::large_inline_tests(&file.path, &file.syntax));
         }
         findings.extend(self.trait_candidates(&inherent_methods));
+        findings.extend(self.crate_header());
+        findings.extend(self.test_findings());
         findings
     }
 
@@ -131,6 +232,13 @@ impl CrateScan {
             });
         }
         findings
+    }
+
+    /// The crate root's missing header, if it has one to miss.
+    fn crate_header(&self) -> Option<Finding> {
+        let roots = [self.root.join("lib.rs"), self.root.join("main.rs")];
+        let root = self.files.iter().find(|file| roots.contains(&file.path))?;
+        layout::crate_header(&root.path, &root.syntax)
     }
 
     fn trait_candidates(&self, inherent_methods: &InherentMethods) -> Vec<Finding> {
@@ -156,15 +264,60 @@ impl CrateScan {
     }
 }
 
+/// Free functions and inherent methods by name: `pub`, or anything less
+/// (`pub(crate)` included), which only the crate's own tests can reach.
+#[derive(Default)]
+struct PrivateFns {
+    private: BTreeSet<String>,
+    visible: BTreeSet<String>,
+}
+
+impl PrivateFns {
+    fn record(&mut self, sig: &syn::Signature, vis: &syn::Visibility) {
+        let names = if matches!(vis, syn::Visibility::Public(_)) {
+            &mut self.visible
+        } else {
+            &mut self.private
+        };
+        names.insert(sig.ident.to_string());
+    }
+}
+
+impl<'ast> Visit<'ast> for PrivateFns {
+    fn visit_item_fn(&mut self, function: &'ast syn::ItemFn) {
+        self.record(&function.sig, &function.vis);
+        syn::visit::visit_item_fn(self, function);
+    }
+
+    fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
+        if item.trait_.is_some() {
+            // Trait methods are reached through the trait; every name is visible.
+            for member in &item.items {
+                if let syn::ImplItem::Fn(method) = member {
+                    self.visible.insert(method.sig.ident.to_string());
+                }
+            }
+            return;
+        }
+        for member in &item.items {
+            if let syn::ImplItem::Fn(method) = member {
+                self.record(&method.sig, &method.vis);
+            }
+        }
+        syn::visit::visit_item_impl(self, item);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn findings(source: &str) -> Vec<(Kind, String)> {
-        let file = SourceFile {
-            path: PathBuf::from("lib.rs"),
-            syntax: syn::parse_file(source).unwrap(),
-        };
+        let file = SourceFile::new(
+            PathBuf::from("lib.rs"),
+            syn::parse_file(source).unwrap(),
+            Role::Library,
+        );
         let scan = CrateScan {
             root: PathBuf::from("crate"),
             files: vec![file],

@@ -677,6 +677,12 @@ jobs:
             fi
           done
 
+      # Each shift-scan kind's count per crate is held to
+      # crates/shift-scan/baseline.json: a rise lists the new hits, a fall
+      # asks for `pnpm scan:rust --update`. About 3 s once built.
+      - name: Hold shift-scan counts to the baseline
+        run: cargo run -q -p shift-scan -- --check
+
       - name: Run tests
         run: cargo test --workspace --exclude shift-bridge
 

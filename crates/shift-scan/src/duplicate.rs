@@ -27,8 +27,8 @@ use quote::ToTokens;
 use syn::visit::{self, Visit};
 use syn::{BinOp, Expr, FnArg, Pat};
 
-use crate::file_scan::FileScan;
 use crate::finding::{Finding, Kind};
+use crate::syntax;
 
 /// Normalized tokens a body needs before its shape is compared. Shorter
 /// bodies (getters, one-call wrappers) match each other by chance.
@@ -47,28 +47,16 @@ const COMMON: usize = 40;
 
 /// One non-test function body, normalized for comparison.
 pub(crate) struct FnBody {
-    path: PathBuf,
-    line: usize,
-    name: String,
+    pub(crate) path: PathBuf,
+    pub(crate) line: usize,
+    pub(crate) name: String,
     shingles: BTreeSet<u64>,
     arithmetic: BTreeSet<String>,
 }
 
 impl FnBody {
-    fn of(path: &Path, sig: &syn::Signature, block: &syn::Block) -> Self {
-        let mut owners: HashSet<String> = sig
-            .inputs
-            .iter()
-            .filter_map(|input| match input {
-                FnArg::Typed(typed) => match &*typed.pat {
-                    Pat::Ident(name) => Some(name.ident.to_string()),
-                    _ => None,
-                },
-                FnArg::Receiver(_) => None,
-            })
-            .collect();
-        owners.insert("self".to_string());
-
+    pub(crate) fn of(path: &Path, sig: &syn::Signature, block: &syn::Block) -> Self {
+        let owners = Self::owners(sig);
         let mut tokens = Vec::new();
         Self::normalize(block.to_token_stream(), &owners, &mut tokens);
         let shingles = if tokens.len() < MIN_TOKENS {
@@ -96,6 +84,30 @@ impl FnBody {
             shingles,
             arithmetic,
         }
+    }
+
+    /// `self` and the parameters, whose `.` before a field or method is dropped.
+    fn owners(sig: &syn::Signature) -> HashSet<String> {
+        let mut owners: HashSet<String> = sig
+            .inputs
+            .iter()
+            .filter_map(|input| match input {
+                FnArg::Typed(typed) => match &*typed.pat {
+                    Pat::Ident(name) => Some(name.ident.to_string()),
+                    _ => None,
+                },
+                FnArg::Receiver(_) => None,
+            })
+            .collect();
+        owners.insert("self".to_string());
+        owners
+    }
+
+    /// A body's tokens as the comparisons see them.
+    pub(crate) fn tokens(sig: &syn::Signature, block: &syn::Block) -> Vec<String> {
+        let mut tokens = Vec::new();
+        Self::normalize(block.to_token_stream(), &Self::owners(sig), &mut tokens);
+        tokens
     }
 
     fn hash(window: &[String]) -> u64 {
@@ -194,19 +206,19 @@ impl<'a> FnBodies<'a> {
 
 impl<'ast> Visit<'ast> for FnBodies<'_> {
     fn visit_item_mod(&mut self, module: &'ast syn::ItemMod) {
-        if !FileScan::is_test(&module.attrs) {
+        if !syntax::is_test(&module.attrs) {
             visit::visit_item_mod(self, module);
         }
     }
 
     fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
-        if !FileScan::is_test(&item.attrs) {
+        if !syntax::is_test(&item.attrs) {
             visit::visit_item_impl(self, item);
         }
     }
 
     fn visit_item_fn(&mut self, function: &'ast syn::ItemFn) {
-        if FileScan::is_test(&function.attrs) {
+        if syntax::is_test(&function.attrs) {
             return;
         }
         let body = FnBody::of(self.path, &function.sig, &function.block);
@@ -215,7 +227,7 @@ impl<'ast> Visit<'ast> for FnBodies<'_> {
     }
 
     fn visit_impl_item_fn(&mut self, method: &'ast syn::ImplItemFn) {
-        if FileScan::is_test(&method.attrs) {
+        if syntax::is_test(&method.attrs) {
             return;
         }
         let body = FnBody::of(self.path, &method.sig, &method.block);
@@ -248,14 +260,17 @@ impl Likeness {
     }
 }
 
-/// The bodies of every scanned crate, compared with each other.
+/// The bodies of every scanned crate, compared with each other, and the kind
+/// a pair is reported as: library bodies are `duplicate-body`, test helpers
+/// `test-helper-dup`.
 pub(crate) struct DuplicateBodies {
     bodies: Vec<FnBody>,
+    kind: Kind,
 }
 
 impl DuplicateBodies {
-    pub(crate) fn new(bodies: Vec<FnBody>) -> Self {
-        Self { bodies }
+    pub(crate) fn new(bodies: Vec<FnBody>, kind: Kind) -> Self {
+        Self { bodies, kind }
     }
 
     /// Reports every body that is alike another, at its signature, naming the
@@ -328,7 +343,7 @@ impl DuplicateBodies {
                 Finding {
                     path: body.path.clone(),
                     line: body.line,
-                    kind: Kind::DuplicateBody,
+                    kind: self.kind,
                     detail,
                 }
             })
@@ -348,7 +363,7 @@ mod tests {
             collector.visit_file(&syntax);
             bodies.extend(collector.found);
         }
-        DuplicateBodies::new(bodies)
+        DuplicateBodies::new(bodies, Kind::DuplicateBody)
             .findings()
             .into_iter()
             .map(|finding| {
