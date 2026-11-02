@@ -170,7 +170,10 @@ fn read_colors(
             ));
             continue;
         }
-        match item.as_str().and_then(normalize_override) {
+        match item
+            .as_str()
+            .and_then(|color| HexColor::WithAlpha.normalize(color))
+        {
             Some(color) => {
                 colors.insert(name.to_string(), color);
             }
@@ -194,12 +197,27 @@ fn is_color_name(name: &str) -> bool {
         })
 }
 
-/// Returns lowercase `#rrggbb` or `#rrggbbaa` for an override with or without `#`.
-fn normalize_override(color: &str) -> Option<String> {
-    let digits = color.strip_prefix('#').unwrap_or(color);
-    let valid =
-        matches!(digits.len(), 6 | 8) && digits.bytes().all(|byte| byte.is_ascii_hexdigit());
-    valid.then(|| format!("#{}", digits.to_ascii_lowercase()))
+/// Which hex colors a theme value accepts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HexColor {
+    /// `rrggbb`, as base16 palettes write colors.
+    Opaque,
+    /// `rrggbb` or `rrggbbaa`, as color overrides may.
+    WithAlpha,
+}
+
+impl HexColor {
+    /// Returns `color` as lowercase `#rrggbb` (or `#rrggbbaa` when alpha is
+    /// accepted), with or without its `#`.
+    fn normalize(self, color: &str) -> Option<String> {
+        let digits = color.strip_prefix('#').unwrap_or(color);
+        let length_fits = match self {
+            Self::Opaque => digits.len() == 6,
+            Self::WithAlpha => matches!(digits.len(), 6 | 8),
+        };
+        let valid = length_fits && digits.bytes().all(|byte| byte.is_ascii_hexdigit());
+        valid.then(|| format!("#{}", digits.to_ascii_lowercase()))
+    }
 }
 
 fn read_palette(
@@ -222,7 +240,10 @@ fn read_palette(
             missing.push(key);
             continue;
         };
-        match item.as_str().and_then(normalize_color) {
+        match item
+            .as_str()
+            .and_then(|color| HexColor::Opaque.normalize(color))
+        {
             Some(color) => *slot = color,
             None => problems.push(error_problem(
                 format!("\"{key}\" must be a six-digit hex color such as \"#1a1b26\"."),
@@ -239,13 +260,6 @@ fn read_palette(
     }
     let complete = missing.is_empty() && palette.iter().all(|color| !color.is_empty());
     complete.then_some(palette)
-}
-
-/// Returns `#rrggbb` in lowercase for a six-digit hex color with or without `#`.
-fn normalize_color(color: &str) -> Option<String> {
-    let digits = color.strip_prefix('#').unwrap_or(color);
-    let valid = digits.len() == 6 && digits.bytes().all(|byte| byte.is_ascii_hexdigit());
-    valid.then(|| format!("#{}", digits.to_ascii_lowercase()))
 }
 
 fn key_location(source: &str, table: &dyn TableLike, key: &str) -> Option<Location> {
