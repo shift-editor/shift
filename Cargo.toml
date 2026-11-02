@@ -57,6 +57,15 @@ struct_excessive_bools = "warn"
 # Name the type once: `Self` inside its own impl.
 use_self = "warn"
 map_unwrap_or = "warn"
+# Write the short form: no else after an exit, no negated if/else, no
+# ceremony around iterators and strings.
+redundant_else = "warn"
+if_not_else = "warn"
+explicit_into_iter_loop = "warn"
+manual_string_new = "warn"
+flat_map_option = "warn"
+inefficient_to_string = "warn"
+needless_raw_string_hashes = "warn"
 # `Arc::clone(&x)` shows a reference-count bump, not a deep copy.
 clone_on_ref_ptr = "warn"
 # The rustdoc skill requires `# Errors` on every public fallible function.
