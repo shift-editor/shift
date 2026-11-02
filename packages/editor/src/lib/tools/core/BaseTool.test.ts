@@ -89,8 +89,8 @@ describe("BaseTool contract", () => {
   let session: MemoryFontSession;
   let editor: Editor;
 
-  beforeEach(() => {
-    session = startEmptyMemorySession();
+  beforeEach(async () => {
+    session = await startEmptyMemorySession();
     editor = session.editor;
     tool = new ContractTestTool(editor);
     tool.activate();

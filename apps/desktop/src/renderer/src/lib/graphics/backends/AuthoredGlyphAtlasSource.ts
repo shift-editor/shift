@@ -1,4 +1,4 @@
-import type { Axis, AxisMappingBasis } from "@shift/types";
+import type { Axis } from "@shift/types";
 import type { SlugAtlasOrigin } from "@shared/workspace/lanes";
 import type { WorkspaceEditCoordinator } from "@/lib/workspace/WorkspaceEditCoordinator";
 import type {
@@ -12,17 +12,11 @@ import type {
 export class AuthoredGlyphAtlasSource implements GlyphAtlasSource {
   readonly #edits: WorkspaceEditCoordinator;
   readonly #axes: () => readonly Axis[];
-  readonly #mappingBases: () => readonly AxisMappingBasis[];
   readonly #origins = new Map<number, SlugAtlasOrigin>();
 
-  constructor(
-    edits: WorkspaceEditCoordinator,
-    axes: () => readonly Axis[],
-    mappingBases: () => readonly AxisMappingBasis[],
-  ) {
+  constructor(edits: WorkspaceEditCoordinator, axes: () => readonly Axis[]) {
     this.#edits = edits;
     this.#axes = axes;
-    this.#mappingBases = mappingBases;
   }
 
   async preparePage(request: GlyphAtlasPageRequest, alignment: number): Promise<GlyphAtlasPage> {
@@ -50,7 +44,6 @@ export class AuthoredGlyphAtlasSource implements GlyphAtlasSource {
       })),
       weightSets: descriptor.weightSets,
       weightAxes: [...this.#axes()],
-      weightMappingBases: [...this.#mappingBases()],
       weightEngine: this.#edits.engine,
       resolvedWeights: null,
     };

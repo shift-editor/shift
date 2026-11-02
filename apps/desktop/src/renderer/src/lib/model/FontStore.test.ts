@@ -25,7 +25,7 @@ import {
 import { segmentIdFor } from "@shift/glyph-state";
 import type { WorkspaceSnapshot } from "@shared/workspace/lanes";
 import { effect, track } from "@shift/editor/signals";
-import { Font, FontStore } from "@shift/editor/model";
+import { Font, FontStore, SessionEngine } from "@shift/editor/model";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
 
 const GLYPH_ID = "glyph_shared" as GlyphId;
@@ -47,6 +47,7 @@ const NEXT_SEGMENT_ID = segmentIdFor(NEXT_POINT_ID, POINT_4_ID);
 describe("FontStore glyph snapshot application", () => {
   it("only materializes layer snapshots that match current font records", () => {
     const store = new FontStore({
+      engine: new SessionEngine(),
       workspace: snapshot("document-a", LAYER_A_ID),
     });
 
@@ -62,6 +63,7 @@ describe("FontStore glyph snapshot application", () => {
 
   it("removes concrete layer state when the layer record is removed", () => {
     const store = new FontStore({
+      engine: new SessionEngine(),
       workspace: snapshot("document-a", LAYER_A_ID),
     });
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
@@ -90,6 +92,7 @@ describe("FontStore record index", () => {
       nonspacingMark: false,
     });
     const store = new FontStore({
+      engine: new SessionEngine(),
       workspace: {
         ...base,
         glyphs: [...base.glyphs, record("glyph_m", "M"), record("glyph_t", "T")],
@@ -133,6 +136,7 @@ describe("FontStore record index", () => {
       nonspacingMark: false,
     };
     const store = new FontStore({
+      engine: new SessionEngine(),
       workspace: { ...base, glyphs: [...base.glyphs, acute, aacute] },
     });
     const font = new Font({ store });
@@ -163,6 +167,7 @@ describe("FontStore record index", () => {
 describe("FontStore glyph object ownership", () => {
   it("indexes concrete layer structure ids by owner", () => {
     const store = new FontStore({
+      engine: new SessionEngine(),
       workspace: snapshot("document-a", LAYER_A_ID),
     });
     expect(store.layerIdForPoint(POINT_1_ID)).toBeNull();
@@ -185,6 +190,7 @@ describe("FontStore glyph object ownership", () => {
 
   it("rebuilds after a concrete layer structure replacement", () => {
     const store = new FontStore({
+      engine: new SessionEngine(),
       workspace: snapshot("document-a", LAYER_A_ID),
     });
     store.applyGlyphSnapshots([glyphSnapshot(LAYER_A_ID, structure())]);
@@ -219,6 +225,7 @@ describe("FontStore glyph object ownership", () => {
 
   it("materializes added layer structure from the same workspace change", () => {
     const store = new FontStore({
+      engine: new SessionEngine(),
       workspace: snapshot("document-a", LAYER_A_ID),
     });
     const nextStructure = structure({
@@ -259,6 +266,7 @@ describe("FontStore glyph object ownership", () => {
 
   it("invalidates committed font dependents after a values-only native echo", () => {
     const store = new FontStore({
+      engine: new SessionEngine(),
       workspace: snapshot("document-a", LAYER_A_ID),
     });
     const font = new Font({ store });
@@ -279,6 +287,7 @@ describe("FontStore glyph object ownership", () => {
   it("publishes values-only roots and component dependents for atlas invalidation", () => {
     const dependentGlyphId = "glyph_dependent" as GlyphId;
     const store = new FontStore({
+      engine: new SessionEngine(),
       workspace: snapshot("document-a", LAYER_A_ID),
     });
     const font = new Font({ store });
@@ -300,6 +309,7 @@ describe("FontStore glyph object ownership", () => {
 
   it("forwards ownership queries through Font", () => {
     const store = new FontStore({
+      engine: new SessionEngine(),
       workspace: snapshot("document-a", LAYER_A_ID),
     });
     const font = new Font({ store });

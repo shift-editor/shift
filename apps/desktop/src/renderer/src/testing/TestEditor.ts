@@ -219,11 +219,7 @@ export async function openTestEditor(
 export function authoredGlyphAtlas(editor: EditorTestSurface): AuthoredGlyphAtlasSource {
   if (!(editor instanceof TestEditor)) throw new Error("Expected an editor from startTestEditor");
   const font = editor.font;
-  return new AuthoredGlyphAtlasSource(
-    editor.workspaceEditCoordinator,
-    () => font.getAxes(),
-    () => font.getAxisMappingBases(),
-  );
+  return new AuthoredGlyphAtlasSource(editor.workspaceEditCoordinator, () => font.getAxes());
 }
 
 /**

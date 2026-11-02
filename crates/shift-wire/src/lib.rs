@@ -409,6 +409,32 @@ impl From<&IrVariationBasis> for VariationBasis {
     }
 }
 
+impl From<VariationBasis> for IrVariationBasis {
+    /// Rebuilds a basis Rust compiled and the editor sent back, as it holds it.
+    fn from(basis: VariationBasis) -> Self {
+        Self::new(
+            basis
+                .deltas
+                .into_iter()
+                .map(|delta| {
+                    let supports = delta.region.into_iter().map(|support| {
+                        shift_font::AxisSupport::new(
+                            support.axis_id,
+                            support.lower,
+                            support.peak,
+                            support.upper,
+                        )
+                    });
+                    shift_font::VariationDelta::new(
+                        shift_font::InterpolationRegion::new(supports.collect()),
+                        delta.values,
+                    )
+                })
+                .collect(),
+        )
+    }
+}
+
 /// Design-space normalization transported without authoring-axis metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -8,19 +8,17 @@ import {
   asPointId,
   asSourceId,
   mintRunId,
-  type AxisId,
-  type FontSnapshot,
-  type GlyphRecord,
-  type GlyphSnapshot,
+  type FontIntent,
+  type LayerId,
+  type PointId,
+  type SourceId,
 } from "@shift/types";
-import { createMemoryFontSession } from "../createMemoryFontSession";
-import type { SystemClipboard } from "../lib/clipboard";
 import { externalAxisLocationFromRecord } from "../lib/variation/location";
-import type { MemoryFontSource } from "../types/fontSession";
+import type { MemoryFontSession, MemoryToolName } from "../types/fontSession";
 import type { GlyphNode, TextRunNode } from "../types/node";
+import { startMemorySession } from "./emptyMemorySession";
 
 const glyphId = asGlyphId("glyph_s");
-const regularSourceId = asSourceId("source_regular");
 const boldSourceId = asSourceId("source_bold");
 const regularLayerId = asLayerId("layer_regular");
 const boldLayerId = asLayerId("layer_bold");
@@ -30,27 +28,28 @@ const boldPointId = asPointId("point_bold_start");
 const boldEndPointId = asPointId("point_bold_end");
 const axisId = asAxisId("axis_weight");
 
-class MemoryClipboard implements SystemClipboard {
-  #value = "";
+/** A session over a font with a weight axis, Regular at 0 and Bold at 1000, and an open stroke `S`. */
+interface StrokeFont {
+  readonly session: MemoryFontSession;
+  readonly regularSourceId: SourceId;
+}
 
-  writeText(value: string): Promise<void> {
-    this.#value = value;
-    return Promise.resolve();
-  }
-
-  readText(): Promise<string> {
-    return Promise.resolve(this.#value);
-  }
+async function strokeFont(tools?: readonly MemoryToolName[]): Promise<StrokeFont> {
+  let regularSourceId: SourceId | null = null;
+  const session = await startMemorySession({
+    tools,
+    build: ({ sourceId }) => {
+      regularSourceId = sourceId;
+      return strokeIntents(sourceId);
+    },
+  });
+  if (!regularSourceId) throw new Error("the font was built without its default source");
+  return { session, regularSourceId };
 }
 
 describe("memory font editing", () => {
-  it("loads snapshots and retains a Select-tool point drag in memory", async () => {
-    const { font: fontSnapshot, glyph, records } = fixture();
-    const source = memorySource({ font: fontSnapshot, glyph, records });
-    const session = createMemoryFontSession({
-      source,
-      clipboard: new MemoryClipboard(),
-    });
+  it("loads a glyph from the engine and retains a Select-tool point drag in memory", async () => {
+    const { session, regularSourceId } = await strokeFont();
     const { editor, font } = session;
 
     expect(editor.scene.nodes()).toEqual([]);
@@ -97,11 +96,8 @@ describe("memory font editing", () => {
     session.dispose();
   });
 
-  it("lays proof text out as typed, by shift-text, without an engine", async () => {
-    const session = createMemoryFontSession({
-      source: memorySource(fixture()),
-      clipboard: new MemoryClipboard(),
-    });
+  it("shapes and lays proof text out through the session's engine", async () => {
+    const { session, regularSourceId } = await strokeFont();
     const { editor } = session;
     editor.selectSource(regularSourceId);
     const run = editor.scene.createNode<TextRunNode>(
@@ -125,18 +121,13 @@ describe("memory font editing", () => {
         };
       })
       .toEqual({ lefts: [0, 500], carets: [0, 500, 1000] });
+
+    session.dispose();
   });
 
-  it("keeps axis state isolated between independent editor sessions", () => {
-    const source = memorySource(fixture());
-    const first = createMemoryFontSession({
-      source,
-      clipboard: new MemoryClipboard(),
-    });
-    const second = createMemoryFontSession({
-      source,
-      clipboard: new MemoryClipboard(),
-    });
+  it("keeps axis state isolated between independent editor sessions", async () => {
+    const { session: first } = await strokeFont();
+    const { session: second } = await strokeFont();
     const secondLocation = second.editor.externalLocation;
 
     first.editor.setExternalLocation(externalAxisLocationFromRecord({ [axisId]: 625 }));
@@ -149,22 +140,10 @@ describe("memory font editing", () => {
     second.dispose();
   });
 
-  it("offers only the requested tools and activates the first", () => {
-    const source = memorySource(fixture());
-    const defaults = createMemoryFontSession({
-      source,
-      clipboard: new MemoryClipboard(),
-    });
-    const handOnly = createMemoryFontSession({
-      source,
-      clipboard: new MemoryClipboard(),
-      tools: ["hand"],
-    });
-    const viewOnly = createMemoryFontSession({
-      source,
-      clipboard: new MemoryClipboard(),
-      tools: [],
-    });
+  it("offers only the requested tools and activates the first", async () => {
+    const { session: defaults } = await strokeFont();
+    const { session: handOnly } = await strokeFont(["hand"]);
+    const { session: viewOnly } = await strokeFont([]);
 
     expect([...defaults.editor.toolRegistryCell.peek().keys()]).toEqual(["select", "hand"]);
     expect(defaults.editor.toolCell.peek()?.id).toBe("select");
@@ -178,11 +157,8 @@ describe("memory font editing", () => {
     viewOnly.dispose();
   });
 
-  it("narrows the active tool to its identity and to one tool's state", () => {
-    const session = createMemoryFontSession({
-      source: memorySource(fixture()),
-      clipboard: new MemoryClipboard(),
-    });
+  it("narrows the active tool to its identity and to one tool's state", async () => {
+    const { session } = await strokeFont();
     const { editor } = session;
     const toolId = editor.toolIdCell;
     const select = editor.toolCellIf("select");
@@ -211,11 +187,8 @@ describe("memory font editing", () => {
     session.dispose();
   });
 
-  it("disposes a session idempotently", () => {
-    const session = createMemoryFontSession({
-      source: memorySource(fixture()),
-      clipboard: new MemoryClipboard(),
-    });
+  it("disposes a session idempotently", async () => {
+    const { session } = await strokeFont();
     expect(session.editor.toolCell.peek()?.id).toBe("select");
     expect(session.editor.toolRegistryCell.peek().size).toBeGreaterThan(0);
 
@@ -227,84 +200,13 @@ describe("memory font editing", () => {
   });
 });
 
-function memorySource({ font, glyph, records }: ReturnType<typeof fixture>): MemoryFontSource {
-  return {
-    font,
-    records,
-    read(glyphIds) {
-      return Promise.resolve(glyphIds.includes(glyph.glyphId) ? [glyph] : []);
-    },
-    glyphPreviews() {
-      return Promise.resolve([]);
-    },
-  };
-}
-
-function fixture(): {
-  font: FontSnapshot;
-  glyph: GlyphSnapshot;
-  records: readonly GlyphRecord[];
-} {
-  const regularStructure = {
-    contours: [
-      {
-        id: asContourId("contour_regular"),
-        closed: false,
-        points: [
-          { id: regularPointId, pointType: "onCurve" as const, smooth: false },
-          {
-            id: regularEndPointId,
-            pointType: "onCurve" as const,
-            smooth: false,
-          },
-        ],
-      },
-    ],
-    anchors: [],
-    components: [],
-  };
-  const boldStructure = {
-    contours: [
-      {
-        id: asContourId("contour_bold"),
-        closed: false,
-        points: [
-          { id: boldPointId, pointType: "onCurve" as const, smooth: false },
-          { id: boldEndPointId, pointType: "onCurve" as const, smooth: false },
-        ],
-      },
-    ],
-    anchors: [],
-    components: [],
-  };
-  const regularValues = new Float64Array([500, 100, 100, 300, 100]);
-  const boldValues = new Float64Array([500, 300, 100, 500, 100]);
-
-  return {
-    font: {
-      metadata: { familyName: "Memory Test" },
-      metrics: { unitsPerEm: 1000 },
-      metricDefinitions: [],
-      kerning: { groups: [], sources: [] },
-      glyphs: [{ id: glyphId, name: "S", unicodes: [83] }],
-      sources: [
-        {
-          id: regularSourceId,
-          name: "Regular",
-          location: { values: { [axisId]: 0 } as Record<AxisId, number> },
-          metricValues: {},
-          role: "master",
-        },
-        {
-          id: boldSourceId,
-          name: "Bold",
-          location: { values: { [axisId]: 1000 } as Record<AxisId, number> },
-          metricValues: {},
-          role: "master",
-        },
-      ],
-      axes: [
-        {
+/** The intents that add the weight axis, Bold, and `S` drawn as one open stroke in each source. */
+function strokeIntents(regularSourceId: SourceId): FontIntent[] {
+  return [
+    {
+      kind: "createAxis",
+      createAxis: {
+        axis: {
           id: axisId,
           tag: "wght",
           name: "Weight",
@@ -313,78 +215,53 @@ function fixture(): {
           labels: [],
           hidden: false,
         },
-      ],
-      axisMappings: [],
-      axisMappingBases: [],
-      namedInstances: [],
+      },
     },
-    records: [
-      {
-        id: glyphId,
-        name: "S" as GlyphRecord["name"],
-        unicodes: [83 as GlyphRecord["unicodes"][number]],
-        componentBaseGlyphIds: [],
-        layers: [
-          { id: regularLayerId, sourceId: regularSourceId },
-          { id: boldLayerId, sourceId: boldSourceId },
+    {
+      kind: "createSource",
+      createSource: {
+        sourceId: boldSourceId,
+        name: "Bold",
+        location: { values: { [axisId]: 1000 } },
+      },
+    },
+    { kind: "createGlyph", createGlyph: { glyphId, name: "S", unicodes: [83] } },
+    ...stroke(regularLayerId, regularSourceId, [regularPointId, regularEndPointId], 100),
+    ...stroke(boldLayerId, boldSourceId, [boldPointId, boldEndPointId], 300),
+  ];
+}
+
+/** A layer of `S` in `sourceId`, 500 wide, with one open stroke 200 long from (`x`, 100). */
+function stroke(
+  layerId: LayerId,
+  sourceId: SourceId,
+  [start, end]: readonly [PointId, PointId],
+  x: number,
+): FontIntent[] {
+  const point = (id: PointId, at: number) => ({
+    id,
+    x: at,
+    y: 100,
+    pointType: "onCurve" as const,
+    smooth: false,
+  });
+  return [
+    { kind: "createGlyphLayer", createGlyphLayer: { layerId, glyphId, sourceId } },
+    {
+      kind: "replaceGlyphLayerContent",
+      replaceGlyphLayerContent: {
+        layerId,
+        width: 500,
+        contours: [
+          {
+            id: asContourId(`contour_${layerId}`),
+            closed: false,
+            points: [point(start, x), point(end, x + 200)],
+          },
         ],
-        mark: false,
-        nonspacingMark: false,
+        anchors: [],
+        components: [],
       },
-    ],
-    glyph: {
-      glyphId,
-      projection: {
-        glyphId,
-        fallback: {
-          structure: regularStructure,
-          values: regularValues,
-          componentTransformKind: "decomposed",
-        },
-        interpolation: {
-          basis: {
-            sourceIds: [regularSourceId, boldSourceId],
-            designNormalization: [{ axisId, minimum: 0, default: 0, maximum: 1000 }],
-            basis: {
-              deltas: [
-                { region: [], values: new Float64Array([1, 0]) },
-                {
-                  region: [{ axisId, lower: 0, peak: 1, upper: 1 }],
-                  values: new Float64Array([-1, 1]),
-                },
-              ],
-            },
-          },
-          sources: [
-            { sourceId: regularSourceId, values: regularValues },
-            { sourceId: boldSourceId, values: boldValues },
-          ],
-        },
-        exactSourceShapes: [],
-        components: { rootGlyphId: glyphId, components: [] },
-        exactSourceComponents: [],
-        componentGlyphIds: [],
-      },
-      layers: [
-        {
-          glyphId,
-          sourceId: regularSourceId,
-          state: {
-            layerId: regularLayerId,
-            structure: regularStructure,
-            values: regularValues,
-          },
-        },
-        {
-          glyphId,
-          sourceId: boldSourceId,
-          state: {
-            layerId: boldLayerId,
-            structure: boldStructure,
-            values: boldValues,
-          },
-        },
-      ],
     },
-  };
+  ];
 }

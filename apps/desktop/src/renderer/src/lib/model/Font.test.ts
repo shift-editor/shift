@@ -14,7 +14,7 @@ import {
   type Unicode,
 } from "@shift/types";
 import type { WorkspaceSnapshot } from "@shared/workspace/lanes";
-import { Font, FontStore } from "@shift/editor/model";
+import { Font, FontStore, SessionEngine } from "@shift/editor/model";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
 import { signal } from "@shift/editor/signals";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
@@ -56,7 +56,7 @@ const SNAPSHOT: WorkspaceSnapshot = {
 
 describe("Font projects the workspace snapshot", () => {
   it("is unloaded with default metrics while no workspace is open", () => {
-    const font = new Font({ store: new FontStore() });
+    const font = new Font({ store: new FontStore({ engine: new SessionEngine() }) });
 
     expect(font.loaded).toBe(false);
     expect(font.metrics.unitsPerEm).toBe(1000);
@@ -64,7 +64,7 @@ describe("Font projects the workspace snapshot", () => {
   });
 
   it("follows a snapshot: loaded, metrics, metadata, directory, sources", () => {
-    const store = new FontStore();
+    const store = new FontStore({ engine: new SessionEngine() });
     const font = new Font({ store });
 
     store.replaceWorkspace(SNAPSHOT);
@@ -81,9 +81,9 @@ describe("Font projects the workspace snapshot", () => {
 
   it("uses injected glyph metadata only when the host provides it", () => {
     const unicode = 0x00c0 as Unicode;
-    const lightweight = new Font({ store: new FontStore() });
+    const lightweight = new Font({ store: new FontStore({ engine: new SessionEngine() }) });
     const informed = new Font({
-      store: new FontStore(),
+      store: new FontStore({ engine: new SessionEngine() }),
       glyphInfo: getGlyphInfo(),
     });
 
@@ -99,7 +99,7 @@ describe("Font projects the workspace snapshot", () => {
   });
 
   it("loadedCell flips reactively when the snapshot changes", () => {
-    const store = new FontStore();
+    const store = new FontStore({ engine: new SessionEngine() });
     const font = new Font({ store });
 
     expect(font.loadedCell.value).toBe(false);
@@ -110,7 +110,7 @@ describe("Font projects the workspace snapshot", () => {
   });
 
   it("resets to fallback font values when the workspace goes null", () => {
-    const store = new FontStore({ workspace: SNAPSHOT });
+    const store = new FontStore({ engine: new SessionEngine(), workspace: SNAPSHOT });
     const font = new Font({ store });
 
     expect(font.loaded).toBe(true);
@@ -126,6 +126,7 @@ describe("Font projects the workspace snapshot", () => {
 
   it("an empty loaded font reports records, not the unloaded fallback", () => {
     const store = new FontStore({
+      engine: new SessionEngine(),
       workspace: {
         ...SNAPSHOT,
         glyphs: [],
@@ -157,7 +158,12 @@ describe("Font answers directory and source queries", () => {
     role: "master",
   });
   const font = (snapshot: Partial<WorkspaceSnapshot>) =>
-    new Font({ store: new FontStore({ workspace: { ...SNAPSHOT, ...snapshot } }) });
+    new Font({
+      store: new FontStore({
+        engine: new SessionEngine(),
+        workspace: { ...SNAPSHOT, ...snapshot },
+      }),
+    });
 
   it("pages the directory after a glyph, in font order", () => {
     const abc = font({ glyphs: [glyph("g_A", "A"), glyph("g_B", "B"), glyph("g_C", "C")] });

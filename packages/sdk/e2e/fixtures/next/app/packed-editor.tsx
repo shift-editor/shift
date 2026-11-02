@@ -12,21 +12,28 @@ export function PackedEditor() {
 
   useEffect(() => {
     let clipboardText = "";
-    const next = createMemoryFontSession({
-      source,
-      clipboard: {
-        readText: () => Promise.resolve(clipboardText),
-        writeText: (value) => {
-          clipboardText = value;
-          return Promise.resolve();
-        },
-      },
-    });
     let active = true;
+    let opened: MemoryFontSession | null = null;
 
-    void next.font.loadGlyph(source.records[0]!.id).then((glyph) => {
+    void (async () => {
+      const next = await createMemoryFontSession({
+        source,
+        clipboard: {
+          readText: () => Promise.resolve(clipboardText),
+          writeText: (value) => {
+            clipboardText = value;
+            return Promise.resolve();
+          },
+        },
+      });
+      opened = next;
+      if (!active) {
+        next.dispose();
+        return;
+      }
+      const glyph = await next.font.loadGlyph(next.font.glyphRecords()[0]!.id);
       if (!active) return;
-      const sourceId = source.font.sources[0]!.id;
+      const sourceId = next.font.sources[0]!.id;
       next.editor.selectSource(sourceId);
       const node = next.editor.scene.createNode({
         kind: "glyph",
@@ -36,11 +43,11 @@ export function PackedEditor() {
       });
       next.editor.editing.enter(node.id);
       setSession(next);
-    });
+    })();
 
     return () => {
       active = false;
-      next.dispose();
+      opened?.dispose();
     };
   }, []);
 

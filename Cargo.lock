@@ -2480,6 +2480,7 @@ dependencies = [
  "clap",
  "comfy-table",
  "miette",
+ "rmp-serde",
  "rusqlite",
  "serde",
  "serde_json",
