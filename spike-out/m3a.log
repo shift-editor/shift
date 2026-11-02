@@ -1,0 +1,23 @@
+ INFO Iteration excludes 166 previously caught or unviable mutants
+Found 19 mutants to test
+ok       Unmutated baseline in 2s build + 20s test
+MISSED   crates/shift-font/src/ir/variation.rs:37:30: replace * with / in AxisRange::normalize in 3s build + 23s test
+MISSED   crates/shift-font/src/ir/variation.rs:38:31: replace < with <= in AxisRange::normalize in 3s build + 24s test
+MISSED   crates/shift-font/src/ir/variation.rs:43:25: replace < with <= in AxisRange::normalize in 3s build + 24s test
+MISSED   crates/shift-font/src/ir/variation.rs:43:69: replace < with == in AxisRange::normalize in 3s build + 23s test
+MISSED   crates/shift-font/src/ir/variation.rs:43:69: replace < with <= in AxisRange::normalize in 3s build + 24s test
+MISSED   crates/shift-font/src/ir/variation.rs:53:18: replace < with <= in AxisRange::denormalize in 3s build + 25s test
+MISSED   crates/shift-font/src/ir/variation.rs:55:25: replace > with >= in AxisRange::denormalize in 3s build + 24s test
+MISSED   crates/shift-font/src/ir/variation.rs:89:40: replace < with <= in snap in 3s build + 25s test
+MISSED   crates/shift-font/src/ir/variation.rs:188:9: replace AxisMappingBasis::mapping_id -> AxisMappingId with Default::default() in 3s build + 25s test
+MISSED   crates/shift-font/src/ir/variation.rs:193:9: replace AxisMappingBasis::input_axis_ids -> &[AxisId] with Vec::leak(Vec::new()) in 4s build + 24s test
+MISSED   crates/shift-font/src/ir/variation.rs:193:9: replace AxisMappingBasis::input_axis_ids -> &[AxisId] with Vec::leak(vec![Default::default()]) in 4s build + 25s test
+MISSED   crates/shift-font/src/ir/variation.rs:208:40: replace && with || in AxisMappingBasis::is_independent in 4s build + 25s test
+MISSED   crates/shift-font/src/ir/variation.rs:371:54: replace && with || in unmap_location_with_bases in 3s build + 25s test
+MISSED   crates/shift-font/src/ir/variation.rs:405:70: delete ! in AxisMappingBasis::inverse_candidates in 3s build + 25s test
+MISSED   crates/shift-font/src/ir/variation.rs:431:35: replace < with == in AxisMappingBasis::inverse_candidates in 3s build + 25s test
+MISSED   crates/shift-font/src/ir/variation.rs:431:35: replace < with <= in AxisMappingBasis::inverse_candidates in 3s build + 25s test
+MISSED   crates/shift-font/src/ir/variation.rs:435:28: replace && with || in AxisMappingBasis::inverse_candidates in 3s build + 25s test
+MISSED   crates/shift-font/src/ir/variation.rs:435:22: replace > with >= in AxisMappingBasis::inverse_candidates in 3s build + 25s test
+MISSED   crates/shift-font/src/ir/variation.rs:435:37: replace < with <= in AxisMappingBasis::inverse_candidates in 3s build + 25s test
+19 mutants tested in 9m: 19 missed

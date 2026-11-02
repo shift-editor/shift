@@ -1,0 +1,51 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on artifact directory
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.43s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.15s
+     Running `/Users/kostyafarber/.cache/cargo-targets/shift/fuzz/aarch64-apple-darwin/release/proof_text -artifact_prefix=/Users/kostyafarber/worktrees/shift-2/fuzz/artifacts/proof_text/ -max_total_time=600 -timeout=10 -rss_limit_mb=2048 -print_final_stats=1 corpus/proof_text`
+WARNING: Failed to find function "__sanitizer_acquire_crash_state". Reason dlsym(RTLD_DEFAULT, __sanitizer_acquire_crash_state): symbol not found.
+WARNING: Failed to find function "__sanitizer_print_stack_trace". Reason dlsym(RTLD_DEFAULT, __sanitizer_print_stack_trace): symbol not found.
+WARNING: Failed to find function "__sanitizer_set_death_callback". Reason dlsym(RTLD_DEFAULT, __sanitizer_set_death_callback): symbol not found.
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 2736507345
+INFO: Loaded 1 modules   (134194 inline 8-bit counters): 134194 [0x105364000, 0x105384c32), 
+INFO: Loaded 1 PC tables (134194 PCs): 134194 [0x105384c38,0x105590f58), 
+INFO:       65 files found in corpus/proof_text
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 4096 bytes
+INFO: seed corpus: files: 65 min: 3b max: 21b total: 1056b rss: 28Mb
+#66	INITED cov: 129 ft: 412 corp: 48/726b exec/s: 0 rss: 29Mb
+#78	REDUCE cov: 129 ft: 412 corp: 48/718b lim: 21 exec/s: 0 rss: 29Mb L: 11/21 MS: 2 CrossOver-EraseBytes-
+#94	NEW    cov: 130 ft: 413 corp: 49/728b lim: 21 exec/s: 0 rss: 29Mb L: 10/21 MS: 1 EraseBytes-
+#120	NEW    cov: 130 ft: 414 corp: 50/745b lim: 21 exec/s: 0 rss: 29Mb L: 17/21 MS: 1 CopyPart-
+...
+"\037\000\000\000\000\000\000\000" # Uses: 50353
+"\000\000\000\000\000\000\001\000" # Uses: 47179
+"\001\020" # Uses: 48470
+"\001\001\000\000" # Uses: 45525
+"<\000" # Uses: 42579
+"\0017" # Uses: 42326
+"\012\000\000\000\000\000\000\000" # Uses: 30303
+"\001#" # Uses: 31057
+".\000\000\000" # Uses: 29744
+"\004\001\000\000\000\000\000\000" # Uses: 27748
+"\3771" # Uses: 27466
+"\000\000\000\000\000\000\000\015" # Uses: 24255
+"4\000" # Uses: 23114
+"\004\034" # Uses: 20910
+"c\000" # Uses: 17020
+"\000\006" # Uses: 5215
+"\022\000" # Uses: 3634
+"\001\000\000\000\000\000\001\000" # Uses: 1775
+###### End of recommended dictionary. ######
+Done 49171205 runs in 601 second(s)
+stat::number_of_executed_units: 49171205
+stat::average_exec_per_sec:     81815
+stat::new_units_added:          4281
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              32

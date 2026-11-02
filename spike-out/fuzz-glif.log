@@ -1,0 +1,51 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on shared package cache
+    Blocking waiting for file lock on artifact directory
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.41s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on artifact directory
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.15s
+     Running `/Users/kostyafarber/.cache/cargo-targets/shift/fuzz/aarch64-apple-darwin/release/glif -artifact_prefix=/Users/kostyafarber/worktrees/shift-2/fuzz/artifacts/glif/ -max_total_time=600 -timeout=10 -rss_limit_mb=2048 -print_final_stats=1 corpus/glif`
+WARNING: Failed to find function "__sanitizer_acquire_crash_state". Reason dlsym(RTLD_DEFAULT, __sanitizer_acquire_crash_state): symbol not found.
+WARNING: Failed to find function "__sanitizer_print_stack_trace". Reason dlsym(RTLD_DEFAULT, __sanitizer_print_stack_trace): symbol not found.
+WARNING: Failed to find function "__sanitizer_set_death_callback". Reason dlsym(RTLD_DEFAULT, __sanitizer_set_death_callback): symbol not found.
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 2736202145
+INFO: Loaded 1 modules   (630561 inline 8-bit counters): 630561 [0x10584ce20, 0x1058e6d41), 
+INFO: Loaded 1 PC tables (630561 PCs): 630561 [0x1058e6d48,0x106285f58), 
+INFO:       60 files found in corpus/glif
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 4096 bytes
+INFO: seed corpus: files: 60 min: 154b max: 2367b total: 47323b rss: 48Mb
+#61	INITED cov: 3204 ft: 4842 corp: 50/40Kb exec/s: 0 rss: 52Mb
+...
+"K\000\000\000\000\000\000\000" # Uses: 249
+"8\000" # Uses: 233
+"f\000" # Uses: 246
+"\000\000\000\000\000\000\000\033" # Uses: 202
+"\005\000\000\000\000\000\000\000" # Uses: 178
+"\000\000\000\000\000\000\000\214" # Uses: 162
+"h\000\000\000" # Uses: 122
+"9\000" # Uses: 101
+">\000\000\000\000\000\000\000" # Uses: 108
+"\353\377\377\377" # Uses: 77
+"\000\000\000u" # Uses: 66
+"\377\377\3772" # Uses: 73
+";\261\023;\261\023;\001" # Uses: 59
+" \000\000\000\000\000\000\000" # Uses: 60
+"\374\000\000\000\000\000\000\000" # Uses: 36
+"\003\000" # Uses: 23
+"\034\000\000\000\000\000\000\000" # Uses: 17
+"\000\000\000\000\000\000\000\320" # Uses: 16
+###### End of recommended dictionary. ######
+Done 2194767 runs in 601 second(s)
+stat::number_of_executed_units: 2194767
+stat::average_exec_per_sec:     3651
+stat::new_units_added:          8857
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              540

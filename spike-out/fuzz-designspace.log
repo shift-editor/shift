@@ -1,0 +1,51 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on artifact directory
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.38s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.15s
+     Running `/Users/kostyafarber/.cache/cargo-targets/shift/fuzz/aarch64-apple-darwin/release/designspace -artifact_prefix=/Users/kostyafarber/worktrees/shift-2/fuzz/artifacts/designspace/ -max_total_time=600 -timeout=10 -rss_limit_mb=2048 -print_final_stats=1 corpus/designspace`
+WARNING: Failed to find function "__sanitizer_acquire_crash_state". Reason dlsym(RTLD_DEFAULT, __sanitizer_acquire_crash_state): symbol not found.
+WARNING: Failed to find function "__sanitizer_print_stack_trace". Reason dlsym(RTLD_DEFAULT, __sanitizer_print_stack_trace): symbol not found.
+WARNING: Failed to find function "__sanitizer_set_death_callback". Reason dlsym(RTLD_DEFAULT, __sanitizer_set_death_callback): symbol not found.
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 2735251480
+INFO: Loaded 1 modules   (630559 inline 8-bit counters): 630559 [0x1058b0e20, 0x10594ad3f), 
+INFO: Loaded 1 PC tables (630559 PCs): 630559 [0x10594ad40,0x1062e9f30), 
+INFO:        2 files found in corpus/designspace
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 11906 bytes
+INFO: seed corpus: files: 2 min: 760b max: 11906b total: 12666b rss: 45Mb
+#3	INITED cov: 1962 ft: 2597 corp: 2/12666b exec/s: 0 rss: 49Mb
+	NEW_FUNC[1/10]: 0x102eda6f8
+	NEW_FUNC[2/10]: 0x102f5d42c
+#4	NEW    cov: 2036 ft: 3547 corp: 3/23Kb lim: 11906 exec/s: 0 rss: 49Mb L: 11906/11906 MS: 1 CMP- DE: "\377\377\377\377"-
+...
+"s\000\000\000\000\000\000\000" # Uses: 59
+"\000\000\000'" # Uses: 81
+"\000\000\000\000\000\000\000\203" # Uses: 52
+"\000\000\000\000\000\000\000Y" # Uses: 69
+"\021\000" # Uses: 52
+"\272\276\377\377" # Uses: 39
+"\377\377\373\361" # Uses: 49
+"p\000\000\000\000\000\000\000" # Uses: 37
+"\001\021\021\021\021\021\021\022" # Uses: 54
+"\001\000\0000" # Uses: 24
+"\001\000\000\000\000\000\003\016" # Uses: 44
+"B\000\000\000\000\000\000\000" # Uses: 31
+"\001\000\000n" # Uses: 18
+"R\000\000\000\000\000\000\000" # Uses: 13
+"\001\000\000\000\000\000\000\014" # Uses: 9
+"\256\000\000\000\000\000\000\000" # Uses: 7
+"&\000\000\000\000\000\000\000" # Uses: 1
+"+\000\000\000" # Uses: 1
+###### End of recommended dictionary. ######
+Done 4893641 runs in 601 second(s)
+stat::number_of_executed_units: 4893641
+stat::average_exec_per_sec:     8142
+stat::new_units_added:          30206
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              71

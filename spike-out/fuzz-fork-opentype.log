@@ -1,0 +1,46 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on artifact directory
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.14s
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on artifact directory
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.09s
+     Running `/Users/kostyafarber/.cache/cargo-targets/shift/fuzz/aarch64-apple-darwin/release/opentype -artifact_prefix=/Users/kostyafarber/worktrees/shift-2/fuzz/artifacts/opentype/ -max_total_time=600 -timeout=10 -rss_limit_mb=2048 -fork=3 -ignore_crashes=1 -ignore_timeouts=1 -ignore_ooms=1 corpus/opentype`
+WARNING: Failed to find function "__sanitizer_acquire_crash_state". Reason dlsym(RTLD_DEFAULT, __sanitizer_acquire_crash_state): symbol not found.
+WARNING: Failed to find function "__sanitizer_print_stack_trace". Reason dlsym(RTLD_DEFAULT, __sanitizer_print_stack_trace): symbol not found.
+WARNING: Failed to find function "__sanitizer_set_death_callback". Reason dlsym(RTLD_DEFAULT, __sanitizer_set_death_callback): symbol not found.
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 3362499124
+INFO: Loaded 1 modules   (630532 inline 8-bit counters): 630532 [0x105764000, 0x1057fdf04), 
+INFO: Loaded 1 PC tables (630532 PCs): 630532 [0x1057fdf08,0x10619cf48), 
+INFO: -fork=3: fuzzing in separate process(s)
+INFO: -fork=3: 33 seed inputs, starting to fuzz in /tmp/nix-shell.2oxXmv/libFuzzerTemp.FuzzWithFork70532.dir
+#24: cov: 4633 ft: 8998 corp: 33 exec/s: 0 oom/timeout/crash: 0/0/0 time: 0s job: 2 dft_time: 0
+==70561== ERROR: libFuzzer: deadly signal
+#38: cov: 4675 ft: 9824 corp: 48 exec/s: 0 oom/timeout/crash: 0/0/1 time: 0s job: 3 dft_time: 0
+==70563== ERROR: libFuzzer: deadly signal
+#227: cov: 4716 ft: 10278 corp: 55 exec/s: 94 oom/timeout/crash: 0/0/2 time: 2s job: 1 dft_time: 0
+#2763: cov: 5036 ft: 13854 corp: 149 exec/s: 507 oom/timeout/crash: 0/0/2 time: 5s job: 4 dft_time: 0
+#3111: cov: 5181 ft: 16632 corp: 329 exec/s: 58 oom/timeout/crash: 0/0/2 time: 7s job: 5 dft_time: 0
+#4852: cov: 5236 ft: 17705 corp: 432 exec/s: 248 oom/timeout/crash: 0/0/2 time: 10s job: 6 dft_time: 0
+#6041: cov: 5286 ft: 19051 corp: 593 exec/s: 148 oom/timeout/crash: 0/0/2 time: 15s job: 7 dft_time: 0
+#6621: cov: 5301 ft: 19666 corp: 692 exec/s: 290 oom/timeout/crash: 0/0/2 time: 17s job: 9 dft_time: 0
+==70673== ERROR: libFuzzer: deadly signal
+#8825: cov: 5305 ft: 19823 corp: 726 exec/s: 244 oom/timeout/crash: 0/0/3 time: 19s job: 8 dft_time: 0
+...
+#129193: cov: 5640 ft: 25368 corp: 1796 exec/s: 26 oom/timeout/crash: 0/0/5 time: 389s job: 45 dft_time: 0
+#129922: cov: 5640 ft: 25369 corp: 1797 exec/s: 15 oom/timeout/crash: 0/0/5 time: 419s job: 46 dft_time: 0
+#132398: cov: 5640 ft: 25374 corp: 1801 exec/s: 51 oom/timeout/crash: 0/0/5 time: 429s job: 47 dft_time: 0
+#138029: cov: 5646 ft: 25393 corp: 1810 exec/s: 114 oom/timeout/crash: 0/0/5 time: 439s job: 48 dft_time: 0
+#141955: cov: 5652 ft: 25460 corp: 1825 exec/s: 75 oom/timeout/crash: 0/0/5 time: 473s job: 49 dft_time: 0
+#144841: cov: 5652 ft: 25492 corp: 1839 exec/s: 56 oom/timeout/crash: 0/0/5 time: 482s job: 50 dft_time: 0
+#146162: cov: 5653 ft: 25521 corp: 1844 exec/s: 24 oom/timeout/crash: 0/0/5 time: 492s job: 51 dft_time: 0
+#152926: cov: 5653 ft: 25528 corp: 1847 exec/s: 127 oom/timeout/crash: 0/0/5 time: 528s job: 52 dft_time: 0
+#156115: cov: 5685 ft: 25723 corp: 1878 exec/s: 59 oom/timeout/crash: 0/0/5 time: 539s job: 53 dft_time: 0
+#167793: cov: 5685 ft: 25732 corp: 1885 exec/s: 212 oom/timeout/crash: 0/0/5 time: 549s job: 54 dft_time: 0
+#178850: cov: 5703 ft: 25782 corp: 1905 exec/s: 197 oom/timeout/crash: 0/0/5 time: 585s job: 55 dft_time: 0
+#184287: cov: 5704 ft: 25861 corp: 1926 exec/s: 95 oom/timeout/crash: 0/0/5 time: 598s job: 56 dft_time: 0
+#187197: cov: 5704 ft: 25923 corp: 1939 exec/s: 50 oom/timeout/crash: 0/0/5 time: 608s job: 57 dft_time: 0
+INFO: fuzzed for 610 seconds, wrapping up soon
+INFO: exiting: 0 time: 611s

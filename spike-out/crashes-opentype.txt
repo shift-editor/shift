@@ -1,0 +1,8 @@
+no-repro artifacts/opentype/crash-0a647e9715b17d0735db37515d4ee5b41491a9ee
+panicked at worktrees/shift-2/crates/shift-backends/src/formats/opentype/reader.rs:59:14: artifacts/opentype/crash-11e5c85a1f3492bbf88c32c3fd4b45c6946b2d3b
+panicked at worktrees/shift-2/crates/shift-backends/src/formats/opentype/source.rs:174:33: artifacts/opentype/crash-550636963c4582300cbe08c4ea9df7348c77434b
+no-repro artifacts/opentype/crash-6454d992af94d279a7141fbf4be87091ec4084cc
+panicked at worktrees/shift-2/crates/shift-backends/src/formats/opentype/source.rs:174:33: artifacts/opentype/crash-73c3a12ba53b9ebe83cc76e9431b8f4eb3ff7eff
+no-repro artifacts/opentype/crash-7e8392681819795262a64cb5b630bb173ba600a0
+panicked at worktrees/shift-2/crates/shift-backends/src/formats/opentype/source.rs:174:33: artifacts/opentype/crash-88066d3eb12dbd89599d7e2e3393a069694bdb10
+no-repro artifacts/opentype/crash-a50f827ade5b9489dfc73567d90a186ddc4c169c

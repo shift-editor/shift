@@ -1,0 +1,27 @@
+Shift dev shell: node v24.19.0, pnpm 11.18.0, rustc rustc 1.93.0 (254b59607 2026-01-19)
+Found 64 mutants to test
+ok       Unmutated baseline in 3s build + 16s test
+MISSED   crates/shift-font/src/ir/component.rs:223:31: replace - with + in DecomposedTransform::from_matrix in 2s build + 16s test
+MISSED   crates/shift-font/src/ir/component.rs:223:24: replace * with + in DecomposedTransform::from_matrix in 2s build + 16s test
+MISSED   crates/shift-font/src/ir/component.rs:223:24: replace * with / in DecomposedTransform::from_matrix in 2s build + 16s test
+MISSED   crates/shift-font/src/ir/component.rs:223:38: replace * with / in DecomposedTransform::from_matrix in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:224:38: delete - in DecomposedTransform::from_matrix in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:229:39: replace > with == in DecomposedTransform::from_matrix in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:229:39: replace > with >= in DecomposedTransform::from_matrix in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:229:71: replace > with == in DecomposedTransform::from_matrix in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:229:71: replace > with < in DecomposedTransform::from_matrix in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:229:71: replace > with >= in DecomposedTransform::from_matrix in 2s build + 19s test
+MISSED   crates/shift-font/src/ir/component.rs:230:52: replace / with % in DecomposedTransform::from_matrix in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:230:52: replace / with * in DecomposedTransform::from_matrix in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:230:37: replace + with - in DecomposedTransform::from_matrix in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:230:37: replace + with * in DecomposedTransform::from_matrix in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:230:44: replace * with / in DecomposedTransform::from_matrix in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:230:63: replace * with + in DecomposedTransform::from_matrix in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:230:63: replace * with / in DecomposedTransform::from_matrix in 2s build + 18s test
+MISSED   crates/shift-font/src/ir/component.rs:255:13: delete field translate_x from struct Self expression in DecomposedTransform::translation in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:256:13: delete field translate_y from struct Self expression in DecomposedTransform::translation in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:282:47: replace < with <= in Transform::mirrors in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:282:27: replace - with + in Transform::mirrors in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:282:17: replace * with / in Transform::mirrors in 2s build + 17s test
+MISSED   crates/shift-font/src/ir/component.rs:282:37: replace * with + in Transform::mirrors in 2s build + 17s test
+64 mutants tested in 14m: 23 missed, 37 caught, 4 unviable

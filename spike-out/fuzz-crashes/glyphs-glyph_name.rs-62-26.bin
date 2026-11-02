@@ -1,0 +1,99 @@
+{
+.appVersion = "3532";
+.formatVersion = 3;
+familyName = "Scaled Component";
+unitsPerEm = 1000;
+axes = ({ name = Weight; tag = wgft; });
+metrics = ({ type = ascender; });
+fontMaster = (
+{
+id = light;
+name = Light;
+axesValues = (100);
+metricValues = ({ pos = 700; });
+},
+{
+id = bold;
+name = Bold;
+axesValues = (700);
+metricValues = ({ pos = 800; });
+}
+);
+instances = (
+{ name = Light; axesValues = (100); weightClass = 100; },
+{ name = ExtraLight; axesValues = (200); weightClass = 200; },
+{ name = Regular; axesValues = (400); weightClass = 400; },
+{ name = Bold; axesValues = (700); weightClass = 700; }
+);
+glyphs = (
+{
+glyphname = period;
+unicode = 46;
+layers = (
+{
+layerId = light;
+width = 300;
+shapes = ({ closed = 1; nodes = ((0,0,l), (100,0,l), (100,100,l), (0,100,l)); });
+},
+{
+layerId = bold;
+width = 400;
+shapes = ({ closed = 1; nodes = ((0,0,l), (200,0,l), (200,200,l), (0,200,l)); });
+}
+);
+},
+{
+glyphn = ({ ref = ring; pos = (50,0); scale = (2,2); });
+}
+);
+},
+{
+glyphname = wedge;
+unicode = 9698;
+layers = (
+{
+layerId = light;
+width = 300;
+shapes = ({ closed = 1; nodes = ((0,0,l), (100,0,l), (0,200,l)); });
+},
+{
+layerId = bold;
+width = 400;
+shapes = ({ closed = 1; nodes = ((0,0,l), (200,0,l), (0,300,l)); });
+}
+);
+},
+{
+glyphname = wedgeflip;
+unicode = 9699;
+layers = (
+{
+layerId = light;
+width = 300;
+shapes = ({ ref = wedge; pos = (50,0); scale = (1,1); });
+},
+{
+layerId = bold;
+width = 500;
+shapes = ({ ref = wedge; pos = (450,0); scale = (-1,1); });
+}
+);
+},
+{
+glyphname = wedgenest;
+unicode = 9700;
+layers = (
+{
+layerId = light;
+width = 300;
+shapes = ({ ref = wedgeflip; pos = (0,0); scale = (1,1); });
+},
+{
+layerId = bold;
+width = 500;
+shapes = ({ ref = wedgeflip; pos = (500,0); scale = (-1,1); });
+}
+);
+}
+);
+}

@@ -1,0 +1,46 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.12s
+    Blocking waiting for file lock on package cache
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.09s
+     Running `/Users/kostyafarber/.cache/cargo-targets/shift/fuzz/aarch64-apple-darwin/release/glyphs -artifact_prefix=/Users/kostyafarber/worktrees/shift-2/fuzz/artifacts/glyphs/ -max_total_time=600 -timeout=10 -rss_limit_mb=2048 -fork=3 -ignore_crashes=1 -ignore_timeouts=1 -ignore_ooms=1 corpus/glyphs`
+WARNING: Failed to find function "__sanitizer_acquire_crash_state". Reason dlsym(RTLD_DEFAULT, __sanitizer_acquire_crash_state): symbol not found.
+WARNING: Failed to find function "__sanitizer_print_stack_trace". Reason dlsym(RTLD_DEFAULT, __sanitizer_print_stack_trace): symbol not found.
+WARNING: Failed to find function "__sanitizer_set_death_callback". Reason dlsym(RTLD_DEFAULT, __sanitizer_set_death_callback): symbol not found.
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 3361558264
+INFO: Loaded 1 modules   (630532 inline 8-bit counters): 630532 [0x104b9c000, 0x104c35f04), 
+INFO: Loaded 1 PC tables (630532 PCs): 630532 [0x104c35f08,0x1055d4f48), 
+INFO: -fork=3: fuzzing in separate process(s)
+INFO: -fork=3: 27 seed inputs, starting to fuzz in /tmp/nix-shell.2oxXmv/libFuzzerTemp.FuzzWithFork70515.dir
+#42: cov: 9719 ft: 20341 corp: 27 exec/s: 0 oom/timeout/crash: 0/0/0 time: 0s job: 3 dft_time: 0
+==70539== ERROR: libFuzzer: deadly signal
+#50: cov: 9822 ft: 20888 corp: 36 exec/s: 0 oom/timeout/crash: 0/0/1 time: 0s job: 4 dft_time: 0
+==70544== ERROR: libFuzzer: deadly signal
+#754: cov: 9822 ft: 20888 corp: 36 exec/s: 0 oom/timeout/crash: 0/0/2 time: 0s job: 1 dft_time: 0
+==70540== ERROR: libFuzzer: deadly signal
+#3144: cov: 10349 ft: 23497 corp: 118 exec/s: 2390 oom/timeout/crash: 0/0/3 time: 1s job: 2 dft_time: 0
+==70538== ERROR: libFuzzer: deadly signal
+#6202: cov: 10611 ft: 25415 corp: 227 exec/s: 3058 oom/timeout/crash: 0/0/4 time: 2s job: 6 dft_time: 0
+==70551== ERROR: libFuzzer: deadly signal
+#11075: cov: 10802 ft: 26165 corp: 310 exec/s: 2436 oom/timeout/crash: 0/0/5 time: 2s job: 5 dft_time: 0
+==70546== ERROR: libFuzzer: deadly signal
+#11210: cov: 10903 ft: 26998 corp: 371 exec/s: 0 oom/timeout/crash: 0/0/6 time: 3s job: 9 dft_time: 0
+==70587== ERROR: libFuzzer: deadly signal
+...
+==82535== ERROR: libFuzzer: deadly signal
+#1880999: cov: 13090 ft: 41061 corp: 3529 exec/s: 1921 oom/timeout/crash: 0/0/2080 time: 599s job: 2077 dft_time: 0
+==82521== ERROR: libFuzzer: deadly signal
+#1881281: cov: 13090 ft: 41064 corp: 3530 exec/s: 0 oom/timeout/crash: 0/0/2081 time: 599s job: 2084 dft_time: 0
+==82543== ERROR: libFuzzer: deadly signal
+#1882640: cov: 13090 ft: 41068 corp: 3532 exec/s: 1359 oom/timeout/crash: 0/0/2082 time: 599s job: 2083 dft_time: 0
+==82537== ERROR: libFuzzer: deadly signal
+#1883252: cov: 13090 ft: 41068 corp: 3532 exec/s: 0 oom/timeout/crash: 0/0/2083 time: 599s job: 2085 dft_time: 0
+==82547== ERROR: libFuzzer: deadly signal
+#1883476: cov: 13090 ft: 41068 corp: 3532 exec/s: 0 oom/timeout/crash: 0/0/2084 time: 599s job: 2086 dft_time: 0
+==82551== ERROR: libFuzzer: deadly signal
+#1883631: cov: 13090 ft: 41068 corp: 3532 exec/s: 0 oom/timeout/crash: 0/0/2085 time: 600s job: 2089 dft_time: 0
+==82561== ERROR: libFuzzer: deadly signal
+INFO: fuzzed for 600 seconds, wrapping up soon
+INFO: exiting: 19712 time: 600s
