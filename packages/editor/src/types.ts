@@ -15,10 +15,12 @@ export type {
 } from "./types/font";
 export type { SceneDocument, SceneIntent, SceneNode, SceneRecording } from "./types/sceneDocument";
 export type {
+  MemoryEditorOptions,
   MemoryFontSession,
   MemoryFontSessionOptions,
   MemoryFontSource,
   MemoryToolName,
+  NewMemoryFont,
 } from "./types/fontSession";
 export type { CursorType } from "./types/editor";
 export type { DeleteMode, GlyphReader } from "./types/glyph";

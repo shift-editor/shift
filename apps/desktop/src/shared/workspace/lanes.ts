@@ -306,6 +306,15 @@ export interface WorkspaceSync {
   sourceSnapshot(): Promise<FontSourceSnapshot | null>;
 
   /**
+   * Reads a compiled font's preview (TrueType, OpenType) as its window's
+   * engine opens it: its font without glyphs (axes, axis mappings and
+   * sources, under the ids its snapshot gives them), as named MessagePack.
+   *
+   * @throws {Error} when no preview is open.
+   */
+  sourceHeader(): Promise<Uint8Array>;
+
+  /**
    * Reads one retained, location-independent glyph of a compiled font's preview
    * (TrueType, OpenType) and its component closure. Other previews read glyphs
    * from their engine.
@@ -506,6 +515,7 @@ export const workspaceSyncMethods: LaneMethods<WorkspaceSync> = {
   storeLocation: true,
   directory: true,
   sourceSnapshot: true,
+  sourceHeader: true,
   sourceGlyph: true,
   prepareSourceAtlasPage: true,
   discardSourceAtlasPage: true,

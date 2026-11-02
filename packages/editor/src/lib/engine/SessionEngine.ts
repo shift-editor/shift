@@ -77,6 +77,8 @@ export class SessionEngine implements FontEngine {
   );
   /** The impact of the open edit's changes so far, to show again when it is rewound or cancelled. */
   #inEdit = 0;
+  /** What the open session was opened over; a compiled font's session lays out no text. */
+  #storeKind: EngineStore["kind"] | null = null;
 
   /**
    * Opens an engine over `store`.
@@ -374,7 +376,14 @@ export class SessionEngine implements FontEngine {
     return this.#require().nextGlyphName(name);
   }
 
+  /**
+   * `run` shaped and laid out at `place`.
+   *
+   * @returns null while no session is open, and for a compiled font, whose
+   * shaper is the binary itself, which the engine does not shape with yet.
+   */
   layoutText(run: TextRun, place: KerningPlace): PlacedText | null {
+    if (this.#storeKind === "compiled") return null;
     return this.#session?.layoutText(run, place) ?? null;
   }
 
@@ -458,10 +467,11 @@ export class SessionEngine implements FontEngine {
    */
   protected async replace(store: EngineStore): Promise<void> {
     const { EngineSession } = await loadEngine();
-    const session = EngineSession.open(store.directory, store.request, store.scene);
+    const session = openSession(EngineSession, store);
     batch(() => {
       this.close();
       this.#session = session;
+      this.#storeKind = store.kind;
       this.#variation.set(session);
       this.#changed(EVERY_CHANGE);
     });
@@ -475,6 +485,7 @@ export class SessionEngine implements FontEngine {
     if (!this.#session) return;
     this.#session.dispose();
     this.#session = null;
+    this.#storeKind = null;
     this.#variation.set(null);
   }
 
@@ -510,5 +521,17 @@ export class SessionEngine implements FontEngine {
   #require(): EngineSession {
     if (!this.#session) throw new Error("the editing engine is not open");
     return this.#session;
+  }
+}
+
+/** A session over `store`, opened as its kind says. */
+function openSession(sessions: typeof EngineSession, store: EngineStore): EngineSession {
+  switch (store.kind) {
+    case "reader":
+      return sessions.open(store.directory, store.request, store.scene);
+    case "resident":
+      return sessions.openResident(store.font, store.scene);
+    case "compiled":
+      return sessions.openResident(store.header);
   }
 }

@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
-import type { Axis, AxisId, AxisMappingBasis, Source } from "@shift/types";
+import { afterEach, describe, expect, it } from "vitest";
+import type { Axis, AxisId, AxisMapping, Source } from "@shift/types";
 import { mintAxisId, mintAxisLabelId, mintAxisMappingId, mintSourceId } from "@shift/types";
-import { Designspace, externalAxisLocationFromLocation } from "@shift/editor/variation";
-import { signal } from "@shift/editor/signals";
+import { type Designspace, externalAxisLocationFromLocation } from "@shift/editor/variation";
+import { openDesignspace } from "@/testing/designspace";
 import { sourceCreationIssue, sourceLocation, suggestedSourceName } from "./sourceCreation";
 
 function weightAxis(): Axis {
@@ -34,20 +34,23 @@ function source(name: string, values: Record<AxisId, number>): Source {
   };
 }
 
-function designspace(
+const opened: (() => void)[] = [];
+afterEach(() => {
+  for (const dispose of opened.splice(0)) dispose();
+});
+
+async function designspace(
   axes: Axis[],
   sources: Source[],
-  mappingBases: AxisMappingBasis[] = [],
-): Designspace {
-  return new Designspace({
-    axesCell: signal(axes),
-    mappingBasesCell: signal(mappingBases),
-    sourcesCell: signal(sources),
-  });
+  mappings: AxisMapping[] = [],
+): Promise<Designspace> {
+  const open = await openDesignspace({ axes, sources, mappings });
+  opened.push(() => open.dispose());
+  return open.designspace;
 }
 
 describe("source creation", () => {
-  it("parses finite axis fields and rejects incomplete numeric input", () => {
+  it("parses finite axis fields and rejects incomplete numeric input", async () => {
     const axis = weightAxis();
 
     expect([...(sourceLocation([axis], { [axis.id]: "550" }) ?? [])]).toEqual([[axis.id, 550]]);
@@ -55,12 +58,12 @@ describe("source creation", () => {
     expect(sourceLocation([axis], { [axis.id]: "" })).toBeNull();
   });
 
-  it("treats omitted coordinates as axis defaults when checking duplicate masters", () => {
+  it("treats omitted coordinates as axis defaults when checking duplicate masters", async () => {
     const axis = weightAxis();
     const regular = source("Regular", {} as Record<AxisId, number>);
 
     expect(
-      sourceCreationIssue("Book", { [axis.id]: "400" }, designspace([axis], [regular])),
+      sourceCreationIssue("Book", { [axis.id]: "400" }, await designspace([axis], [regular])),
     ).toEqual({
       kind: "location",
       sourceId: regular.id,
@@ -68,48 +71,49 @@ describe("source creation", () => {
     });
   });
 
-  it("maps external coordinates before checking duplicate design locations", () => {
+  it("maps external coordinates before checking duplicate design locations", async () => {
     const axis = weightAxis();
     const black = source("Black", { [axis.id]: 800 } as Record<AxisId, number>);
-    const mapping: AxisMappingBasis = {
-      mappingId: mintAxisMappingId(),
-      inputAxisIds: [axis.id],
-      outputAxisIds: [axis.id],
-      basis: {
-        deltas: [
-          {
-            region: [{ axisId: axis.id, lower: 0, peak: 1, upper: 1 }],
-            values: Float64Array.of(-100),
-          },
-        ],
-      },
+    const at = (value: number) => ({ values: { [axis.id]: value } });
+    const point = (input: number, output: number) => ({ input: at(input), output: at(output) });
+    // External 900 maps to design 800.
+    const mapping: AxisMapping = {
+      id: mintAxisMappingId(),
+      name: "Weight",
+      inputs: [axis.id],
+      outputs: [axis.id],
+      points: [point(100, 100), point(400, 400), point(900, 800)],
     };
 
     expect(
-      sourceCreationIssue("Book", { [axis.id]: "900" }, designspace([axis], [black], [mapping])),
+      sourceCreationIssue(
+        "Book",
+        { [axis.id]: "900" },
+        await designspace([axis], [black], [mapping]),
+      ),
     ).toMatchObject({ kind: "location", sourceId: black.id });
   });
 
-  it("targets the axis whose coordinate is invalid", () => {
+  it("targets the axis whose coordinate is invalid", async () => {
     const axis = weightAxis();
 
-    expect(sourceCreationIssue("Book", { [axis.id]: "" }, designspace([axis], []))).toEqual({
+    expect(sourceCreationIssue("Book", { [axis.id]: "" }, await designspace([axis], []))).toEqual({
       kind: "axis",
       axisId: axis.id,
       message: "Enter a number for Weight",
     });
   });
 
-  it("targets invalid source names independently of location", () => {
+  it("targets invalid source names independently of location", async () => {
     const axis = weightAxis();
 
-    expect(sourceCreationIssue("", { [axis.id]: "400" }, designspace([axis], []))).toEqual({
+    expect(sourceCreationIssue("", { [axis.id]: "400" }, await designspace([axis], []))).toEqual({
       kind: "name",
       message: "Enter a source name",
     });
   });
 
-  it("suggests unique names from axis labels", () => {
+  it("suggests unique names from axis labels", async () => {
     const axis = weightAxis();
     const location = { values: { [axis.id]: 700 } as Record<AxisId, number> };
     const bold = source("Bold", { [axis.id]: 800 } as Record<AxisId, number>);

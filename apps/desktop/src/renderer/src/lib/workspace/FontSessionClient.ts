@@ -132,6 +132,16 @@ export class FontSessionClient {
   }
 
   /**
+   * Reads a compiled font's preview as its engine opens it: its font without
+   * glyphs, as named MessagePack.
+   */
+  async sourceHeader(): Promise<Uint8Array> {
+    await this.connect();
+
+    return this.#workspace().sourceHeader();
+  }
+
+  /**
    * Reads one retained location-independent glyph of a compiled font's preview
    * and its component closure; other previews read glyphs from their engine.
    */

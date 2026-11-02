@@ -8,13 +8,10 @@ import type {
   VariationBasis,
 } from "@shift/types";
 import { Axis } from "../model/Axis";
-import { computed, signal, track, type ComputedSignal, type Signal } from "../signals";
-import type {
-  DesignAxisLocation,
-  ExternalAxisLocation,
-  VariationReader,
-} from "../../types/variation";
+import { computed, track, type ComputedSignal, type Signal } from "../signals";
+import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import {
+  asDesignAxisLocation,
   axisValue,
   defaultExternalAxisLocation,
   designAxisLocationDistanceSquared,
@@ -23,7 +20,7 @@ import {
   emptyExternalAxisLocation,
   externalAxisLocationFromRecord,
 } from "./location";
-import { CompiledVariationReader, StatelessVariationReader } from "../wasm/variation";
+import type { FontVariation } from "../wasm/variation";
 
 /**
  * A font's axes, axis mappings, and sources, with the location operations over them.
@@ -31,38 +28,34 @@ import { CompiledVariationReader, StatelessVariationReader } from "../wasm/varia
  * @remarks
  * Every method subscribes to exactly the cells it reads (`track` then `peek`),
  * so calls are correct from imperative code and keep `computed`/`effect`
- * readers current when the designspace changes. Mapping and interpolation
- * weights are evaluated by the font's current {@link VariationReader}: the
- * window's engine while it is open, stateless calls over these cells
- * otherwise. Compiled variation deltas are always evaluated statelessly.
+ * readers current when the designspace changes. Mapping, interpolation
+ * weights and compiled variation deltas are evaluated by the font's engine,
+ * through its current {@link FontVariation}; while the engine is not open
+ * they throw, as the engine's other reads do.
  */
 export class Designspace {
   readonly #axesCell: ComputedSignal<readonly Axis[]>;
   readonly #mappingBasesCell: Signal<readonly AxisMappingBasis[]>;
   readonly #sourcesCell: Signal<readonly Source[]>;
-  readonly #variationCell: Signal<VariationReader>;
-  readonly #compiled: CompiledVariationReader;
+  readonly #variationCell: Signal<FontVariation | null>;
 
   /**
    * @param cells - the font's axis records, axis mapping bases and sources;
-   *   each is read reactively, never written. `variationCell` holds the
-   *   reader that evaluates the font's variation; stateless calls over the
-   *   axis records and mapping bases when omitted.
+   *   each is read reactively, never written. `variationCell` holds what
+   *   evaluates the font's variation: its engine's open session, null while
+   *   the engine is not open.
    */
   constructor(cells: {
     axesCell: Signal<readonly AxisRecord[]>;
     mappingBasesCell: Signal<readonly AxisMappingBasis[]>;
     sourcesCell: Signal<readonly Source[]>;
-    variationCell?: Signal<VariationReader>;
+    variationCell: Signal<FontVariation | null>;
   }) {
     const recordsCell = cells.axesCell;
     this.#axesCell = computed(() => recordsCell.value.map((record) => new Axis(record)));
     this.#mappingBasesCell = cells.mappingBasesCell;
     this.#sourcesCell = cells.sourcesCell;
-    this.#variationCell =
-      cells.variationCell ??
-      signal(new StatelessVariationReader(cells.axesCell, cells.mappingBasesCell));
-    this.#compiled = new CompiledVariationReader(cells.axesCell);
+    this.#variationCell = cells.variationCell;
   }
 
   /**
@@ -123,13 +116,26 @@ export class Designspace {
     return named[0] ?? null;
   }
 
-  /** Maps external user coordinates once into internal design coordinates. */
+  /**
+   * Maps external user coordinates once into internal design coordinates. A
+   * font without axes has nothing to map, engine or not: every location is
+   * the empty one.
+   *
+   * @throws When the font has axes and its engine is not open.
+   */
   toDesign(location: ExternalAxisLocation): DesignAxisLocation {
+    if (this.axes.length === 0) return asDesignAxisLocation(new Map());
     return this.#mapping().toDesign(location);
   }
 
-  /** Resolves the external user coordinates that represent a design location. */
+  /**
+   * Resolves the external user coordinates that represent a design location;
+   * the empty location in a font without axes.
+   *
+   * @throws When the font has axes and its engine is not open.
+   */
   toExternal(location: DesignAxisLocation): ExternalAxisLocation {
+    if (this.axes.length === 0) return emptyExternalAxisLocation();
     return this.#mapping().toExternal(location);
   }
 
@@ -148,21 +154,37 @@ export class Designspace {
     location: DesignAxisLocation,
   ): Float64Array | null {
     this.track();
-    const variation = read(this.#variationCell);
+    const variation = this.#variation();
     return variation.interpolationWeights(variation.sourceSet(basis), location);
   }
 
-  /** A compiled variation basis's values at a design location. */
-  variationAdjustments(basis: VariationBasis, location: DesignAxisLocation): Float64Array {
+  /**
+   * A compiled variation basis's values at a design location, as a compiled
+   * font's glyph carries its deltas.
+   *
+   * @returns null when the basis's regions name an axis the font lacks.
+   */
+  variationAdjustments(basis: VariationBasis, location: DesignAxisLocation): Float64Array | null {
     track(this.#axesCell);
-    return this.#compiled.adjustments(basis, location);
+    return this.#variation().variationAdjustments(basis, location);
   }
 
-  /** The current reader, subscribed to it and to what mapping reads. */
-  #mapping(): VariationReader {
+  /** The current variation, subscribed to it and to what mapping reads. */
+  #mapping(): FontVariation {
     track(this.#axesCell);
     track(this.#mappingBasesCell);
-    return read(this.#variationCell);
+    return this.#variation();
+  }
+
+  /**
+   * The engine's current variation, subscribed to it.
+   *
+   * @throws When the font's engine is not open.
+   */
+  #variation(): FontVariation {
+    const variation = read(this.#variationCell);
+    if (!variation) throw new Error("the font's engine is not open");
+    return variation;
   }
 
   /** The source exactly at an external location after mapping, or `null` when interpolated. */

@@ -49,10 +49,8 @@ async function createFontSession(
         glyphInfo,
       });
       await workspace.connect();
-      const atlas = new AuthoredGlyphAtlasSource(
-        workspace.editCoordinator,
-        () => workspace.font.getAxes(),
-        () => workspace.font.getAxisMappingBases(),
+      const atlas = new AuthoredGlyphAtlasSource(workspace.editCoordinator, () =>
+        workspace.font.getAxes(),
       );
       const catalog = new GlyphCatalog(workspace.editor, glyphInfo, atlas);
       return createWorkspaceFontSession(catalog, workspace, client);

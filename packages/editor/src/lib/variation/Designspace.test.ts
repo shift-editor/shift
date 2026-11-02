@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   mintAxisId,
   mintAxisMappingId,
@@ -6,9 +6,13 @@ import {
   type Axis,
   type AxisId,
   type AxisMappingBasis,
+  type FontIntent,
   type Source,
 } from "@shift/types";
+import { newMemoryFontSource } from "../../createMemoryFontSession";
+import { SessionEngine } from "../engine/SessionEngine";
 import { computed, signal } from "../signals";
+import { FontVariation } from "../wasm/variation";
 import { Designspace } from "./Designspace";
 import { axisValue, externalAxisLocationFromRecord } from "./location";
 import type {
@@ -46,43 +50,74 @@ function source(name: string, axis: Axis, value: number): Source {
   };
 }
 
-/** Maps external 900 to design 800 on `axis`. */
-function compressTop(axis: Axis): AxisMappingBasis {
+/** The intent that maps external 900 to design 800 on `axis`, the default where it was. */
+function compressTop(axis: Axis): FontIntent {
+  const at = (value: number) => ({ values: { [axis.id]: value } });
+  const point = (input: number, output: number) => ({ input: at(input), output: at(output) });
   return {
-    mappingId: mintAxisMappingId(),
-    inputAxisIds: [axis.id],
-    outputAxisIds: [axis.id],
-    basis: {
-      deltas: [
+    kind: "setAxisMappings",
+    setAxisMappings: {
+      mappings: [
         {
-          region: [{ axisId: axis.id, lower: 0, peak: 1, upper: 1 }],
-          values: Float64Array.of(-100),
+          id: mintAxisMappingId(),
+          name: "Weight",
+          inputs: [axis.id],
+          outputs: [axis.id],
+          points: [point(100, 100), point(400, 400), point(900, 800)],
         },
       ],
     },
   };
 }
 
-function weightDesignspace(sources: Source[], mappingBases: AxisMappingBasis[] = []) {
+const engines: SessionEngine[] = [];
+afterEach(() => {
+  for (const engine of engines.splice(0)) engine.dispose();
+});
+
+/**
+ * A designspace over a weight axis, its variation evaluated by an engine
+ * whose font has the axis, as a font's is. `mapCompressTop` sets the font's
+ * mapping through the engine, then hands the designspace its new bases, as
+ * an edit's echo does.
+ */
+async function weightDesignspace() {
   const axis = weightAxis();
+  const { font } = await newMemoryFontSource({ familyName: "Designspace", unitsPerEm: 1000 });
+  const engine = await SessionEngine.open({ kind: "resident", font });
+  engines.push(engine);
+  const edit = (intents: readonly FontIntent[]) => {
+    engine.beginEdit(null);
+    engine.apply(intents);
+    engine.endEdit();
+  };
+  edit([{ kind: "createAxis", createAxis: { axis } }]);
+
   const axesCell = signal([axis]);
-  const mappingBasesCell = signal(mappingBases);
-  const sourcesCell = signal(sources);
+  const mappingBasesCell = signal<readonly AxisMappingBasis[]>([]);
+  const sourcesCell = signal<readonly Source[]>([]);
+  const cells = { axesCell, mappingBasesCell, sourcesCell };
+  const variationCell = computed(() => {
+    const variation = engine.variationCell.value;
+    return variation && new FontVariation(variation, cells);
+  });
   return {
     axis,
-    axesCell,
-    mappingBasesCell,
     sourcesCell,
-    designspace: new Designspace({ axesCell, mappingBasesCell, sourcesCell }),
+    designspace: new Designspace({ ...cells, variationCell }),
+    mapCompressTop() {
+      edit([compressTop(axis)]);
+      mappingBasesCell.set(engine.fontHeader().axisMappingBases);
+    },
   };
 }
 
 describe("Designspace", () => {
-  it("maps external locations through the font's axis mappings before matching sources", () => {
-    const { axis, designspace, mappingBasesCell, sourcesCell } = weightDesignspace([]);
+  it("maps external locations through the font's axis mappings before matching sources", async () => {
+    const { axis, designspace, mapCompressTop, sourcesCell } = await weightDesignspace();
     const black = source("Black", axis, 800);
     sourcesCell.set([black]);
-    mappingBasesCell.set([compressTop(axis)]);
+    mapCompressTop();
     const external = externalAxisLocationFromRecord({ [axis.id]: 900 });
 
     expect(axisValue(designspace.toDesign(external), axis)).toBeCloseTo(800);
@@ -92,8 +127,8 @@ describe("Designspace", () => {
     );
   });
 
-  it("finds exact, nearest, and identified sources", () => {
-    const { axis, designspace, sourcesCell } = weightDesignspace([]);
+  it("finds exact, nearest, and identified sources", async () => {
+    const { axis, designspace, sourcesCell } = await weightDesignspace();
     const light = source("Light", axis, 100);
     const bold = source("Bold", axis, 700);
     sourcesCell.set([light, bold]);
@@ -106,8 +141,8 @@ describe("Designspace", () => {
     expect(axisValue(designspace.defaultLocation(), axis)).toBe(400);
   });
 
-  it("finds a source by exact name, and refuses a name two sources share", () => {
-    const { axis, designspace, sourcesCell } = weightDesignspace([]);
+  it("finds a source by exact name, and refuses a name two sources share", async () => {
+    const { axis, designspace, sourcesCell } = await weightDesignspace();
     const light = source("Light", axis, 100);
     sourcesCell.set([light, source("Bold", axis, 700), source("Bold", axis, 800)]);
 
@@ -116,8 +151,8 @@ describe("Designspace", () => {
     expect(() => designspace.sourceNamed("Bold")).toThrow("Source name Bold is ambiguous");
   });
 
-  it("keeps reactive readers current when sources or mappings change", () => {
-    const { axis, designspace, mappingBasesCell, sourcesCell } = weightDesignspace([]);
+  it("keeps reactive readers current when sources or mappings change", async () => {
+    const { axis, designspace, mapCompressTop, sourcesCell } = await weightDesignspace();
     const external = externalAxisLocationFromRecord({ [axis.id]: 900 });
     const exact = computed(() => designspace.sourceAt(external)?.name ?? null);
     const black = source("Black", axis, 800);
@@ -125,14 +160,14 @@ describe("Designspace", () => {
     expect(exact.value).toBeNull();
     sourcesCell.set([black]);
     expect(exact.value).toBeNull();
-    mappingBasesCell.set([compressTop(axis)]);
+    mapCompressTop();
     expect(exact.value).toBe("Black");
     exact.dispose();
   });
 
-  it("builds locations from explicit coordinates and lists them on every axis", () => {
-    const { axis, designspace, mappingBasesCell } = weightDesignspace([]);
-    mappingBasesCell.set([compressTop(axis)]);
+  it("builds locations from explicit coordinates and lists them on every axis", async () => {
+    const { axis, designspace, mapCompressTop } = await weightDesignspace();
+    mapCompressTop();
 
     const external = designspace.location([{ axisId: axis.id, value: 900 }]);
 

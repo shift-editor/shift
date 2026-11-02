@@ -11,8 +11,8 @@ describe("EditorHistory", () => {
   let firstId: NodeId;
   let secondId: NodeId;
 
-  beforeEach(() => {
-    session = startEmptyMemorySession();
+  beforeEach(async () => {
+    session = await startEmptyMemorySession();
     editor = session.editor;
     const place = (x: number) =>
       editor.scene.createNode<GlyphNode>({

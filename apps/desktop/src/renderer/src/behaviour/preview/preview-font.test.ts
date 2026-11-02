@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Font } from "@shift/editor/model";
 import { signal } from "@shift/editor/signals";
@@ -13,6 +14,12 @@ import {
 import type { GlyphName } from "@shift/types";
 import { FONTS } from "@/testing/fontFixture";
 import { createWorkspaceStack, openPreviewStack } from "@/testing/workspaceStack";
+
+/** A variable TrueType font with a weight axis, compiled deltas and no authored sources. */
+const VARIABLE_TTF = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../assets/fonts/HostGrotesk-VariableFont_wght.ttf",
+);
 
 /** What closes after each test: previews, stacks and saved documents. */
 const opened: (() => void)[] = [];
@@ -111,5 +118,52 @@ describe("a preview reads the font as the .shift it saves as", () => {
 
     expect(kerning(previewed)).not.toBe(0);
     expect(kerning(previewed)).toBe(kerning(saved));
+  });
+});
+
+describe("a compiled font's preview evaluates its glyphs' deltas in its engine", () => {
+  /** The bounds of every point `name` draws at `location`, off-curve points included. */
+  async function pointBounds(font: Font, name: string, location: ExternalAxisLocation) {
+    const points = (await drawn(font, name, location)).flatMap((contour) => contour.points);
+    const xs = points.map(({ x }) => x);
+    const ys = points.map(({ y }) => y);
+    return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+  }
+
+  it("draws a glyph's outline from its compiled deltas at a weight", async () => {
+    const font = await preview(VARIABLE_TTF);
+    const regular = await drawn(font, "a", font.designspace.defaultLocation());
+    const bold = await drawn(font, "a", at(font, { wght: 800 }));
+
+    expect(bold.map((contour) => contour.points.length)).toEqual(
+      regular.map((contour) => contour.points.length),
+    );
+    expect(bold).not.toEqual(regular);
+  });
+
+  it("places a glyph's points at a mapped weight as fontTools' instancer does", async () => {
+    const font = await preview(VARIABLE_TTF);
+    const near = (bounds: readonly number[]) => bounds.map((value) => expect.closeTo(value, 3));
+
+    // fontTools 4 `instantiateVariableFont(font, {"wght": …})`: the glyf
+    // coordinates' bounds, through the font's avar at 550.
+    expect(await pointBounds(font, "o", at(font, { wght: 550 }))).toEqual(
+      near([26.35675, -12, 549.64325, 508]),
+    );
+    expect(await pointBounds(font, "o", at(font, { wght: 800 }))).toEqual(
+      near([21, -12, 555, 508]),
+    );
+  });
+
+  it("lays proof text out as typed: the binary is its shaper, which the engine does not run", async () => {
+    const font = await preview(VARIABLE_TTF);
+
+    expect(
+      font.layoutText(
+        { items: typedTextItems("fi"), settings: { shaping: true, features: {} } },
+        emptyExternalAxisLocation(),
+        null,
+      ),
+    ).toBeNull();
   });
 });

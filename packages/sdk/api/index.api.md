@@ -163,7 +163,7 @@ export interface ComponentTransform {
 export function computed<T>(fn: () => T, options?: ComputedOptions<T>): ComputedSignal<T>;
 
 // @public
-export function createMemoryFontSession(input: MemoryFontSessionOptions): MemoryFontSession;
+export function createMemoryFontSession(input: MemoryFontSessionOptions): Promise<MemoryFontSession>;
 
 // @public
 export type DesignAxisLocation = AxisLocation<"design">;
@@ -174,7 +174,7 @@ export class Designspace {
         axesCell: Signal<readonly Axis$1[]>;
         mappingBasesCell: Signal<readonly AxisMappingBasis[]>;
         sourcesCell: Signal<readonly Source[]>;
-        variationCell?: Signal<VariationReader>;
+        variationCell: Signal<FontVariation | null>;
     });
     // (undocumented)
     get axes(): readonly Axis[];
@@ -203,7 +203,7 @@ export class Designspace {
     toDesign(location: ExternalAxisLocation): DesignAxisLocation;
     toExternal(location: DesignAxisLocation): ExternalAxisLocation;
     track(): void;
-    variationAdjustments(basis: VariationBasis, location: DesignAxisLocation): Float64Array;
+    variationAdjustments(basis: VariationBasis, location: DesignAxisLocation): Float64Array | null;
 }
 
 // @beta
@@ -1157,24 +1157,30 @@ export interface MemoryFontSession {
 }
 
 // @public
-export interface MemoryFontSessionOptions {
-    // (undocumented)
-    readonly clipboard: SystemClipboard;
+export interface MemoryFontSessionOptions extends MemoryEditorOptions {
     // (undocumented)
     readonly source: MemoryFontSource;
-    readonly tools?: readonly MemoryToolName[];
 }
 
 // @public
-export interface MemoryFontSource extends GlyphReader {
+export interface MemoryFontSource {
     // (undocumented)
-    readonly font: FontSnapshot;
-    // (undocumented)
-    readonly records: readonly GlyphRecord[];
+    readonly font: Uint8Array;
 }
 
 // @public
 export type MemoryToolName = "select" | "hand";
+
+// @public
+export interface NewMemoryFont {
+    // (undocumented)
+    readonly familyName: string;
+    // (undocumented)
+    readonly unitsPerEm: number;
+}
+
+// @public
+export function newMemoryFontSource(input: NewMemoryFont): Promise<MemoryFontSource>;
 
 // @public
 export interface OutlineBounds {

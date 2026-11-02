@@ -161,6 +161,33 @@ impl RetainedSource {
     })
   }
 
+  /// The source's font without glyphs, under the ids its snapshot gives:
+  /// its names, units per em, axes, axis mappings and sources. What a
+  /// window's engine opens to map the source's locations and evaluate the
+  /// compiled deltas its glyphs carry.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`BridgeError::InvalidInput`] when a mapping names an axis the
+  /// source lacks, and the font's error when it refuses the mappings.
+  fn header(&self) -> BridgeResult<Font> {
+    let directory = self.font.directory();
+    let ids = &self.identity;
+    let mut header = Font::empty();
+    header.metadata_mut().family_name = directory.family_name().map(str::to_string);
+    header.metadata_mut().style_name = directory.style_name().map(str::to_string);
+    header.metrics_mut().units_per_em = directory.metrics().units_per_em;
+    for axis in &ids.font_axes {
+      header.add_axis(axis.clone())?;
+    }
+    for source in ids.wire(&ids.source_ids, directory.sources()) {
+      header.add_source(source);
+    }
+    header.set_default_source_id(ids.source_id(directory.default_source())?);
+    header.set_axis_mappings(ids.axis_mappings_of(directory)?)?;
+    Ok(header)
+  }
+
   /// Maps external axis coordinates, in source axis order, to design values.
   fn location(&self, coordinates: Vec<f64>) -> BridgeResult<Vec<f64>> {
     let identity = &self.identity;

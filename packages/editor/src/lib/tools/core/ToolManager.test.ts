@@ -131,8 +131,8 @@ let session: MemoryFontSession;
 let editor: Editor;
 let pointer: Pointer;
 
-beforeEach(() => {
-  session = startEmptyMemorySession();
+beforeEach(async () => {
+  session = await startEmptyMemorySession();
   editor = session.editor;
   pointer = new Pointer(editor);
 });
