@@ -13,6 +13,7 @@ import type {
   NodeId,
   SlugWeightSet,
   SourceId,
+  VariationBasis,
 } from "@shift/types";
 import {
   engineApply,
@@ -25,7 +26,9 @@ import {
   engineMarkSaved,
   engineNewAnchorName,
   engineNextGlyphName,
+  engineNewFont,
   engineOpen,
+  engineOpenResident,
   enginePreload,
   engineEndPreview,
   enginePreview,
@@ -133,6 +136,25 @@ export class EngineSession {
    */
   static open(directory: Uint8Array, source: StoreRequest, scene?: Uint8Array): EngineSession {
     return new EngineSession(engineOpen(directory, source, scene));
+  }
+
+  /**
+   * Opens a session over a whole font, every layer loaded, as named
+   * MessagePack: a memory session, which reads nothing from a store and
+   * persists nothing. `scene` is as for {@link EngineSession.open}.
+   *
+   * @throws When `font` does not decode to a font, or `scene` to scene nodes.
+   */
+  static openResident(font: Uint8Array, scene?: Uint8Array): EngineSession {
+    return new EngineSession(engineOpenResident(font, scene));
+  }
+
+  /**
+   * A new font with one source and no glyphs, as named MessagePack: what
+   * {@link EngineSession.openResident} opens for a font started from nothing.
+   */
+  static newFont(familyName: string, unitsPerEm: number): Uint8Array {
+    return engineNewFont(familyName, unitsPerEm);
   }
 
   /**
@@ -377,6 +399,28 @@ export class EngineSession {
     if (!values) return null;
 
     return placeAtlasWeights(sets, weightCount, values);
+  }
+
+  /**
+   * Interns a compiled variation basis, as a compiled font's glyph carries
+   * its deltas, and returns its number for {@link variationAt}; sent once,
+   * when the glyph loads. A number stays the basis's for the session's life.
+   */
+  variationNumber(basis: VariationBasis): number {
+    return this.#reads.variationNumber(basis);
+  }
+
+  /**
+   * The values of the compiled basis interned as `variation` at a design
+   * location, each axis normalized by its own range: shift-font's
+   * `VariationBasis::evaluate`.
+   *
+   * @param location - Design coordinates in the font's axis order, NaN for an axis default.
+   * @returns null for a number this session never gave, or a basis whose
+   * regions name an axis the font lacks.
+   */
+  variationAt(variation: number, location: readonly number[]): readonly number[] | null {
+    return this.#reads.variationAt(variation, location);
   }
 
   /**

@@ -2613,6 +2613,8 @@ export class Glyph {
     if (!variation) return projectionGeometry(projection.fallback);
 
     const adjustments = this.#designspace.variationAdjustments(variation.basis, designLocation);
+    if (!adjustments) return projectionGeometry(projection.fallback);
+
     const values = new Float64Array(projection.fallback.values);
     for (let index = 0; index < values.length; index++) {
       values[index] += adjustments[index] ?? 0;

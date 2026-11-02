@@ -10,15 +10,6 @@ const MUTATOR = resolve(
   "../../fixtures/fonts/mutatorsans-variable/MutatorSans.designspace",
 );
 
-/** Width then weight, in MutatorSans's axis order. */
-const LOCATIONS = [
-  [0, 0],
-  [250, 400],
-  [500, 650],
-  [1000, 700],
-  [800, 1000],
-] as const;
-
 function buffer(): GPUBuffer {
   return { destroy() {} } as GPUBuffer;
 }
@@ -27,9 +18,12 @@ function atlasOf(page: GlyphAtlasPage): SlugAtlas {
   return new SlugAtlas(page, buffer(), buffer(), page.layout.totalLength);
 }
 
-/** The page's weights evaluated statelessly from its descriptor's bases. */
-function statelessWeights(page: GlyphAtlasPage, coordinates: readonly number[]): number[] {
-  return Array.from(atlasOf({ ...page, weightEngine: null }).weights(coordinates));
+/** The weights of an atlas page prepared now, as the font stands. */
+async function freshWeights(
+  editor: EditorTestSurface,
+  coordinates: readonly number[],
+): Promise<number[]> {
+  return Array.from(atlasOf(await authoredAtlasPage(editor)).weights(coordinates));
 }
 
 function closeTo(weights: readonly number[]) {
@@ -41,17 +35,24 @@ describe("open document atlas weights", () => {
 
   afterEach(() => editor.close());
 
-  it("reads the same weights from the engine as from the descriptor's bases", async () => {
+  it("weighs each master fully at its own location, and its other sources not at all", async () => {
     editor = await openTestEditor(MUTATOR, "A");
     const page = await authoredAtlasPage(editor);
     const atlas = atlasOf(page);
+    const { axes, sources } = editor.fontOverview();
 
-    expect(page.weightEngine).not.toBeNull();
     expect(page.weightSets.length).toBeGreaterThan(1);
-    for (const coordinates of LOCATIONS) {
-      expect(Array.from(atlas.weights(coordinates))).toEqual(
-        closeTo(statelessWeights(page, coordinates)),
-      );
+    for (const source of sources) {
+      // MutatorSans maps no axis, so a master's design location is its external one.
+      const coordinates = axes.map((axis) => source.location.values[axis.id] ?? axis.kind.default);
+      const weights = atlas.weights(coordinates);
+      for (const set of page.weightSets) {
+        const own = set.basis.sourceIds.indexOf(source.id);
+        if (own === -1) continue;
+        expect(set.sourceWeightIndices.map((index) => weights[index])).toEqual(
+          closeTo(set.basis.sourceIds.map((_, index) => (index === own ? 1 : 0))),
+        );
+      }
     }
   });
 
@@ -66,7 +67,7 @@ describe("open document atlas weights", () => {
       [650, 300],
       [1000, 1000],
     ]);
-    const after = statelessWeights(await authoredAtlasPage(editor), coordinates);
+    const after = await freshWeights(editor, coordinates);
 
     expect(after).not.toEqual(closeTo(before));
     expect(Array.from(atlas.weights(coordinates))).toEqual(closeTo(after));
@@ -88,7 +89,7 @@ describe("open document atlas weights", () => {
     const before = Array.from(atlas.weights(coordinates));
 
     await editor.setSourceLocation(crossbar.name, "wght", 500);
-    const after = statelessWeights(await authoredAtlasPage(editor), coordinates);
+    const after = await freshWeights(editor, coordinates);
 
     expect(after).not.toEqual(closeTo(before));
     expect(Array.from(atlas.weights(coordinates))).toEqual(closeTo(after));

@@ -23,7 +23,6 @@ import {
   proofTextsRequest,
   scenesRequest,
   takeReplyBlobs,
-  variationRequest,
   type InitOutput,
 } from "./generated/shift_wasm.js";
 import { moduleBase64 } from "./generated/module";
@@ -37,7 +36,6 @@ import {
   IndexKeys,
   ProofTexts,
   Scenes,
-  Variation,
 } from "./generated-protocol";
 import { moduleNames } from "./names";
 
@@ -71,11 +69,6 @@ export const proofTexts = new ProofTexts(syncTransport(proofTextsRequest, names,
  * shift-engine's scene, with nothing persisted.
  */
 export const scenes = new Scenes(syncTransport(scenesRequest, names, takeReplyBlobs));
-/**
- * Axis mapping, interpolation weights and compiled deltas for a font without
- * an editing engine, each call carrying the axes and bases it evaluates.
- */
-export const variation = new Variation(syncTransport(variationRequest, names, takeReplyBlobs));
 
 // oxlint-disable-next-line eslint-js/no-restricted-syntax -- wasm-bindgen output; its exports change with the Rust crate
 export * from "./generated/shift_wasm.js";

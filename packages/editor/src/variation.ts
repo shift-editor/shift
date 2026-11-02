@@ -1,10 +1,5 @@
 export { interpolateSourceValues } from "./lib/interpolation/InterpolationBasis";
-export {
-  atlasWeights,
-  CompiledVariationReader,
-  EngineVariationReader,
-  StatelessVariationReader,
-} from "./lib/wasm/variation";
+export { atlasWeights, FontVariation } from "./lib/wasm/variation";
 export {
   axisValue,
   defaultExternalAxisLocation,
@@ -18,4 +13,4 @@ export {
 } from "./lib/variation/location";
 export { Designspace } from "./lib/variation/Designspace";
 export { independentMappingFor, withIndependentMapping } from "./lib/variation/independentMapping";
-export type { DesignAxisLocation, ExternalAxisLocation, VariationReader } from "./types/variation";
+export type { DesignAxisLocation, ExternalAxisLocation } from "./types/variation";

@@ -1,20 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { asAxisId, asSourceId, type Axis } from "@shift/types";
-import { createMemoryFontSession } from "../../createMemoryFontSession";
-import type { SystemClipboard } from "../clipboard";
-
-class MemoryClipboard implements SystemClipboard {
-  writeText(): Promise<void> {
-    return Promise.resolve();
-  }
-
-  readText(): Promise<string> {
-    return Promise.resolve("");
-  }
-}
+import { asAxisId, type Axis } from "@shift/types";
+import { startMemorySession } from "../../testing/emptyMemorySession";
 
 describe("Font axes", () => {
-  it("lists only the axes users set directly as external axes", () => {
+  it("lists only the axes users set directly as external axes", async () => {
     const weight = weightAxis();
     const opticalSize: Axis = {
       ...weightAxis(),
@@ -23,33 +12,9 @@ describe("Font axes", () => {
       name: "Optical",
       role: "internal",
     };
-    const { font, dispose } = createMemoryFontSession({
-      clipboard: new MemoryClipboard(),
-      source: {
-        font: {
-          metadata: { familyName: "Axes" },
-          metrics: { unitsPerEm: 1000 },
-          metricDefinitions: [],
-          kerning: { groups: [], sources: [] },
-          glyphs: [],
-          sources: [
-            {
-              id: asSourceId("source_regular"),
-              name: "Regular",
-              location: { values: {} },
-              metricValues: {},
-              role: "master",
-            },
-          ],
-          axes: [weight, opticalSize],
-          axisMappings: [],
-          axisMappingBases: [],
-          namedInstances: [],
-        },
-        records: [],
-        read: () => Promise.resolve([]),
-        glyphPreviews: () => Promise.resolve([]),
-      },
+    const { font, dispose } = await startMemorySession({
+      build: () =>
+        [weight, opticalSize].map((axis) => ({ kind: "createAxis", createAxis: { axis } })),
     });
 
     expect(font.getAxes()).toHaveLength(2);

@@ -8,8 +8,8 @@ describe("Pages", () => {
   let session: MemoryFontSession;
   let editor: Editor;
 
-  beforeEach(() => {
-    session = startEmptyMemorySession();
+  beforeEach(async () => {
+    session = await startEmptyMemorySession();
     editor = session.editor;
   });
   afterEach(() => session.dispose());

@@ -1,4 +1,4 @@
-export { createMemoryFontSession } from "./createMemoryFontSession";
+export { createMemoryFontSession, newMemoryFontSource } from "./createMemoryFontSession";
 export { Editor } from "./lib/editor/Editor";
 export { EditorHistory } from "./lib/editor/history/EditorHistory";
 export { HistoryCapture } from "./lib/editor/history/HistoryCapture";
@@ -50,10 +50,12 @@ export type {
 } from "./types/history";
 export type { ListSelectionMode } from "./types/listSelection";
 export type {
+  MemoryEditorOptions,
   MemoryFontSession,
   MemoryFontSessionOptions,
   MemoryFontSource,
   MemoryToolName,
+  NewMemoryFont,
 } from "./types/fontSession";
 export type {
   DeleteMode,

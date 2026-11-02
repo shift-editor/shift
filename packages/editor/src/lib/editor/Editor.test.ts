@@ -23,8 +23,8 @@ describe("Editor scene", () => {
   let run: TextRunNode;
   let child: GlyphNode;
 
-  beforeEach(() => {
-    session = startEmptyMemorySession();
+  beforeEach(async () => {
+    session = await startEmptyMemorySession();
     editor = session.editor;
     run = editor.scene.createNode<TextRunNode>({
       kind: "textRun",
@@ -181,8 +181,8 @@ describe("Editor handle visibility requests", () => {
   const [first, second, third] = [mintPointId(), mintPointId(), mintPointId()];
   const visible = (id: typeof first) => editor.handlesVisible(id, contourId);
 
-  beforeEach(() => {
-    session = startEmptyMemorySession();
+  beforeEach(async () => {
+    session = await startEmptyMemorySession();
     editor = session.editor;
   });
   afterEach(() => session.dispose());

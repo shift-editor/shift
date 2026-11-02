@@ -219,16 +219,14 @@ interface EditableKerning {
  * kerns and nothing is authored.
  */
 export class Kerning {
-  static readonly EMPTY = new Kerning(KerningRecords.EMPTY, null);
-
   readonly #records: KerningRecords;
-  readonly #engine: FontEngine | null;
+  readonly #engine: FontEngine;
 
   /**
    * @param records - The font's kerning records.
-   * @param engine - The window's engine, which answers pair reads; null for none.
+   * @param engine - The font's engine, which answers pair reads.
    */
-  constructor(records: KerningRecords, engine: FontEngine | null) {
+  constructor(records: KerningRecords, engine: FontEngine) {
     this.#records = records;
     this.#engine = engine;
   }
@@ -263,7 +261,7 @@ export class Kerning {
    * through its group at that side, in no set order.
    */
   pairsNaming(sourceId: SourceId, glyphId: GlyphId): ResolvedKerning[] {
-    return this.#engine?.kerningPairsNaming(sourceId, glyphId) ?? [];
+    return this.#engine.kerningPairsNaming(sourceId, glyphId);
   }
 
   /**
@@ -273,7 +271,6 @@ export class Kerning {
    * @returns One value per pair, in font units.
    */
   between(pairs: readonly GlyphId[], place: KerningPlace): readonly number[] {
-    if (!this.#engine) return unkerned(pairs);
     return this.#engine.kerningRun(pairs, place);
   }
 
@@ -338,7 +335,7 @@ export class Kerning {
 
   /** Each glyph pair's editable pair at a source, with its sides named and whether it applies. */
   #pairs(sourceId: SourceId, pairs: readonly GlyphId[]): EditableKerning[] {
-    const read = this.#engine?.kerningPairs(sourceId, pairs) ?? [];
+    const read = this.#engine.kerningPairs(sourceId, pairs);
     const named: EditableKerning[] = [];
     for (let index = 0; index + 1 < pairs.length; index += 2) {
       const first = pairs[index]!;
