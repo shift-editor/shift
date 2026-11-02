@@ -158,6 +158,19 @@ function verifyLicenseResources() {
 verifyMacosDocumentIcon();
 verifyLicenseResources();
 
+/** Whether macOS runs the packaged app under Rosetta: an x64 build on an arm64 host. */
+function runsUnderRosetta() {
+  if (process.platform !== "darwin" || process.arch !== "arm64") return false;
+
+  return runCommand("lipo", ["-archs", executablePath]).trim() === "x86_64";
+}
+
+/**
+ * How long each startup stage may take. Rosetta translates Electron on the
+ * app's first launch, which takes well past the native budget.
+ */
+const stageTimeoutMs = runsUnderRosetta() ? 180_000 : 30_000;
+
 async function reservePort() {
   const server = createServer();
   await new Promise((resolve, reject) => {
@@ -185,7 +198,7 @@ async function waitForExit(child) {
 }
 
 async function waitForDebugEndpoint(url, child, output) {
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + stageTimeoutMs;
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
       throw new Error(`Packaged app exited with code ${child.exitCode}\n${output.join("")}`);
@@ -205,7 +218,7 @@ async function waitForDebugEndpoint(url, child, output) {
 }
 
 async function waitForRendererPage(browser, child, output) {
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + stageTimeoutMs;
   while (Date.now() < deadline) {
     const page = browser.contexts().flatMap((context) => context.pages())[0];
     if (page) return page;
@@ -246,7 +259,7 @@ try {
 
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error));
-  await page.getByRole("button", { name: "New font" }).waitFor({ timeout: 30_000 });
+  await page.getByRole("button", { name: "New font" }).waitFor({ timeout: stageTimeoutMs });
 
   const rendererPath = "/.vite/renderer/main_window/index.html";
   if (!page.url().includes(rendererPath)) {
