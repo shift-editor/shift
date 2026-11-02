@@ -1,0 +1,8 @@
+crates/shift-font/src/ir/variation.rs:37:30: replace * with / in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:38:31: replace < with <= in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:43:25: replace < with <= in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:43:69: replace < with == in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:43:69: replace < with <= in AxisRange::normalize
+crates/shift-font/src/ir/variation.rs:53:18: replace < with <= in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:55:25: replace > with >= in AxisRange::denormalize
+crates/shift-font/src/ir/variation.rs:89:40: replace < with <= in snap

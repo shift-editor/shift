@@ -1,0 +1,7 @@
+crates/shift-font/src/ir/variation.rs:110:9: replace Font::design_normalization -> CoreResult<Vec<DesignNormalization>> with CoreResult::new()
+crates/shift-font/src/ir/variation.rs:110:9: replace Font::design_normalization -> CoreResult<Vec<DesignNormalization>> with CoreResult::from_iter([vec![]])
+crates/shift-font/src/ir/variation.rs:110:9: replace Font::design_normalization -> CoreResult<Vec<DesignNormalization>> with CoreResult::new(vec![])
+crates/shift-font/src/ir/variation.rs:110:9: replace Font::design_normalization -> CoreResult<Vec<DesignNormalization>> with CoreResult::from(vec![])
+crates/shift-font/src/ir/variation.rs:110:9: replace Font::design_normalization -> CoreResult<Vec<DesignNormalization>> with CoreResult::from_iter([vec![Default::default()]])
+crates/shift-font/src/ir/variation.rs:110:9: replace Font::design_normalization -> CoreResult<Vec<DesignNormalization>> with CoreResult::new(vec![Default::default()])
+crates/shift-font/src/ir/variation.rs:110:9: replace Font::design_normalization -> CoreResult<Vec<DesignNormalization>> with CoreResult::from(vec![Default::default()])
