@@ -17,3 +17,4 @@ mod reply;
 // Public so the compiler sees the napi exports as the crate's interface; nothing else calls them.
 pub mod source_reader;
 mod specimen;
+mod wire_napi;

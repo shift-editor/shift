@@ -193,7 +193,7 @@ contour.reverse();
 - `FontSessionClient` owns the one renderer/utility channel and catches up from either the existing workspace snapshot or retained source snapshot according to immutable session mode. A workspace's stored snapshot (`StoredWorkspaceSnapshot`) has no axes, sources, kerning or glyph records: `WorkspaceEditCoordinator.open` opens the window's engine first and shows the font with the ones the engine reads (`EngineSession.fontRecords`), unsaved edits included.
 - `GlyphCatalog` is the only font-wide surface consumed by Home/Grid. Imported `GlyphEntry` directory values populate `FontStore`, while imported authored-record and layer collections remain empty.
 - Rust/Fontdrasil owns source compatibility and constructs every variation and axis-mapping basis.
-- `shift-wire` and the workspace bridge translate those values without inventing samples, source identities, support regions, or a UI location.
+- `shift_font::wire` and the workspace bridge translate those values without inventing samples, source identities, support regions, or a UI location.
 - Raw `AxisMapping` values are available only to the `Font` authoring surface and mapping settings UI. Glyph/runtime contracts receive `AxisMappingBasis` values. A TypeScript helper that consumes mapping points to answer a renderer query is an architecture violation even when its output matches Rust fixtures.
 - `FontStore` owns renderer-local backing, reactive authored state, and canonical completely loaded Glyph objects; do not wrap it in another manager/store/cache.
 - `FontStore`'s `FontRecordIndex` is the only index of glyph identity and its relations: entries and records by ID and name, codepoints, component dependents, and each glyph's layer per source. `Font`'s `GlyphDirectory` is a query view over that index and builds no lookups of its own.
@@ -237,7 +237,7 @@ contour.reverse();
 ```bash
 pnpm typecheck
 pnpm test:unit
-cargo test -p shift-font -p shift-wire -p shift-bridge
+cargo test -p shift-font -p shift-bridge
 python3 scripts/context-drift-check.py
 ```
 

@@ -16,7 +16,7 @@
 use shift_engine::EditLocation;
 use shift_engine::scene::SceneIntent;
 use shift_font::FontIntent;
-use shift_wire::replacement::FontReplacement;
+use shift_font::wire::replacement::FontReplacement;
 
 /// The intents one engine session applies next, and what its latest edit
 /// changed at font level.
@@ -43,7 +43,7 @@ mod exports {
     use shift_engine::EditLocation;
     use shift_engine::scene::SceneIntent;
     use shift_font::FontIntent;
-    use shift_wire::replacement::FontReplacement;
+    use shift_font::wire::replacement::FontReplacement;
     use wasm_bindgen::prelude::*;
 
     use super::{EngineEdits, engine_edits_request};

@@ -1,21 +1,14 @@
 //! Values the editor and the native addon pass as text or by name: ids,
-//! which parse into shift-font's typed ids, component alignments and point
-//! types. The edits themselves cross as shift-font's own intents.
+//! which parse into shift-font's typed ids, and component alignments. The edits themselves cross as shift-font's own intents.
 
-use std::collections::HashMap;
 use std::str::FromStr;
 
-use crate::PointType as StatePointType;
-#[cfg(feature = "napi")]
-use napi_derive::napi;
-use shift_font::PointType as IrPointType;
-use shift_font::{
+use crate::{
     AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentAlignment, ComponentId, ContourId,
-    GlyphId, GuidelineId, KerningGroupId, LayerId, Location as FontLocation, MetricId,
-    NamedInstanceId, PointId, SourceId,
+    GlyphId, GuidelineId, KerningGroupId, LayerId, MetricId, NamedInstanceId, PointId, SourceId,
 };
 
-shift_font::string_enum! {
+crate::string_enum! {
     /// Which kind of id the editor sent, for errors that name it.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum IdKind {
@@ -136,64 +129,6 @@ impl WireParse for LayerId {
 
 impl WireParse for SourceId {
     const KIND: IdKind = IdKind::Source;
-}
-
-/// A point type as the native addon's napi records carry it.
-#[cfg_attr(feature = "napi", napi(string_enum = "camelCase"))]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(
-    clippy::enum_variant_names,
-    reason = "the font-format names for point types"
-)]
-pub enum PointType {
-    OnCurve,
-    OffCurve,
-    QCurve,
-}
-
-/// A location as the native addon's napi calls take it, by axis id.
-#[cfg_attr(feature = "napi", napi(object))]
-pub struct Location {
-    #[cfg_attr(feature = "napi", napi(ts_type = "Record<AxisId, number>"))]
-    pub values: HashMap<String, f64>,
-}
-
-impl TryFrom<Location> for FontLocation {
-    type Error = WireError;
-
-    fn try_from(wire: Location) -> WireResult<Self> {
-        wire.values
-            .into_iter()
-            .map(|(axis_id, value)| Ok((parse::<AxisId>(&axis_id)?, value)))
-            .collect()
-    }
-}
-
-impl From<StatePointType> for PointType {
-    fn from(point_type: StatePointType) -> Self {
-        match point_type {
-            StatePointType::OnCurve => Self::OnCurve,
-            StatePointType::OffCurve => Self::OffCurve,
-            StatePointType::QCurve => Self::QCurve,
-        }
-    }
-}
-
-impl From<PointType> for StatePointType {
-    fn from(point_type: PointType) -> Self {
-        match point_type {
-            PointType::OnCurve => Self::OnCurve,
-            PointType::OffCurve => Self::OffCurve,
-            PointType::QCurve => Self::QCurve,
-        }
-    }
-}
-
-impl From<PointType> for IrPointType {
-    fn from(point_type: PointType) -> Self {
-        let point_type: StatePointType = point_type.into();
-        point_type.into()
-    }
 }
 
 #[cfg(test)]

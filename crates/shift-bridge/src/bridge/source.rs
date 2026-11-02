@@ -3,7 +3,7 @@
 
 use pack::{Bytes, Pack};
 use shift_font::GlyphId;
-use shift_wire::{FontSnapshot, GlyphSnapshot};
+use shift_font::wire::{FontSnapshot, GlyphSnapshot};
 use std::path::Path;
 
 use super::{Bridge, RetainedSource};

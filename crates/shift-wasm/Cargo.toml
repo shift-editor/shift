@@ -25,12 +25,9 @@ engine = [
     "shift-text/layout",
 ]
 # The engine's interfaces and the records they carry, without the session
-# that answers them: what the editor's generated side is written from. Kept
-# out of the default build, which would otherwise link shift-wire, and with
-# it napi's symbols wherever another crate turns napi on.
+# that answers them: what the editor's generated side is written from.
 engine-protocol = [
     "dep:shift-text",
-    "dep:shift-wire",
     "shift-text/shape",
 ]
 
@@ -50,8 +47,6 @@ serde-wasm-bindgen = { version = "0.6", optional = true }
 shift-layout = { workspace = true, optional = true }
 # The scene a session without an engine edits (`scene`), and the engine itself.
 shift-engine = { workspace = true }
-# The records an engine edit changes, in the native workspace's packed shape.
-shift-wire = { workspace = true, features = ["pack"], optional = true }
 thiserror = "2"
 # Must match the wasm-bindgen CLI in the Nix dev shell exactly; scripts check it.
 wasm-bindgen = "=0.2.121"

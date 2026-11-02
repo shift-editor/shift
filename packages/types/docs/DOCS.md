@@ -101,7 +101,7 @@ It runs those tests with `SHIFT_UPDATE_FIXTURES=1`, which writes the files inste
 
 ### Regenerate bridge types after Rust bridge changes
 
-1. Update `shift-wire` and/or `shift-wire::bridges::napi`.
+1. Update `shift_font::wire` and/or `shift-bridge`'s `wire_napi.rs`.
 2. Rebuild `shift-bridge` declarations.
 3. Run `pnpm generate:bridge-types`.
 4. Import the result from `@shift/types`.
@@ -136,7 +136,7 @@ It runs those tests with `SHIFT_UPDATE_FIXTURES=1`, which writes the files inste
 
 ## Related
 
-- `shift-wire` -- Rust source of truth for bridge DTO semantics.
+- `shift_font::wire` -- Rust source of truth for bridge DTO semantics.
 - `shift-bridge` -- NAPI bridge class and generated declaration source.
 - `scripts/generate-bridge-types.mjs` -- declaration transformer for the generated bridge DTO internals.
 - `@shift/bridge` -- runtime package that creates the native bridge instance.

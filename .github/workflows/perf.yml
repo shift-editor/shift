@@ -54,7 +54,6 @@ on:
       - "crates/shift-edit/src/**"
       - "crates/shift-bridge/src/**"
       - "crates/shift-slug/**"
-      - "crates/shift-wire/**"
       - "crates/shift-workspace/**"
       - "packages/types/src/bridge/**"
       - "apps/desktop/e2e/**"
