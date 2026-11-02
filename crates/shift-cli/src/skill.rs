@@ -6,6 +6,7 @@
 //! `shift-nightly`, `shift-dev`. A non-release skill opens by naming its
 //! command, so an agent never runs another build's CLI.
 
+use crate::Report;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -217,8 +218,8 @@ pub(crate) struct SkillReport {
     pub targets: Vec<SkillTargetReport>,
 }
 
-impl SkillReport {
-    pub(crate) fn render(&self) -> String {
+impl Report for SkillReport {
+    fn render(&self) -> String {
         let mut lines = vec![format!(
             "{} {} ({})",
             self.skill, self.version, self.command

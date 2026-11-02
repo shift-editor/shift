@@ -1,5 +1,6 @@
 //! Reports of authored metadata and source metrics, never compiled line-height estimates.
 
+use crate::Report;
 use std::path::PathBuf;
 
 use serde::Serialize;
@@ -30,8 +31,8 @@ pub(crate) struct SourceMetrics {
     pub italic_angle: Option<f64>,
 }
 
-impl FontInfoReport {
-    pub(crate) fn render(&self) -> String {
+impl Report for FontInfoReport {
+    fn render(&self) -> String {
         let metadata = &self.metadata;
         let mut lines = vec![self.document.display().to_string(), String::new()];
         for (label, value) in [

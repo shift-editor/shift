@@ -57,45 +57,49 @@ pub enum BridgeError {
   StoreRead(#[from] shift_engine::StoreReadError),
 }
 
-pub(crate) fn to_napi_error(error: BridgeError) -> Error {
-  let status = match &error {
-    BridgeError::InvalidInput { .. }
-    | BridgeError::NoWorkspace
-    | BridgeError::NoFontSource
-    | BridgeError::Wire(_)
-    | BridgeError::Backend(
-      BackendError::MissingExtension { .. }
-      | BackendError::InvalidPathUtf8 { .. }
-      | BackendError::InvalidExtensionUtf8 { .. }
-      | BackendError::UnsupportedFormat { .. }
-      | BackendError::UnsupportedWriteFormat { .. }
-      | BackendError::AuthoredUnsupported { .. },
-    ) => Status::InvalidArg,
-    BridgeError::Core(_)
-    | BridgeError::Backend(_)
-    | BridgeError::FontRead(_)
-    | BridgeError::SourceAtlas(_)
-    | BridgeError::Workspace(_)
-    | BridgeError::Store(_)
-    | BridgeError::Encoding(_)
-    | BridgeError::Decoding(_)
-    | BridgeError::AuthoredSlug(_)
-    | BridgeError::Slug(_)
-    | BridgeError::StoreRead(_) => Status::GenericFailure,
-  };
-
-  Error::new(status, error.to_string())
-}
-
+/// Gives input the window sent `InvalidArg` and every other failure
+/// `GenericFailure`, with the error's message.
 impl From<BridgeError> for Error {
   fn from(error: BridgeError) -> Self {
-    to_napi_error(error)
+    let status = match &error {
+      BridgeError::InvalidInput { .. }
+      | BridgeError::NoWorkspace
+      | BridgeError::NoFontSource
+      | BridgeError::Wire(_)
+      | BridgeError::Backend(
+        BackendError::MissingExtension { .. }
+        | BackendError::InvalidPathUtf8 { .. }
+        | BackendError::InvalidExtensionUtf8 { .. }
+        | BackendError::UnsupportedFormat { .. }
+        | BackendError::UnsupportedWriteFormat { .. }
+        | BackendError::AuthoredUnsupported { .. },
+      ) => Status::InvalidArg,
+      BridgeError::Core(_)
+      | BridgeError::Backend(_)
+      | BridgeError::FontRead(_)
+      | BridgeError::SourceAtlas(_)
+      | BridgeError::Workspace(_)
+      | BridgeError::Store(_)
+      | BridgeError::Encoding(_)
+      | BridgeError::Decoding(_)
+      | BridgeError::AuthoredSlug(_)
+      | BridgeError::Slug(_)
+      | BridgeError::StoreRead(_) => Status::GenericFailure,
+    };
+
+    Self::new(status, error.to_string())
   }
+}
+
+/// A `GenericFailure` NAPI error carrying `error`'s message, whatever kind of
+/// failure it is.
+pub(crate) fn generic_failure(error: impl std::fmt::Display) -> Error {
+  Error::new(Status::GenericFailure, error.to_string())
 }
 
 impl From<BridgeError> for JsError {
   fn from(error: BridgeError) -> Self {
-    Self::from(to_napi_error(error))
+    Self::from(Error::from(error))
   }
 }
 

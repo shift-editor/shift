@@ -1,5 +1,6 @@
 //! Stable CLI mutation reports derived from committed semantic changes.
 
+use crate::Report;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -162,8 +163,8 @@ impl LayerReport {
     }
 }
 
-impl AuthoringReport {
-    pub(crate) fn render(&self) -> String {
+impl Report for AuthoringReport {
+    fn render(&self) -> String {
         let mut lines = vec![self.document.display().to_string(), String::new()];
         for change in &self.changes {
             match change {

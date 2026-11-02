@@ -124,11 +124,6 @@ fn choose_fit(one_line_em: f64, two_lines_em: Option<f64>, name_box: NameBox) ->
     })
 }
 
-/// Ink extent of shaped lines set from a common left origin, in font units.
-fn ink_width(ink: &Bounds) -> f64 {
-    ink.max_x - ink.min_x
-}
-
 impl SpecimenFont<'_> {
     /// Reads the family name: the typographic family (`name` ID 16), else
     /// the legacy family (ID 1).
@@ -167,9 +162,9 @@ impl SpecimenFont<'_> {
         let two_lines = self.balanced_break(&text);
         let two_lines_em = two_lines
             .as_ref()
-            .map(|(_, drawn)| ink_width(&drawn.ink) / self.units_per_em);
+            .map(|(_, drawn)| drawn.ink.width() / self.units_per_em);
         let fitted = choose_fit(
-            ink_width(&one_line.ink) / self.units_per_em,
+            one_line.ink.width() / self.units_per_em,
             two_lines_em,
             name_box,
         )?;
@@ -187,10 +182,10 @@ impl SpecimenFont<'_> {
             view_box: ViewBox {
                 x: drawn.ink.min_x,
                 y: 0.0,
-                width: ink_width(&drawn.ink),
+                width: drawn.ink.width(),
                 height: fitted.type_size.line_height / scale * line_count,
             },
-            width: ink_width(&drawn.ink) * scale,
+            width: drawn.ink.width() * scale,
             height: fitted.type_size.line_height * line_count,
             fit: fitted.fit,
             text,
@@ -210,7 +205,7 @@ impl SpecimenFont<'_> {
                 let drawn = self.draw_lines(&[first, second])?;
                 Some(([first, second], drawn))
             })
-            .min_by(|(_, a), (_, b)| ink_width(&a.ink).total_cmp(&ink_width(&b.ink)))
+            .min_by(|(_, a), (_, b)| a.ink.width().total_cmp(&b.ink.width()))
     }
 
     /// Draws `lines` from a common left origin with every baseline at zero,

@@ -7,7 +7,6 @@ use crate::label::{cells, char_advance};
 use crate::layout::{Label, Page, Row};
 use crate::palette::{BACKGROUND, INK, LABEL, MISSING, Rgb};
 use crate::shape::{PlacedGlyph, Segment};
-use crate::svg::fill_runs;
 
 /// Draws `page` anti-aliased and returns encoded PNG bytes, one pixel per
 /// layout pixel.
@@ -39,7 +38,7 @@ pub fn render_png(page: &Page) -> Result<Vec<u8>, ProofError> {
         draw_label(&mut pixmap, label);
     }
     for row in &page.rows {
-        for (glyphs, missing) in fill_runs(row) {
+        for (glyphs, missing) in row.fill_runs() {
             let color = if missing { MISSING } else { INK };
             fill_glyphs(&mut pixmap, row, glyphs, color);
         }

@@ -260,7 +260,7 @@ fn theme_error(message: &str, location: Option<Location>) -> ConfigProblem {
 pub fn set_theme(source: Option<&str>, theme: &ThemeSetting) -> Result<String, ConfigEditError> {
     let Some(source) = source else {
         let mut document = DocumentMut::new();
-        document.insert("theme", Item::Value(theme_value(theme)));
+        document.insert("theme", Item::Value(Value::from(theme)));
         return Ok(document.to_string());
     };
 
@@ -281,8 +281,8 @@ pub fn set_theme(source: Option<&str>, theme: &ThemeSetting) -> Result<String, C
         document.remove("theme");
     }
     match document.get_mut("theme").and_then(Item::as_value_mut) {
-        Some(value) => replace_value(value, theme_value(theme)),
-        None => insert_top_level(&mut document, theme_value(theme)),
+        Some(value) => replace_value(value, Value::from(theme)),
+        None => insert_top_level(&mut document, Value::from(theme)),
     }
     Ok(document.to_string())
 }
@@ -328,23 +328,25 @@ fn close_inline_table(table: &mut InlineTable) {
     }
 }
 
-/// The value `theme` is written as: a string, or an inline table of the set slots.
-fn theme_value(theme: &ThemeSetting) -> Value {
-    match theme {
-        ThemeSetting::Name(name) => Value::from(name.as_str()),
-        ThemeSetting::Slots(slots) => {
-            let mut table = InlineTable::new();
-            if let Some(mode) = slots.mode {
-                table.insert("mode", Value::from(mode.as_str()));
+/// Writes a theme as a string, or as an inline table of the set slots.
+impl From<&ThemeSetting> for Value {
+    fn from(theme: &ThemeSetting) -> Self {
+        match theme {
+            ThemeSetting::Name(name) => Self::from(name.as_str()),
+            ThemeSetting::Slots(slots) => {
+                let mut table = InlineTable::new();
+                if let Some(mode) = slots.mode {
+                    table.insert("mode", Self::from(mode.as_str()));
+                }
+                if let Some(light) = &slots.light {
+                    table.insert("light", Self::from(light.as_str()));
+                }
+                if let Some(dark) = &slots.dark {
+                    table.insert("dark", Self::from(dark.as_str()));
+                }
+                table.fmt();
+                Self::InlineTable(table)
             }
-            if let Some(light) = &slots.light {
-                table.insert("light", Value::from(light.as_str()));
-            }
-            if let Some(dark) = &slots.dark {
-                table.insert("dark", Value::from(dark.as_str()));
-            }
-            table.fmt();
-            Value::InlineTable(table)
         }
     }
 }

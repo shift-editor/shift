@@ -1,4 +1,4 @@
-use crate::errors::{self, BridgeError, BridgeResult};
+use crate::errors::{self, BridgeError, BridgeResult, generic_failure};
 use crate::input::parse_id_list;
 use crate::reply::{PackedReply, answer};
 use napi::bindgen_prelude::*;
@@ -612,7 +612,7 @@ impl Task for ExportFontTask {
   fn compute(&mut self) -> Result<Self::Output> {
     FontExporter::new()
       .export(&self.snapshot, self.request.clone())
-      .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))
+      .map_err(generic_failure)
   }
 
   fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
@@ -1022,9 +1022,7 @@ impl Bridge {
     request: NapiFontExportRequest,
   ) -> Result<AsyncTask<ExportFontTask>> {
     Ok(AsyncTask::new(ExportFontTask {
-      snapshot: self
-        .save_snapshot()
-        .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?,
+      snapshot: self.save_snapshot().map_err(generic_failure)?,
       request: request.try_into()?,
     }))
   }
@@ -1050,9 +1048,7 @@ impl Bridge {
   pub fn document_specimen(&mut self) -> Result<AsyncTask<crate::specimen::SpecimenTask>> {
     Ok(AsyncTask::new(crate::specimen::SpecimenTask {
       input: crate::specimen::SpecimenInput::Snapshot(
-        self
-          .specimen_snapshot()
-          .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?,
+        self.specimen_snapshot().map_err(generic_failure)?,
       ),
     }))
   }
@@ -1245,7 +1241,7 @@ impl Bridge {
             receiver_closed = sender.blocking_send(Ok(chunk.bytes.to_vec())).is_err();
           });
       if !receiver_closed && let Err(error) = result {
-        let _ = sender.blocking_send(Err(Error::new(Status::GenericFailure, error.to_string())));
+        let _ = sender.blocking_send(Err(generic_failure(error)));
       }
     });
 
