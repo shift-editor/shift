@@ -1,6 +1,7 @@
 //! Structural matches between ordered authored glyph layers.
 
 use std::collections::HashMap;
+use std::fmt;
 
 use crate::{
     AnchorId, ComponentId, ContourId, Font, GlyphId, GlyphLayer, LayerId, PointId, PointType,
@@ -54,6 +55,48 @@ pub enum LayerDifference {
         reference: Vec<GlyphId>,
         source: Vec<GlyphId>,
     },
+}
+
+/// Describes the difference for a person reading a check report, counting
+/// contours and points from one.
+impl fmt::Display for LayerDifference {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ContourCount { reference, source } => {
+                write!(f, "{source} contours instead of {reference}")
+            }
+            Self::ContourClosed {
+                contour, reference, ..
+            } => {
+                let state = if *reference { "open" } else { "closed" };
+                write!(f, "contour {} is {state}", contour + 1)
+            }
+            Self::PointCount {
+                contour,
+                reference,
+                source,
+            } => write!(
+                f,
+                "contour {} has {source} points instead of {reference}",
+                contour + 1
+            ),
+            Self::PointType { contour, point, .. } => write!(
+                f,
+                "point {} of contour {} is a different kind of point",
+                point + 1,
+                contour + 1
+            ),
+            Self::AnchorCount { reference, source } => {
+                write!(f, "{source} anchors instead of {reference}")
+            }
+            Self::AnchorSequence { .. } => {
+                f.write_str("the anchors are named or ordered differently")
+            }
+            Self::ComponentSequence { .. } => {
+                f.write_str("the components are different or in a different order")
+            }
+        }
+    }
 }
 
 /// Derived structural match from one reference layer to one target layer.
@@ -248,9 +291,9 @@ impl GlyphLayer {
     pub fn match_with(&self, target: &Self) -> LayerMatch {
         let mut differences = Vec::new();
 
-        compare_contours(self, target, &mut differences);
-        compare_anchors(self, target, &mut differences);
-        compare_components(self, target, &mut differences);
+        self.compare_contours(target, &mut differences);
+        self.compare_anchors(target, &mut differences);
+        self.compare_components(target, &mut differences);
 
         let mut layer_match = LayerMatch {
             reference_layer_id: self.id(),
@@ -266,6 +309,93 @@ impl GlyphLayer {
         }
 
         layer_match
+    }
+
+    /// Records contour count, closure, point count and point type
+    /// differences between this reference layer and `source`.
+    fn compare_contours(&self, source: &Self, differences: &mut Vec<LayerDifference>) {
+        if self.contours().len() != source.contours().len() {
+            differences.push(LayerDifference::ContourCount {
+                reference: self.contours().len(),
+                source: source.contours().len(),
+            });
+            return;
+        }
+
+        for (contour, (reference, source)) in
+            self.contours_iter().zip(source.contours_iter()).enumerate()
+        {
+            if reference.is_closed() != source.is_closed() {
+                differences.push(LayerDifference::ContourClosed {
+                    contour,
+                    reference: reference.is_closed(),
+                    source: source.is_closed(),
+                });
+            }
+
+            if reference.points().len() != source.points().len() {
+                differences.push(LayerDifference::PointCount {
+                    contour,
+                    reference: reference.points().len(),
+                    source: source.points().len(),
+                });
+                continue;
+            }
+
+            for (point, (reference, source)) in
+                reference.points().iter().zip(source.points()).enumerate()
+            {
+                if reference.point_type() == source.point_type() {
+                    continue;
+                }
+
+                differences.push(LayerDifference::PointType {
+                    contour,
+                    point,
+                    reference: reference.point_type(),
+                    source: source.point_type(),
+                });
+            }
+        }
+    }
+
+    /// Records anchor count and anchor name sequence differences.
+    fn compare_anchors(&self, source: &Self, differences: &mut Vec<LayerDifference>) {
+        if self.anchors().len() != source.anchors().len() {
+            differences.push(LayerDifference::AnchorCount {
+                reference: self.anchors().len(),
+                source: source.anchors().len(),
+            });
+            return;
+        }
+
+        if self.anchor_names().ne(source.anchor_names()) {
+            let owned_names = |layer: &Self| {
+                layer
+                    .anchor_names()
+                    .map(|name| name.map(ToOwned::to_owned))
+                    .collect()
+            };
+            differences.push(LayerDifference::AnchorSequence {
+                reference: owned_names(self),
+                source: owned_names(source),
+            });
+        }
+    }
+
+    /// Records a difference when the component base glyph sequence differs.
+    fn compare_components(&self, source: &Self, differences: &mut Vec<LayerDifference>) {
+        let sequence_differs = self.components().len() != source.components().len()
+            || self
+                .components_iter()
+                .zip(source.components_iter())
+                .any(|(reference, source)| reference.base_glyph_id() != source.base_glyph_id());
+        if sequence_differs {
+            differences.push(LayerDifference::ComponentSequence {
+                reference: self.component_glyph_ids().collect(),
+                source: source.component_glyph_ids().collect(),
+            });
+        }
     }
 }
 
@@ -293,103 +423,6 @@ impl LayerMatch {
         for (reference, target) in reference.components_iter().zip(target.components_iter()) {
             self.components.insert(reference.id(), target.id());
         }
-    }
-}
-
-fn compare_contours(
-    reference: &GlyphLayer,
-    source: &GlyphLayer,
-    differences: &mut Vec<LayerDifference>,
-) {
-    if reference.contours().len() != source.contours().len() {
-        differences.push(LayerDifference::ContourCount {
-            reference: reference.contours().len(),
-            source: source.contours().len(),
-        });
-        return;
-    }
-
-    for (contour, (reference, source)) in reference
-        .contours_iter()
-        .zip(source.contours_iter())
-        .enumerate()
-    {
-        if reference.is_closed() != source.is_closed() {
-            differences.push(LayerDifference::ContourClosed {
-                contour,
-                reference: reference.is_closed(),
-                source: source.is_closed(),
-            });
-        }
-
-        if reference.points().len() != source.points().len() {
-            differences.push(LayerDifference::PointCount {
-                contour,
-                reference: reference.points().len(),
-                source: source.points().len(),
-            });
-            continue;
-        }
-
-        for (point, (reference, source)) in
-            reference.points().iter().zip(source.points()).enumerate()
-        {
-            if reference.point_type() == source.point_type() {
-                continue;
-            }
-
-            differences.push(LayerDifference::PointType {
-                contour,
-                point,
-                reference: reference.point_type(),
-                source: source.point_type(),
-            });
-        }
-    }
-}
-
-fn compare_anchors(
-    reference: &GlyphLayer,
-    source: &GlyphLayer,
-    differences: &mut Vec<LayerDifference>,
-) {
-    if reference.anchors().len() != source.anchors().len() {
-        differences.push(LayerDifference::AnchorCount {
-            reference: reference.anchors().len(),
-            source: source.anchors().len(),
-        });
-        return;
-    }
-
-    if reference.anchor_names().ne(source.anchor_names()) {
-        let owned_names = |layer: &GlyphLayer| {
-            layer
-                .anchor_names()
-                .map(|name| name.map(ToOwned::to_owned))
-                .collect()
-        };
-        differences.push(LayerDifference::AnchorSequence {
-            reference: owned_names(reference),
-            source: owned_names(source),
-        });
-    }
-}
-
-fn compare_components(
-    reference: &GlyphLayer,
-    source: &GlyphLayer,
-    differences: &mut Vec<LayerDifference>,
-) {
-    let sequence_differs = reference.components().len() != source.components().len()
-        || reference
-            .components_iter()
-            .zip(source.components_iter())
-            .any(|(reference, source)| reference.base_glyph_id() != source.base_glyph_id());
-    if sequence_differs {
-        differences.push(LayerDifference::ComponentSequence {
-            reference: reference.component_glyph_ids().collect(),
-            source: source.component_glyph_ids().collect(),
-        });
     }
 }
 

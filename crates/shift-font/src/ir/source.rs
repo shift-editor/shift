@@ -1,6 +1,8 @@
-use crate::axis::DesignLocation;
+use crate::axis::{Axis, AxisList, DesignLocation};
 use crate::entity::{MetricId, SourceId};
+use crate::error::{CoreError, CoreResult};
 use crate::lib_data::LibData;
+use crate::metrics::MetricKind;
 use crate::metrics::{MetricDefinition, MetricValue};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -270,6 +272,124 @@ impl Source {
 
     pub fn remove_axis_location(&mut self, axis_id: crate::AxisId) -> Option<f64> {
         self.location.remove(&axis_id)
+    }
+
+    /// Checks this source against the font it joins: a non-empty name unique
+    /// among `sources`, no other master at an equivalent location, and the
+    /// values [`Self::validate_values`] checks.
+    ///
+    /// # Errors
+    ///
+    /// Returns the [`CoreError`] for the first rule the source breaks.
+    pub(crate) fn validate(
+        &self,
+        sources: &[Self],
+        axes: &[Axis],
+        definitions: &[MetricDefinition],
+    ) -> CoreResult<()> {
+        let name = self.name().trim();
+        if name.is_empty() {
+            return Err(CoreError::InvalidSourceName(name.to_string()));
+        }
+        if sources
+            .iter()
+            .any(|current| current.id() != self.id() && current.name() == name)
+        {
+            return Err(CoreError::DuplicateSourceName(name.to_string()));
+        }
+        if let Some(existing) = sources.iter().find(|current| {
+            current.id() != self.id()
+                && current.is_master()
+                && self.is_master()
+                && current.location().is_equivalent_to(self.location(), axes)
+        }) {
+            return Err(CoreError::DuplicateSourceLocation {
+                first: existing.id(),
+                second: self.id(),
+            });
+        }
+
+        self.validate_values(axes, definitions)
+    }
+
+    /// Checks that this source's location names only `axes`, that its
+    /// values are finite, and that a master has a value for every one of
+    /// `definitions` and none for a metric that isn't defined.
+    ///
+    /// # Errors
+    ///
+    /// Returns the [`CoreError`] for the first value that breaks a rule.
+    pub(crate) fn validate_values(
+        &self,
+        axes: &[Axis],
+        definitions: &[MetricDefinition],
+    ) -> CoreResult<()> {
+        for (axis_id, value) in self.location() {
+            if !axes.contains_axis(*axis_id) {
+                return Err(CoreError::AxisNotFound(*axis_id));
+            }
+            if !value.is_finite() {
+                return Err(CoreError::InvalidSourceName(format!(
+                    "{} has a non-finite location",
+                    self.name()
+                )));
+            }
+        }
+        if self.is_master() {
+            for definition in definitions {
+                let metric_id = definition.id();
+                let Some(value) = self.metric_value(metric_id) else {
+                    return Err(CoreError::InvalidSourceMetric {
+                        source_id: self.id(),
+                        metric_id,
+                        message: "master source is missing a value".to_string(),
+                    });
+                };
+                if !value.position.is_finite() || !value.overshoot.is_finite() {
+                    return Err(CoreError::InvalidSourceMetric {
+                        source_id: self.id(),
+                        metric_id,
+                        message: "position and overshoot must be finite".to_string(),
+                    });
+                }
+                if definition.kind() == MetricKind::Baseline && value.position != 0.0 {
+                    return Err(CoreError::InvalidSourceMetric {
+                        source_id: self.id(),
+                        metric_id,
+                        message: "baseline position must be zero".to_string(),
+                    });
+                }
+            }
+        }
+        for metric_id in self.metric_values().keys() {
+            if !definitions
+                .iter()
+                .any(|definition| definition.id() == *metric_id)
+            {
+                return Err(CoreError::InvalidSourceMetric {
+                    source_id: self.id(),
+                    metric_id: *metric_id,
+                    message: "metric definition does not exist".to_string(),
+                });
+            }
+        }
+        for value in [
+            self.italic_angle(),
+            self.line_gap(),
+            self.underline_position(),
+            self.underline_thickness(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if !value.is_finite() {
+                return Err(CoreError::InvalidSourceName(format!(
+                    "{} has a non-finite source metric",
+                    self.name()
+                )));
+            }
+        }
+        Ok(())
     }
 }
 

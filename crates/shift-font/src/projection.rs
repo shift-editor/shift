@@ -77,6 +77,24 @@ struct GlyphLayerProjection {
 }
 
 impl GlyphLayerProjection {
+    /// Layer whose structure `resolve` selects at one master: the exact-source
+    /// shape when the master has one, else the fallback/reference layer whose
+    /// component identities interpolation output carries.
+    fn structural_layer(&self, source_id: SourceId) -> &GlyphLayer {
+        self.exact_source_shapes
+            .iter()
+            .find(|shape| shape.source_id == source_id)
+            .map_or(&self.fallback, |shape| &shape.layer)
+    }
+
+    /// Component base ids across the fallback and every exact-source shape.
+    fn component_base_glyph_ids(&self) -> impl Iterator<Item = GlyphId> + '_ {
+        let exact_layers = self.exact_source_shapes.iter().map(|shape| &shape.layer);
+        std::iter::once(&self.fallback)
+            .chain(exact_layers)
+            .flat_map(|layer| layer.component_glyph_ids())
+    }
+
     fn resolve(
         &self,
         location: &DesignLocation,
@@ -327,7 +345,7 @@ impl Font {
                 self.glyph_layer_projection_with_bases(glyph_id, interpolation_bases)?;
             let component_glyph_ids = projection
                 .as_ref()
-                .map(|projection| component_base_glyph_ids(projection).collect::<Vec<_>>())
+                .map(|projection| projection.component_base_glyph_ids().collect::<Vec<_>>())
                 .unwrap_or_default();
             projections.insert(glyph_id, projection);
             projection_order.push(glyph_id);
@@ -349,7 +367,7 @@ impl Font {
         projections: &HashMap<GlyphId, Option<Arc<GlyphLayerProjection>>>,
         source_id: SourceId,
     ) -> CoreResult<GlyphComponents> {
-        let root_layer = structural_layer(root_projection, source_id);
+        let root_layer = root_projection.structural_layer(source_id);
         let mut layers = HashMap::from([(root_glyph_id, root_layer)]);
         let mut pending: Vec<GlyphId> = vec![root_glyph_id];
 
@@ -372,7 +390,7 @@ impl Font {
                         base_glyph_id,
                     });
                 };
-                layers.insert(base_glyph_id, structural_layer(projection, source_id));
+                layers.insert(base_glyph_id, projection.structural_layer(source_id));
                 pending.push(base_glyph_id);
             }
         }
@@ -739,31 +757,6 @@ impl Font {
 
         flatten_selected_component_contours_from_layers(glyph_id, &projection.layers, component_ids)
     }
-}
-
-/// Layer whose structure `resolve` selects at one master: the exact-source
-/// shape when the master has one, else the fallback/reference layer whose
-/// component identities interpolation output carries.
-fn structural_layer(projection: &GlyphLayerProjection, source_id: SourceId) -> &GlyphLayer {
-    projection
-        .exact_source_shapes
-        .iter()
-        .find(|shape| shape.source_id == source_id)
-        .map_or(&projection.fallback, |shape| &shape.layer)
-}
-
-/// Component base ids across the fallback and every exact-source shape.
-fn component_base_glyph_ids(
-    projection: &GlyphLayerProjection,
-) -> impl Iterator<Item = GlyphId> + '_ {
-    std::iter::once(&projection.fallback)
-        .chain(
-            projection
-                .exact_source_shapes
-                .iter()
-                .map(|shape| &shape.layer),
-        )
-        .flat_map(|layer| layer.component_glyph_ids())
 }
 
 fn exact_source_id(

@@ -1,5 +1,6 @@
 use crate::entity::{AxisId, AxisLabelId, AxisMappingId};
 use crate::error::{CoreError, CoreResult};
+use crate::source::Source;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -532,6 +533,40 @@ impl Axis {
     pub fn denormalize(&self, value: f64) -> f64 {
         self.kind.denormalize(value)
     }
+
+    /// Checks that master `source` may sit at `value` on this axis: inside
+    /// the axis range, and at the axis default when it is the default master.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidAxis`] when either rule is broken.
+    pub(crate) fn validate_master_value(
+        &self,
+        source: &Source,
+        value: f64,
+        is_default: bool,
+    ) -> CoreResult<()> {
+        if !self.accepts(value) {
+            return Err(CoreError::InvalidAxis {
+                axis_id: self.id(),
+                message: format!(
+                    "master {} ({}) value {value} is outside the replacement axis",
+                    source.name(),
+                    source.id()
+                ),
+            });
+        }
+        if is_default && value != self.default() {
+            return Err(CoreError::InvalidAxis {
+                axis_id: self.id(),
+                message: format!(
+                    "default master {} must remain at the axis origin; explicit relocation is required",
+                    source.name()
+                ),
+            });
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -696,7 +731,9 @@ impl AxisMapping {
         Ok(())
     }
 
-    fn invalid(&self, message: impl Into<String>) -> CoreError {
+    /// The [`CoreError::InvalidAxisMapping`] for this mapping, explained by
+    /// `message`.
+    pub(crate) fn invalid(&self, message: impl Into<String>) -> CoreError {
         CoreError::InvalidAxisMapping {
             mapping_id: self.id(),
             message: message.into(),

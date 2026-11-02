@@ -219,7 +219,7 @@ pub fn follow_anchors<A: AnchorLike>(components: &[FollowingComponent<'_, A>]) -
             _ if moved => ComponentAlignment::Free,
             ComponentAlignment::Anchored => ComponentAlignment::Anchored,
             ComponentAlignment::Unset
-                if sits_on_anchors(&accepted, &placed_accepted, component.accepted_anchors) =>
+                if accepted.sits_on_anchors(&placed_accepted, component.accepted_anchors) =>
             {
                 ComponentAlignment::Anchored
             }
@@ -243,14 +243,14 @@ pub fn follow_anchors<A: AnchorLike>(components: &[FollowingComponent<'_, A>]) -
     following
 }
 
-fn sits_on_anchors<A: AnchorLike>(
-    transform: &DecomposedTransform,
-    placed: &[(Transform, &[A])],
-    anchors: &[A],
-) -> bool {
-    transform.is_translation()
-        && aligned_offset(placed, anchors).is_some_and(|offset| {
-            let gap = transform.offset() - offset;
-            gap.x.abs() < EPSILON && gap.y.abs() < EPSILON
-        })
+impl DecomposedTransform {
+    /// Whether this transform is the plain offset that aligns `anchors` with
+    /// the `placed` components' anchors.
+    fn sits_on_anchors<A: AnchorLike>(&self, placed: &[(Transform, &[A])], anchors: &[A]) -> bool {
+        self.is_translation()
+            && aligned_offset(placed, anchors).is_some_and(|offset| {
+                let gap = self.offset() - offset;
+                gap.x.abs() < EPSILON && gap.y.abs() < EPSILON
+            })
+    }
 }
