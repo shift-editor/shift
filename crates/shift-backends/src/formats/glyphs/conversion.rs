@@ -9,7 +9,7 @@ use ordered_float::OrderedFloat;
 use shift_font::{
     Anchor, Axis, AxisMapping, AxisMappingPoint, Component, Contour, DesignLocation,
     ExternalLocation, FeatureData, Font, Glyph, GlyphId, GlyphLayer, Kerning, KerningPosition,
-    LibValue, Location, NamedInstance, Source, SourceId, StandardMetrics, Transform,
+    LibValue, Location, NamedInstance, Source, SourceId, StandardMetrics, Transform, piecewise_map,
 };
 
 use super::families::InstanceFamilies;
@@ -17,7 +17,6 @@ use crate::{
     FormatBackendError, FormatBackendResult, ImportLoss, ImportReport, SourceIds,
     distinct_named_instances,
     feature_includes::inline_feature_includes,
-    font_source::piecewise_map,
     glyph_category::GlyphCategories,
     kerning_import::{KerningImport, NamedKerningSide},
 };

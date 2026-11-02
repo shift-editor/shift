@@ -1,6 +1,8 @@
 use crate::length::OrOverflow;
 use std::collections::HashMap;
 
+use shift_font::piecewise_map;
+
 use crate::SlugError;
 use shift_font::AxisRange;
 
@@ -29,7 +31,7 @@ impl AtlasAxis {
         if !value.is_finite() {
             return Err(SlugError::NonFiniteRetainedCoordinate { axis_index });
         }
-        self.normalize_design(map_value(value, &self.user_mapping), axis_index)
+        self.normalize_design(piecewise_map(value, &self.user_mapping), axis_index)
     }
 
     /// Normalizes a design-space `value` to this axis's F2Dot14 coordinate.
@@ -268,30 +270,6 @@ fn weights_with(
         weights.push(1.0 - region_sum);
     }
     Ok(weights)
-}
-
-fn map_value(value: f64, points: &[(f64, f64)]) -> f64 {
-    let Some(first) = points.first().copied() else {
-        return value;
-    };
-    if value <= first.0 {
-        return value + first.1 - first.0;
-    }
-
-    for pair in points.windows(2) {
-        let [left, right] = pair else {
-            unreachable!("a two-point window has two entries");
-        };
-        if value <= right.0 {
-            if left.0 == right.0 {
-                return left.1;
-            }
-            return left.1 + (right.1 - left.1) * (value - left.0) / (right.0 - left.0);
-        }
-    }
-
-    let last = points.last().copied().expect("points are non-empty");
-    value + last.1 - last.0
 }
 
 fn apply_mapping(coordinate: i16, mapping: &[(i16, i16)]) -> i16 {
