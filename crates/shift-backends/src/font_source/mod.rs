@@ -18,7 +18,7 @@ pub use error::FontReadError;
 pub(crate) use error::malformed;
 pub(crate) use geometry::inferred_smooth_point_indices;
 pub use inputs::variable_glyph_inputs;
-pub use segments::ContourSegmentError;
+pub use segments::ContourError;
 pub(crate) use types::DirectoryGlyphInput;
 pub use types::{
     AxisIndex, DirectoryGlyph, DirectoryInstance, DirectoryMapping, DirectoryMappingPoint,

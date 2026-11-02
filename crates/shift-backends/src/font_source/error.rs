@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::FontFormat;
-use crate::font_source::{AxisIndex, ContourSegmentError, GlyphIndex};
+use crate::font_source::{AxisIndex, ContourError, GlyphIndex};
 
 pub(crate) fn malformed(path: &Path, details: String) -> FontReadError {
     let format = match path
@@ -79,7 +79,7 @@ pub enum FontReadError {
     InvalidProjection { details: String },
 
     #[error("invalid glyph contour: {0}")]
-    InvalidContour(#[from] ContourSegmentError),
+    InvalidContour(#[from] ContourError),
 
     #[error("index out of range: {0}")]
     IndexOutOfRange(#[from] std::num::TryFromIntError),

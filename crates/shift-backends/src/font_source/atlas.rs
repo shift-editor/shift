@@ -18,8 +18,8 @@ pub enum SourceAtlasError {
     UnsupportedBinary { details: &'static str },
 }
 
-impl From<super::ContourSegmentError> for SourceAtlasError {
-    fn from(error: super::ContourSegmentError) -> Self {
+impl From<super::ContourError> for SourceAtlasError {
+    fn from(error: super::ContourError) -> Self {
         Self::Read(error.into())
     }
 }

@@ -1,8 +1,8 @@
-use shift_font::Transform;
 use shift_slug::length::OrOverflow;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use rayon::prelude::*;
+use shift_font::Transform;
 use shift_slug::retained::{
     ExactVariant, GlyphInput, GlyphSegment, GlyphShape as RetainedGlyphShape, PageInput,
 };

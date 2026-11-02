@@ -1,8 +1,9 @@
+use shift_font::Transform;
+
 use crate::font_source::segments::{ContourSegments, ImpliedPoint, normalize_points};
 use crate::font_source::{
     FontReadError, GlyphAnchor, GlyphIndex, GlyphPoint, GlyphPointKind, PointProvenance,
 };
-use shift_font::Transform;
 
 /// Maximum tangent-angle difference used to infer smooth binary outline points.
 pub(crate) const SMOOTH_ANGLE_TOLERANCE: f64 = 0.05;
