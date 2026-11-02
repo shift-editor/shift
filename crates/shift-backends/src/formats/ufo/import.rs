@@ -1,17 +1,17 @@
 use crate::SourceIds;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashSet},
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use norad::{DataRequest, Font as NoradFont};
-use shift_font::{Font, GlyphId, Source, SourceId};
+use shift_font::{Font, Source, SourceId};
 
 use crate::{
     ImportReport,
     errors::{FormatBackendError, FormatBackendResult},
-    import::{GlifGlyph, GlifGlyphStream, GlifLayer},
+    import::GlifGlyphStream,
     kerning_import::KerningImport,
 };
 
@@ -49,16 +49,34 @@ pub(crate) fn stream_retained(
     header.clear_sources();
     let default_source_id = header.add_source(default_source.identified_as(ids.source_id("0")));
     let layers = load_layer_directories(retained, &mut header, default_source_id, &ids)?;
-    let (glyph_ids, glyphs) = build_glyph_directory(&ids, &layers);
+    let stream = GlifGlyphStream::from_layers(&ids, &layers);
 
     let mut report = ImportReport::default();
-    let mut import = KerningImport::new(&glyph_ids, &ids);
+    let mut import = KerningImport::new(stream.glyph_ids(), &ids);
     kerning.add_groups(&mut import);
     kerning.add_pairs(&mut import, default_source_id);
     *header.kerning_mut() = import.finish(&mut report);
     ids.identify(&mut header)?;
 
-    Ok((header, GlifGlyphStream::new(glyph_ids, glyphs), report))
+    Ok((header, stream, report))
+}
+
+impl GlifGlyphStream {
+    /// The glyphs of every layer directory, in the order the layers first name them.
+    fn from_layers(source_ids: &SourceIds, layers: &[LayerDirectory]) -> Self {
+        let mut seen = HashSet::new();
+        let names = layers
+            .iter()
+            .flat_map(|layer| layer.glyphs.keys())
+            .filter(|name| seen.insert(*name))
+            .cloned()
+            .collect();
+        let directories = layers
+            .iter()
+            .map(|layer| (layer.source_id, &layer.glyphs))
+            .collect::<Vec<_>>();
+        Self::from_directories(source_ids, names, &directories)
+    }
 }
 
 pub(crate) fn read_ufo_layer_directories(
@@ -204,45 +222,4 @@ fn read_layer_info(layer_path: &Path) -> FormatBackendResult<(Option<String>, pl
         .cloned()
         .unwrap_or_default();
     Ok((color, lib))
-}
-
-fn build_glyph_directory(
-    source_ids: &SourceIds,
-    layers: &[LayerDirectory],
-) -> (HashMap<String, GlyphId>, Vec<GlifGlyph>) {
-    let mut ordered_names = Vec::new();
-    let mut seen = HashSet::new();
-    for layer in layers {
-        for name in layer.glyphs.keys() {
-            if seen.insert(name.clone()) {
-                ordered_names.push(name.clone());
-            }
-        }
-    }
-    let glyph_ids = ordered_names
-        .iter()
-        .map(|name| (name.clone(), source_ids.glyph_id(name)))
-        .collect::<HashMap<_, _>>();
-    let glyphs = ordered_names
-        .into_iter()
-        .map(|name| {
-            let layer_records = layers
-                .iter()
-                .enumerate()
-                .filter_map(|(index, layer)| {
-                    layer.glyphs.get(&name).map(|path| GlifLayer {
-                        source_id: layer.source_id,
-                        layer_id: source_ids.layer_id(&name, &index.to_string()),
-                        path: path.clone(),
-                    })
-                })
-                .collect();
-            GlifGlyph {
-                id: glyph_ids[&name],
-                name,
-                layers: layer_records,
-            }
-        })
-        .collect();
-    (glyph_ids, glyphs)
 }

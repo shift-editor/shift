@@ -155,7 +155,10 @@ pub(crate) fn normalize_contour(
                 ));
             }
             (
-                implied_point(points.last().expect("contour is non-empty"), &points[0]),
+                GlyphPoint::implied_between(
+                    points.last().expect("contour is non-empty"),
+                    &points[0],
+                ),
                 (0..points.len()).collect(),
                 true,
             )
@@ -179,7 +182,7 @@ pub(crate) fn normalize_contour(
             && !closes_all_off_curve
             && next.is_some_and(|next| points[next].kind == GlyphPointKind::QuadraticControl)
         {
-            normalized.push(implied_point(
+            normalized.push(GlyphPoint::implied_between(
                 point,
                 &points[next.expect("next was checked")],
             ));
@@ -192,13 +195,17 @@ pub(crate) fn normalize_contour(
     })
 }
 
-fn implied_point(first: &GlyphPoint, second: &GlyphPoint) -> GlyphPoint {
-    GlyphPoint {
-        x: (first.x + second.x) * 0.5,
-        y: (first.y + second.y) * 0.5,
-        kind: GlyphPointKind::OnCurve,
-        smooth: false,
-        provenance: PointProvenance::Implied,
+impl GlyphPoint {
+    /// The on-curve point a quadratic outline implies halfway between two
+    /// off-curve points.
+    fn implied_between(first: &Self, second: &Self) -> Self {
+        Self {
+            x: (first.x + second.x) * 0.5,
+            y: (first.y + second.y) * 0.5,
+            kind: GlyphPointKind::OnCurve,
+            smooth: false,
+            provenance: PointProvenance::Implied,
+        }
     }
 }
 

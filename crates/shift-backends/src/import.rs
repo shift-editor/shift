@@ -1,8 +1,10 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::{BTreeMap, HashMap};
+use std::path::PathBuf;
 
 use rayon::prelude::*;
 use shift_font::{Anchor, Font, Glyph, GlyphId, GlyphName, LayerId, SourceId};
 
+use crate::SourceIds;
 use crate::font_source::authored::{AuthoredEntry, AuthoredGlyphs};
 use crate::{BackendError, BackendResult, FontFormat, FormatBackendResult, ImportReport};
 
@@ -62,12 +64,50 @@ pub(crate) struct GlifGlyphStream {
 }
 
 impl GlifGlyphStream {
-    pub(crate) fn new(glyph_ids: HashMap<String, GlyphId>, glyphs: Vec<GlifGlyph>) -> Self {
+    /// The glyphs `names` lists, in that order, each with a layer in every
+    /// directory that holds a GLIF for it. A directory's position among
+    /// `directories` keys the layer's id.
+    pub(crate) fn from_directories(
+        source_ids: &SourceIds,
+        names: Vec<String>,
+        directories: &[(SourceId, &BTreeMap<String, PathBuf>)],
+    ) -> Self {
+        let glyph_ids = names
+            .iter()
+            .map(|name| (name.clone(), source_ids.glyph_id(name)))
+            .collect::<HashMap<_, _>>();
+        let glyphs = names
+            .into_iter()
+            .map(|name| {
+                let layers = directories
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, (source_id, glyphs))| {
+                        let path = glyphs.get(&name)?;
+                        Some(GlifLayer {
+                            source_id: *source_id,
+                            layer_id: source_ids.layer_id(&name, &index.to_string()),
+                            path: path.clone(),
+                        })
+                    })
+                    .collect();
+                GlifGlyph {
+                    id: glyph_ids[&name],
+                    name,
+                    layers,
+                }
+            })
+            .collect();
         Self {
             glyph_ids,
             glyphs,
             next_glyph: 0,
         }
+    }
+
+    /// Each glyph's id by name.
+    pub(crate) fn glyph_ids(&self) -> &HashMap<String, GlyphId> {
+        &self.glyph_ids
     }
 }
 

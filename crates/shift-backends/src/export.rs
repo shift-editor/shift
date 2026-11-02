@@ -132,8 +132,10 @@ impl FontExporter {
         reason = "an exporter method; the exporter is the export entry point callers hold"
     )]
     pub fn compile_ttf(&self, font: &impl FontView) -> Result<Vec<u8>, ExportError> {
-        let source = ShiftIrSource::from_font_view(font).map_err(map_source_error)?;
-        compile_ttf(source)
+        let source = ShiftIrSource::from_font_view(font)?;
+        let bytes = fontc::generate_font(Box::new(source), fontc::Options::default())
+            .map_err(|error| compile_error(&error))?;
+        strip_compiler_version(&bytes)
     }
 
     fn export_ttf(&self, font: &impl FontView, output_path: &Path) -> Result<(), ExportError> {
@@ -160,8 +162,7 @@ impl FontExporter {
         &self,
         font: &impl FontView,
     ) -> Result<Vec<PropagatedGlyphAnchors>, ExportError> {
-        ShiftIrSource::from_font_view(font)
-            .map_err(map_source_error)?
+        ShiftIrSource::from_font_view(font)?
             .propagated_anchors()
             .map_err(|error| compile_error(&error))
     }
@@ -175,12 +176,6 @@ impl Default for FontExporter {
 
 /// Marker fontc appends to every version string (name ID 5) it compiles.
 const FONTC_VERSION_MARKER: &str = ";fontc ";
-
-fn compile_ttf(source: ShiftIrSource) -> Result<Vec<u8>, ExportError> {
-    let bytes = fontc::generate_font(Box::new(source), fontc::Options::default())
-        .map_err(|error| compile_error(&error))?;
-    strip_compiler_version(&bytes)
-}
 
 /// Removes the `;fontc <version>` suffix fontc stamps onto version strings, so
 /// an exported font reports exactly the version its author entered.
@@ -229,14 +224,16 @@ fn compile_error(error: &impl std::fmt::Display) -> ExportError {
     }
 }
 
-fn map_source_error(error: ShiftIrSourceError) -> ExportError {
-    match error {
-        ShiftIrSourceError::UnsupportedCrossAxisMappings { mapping_count } => {
-            ExportError::UnsupportedCrossAxisMappings { mapping_count }
+impl From<ShiftIrSourceError> for ExportError {
+    fn from(error: ShiftIrSourceError) -> Self {
+        match error {
+            ShiftIrSourceError::UnsupportedCrossAxisMappings { mapping_count } => {
+                Self::UnsupportedCrossAxisMappings { mapping_count }
+            }
+            error => Self::InvalidSource {
+                message: error.to_string(),
+            },
         }
-        error => ExportError::InvalidSource {
-            message: error.to_string(),
-        },
     }
 }
 

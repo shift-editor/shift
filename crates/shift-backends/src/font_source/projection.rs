@@ -23,6 +23,152 @@ pub(crate) struct ProjectionLayer {
     pub(crate) metrics: GlyphMetrics,
 }
 
+impl ProjectionLayer {
+    /// The self's structure, with its advance, point, anchor and component
+    /// values in that order.
+    pub(crate) fn shape(&self) -> GlyphShape {
+        let mut values = Vec::new();
+        values.push(self.metrics.x_advance);
+        for contour in &self.geometry.contours {
+            for point in &contour.points {
+                values.push(point.x);
+                values.push(point.y);
+            }
+        }
+        for anchor in &self.geometry.anchors {
+            values.push(anchor.x);
+            values.push(anchor.y);
+        }
+        for component in &self.geometry.components {
+            values.extend(component.transform.to_values());
+        }
+        GlyphShape {
+            contours: self
+                .geometry
+                .contours
+                .iter()
+                .map(|contour| GlyphShapeContour {
+                    points: contour
+                        .points
+                        .iter()
+                        .map(|point| GlyphShapePoint {
+                            kind: point.kind,
+                            smooth: point.smooth,
+                            provenance: point.provenance,
+                        })
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                    closed: contour.closed,
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            anchors: self
+                .geometry
+                .anchors
+                .iter()
+                .map(|anchor| anchor.name.clone())
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            components: self
+                .geometry
+                .components
+                .iter()
+                .map(|component| GlyphComponent {
+                    glyph: component.glyph,
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            values: values.into_boxed_slice(),
+        }
+    }
+
+    /// The layer's values in [`Self::shape`] order.
+    fn values(&self) -> Vec<f64> {
+        self.shape().values.into_vec()
+    }
+
+    /// Whether `candidate` has this layer's contours, point kinds, components
+    /// and anchors, so their values line up.
+    fn compatible_with(&self, candidate: &Self) -> bool {
+        self.geometry.contours.len() == candidate.geometry.contours.len()
+            && self
+                .geometry
+                .contours
+                .iter()
+                .zip(&candidate.geometry.contours)
+                .all(|(left, right)| {
+                    left.closed == right.closed
+                        && left.points.len() == right.points.len()
+                        && left
+                            .points
+                            .iter()
+                            .zip(&right.points)
+                            .all(|(left, right)| left.kind == right.kind)
+                })
+            && self.geometry.components.len() == candidate.geometry.components.len()
+            && self
+                .geometry
+                .components
+                .iter()
+                .zip(&candidate.geometry.components)
+                .all(|(left, right)| left.glyph == right.glyph)
+            && self.geometry.anchors.len() == candidate.geometry.anchors.len()
+            && self
+                .geometry
+                .anchors
+                .iter()
+                .zip(&candidate.geometry.anchors)
+                .all(|(left, right)| left.name == right.name)
+    }
+}
+
+impl GlyphShape {
+    /// This shape's structure holding `values`.
+    fn with_values(&self, values: Vec<f64>) -> Self {
+        Self {
+            contours: self.contours.clone(),
+            anchors: self.anchors.clone(),
+            components: self.components.clone(),
+            values: values.into_boxed_slice(),
+        }
+    }
+}
+
+impl GlyphProjection {
+    /// How many sources the self's exact shapes and `default_source` index.
+    fn source_count(&self, default_source: SourceIndex) -> usize {
+        self.exact_shapes
+            .iter()
+            .map(|shape| shape.source.to_usize() + 1)
+            .chain(std::iter::once(default_source.to_usize() + 1))
+            .max()
+            .unwrap_or(1)
+    }
+}
+
+impl InterpolationAxis {
+    /// `value` on this axis, normalized to -1..=1 around its default.
+    fn normalize(&self, value: f64) -> f64 {
+        if value == self.default {
+            return 0.0;
+        }
+        if value < self.default {
+            let range = self.default - self.minimum;
+            return if range == 0.0 {
+                0.0
+            } else {
+                ((value - self.default) / range).max(-1.0)
+            };
+        }
+        let range = self.maximum - self.default;
+        if range == 0.0 {
+            0.0
+        } else {
+            ((value - self.default) / range).min(1.0)
+        }
+    }
+}
+
 pub(crate) fn empty_projection_layer(glyph: GlyphIndex) -> ProjectionLayer {
     ProjectionLayer {
         geometry: SourceGeometry {
@@ -324,17 +470,17 @@ pub(crate) fn project_layers(
     let mut compatible = Vec::new();
     let mut exact_shapes = Vec::new();
     for (source, location, layer) in layers {
-        if layer_compatible(&reference, &layer) {
+        if reference.compatible_with(&layer) {
             compatible.push((source, location, layer));
         } else {
             exact_shapes.push(GlyphSourceShape {
                 source,
-                shape: shape_from_layer(&layer),
+                shape: layer.shape(),
             });
         }
     }
 
-    let reference_shape = shape_from_layer(&reference);
+    let reference_shape = reference.shape();
     let (fallback, variation) = variation_from_layers(&reference_shape, &compatible, axes)
         .unwrap_or((reference_shape, None));
     let projection = GlyphProjection {
@@ -343,18 +489,8 @@ pub(crate) fn project_layers(
         variation,
         exact_shapes: exact_shapes.into_boxed_slice(),
     };
-    projection.validate(axes.len(), source_count(&projection, default_source))?;
+    projection.validate(axes.len(), projection.source_count(default_source))?;
     Ok(projection)
-}
-
-fn source_count(projection: &GlyphProjection, default_source: SourceIndex) -> usize {
-    projection
-        .exact_shapes
-        .iter()
-        .map(|shape| shape.source.to_usize() + 1)
-        .chain(std::iter::once(default_source.to_usize() + 1))
-        .max()
-        .unwrap_or(1)
 }
 
 fn variation_from_layers(
@@ -366,10 +502,7 @@ fn variation_from_layers(
         return None;
     }
     if layers.len() == 1 || axes.is_empty() {
-        return Some((
-            shape_with_values(reference, values_from_layer(&layers[0].2)),
-            None,
-        ));
+        return Some((reference.with_values(layers[0].2.values()), None));
     }
     if layers
         .iter()
@@ -388,10 +521,7 @@ fn variation_from_layers(
         .map(|(_, location, _)| normalized_location(location, axes, &tags))
         .collect::<Vec<_>>();
     for ((_, _, layer), location) in layers.iter().zip(&normalized_sources) {
-        if samples
-            .insert(location.clone(), values_from_layer(layer))
-            .is_some()
-        {
+        if samples.insert(location.clone(), layer.values()).is_some() {
             return None;
         }
     }
@@ -403,7 +533,7 @@ fn variation_from_layers(
         let value_count = reference.values.len();
         let mut values = vec![0.0; value_count];
         for ((_, _, layer), coefficient) in layers.iter().zip(coefficients) {
-            for (value, source) in values.iter_mut().zip(values_from_layer(layer)) {
+            for (value, source) in values.iter_mut().zip(layer.values()) {
                 *value += coefficient * source;
             }
         }
@@ -421,7 +551,7 @@ fn variation_from_layers(
         .iter()
         .position(|(region, _)| region.is_default())?;
     let (_, base_values) = model_deltas.remove(base_index);
-    let fallback = shape_with_values(reference, base_values);
+    let fallback = reference.with_values(base_values);
     let deltas = model_deltas
         .into_iter()
         .filter(|(_, values)| values.iter().any(|value| *value != 0.0))
@@ -452,107 +582,6 @@ fn variation_from_layers(
     Some((fallback, variation))
 }
 
-pub(crate) fn shape_from_layer(layer: &ProjectionLayer) -> GlyphShape {
-    let mut values = Vec::new();
-    values.push(layer.metrics.x_advance);
-    for contour in &layer.geometry.contours {
-        for point in &contour.points {
-            values.push(point.x);
-            values.push(point.y);
-        }
-    }
-    for anchor in &layer.geometry.anchors {
-        values.push(anchor.x);
-        values.push(anchor.y);
-    }
-    for component in &layer.geometry.components {
-        values.extend(component.transform.to_values());
-    }
-    GlyphShape {
-        contours: layer
-            .geometry
-            .contours
-            .iter()
-            .map(|contour| GlyphShapeContour {
-                points: contour
-                    .points
-                    .iter()
-                    .map(|point| GlyphShapePoint {
-                        kind: point.kind,
-                        smooth: point.smooth,
-                        provenance: point.provenance,
-                    })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-                closed: contour.closed,
-            })
-            .collect::<Vec<_>>()
-            .into_boxed_slice(),
-        anchors: layer
-            .geometry
-            .anchors
-            .iter()
-            .map(|anchor| anchor.name.clone())
-            .collect::<Vec<_>>()
-            .into_boxed_slice(),
-        components: layer
-            .geometry
-            .components
-            .iter()
-            .map(|component| GlyphComponent {
-                glyph: component.glyph,
-            })
-            .collect::<Vec<_>>()
-            .into_boxed_slice(),
-        values: values.into_boxed_slice(),
-    }
-}
-
-fn values_from_layer(layer: &ProjectionLayer) -> Vec<f64> {
-    shape_from_layer(layer).values.into_vec()
-}
-
-fn shape_with_values(reference: &GlyphShape, values: Vec<f64>) -> GlyphShape {
-    GlyphShape {
-        contours: reference.contours.clone(),
-        anchors: reference.anchors.clone(),
-        components: reference.components.clone(),
-        values: values.into_boxed_slice(),
-    }
-}
-
-fn layer_compatible(reference: &ProjectionLayer, candidate: &ProjectionLayer) -> bool {
-    reference.geometry.contours.len() == candidate.geometry.contours.len()
-        && reference
-            .geometry
-            .contours
-            .iter()
-            .zip(&candidate.geometry.contours)
-            .all(|(left, right)| {
-                left.closed == right.closed
-                    && left.points.len() == right.points.len()
-                    && left
-                        .points
-                        .iter()
-                        .zip(&right.points)
-                        .all(|(left, right)| left.kind == right.kind)
-            })
-        && reference.geometry.components.len() == candidate.geometry.components.len()
-        && reference
-            .geometry
-            .components
-            .iter()
-            .zip(&candidate.geometry.components)
-            .all(|(left, right)| left.glyph == right.glyph)
-        && reference.geometry.anchors.len() == candidate.geometry.anchors.len()
-        && reference
-            .geometry
-            .anchors
-            .iter()
-            .zip(&candidate.geometry.anchors)
-            .all(|(left, right)| left.name == right.name)
-}
-
 fn normalized_location(
     location: &[f64],
     axes: &[InterpolationAxis],
@@ -561,28 +590,8 @@ fn normalized_location(
     axes.iter()
         .zip(location)
         .zip(tags)
-        .map(|((axis, value), tag)| (*tag, NormalizedCoord::new(normalize(axis, *value))))
+        .map(|((axis, value), tag)| (*tag, NormalizedCoord::new(axis.normalize(*value))))
         .collect()
-}
-
-fn normalize(axis: &InterpolationAxis, value: f64) -> f64 {
-    if value == axis.default {
-        return 0.0;
-    }
-    if value < axis.default {
-        let range = axis.default - axis.minimum;
-        return if range == 0.0 {
-            0.0
-        } else {
-            ((value - axis.default) / range).max(-1.0)
-        };
-    }
-    let range = axis.maximum - axis.default;
-    if range == 0.0 {
-        0.0
-    } else {
-        ((value - axis.default) / range).min(1.0)
-    }
 }
 
 fn virtual_default_coefficients(sources: &[NormalizedLocation]) -> Option<Vec<f64>> {
