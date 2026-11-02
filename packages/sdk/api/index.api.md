@@ -203,7 +203,7 @@ export class Designspace {
     toDesign(location: ExternalAxisLocation): DesignAxisLocation;
     toExternal(location: DesignAxisLocation): ExternalAxisLocation;
     track(): void;
-    variationAdjustments(basis: VariationBasis, location: DesignAxisLocation): Float64Array | null;
+    variationAdjustments(basis: VariationBasis, location: DesignAxisLocation): Float64Array;
 }
 
 // @beta
@@ -1142,6 +1142,13 @@ export function localPoint(x: number, y: number): LocalPoint;
 export interface LocationResolveInput extends ShiftTarget {
     // (undocumented)
     location: AxisCoordinate[];
+}
+
+// @public
+export interface MemoryEditorOptions {
+    // (undocumented)
+    readonly clipboard: SystemClipboard;
+    readonly tools?: readonly MemoryToolName[];
 }
 
 // @public

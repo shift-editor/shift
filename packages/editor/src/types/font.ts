@@ -326,10 +326,11 @@ export interface EngineVariation {
    */
   variationNumber(basis: VariationBasis): number;
   /**
-   * The values of the compiled basis interned as `variation` at a design
-   * location; null for a number the session never gave.
+   * The values of the compiled basis interned as `variation` at a design location.
+   *
+   * @throws For a number the session never gave, or a basis it cannot evaluate.
    */
-  variationAt(variation: number, location: readonly number[]): readonly number[] | null;
+  variationAt(variation: number, location: readonly number[]): readonly number[];
 }
 
 /**

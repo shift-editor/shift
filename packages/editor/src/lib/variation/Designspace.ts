@@ -162,9 +162,10 @@ export class Designspace {
    * A compiled variation basis's values at a design location, as a compiled
    * font's glyph carries its deltas.
    *
-   * @returns null when the basis's regions name an axis the font lacks.
+   * @throws When the font's engine is not open, or the basis's regions name
+   * an axis the font lacks.
    */
-  variationAdjustments(basis: VariationBasis, location: DesignAxisLocation): Float64Array | null {
+  variationAdjustments(basis: VariationBasis, location: DesignAxisLocation): Float64Array {
     track(this.#axesCell);
     return this.#variation().variationAdjustments(basis, location);
   }
