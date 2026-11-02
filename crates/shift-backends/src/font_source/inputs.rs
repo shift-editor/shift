@@ -1,3 +1,4 @@
+use shift_font::Transform;
 use shift_slug::length::OrOverflow;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -13,8 +14,8 @@ use super::atlas::{
 };
 use super::interpolation::piecewise_map;
 use super::{
-    AffineTransform, FontDirectory, FontReadError, FontSource, GlyphIndex, GlyphPointKind,
-    GlyphProjection, GlyphShape, SourceIndex, VariationAxisKind, VariationRegion,
+    FontDirectory, FontReadError, FontSource, GlyphIndex, GlyphPointKind, GlyphProjection,
+    GlyphShape, SourceIndex, VariationAxisKind, VariationRegion,
 };
 
 #[derive(Clone, Copy)]
@@ -317,7 +318,7 @@ fn flatten_projection(
         delta_weights,
         regions,
         evaluation,
-        AffineTransform::identity(),
+        Transform::identity(),
         &mut HashSet::new(),
         &mut segments,
     )?;
@@ -332,7 +333,7 @@ fn flatten_shape(
     delta_weights: &BTreeMap<(GlyphIndex, usize), u32>,
     regions: &[AtlasRegion],
     evaluation: ProjectionEvaluation<'_>,
-    transform: AffineTransform,
+    transform: Transform,
     visiting: &mut HashSet<GlyphIndex>,
     segments: &mut Vec<ProjectedSegment>,
 ) -> Result<(), SourceAtlasError> {
@@ -354,7 +355,8 @@ fn flatten_shape(
             .iter()
             .zip(coordinates.chunks_exact(2))
             .map(|(point, values)| {
-                let (x, y) = transform.transform_point(values[0], values[1]);
+                let kurbo::Point { x, y } =
+                    transform.transform_point(kurbo::Point::new(values[0], values[1]));
                 (point.kind, ProjectedPoint { x, y })
             })
             .collect::<Vec<_>>();
@@ -366,7 +368,7 @@ fn flatten_shape(
         let local = values
             .get(cursor..cursor + 6)
             .and_then(|transform_values| transform_values.try_into().ok())
-            .map(AffineTransform::from_values)
+            .map(Transform::from_values)
             .ok_or_else(|| invalid("source atlas component transform is missing"))?;
         let child = projections
             .get(&component.glyph)

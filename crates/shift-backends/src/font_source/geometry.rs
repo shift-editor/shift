@@ -1,7 +1,7 @@
 use crate::font_source::{
-    AffineTransform, FontReadError, GlyphAnchor, GlyphIndex, GlyphPoint, GlyphPointKind,
-    PointProvenance,
+    FontReadError, GlyphAnchor, GlyphIndex, GlyphPoint, GlyphPointKind, PointProvenance,
 };
+use shift_font::Transform;
 
 /// Maximum tangent-angle difference used to infer smooth binary outline points.
 pub(crate) const SMOOTH_ANGLE_TOLERANCE: f64 = 0.05;
@@ -24,7 +24,7 @@ pub(crate) struct SourceContour {
 #[derive(Clone, Debug)]
 pub(crate) struct SourceComponent {
     pub(crate) glyph: GlyphIndex,
-    pub(crate) transform: AffineTransform,
+    pub(crate) transform: Transform,
 }
 
 #[derive(Clone, Debug)]

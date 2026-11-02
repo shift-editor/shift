@@ -1590,6 +1590,7 @@ dependencies = [
  "base64 0.22.1",
  "close_already",
  "indexmap",
+ "kurbo",
  "log",
  "plist",
  "quick-xml 0.38.4",

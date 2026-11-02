@@ -13,7 +13,7 @@ shift-font = { workspace = true }
 shift-slug = { workspace = true }
 shift-text = { workspace = true, features = ["shaper-font"] }
 
-norad = "0.18.4"
+norad = { version = "0.18.4", features = ["kurbo"] }
 skrifa = "0.32.0"
 fontc = "1.0"
 fontdrasil = "1.0"

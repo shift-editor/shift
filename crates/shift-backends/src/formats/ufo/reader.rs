@@ -1,6 +1,5 @@
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::feature_includes::inline_feature_includes;
-use crate::font_source::AffineTransform;
 use crate::import::collect_streamed_font;
 use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
@@ -87,7 +86,7 @@ impl UfoReader {
     fn convert_component(component: &norad::Component) -> PendingComponent {
         PendingComponent {
             base_glyph_name: component.base.to_string(),
-            matrix: Transform::from_values(AffineTransform::from(&component.transform).to_values()),
+            matrix: kurbo::Affine::from(component.transform).into(),
         }
     }
 
