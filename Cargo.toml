@@ -62,6 +62,7 @@ map_unwrap_or = "warn"
 redundant_else = "warn"
 if_not_else = "warn"
 explicit_into_iter_loop = "warn"
+manual_string_new = "warn"
 # `Arc::clone(&x)` shows a reference-count bump, not a deep copy.
 clone_on_ref_ptr = "warn"
 # The rustdoc skill requires `# Errors` on every public fallible function.
