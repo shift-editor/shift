@@ -34,66 +34,33 @@ struct NodePositionGroups {
     anchors: HashMap<AnchorId, NodePosition>,
 }
 
-struct BulkPositionUpdateReader {
-    groups: NodePositionGroups,
-}
+/// Pairs each of `ids` with the next `x, y` of `coords` into `positions`.
+/// Absent `ids` read nothing.
+///
+/// # Errors
+///
+/// Returns an invalid-input error naming `kind` when `ids` come without
+/// `coords`, or `coords` hold fewer or more values than two per id.
+fn read_positions<Id: Clone + Eq + std::hash::Hash>(
+    ids: Option<&[Id]>,
+    coords: Option<&[GlyphValue]>,
+    kind: &'static str,
+    positions: &mut HashMap<Id, NodePosition>,
+) -> CoreResult<()> {
+    let Some(ids) = ids else {
+        return Ok(());
+    };
 
-impl BulkPositionUpdateReader {
-    fn new() -> Self {
-        Self {
-            groups: NodePositionGroups::default(),
-        }
+    let coords =
+        coords.ok_or_else(|| invalid_position_update_input(kind, "missing coordinates"))?;
+    let mut coords = BulkPositionCoords::new(coords, ids.len(), kind)?;
+
+    for id in ids {
+        let (x, y) = coords.next()?;
+        positions.insert(id.clone(), NodePosition { x, y });
     }
 
-    fn read_points(
-        &mut self,
-        ids: Option<&[PointId]>,
-        coords: Option<&[GlyphValue]>,
-    ) -> CoreResult<()> {
-        let Some(ids) = ids else {
-            return Ok(());
-        };
-
-        let coords = coords.ok_or_else(|| {
-            invalid_position_update_input("point positions", "missing coordinates")
-        })?;
-        let mut coords = BulkPositionCoords::new(coords, ids.len(), "point positions")?;
-
-        for id in ids {
-            let (x, y) = coords.next()?;
-            self.groups.points.insert(id.clone(), NodePosition { x, y });
-        }
-
-        coords.finish()
-    }
-
-    fn read_anchors(
-        &mut self,
-        ids: Option<&[AnchorId]>,
-        coords: Option<&[GlyphValue]>,
-    ) -> CoreResult<()> {
-        let Some(ids) = ids else {
-            return Ok(());
-        };
-
-        let coords = coords.ok_or_else(|| {
-            invalid_position_update_input("anchor positions", "missing coordinates")
-        })?;
-        let mut coords = BulkPositionCoords::new(coords, ids.len(), "anchor positions")?;
-
-        for id in ids {
-            let (x, y) = coords.next()?;
-            self.groups
-                .anchors
-                .insert(id.clone(), NodePosition { x, y });
-        }
-
-        coords.finish()
-    }
-
-    fn finish(self) -> NodePositionGroups {
-        self.groups
-    }
+    coords.finish()
 }
 
 struct BulkPositionCoords<'a> {
@@ -306,10 +273,20 @@ impl GlyphLayer {
     fn bulk_node_position_updates(
         updates: BulkNodePositionUpdates<'_>,
     ) -> CoreResult<NodePositionGroups> {
-        let mut reader = BulkPositionUpdateReader::new();
-        reader.read_points(updates.point_ids, updates.point_coords)?;
-        reader.read_anchors(updates.anchor_ids, updates.anchor_coords)?;
-        Ok(reader.finish())
+        let mut groups = NodePositionGroups::default();
+        read_positions(
+            updates.point_ids,
+            updates.point_coords,
+            "point positions",
+            &mut groups.points,
+        )?;
+        read_positions(
+            updates.anchor_ids,
+            updates.anchor_coords,
+            "anchor positions",
+            &mut groups.anchors,
+        )?;
+        Ok(groups)
     }
 
     fn apply_node_position_groups(&mut self, groups: &NodePositionGroups) -> CoreResult<()> {
@@ -889,6 +866,43 @@ mod tests {
             Err(CoreError::PointInContourNotFound(id)) if id == missing_id
         ));
         assert_eq!(point_position(&session, &contour_id, &point_id), (0.0, 0.0));
+    }
+
+    #[test]
+    fn bulk_positions_name_the_kind_whose_ids_and_coordinates_do_not_pair() {
+        let mut session = create_session();
+        let anchor_id = add_anchor(&mut session, 0.0, 0.0);
+        let anchor_ids = [anchor_id.clone()];
+        let point_ids = [PointId::new()];
+
+        let missing = session.apply_bulk_node_positions(BulkNodePositionUpdates {
+            point_ids: None,
+            point_coords: None,
+            anchor_ids: Some(&anchor_ids),
+            anchor_coords: None,
+        });
+        let short = session.apply_bulk_node_positions(BulkNodePositionUpdates {
+            point_ids: Some(&point_ids),
+            point_coords: Some(&[1.0]),
+            anchor_ids: Some(&anchor_ids),
+            anchor_coords: Some(&[5.0, 5.0]),
+        });
+
+        assert!(matches!(
+            missing,
+            Err(CoreError::InvalidPositionUpdateInput {
+                kind: "anchor positions",
+                ..
+            })
+        ));
+        assert!(matches!(
+            short,
+            Err(CoreError::InvalidPositionUpdateInput {
+                kind: "point positions",
+                ..
+            })
+        ));
+        assert_eq!(anchor_position(&session, &anchor_id), (0.0, 0.0));
     }
 
     #[test]
