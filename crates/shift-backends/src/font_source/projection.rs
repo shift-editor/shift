@@ -146,29 +146,6 @@ impl GlyphProjection {
     }
 }
 
-impl InterpolationAxis {
-    /// `value` on this axis, normalized to -1..=1 around its default.
-    fn normalize(&self, value: f64) -> f64 {
-        if value == self.default {
-            return 0.0;
-        }
-        if value < self.default {
-            let range = self.default - self.minimum;
-            return if range == 0.0 {
-                0.0
-            } else {
-                ((value - self.default) / range).max(-1.0)
-            };
-        }
-        let range = self.maximum - self.default;
-        if range == 0.0 {
-            0.0
-        } else {
-            ((value - self.default) / range).min(1.0)
-        }
-    }
-}
-
 pub(crate) fn empty_projection_layer(glyph: GlyphIndex) -> ProjectionLayer {
     ProjectionLayer {
         geometry: SourceGeometry {
@@ -526,7 +503,10 @@ fn variation_from_layers(
         }
     }
 
-    let defaults = axes.iter().map(|axis| axis.default).collect::<Vec<_>>();
+    let defaults = axes
+        .iter()
+        .map(|axis| axis.range.default)
+        .collect::<Vec<_>>();
     let default_location = normalized_location(&defaults, axes, &tags);
     if let Entry::Vacant(entry) = samples.entry(default_location) {
         let coefficients = virtual_default_coefficients(&normalized_sources)?;
@@ -590,7 +570,13 @@ fn normalized_location(
     axes.iter()
         .zip(location)
         .zip(tags)
-        .map(|((axis, value), tag)| (*tag, NormalizedCoord::new(axis.normalize(*value))))
+        .map(|((axis, value), tag)| {
+            // Designspace bounds these axes by the axis range, not by its
+            // sources, so a source can sit outside it. Clamped, that source
+            // samples the range's edge; `DesignNormalization` does not clamp.
+            let normalized = axis.range.normalize(*value).clamp(-1.0, 1.0);
+            (*tag, NormalizedCoord::new(normalized))
+        })
         .collect()
 }
 
@@ -649,8 +635,8 @@ mod tests {
         GlyphIndex, GlyphPoint, GlyphPointKind, PointProvenance, SourceIndex, VariationLocation,
     };
     use shift_font::{
-        Axis, AxisId, AxisMapping, AxisMappingPoint, DesignLocation, ExternalLocation, MetricKind,
-        MetricValue, NamedInstance, Source,
+        Axis, AxisId, AxisMapping, AxisMappingPoint, AxisRange, DesignLocation, ExternalLocation,
+        MetricKind, MetricValue, NamedInstance, Source,
     };
 
     #[test]
@@ -923,6 +909,38 @@ mod tests {
     }
 
     #[test]
+    fn a_source_beyond_the_axis_range_samples_the_range_edge() {
+        let glyph = GlyphIndex::new(0);
+        let projection = project_layers(
+            vec![
+                (
+                    SourceIndex::new(0),
+                    vec![0.0],
+                    layer(glyph, Vec::new(), 500.0),
+                ),
+                (
+                    SourceIndex::new(1),
+                    vec![2.0],
+                    layer(glyph, Vec::new(), 700.0),
+                ),
+            ],
+            &[axis()],
+            SourceIndex::new(0),
+        )
+        .unwrap();
+
+        let variation = projection.variation.unwrap();
+        let [delta] = variation.deltas.as_ref() else {
+            panic!("one source off the default gives one delta");
+        };
+        let [support] = delta.region.supports.as_ref() else {
+            panic!("the delta varies along the one axis");
+        };
+        assert_eq!(support.peak, 1.0);
+        assert_eq!(delta.values.as_ref(), &[200.0]);
+    }
+
+    #[test]
     fn inconsistent_glyph_identity_fails_without_a_projection() {
         let result = project_layers(
             vec![
@@ -978,9 +996,11 @@ mod tests {
     fn axis() -> InterpolationAxis {
         InterpolationAxis {
             tag: "wght".into(),
-            minimum: 0.0,
-            default: 0.0,
-            maximum: 1.0,
+            range: AxisRange {
+                minimum: 0.0,
+                default: 0.0,
+                maximum: 1.0,
+            },
         }
     }
 

@@ -11,9 +11,9 @@
 
 use pack::Pack;
 use shift_font::{
-    Axis, AxisId, AxisMappingBasis, AxisMappingId, AxisRole, AxisSupport, DesignLocation,
-    DesignNormalization, ExternalLocation, InterpolationBasis, InterpolationRegion, Location,
-    SourceId, VariationBasis, VariationDelta, ir::variation::map_location_with_bases,
+    Axis, AxisId, AxisMappingBasis, AxisMappingId, AxisRange, AxisRole, AxisSupport,
+    DesignLocation, DesignNormalization, ExternalLocation, InterpolationBasis, InterpolationRegion,
+    Location, SourceId, VariationBasis, VariationDelta, ir::variation::map_location_with_bases,
     ir::variation::unmap_location_with_bases,
 };
 use wasm_bindgen::prelude::*;
@@ -295,9 +295,11 @@ impl From<InterpolationBasisData> for InterpolationBasis {
                 .into_iter()
                 .map(|normalization| DesignNormalization {
                     axis_id: normalization.axis_id,
-                    minimum: normalization.minimum,
-                    default: normalization.default,
-                    maximum: normalization.maximum,
+                    range: AxisRange {
+                        minimum: normalization.minimum,
+                        default: normalization.default,
+                        maximum: normalization.maximum,
+                    },
                 })
                 .collect(),
         )

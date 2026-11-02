@@ -539,6 +539,15 @@ fn segments_to_outline(segments: &[ProjectedSegment], subdivisions: &[usize]) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+    use shift_font::AxisRange;
+
+    fn range(minimum: f64, default: f64, maximum: f64) -> AxisRange {
+        AxisRange {
+            minimum,
+            default,
+            maximum,
+        }
+    }
 
     fn line_outline(end: Point) -> QuadraticOutline {
         QuadraticOutline::from_iter([(
@@ -553,7 +562,11 @@ mod tests {
             VariableAtlas::default(),
             Vec::new(),
             Vec::new(),
-            vec![AtlasAxis::new(Vec::new(), -1.0, 0.0, 1.0, Vec::new())],
+            vec![AtlasAxis::new(
+                Vec::new(),
+                range(-1.0, 0.0, 1.0),
+                Vec::new(),
+            )],
             vec![
                 AtlasRegion::new(vec![RegionAxis {
                     start: 0,
@@ -586,9 +599,7 @@ mod tests {
             Vec::new(),
             vec![AtlasAxis::new(
                 vec![(100.0, 100.0), (400.0, 400.0), (900.0, 800.0)],
-                100.0,
-                400.0,
-                800.0,
+                range(100.0, 400.0, 800.0),
                 Vec::new(),
             )],
             vec![AtlasRegion::new(vec![RegionAxis {
@@ -624,7 +635,7 @@ mod tests {
                     }],
                 },
             )],
-            axes: vec![AtlasAxis::new(Vec::new(), 0.0, 0.0, 1.0, Vec::new())],
+            axes: vec![AtlasAxis::new(Vec::new(), range(0.0, 0.0, 1.0), Vec::new())],
             regions: vec![AtlasRegion::new(vec![RegionAxis {
                 start: 0,
                 peak: 16384,

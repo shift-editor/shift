@@ -424,9 +424,9 @@ impl From<&shift_font::DesignNormalization> for DesignNormalization {
     fn from(normalization: &shift_font::DesignNormalization) -> Self {
         Self {
             axis_id: normalization.axis_id,
-            minimum: normalization.minimum,
-            default: normalization.default,
-            maximum: normalization.maximum,
+            minimum: normalization.range.minimum,
+            default: normalization.range.default,
+            maximum: normalization.range.maximum,
         }
     }
 }
