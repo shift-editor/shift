@@ -126,17 +126,7 @@ impl AxisKind {
     /// Maps a normalized `value` back to user space: the inverse of
     /// [`Self::normalize`] on a side with extent.
     pub fn denormalize(&self, value: f64) -> f64 {
-        let minimum = self.minimum();
-        let default = self.default();
-        let maximum = self.maximum();
-
-        if value < 0.0 {
-            default + value * (default - minimum)
-        } else if value > 0.0 {
-            default + value * (maximum - default)
-        } else {
-            default
-        }
+        self.range().denormalize(value)
     }
 }
 
