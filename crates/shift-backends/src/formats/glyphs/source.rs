@@ -21,6 +21,7 @@ use crate::font_source::{
     GlyphPointKind, PointProvenance, ProjectedGlyph, SourceIndex, malformed,
 };
 use crate::{BackendError, BackendResult, FontFormat, FontImport};
+use shift_font::AxisRange;
 
 /// One retained parsed Glyphs or Glyphspackage source.
 pub struct GlyphsFont {
@@ -53,9 +54,11 @@ impl GlyphsFont {
                 let design_default = source.default_design_value(index, &design_values);
                 InterpolationAxis {
                     tag: axis.tag.clone(),
-                    minimum: design_values.iter().copied().fold(design_default, f64::min),
-                    default: design_default,
-                    maximum: design_values.iter().copied().fold(design_default, f64::max),
+                    range: AxisRange {
+                        minimum: design_values.iter().copied().fold(design_default, f64::min),
+                        default: design_default,
+                        maximum: design_values.iter().copied().fold(design_default, f64::max),
+                    },
                 }
             })
             .collect::<Vec<_>>();
@@ -90,7 +93,7 @@ impl GlyphsFont {
                 master
                     .location_values(source.axes.len())
                     .enumerate()
-                    .map(|(index, value)| value.unwrap_or(interpolation_axes[index].default))
+                    .map(|(index, value)| value.unwrap_or(interpolation_axes[index].range.default))
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();

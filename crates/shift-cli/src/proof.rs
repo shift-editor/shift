@@ -145,7 +145,7 @@ fn master_locations(font: &Font) -> Result<Vec<ProofLocation>> {
                     let design = source
                         .location()
                         .get(&axis.id())
-                        .unwrap_or(axis_normalization.default);
+                        .unwrap_or(axis_normalization.range.default);
                     #[expect(
                         clippy::cast_possible_truncation,
                         reason = "a normalized coordinate lies in -1..=1, where f32 is exact enough"
