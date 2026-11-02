@@ -30,13 +30,18 @@ function message({
 test("a hit the lib and its unit-test build both report is one src hit", () => {
   const hit = message({ code: "clippy::expect_used" });
   const counts = countHits([hit, hit], LINTS, NAMES);
-  assert.deepEqual(counts, { expect_used: { "shift-font": { src: 1, tests: 0 } } });
+  assert.deepEqual(counts.expect_used["shift-font"], {
+    src: 1,
+    tests: 0,
+    places: { src: ["crates/shift-font/src/lib.rs:1"], tests: [] },
+  });
 });
 
 test("a hit only the unit-test build reports is test code", () => {
   const inCfgTest = message({ code: "clippy::expect_used" });
   const counts = countHits([inCfgTest], LINTS, NAMES);
-  assert.deepEqual(counts, { expect_used: { "shift-font": { src: 0, tests: 1 } } });
+  const { src, tests } = counts.expect_used["shift-font"];
+  assert.deepEqual({ src, tests }, { src: 0, tests: 1 });
 });
 
 test("hits in integration tests and examples are test code", () => {
@@ -51,14 +56,18 @@ test("hits in integration tests and examples are test code", () => {
     kind: "example",
   });
   const counts = countHits([inTest, inTest, inExample], LINTS, NAMES);
-  assert.deepEqual(counts, { expect_used: { "shift-font": { src: 0, tests: 2 } } });
+  const { src, tests } = counts.expect_used["shift-font"];
+  assert.deepEqual({ src, tests }, { src: 0, tests: 2 });
 });
 
 test("a count above the baseline rose, below it fell, and none left clears the lint", () => {
   const baseline = { expect_used: { "shift-font": { src: 2, tests: 1 } } };
 
   const higher = compare(baseline, { expect_used: { "shift-font": { src: 3, tests: 1 } } });
-  assert.deepEqual(higher.rose, ["clippy::expect_used in shift-font (src): 2 -> 3"]);
+  assert.deepEqual(
+    higher.rose.map((change) => change.line),
+    ["clippy::expect_used in shift-font (src): 2 -> 3"],
+  );
   assert.deepEqual(higher.fell, []);
 
   const cleared = compare(baseline, {});
@@ -71,7 +80,10 @@ test("a hit in a crate the baseline doesn't list rose from zero", () => {
     { expect_used: {} },
     { expect_used: { "shift-font": { src: 0, tests: 1 } } },
   );
-  assert.deepEqual(rose, ["clippy::expect_used in shift-font (tests): 0 -> 1"]);
+  assert.deepEqual(
+    rose.map((change) => change.line),
+    ["clippy::expect_used in shift-font (tests): 0 -> 1"],
+  );
 });
 
 test("the gate fails on errors and other warnings but not on ratcheted lints", () => {
