@@ -195,17 +195,33 @@ where
     where
         D: Deserializer<'de>,
     {
-        let entities = Vec::<T>::deserialize(deserializer)?;
-        let mut list = Self::new();
-
-        for entity in entities {
-            if list.insert(entity).is_some() {
-                return Err(D::Error::custom("duplicate entity identity"));
-            }
-        }
-
-        Ok(list)
+        deserialize_unique(deserializer, Self::insert)
     }
+}
+
+/// Reads a sequence of entities into a list through `insert`, which returns
+/// the entity a new one replaced.
+///
+/// # Errors
+///
+/// Returns the deserializer's error, or a custom one when two entities share
+/// an identity.
+fn deserialize_unique<'de, D, T, L>(
+    deserializer: D,
+    mut insert: impl FnMut(&mut L, T) -> Option<T>,
+) -> Result<L, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+    L: Default,
+{
+    let mut list = L::default();
+    for entity in Vec::<T>::deserialize(deserializer)? {
+        if insert(&mut list, entity).is_some() {
+            return Err(D::Error::custom("duplicate entity identity"));
+        }
+    }
+    Ok(list)
 }
 
 impl<T> FromIterator<T> for EntityList<T>
@@ -379,16 +395,7 @@ where
     where
         D: Deserializer<'de>,
     {
-        let entities = Vec::<T>::deserialize(deserializer)?;
-        let mut list = Self::new();
-
-        for entity in entities {
-            if list.insert(entity).is_some() {
-                return Err(D::Error::custom("duplicate entity identity"));
-            }
-        }
-
-        Ok(list)
+        deserialize_unique(deserializer, Self::insert)
     }
 }
 
@@ -512,6 +519,21 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<PersistentEntityList<Item>>(&json).unwrap(),
             list
+        );
+    }
+
+    #[test]
+    fn both_lists_reject_a_repeated_identity_when_read() {
+        let json = r#"[{"id":1,"value":"a"},{"id":1,"value":"b"}]"#;
+
+        assert!(serde_json::from_str::<EntityList<Item>>(json).is_err());
+        assert!(serde_json::from_str::<PersistentEntityList<Item>>(json).is_err());
+        assert_eq!(
+            serde_json::from_str::<EntityList<Item>>(
+                r#"[{"id":2,"value":"b"},{"id":1,"value":"a"}]"#
+            )
+            .unwrap(),
+            [item(2, "b"), item(1, "a")].into_iter().collect()
         );
     }
 }
