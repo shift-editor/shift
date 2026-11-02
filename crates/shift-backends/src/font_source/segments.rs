@@ -428,4 +428,153 @@ mod tests {
         );
         assert_eq!(walk.next(), None);
     }
+
+    mod properties {
+        use super::*;
+        use GlyphPointKind::{CubicControl as C, OnCurve as On, QuadraticControl as Q};
+        use proptest::prelude::*;
+
+        /// One segment's kind: a line, a quadratic with this many controls (more
+        /// than one implies on-curve points between them), or a cubic.
+        #[derive(Clone, Copy, Debug)]
+        enum Shape {
+            Line,
+            Quadratic(usize),
+            Cubic,
+        }
+
+        fn shape() -> impl Strategy<Value = Shape> {
+            prop_oneof![
+                Just(Shape::Line),
+                (1..4usize).prop_map(Shape::Quadratic),
+                Just(Shape::Cubic),
+            ]
+        }
+
+        impl Shape {
+            /// The kinds of the points the segment adds after its start.
+            fn kinds(self) -> Vec<GlyphPointKind> {
+                let mut kinds = match self {
+                    Self::Line => Vec::new(),
+                    Self::Quadratic(controls) => vec![Q; controls],
+                    Self::Cubic => vec![C, C],
+                };
+                kinds.push(On);
+                kinds
+            }
+        }
+
+        /// A contour's point kinds as a font file stores them: starting on-curve,
+        /// then each segment's controls and end. A closed contour's last segment
+        /// ends at its first point, so that point is not repeated.
+        fn kinds(shapes: &[Shape], closed: bool) -> Vec<GlyphPointKind> {
+            let mut kinds = vec![On];
+            kinds.extend(shapes.iter().flat_map(|shape| shape.kinds()));
+            if closed {
+                kinds.pop();
+            }
+            kinds
+        }
+
+        fn tagged(kinds: &[GlyphPointKind]) -> Vec<Kinded> {
+            kinds
+                .iter()
+                .enumerate()
+                .map(|(index, kind)| Kinded(*kind, index as f64))
+                .collect()
+        }
+
+        proptest! {
+            /// A contour with only single quadratic controls needs no implied
+            /// points, so it walks as stored: every point after the first is one
+            /// segment's control or end exactly once, and a closed contour ends
+            /// back at its first point.
+            #[test]
+            fn a_valid_contour_walks_covering_each_point_once(
+                shapes in prop::collection::vec(
+                    prop_oneof![Just(Shape::Line), Just(Shape::Quadratic(1)), Just(Shape::Cubic)],
+                    1..8,
+                ),
+                closed in any::<bool>(),
+            ) {
+                let kinds = kinds(&shapes, closed);
+                prop_assume!(!kinds.is_empty());
+                let points: Vec<_> = kinds.iter().map(|kind| (*kind, ())).collect();
+
+                let segments: Vec<PointSegment> = ContourSegments::new(&points, closed)
+                    .expect("begins on-curve")
+                    .collect::<Result<_, _>>()
+                    .map_err(|error| TestCaseError::fail(format!("{kinds:?}: {error}")))?;
+
+                prop_assert_eq!(segments.len(), shapes.len());
+                let mut covered = vec![0usize; points.len()];
+                let mut previous_end = 0;
+                for segment in &segments {
+                    let (start, rest) = match *segment {
+                        PointSegment::Line { start, end } => (start, vec![end]),
+                        PointSegment::Quadratic { start, control, end } => (start, vec![control, end]),
+                        PointSegment::Cubic { start, first, second, end } => (start, vec![first, second, end]),
+                    };
+                    prop_assert_eq!(start, previous_end, "{:?} does not start where the last ended", segment);
+                    for index in rest {
+                        covered[index] += 1;
+                    }
+                    previous_end = segment.end();
+                }
+                if closed {
+                    prop_assert_eq!(previous_end, 0);
+                } else {
+                    covered[0] += 1;
+                }
+                prop_assert!(covered.iter().all(|count| *count == 1), "{kinds:?} covers {covered:?}");
+            }
+
+            /// Any contour a font file can hold, rotated to start anywhere,
+            /// normalizes to one that walks without error, with one implied point
+            /// between each pair of adjacent quadratic controls.
+            #[test]
+            fn a_normalized_contour_walks_without_error(
+                shapes in prop::collection::vec(shape(), 1..8),
+                closed in any::<bool>(),
+                rotation in 0..32usize,
+            ) {
+                let mut kinds = kinds(&shapes, closed);
+                prop_assume!(!kinds.is_empty());
+                if closed {
+                    let by = rotation % kinds.len();
+                    kinds.rotate_left(by);
+                }
+                let points = tagged(&kinds);
+
+                let normalized = normalize_points(&points, closed)
+                    .map_err(|error| TestCaseError::fail(format!("{kinds:?}: {error}")))?;
+                let implied: usize = shapes
+                    .iter()
+                    .map(|shape| match shape {
+                        Shape::Quadratic(controls) => controls - 1,
+                        Shape::Line | Shape::Cubic => 0,
+                    })
+                    .sum();
+                prop_assert_eq!(normalized.len(), points.len() + implied, "{:?} normalizes to {:?}", kinds, normalized);
+
+                let walked: Result<Vec<_>, _> = ContourSegments::new(&normalized, closed)
+                    .map_err(|error| TestCaseError::fail(format!("{kinds:?}: {error}")))?
+                    .collect();
+                prop_assert!(walked.is_ok(), "{:?} normalizes to {:?}, which walks to {:?}", kinds, normalized, walked);
+            }
+
+            /// A closed contour of quadratic controls alone, as TrueType allows,
+            /// normalizes to one walk of quadratic segments through every control.
+            #[test]
+            fn a_closed_contour_of_controls_alone_walks(controls in 1..8usize) {
+                let points = tagged(&vec![Q; controls]);
+                let normalized = normalize_points(&points, true).expect("normalizes");
+                let segments: Vec<_> = ContourSegments::new(&normalized, true)
+                    .expect("begins on-curve")
+                    .collect::<Result<_, _>>()
+                    .map_err(|error| TestCaseError::fail(format!("{normalized:?}: {error}")))?;
+                prop_assert_eq!(segments.len(), controls);
+            }
+        }
+    }
 }

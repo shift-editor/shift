@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 802c8b5d0483a96d7de534d12f80e95e0bdab73f5a9150327d9e85b433b25d51 # shrinks to matrix = Transform { xx: 0.0, xy: -0.9580946631354041, yx: 93.08186927680573, yy: 99.75813919459878, dx: 0.0, dy: 0.0 }, point = (0.0, -7308.370871279712)
