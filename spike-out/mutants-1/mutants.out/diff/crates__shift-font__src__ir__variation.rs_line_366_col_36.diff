@@ -1,0 +1,21 @@
+--- crates/shift-font/src/ir/variation.rs
++++ replace == with != in unmap_location_with_bases
+@@ -358,17 +358,17 @@
+ /// its externally controlled values; the derived internal axes stay the
+ /// forward mapping's.
+ pub fn unmap_location_with_bases(
+     design: &DesignLocation,
+     axes: &[Axis],
+     bases: &[AxisMappingBasis],
+ ) -> ExternalLocation {
+     axes.iter()
+-        .filter(|axis| axis.role() == AxisRole::External)
++        .filter(|axis| axis.role() != /* ~ changed by cargo-mutants ~ */ AxisRole::External)
+         .map(|axis| {
+             let target = design.value_on(axis);
+             let mapping = bases
+                 .iter()
+                 .find(|basis| basis.is_independent() && basis.output_axis_ids() == [axis.id()]);
+             let value = mapping.map_or(target, |basis| basis.unmap_independent(axis, axes, target));
+             (axis.id(), value)
+         })

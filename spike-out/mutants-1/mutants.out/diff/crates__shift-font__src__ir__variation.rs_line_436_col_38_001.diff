@@ -1,0 +1,21 @@
+--- crates/shift-font/src/ir/variation.rs
++++ replace + with * in AxisMappingBasis::inverse_candidates
+@@ -428,17 +428,17 @@
+             let (left, right) = (pair[0], pair[1]);
+             let left_mapped = self.map_one(axis, axes, left);
+             let mapped_range = self.map_one(axis, axes, right) - left_mapped;
+             if mapped_range.abs() < f64::EPSILON {
+                 continue;
+             }
+             let ratio = (target - left_mapped) / mapped_range;
+             if ratio > 0.0 && ratio < 1.0 {
+-                candidates.push(left + ratio * (right - left));
++                candidates.push(left * /* ~ changed by cargo-mutants ~ */ ratio * (right - left));
+             }
+         }
+         candidates.sort_by(f64::total_cmp);
+         candidates
+     }
+ }
+ 
+ impl AxisMapping {

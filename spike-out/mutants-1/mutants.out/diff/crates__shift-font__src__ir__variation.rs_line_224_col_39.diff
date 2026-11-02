@@ -1,0 +1,21 @@
+--- crates/shift-font/src/ir/variation.rs
++++ replace + with - in AxisMappingBasis::evaluate
+@@ -216,17 +216,17 @@
+     /// is missing from `axes`.
+     pub fn evaluate(&self, location: &Location, axes: &[Axis]) -> CoreResult<Location> {
+         let adjustments = self.basis.evaluate(location, axes, None)?;
+         let mut result = Location::new();
+ 
+         for (axis_id, adjustment) in self.output_axis_ids.iter().zip(adjustments) {
+             let axis = axes.axis(*axis_id).require(&axis_id)?;
+             let base = location.value_on(axis);
+-            result.set(*axis_id, base + adjustment);
++            result.set(*axis_id, base - /* ~ changed by cargo-mutants ~ */ adjustment);
+         }
+ 
+         Ok(result)
+     }
+ }
+ 
+ impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis {
+     type Error = CoreError;

@@ -1,0 +1,21 @@
+--- crates/shift-font/src/ir/variation.rs
++++ replace < with <= in AxisRange::normalize
+@@ -30,17 +30,17 @@
+     /// the maximum to `1`, linearly on each side.
+     ///
+     /// A side with no extent (the default at the minimum or maximum) maps to
+     /// `0`. A value within a relative `1e-9` of the default maps to exactly
+     /// `0`, and a result within `1e-9` of `-1`, `0` or `1` snaps to it.
+     /// Values outside the range are not clamped.
+     pub fn normalize(&self, value: f64) -> f64 {
+         let tolerance = 1e-9 * (1.0 + self.default.abs());
+-        let extent = if value < self.default {
++        let extent = if value <= /* ~ changed by cargo-mutants ~ */ self.default {
+             self.default - self.minimum
+         } else {
+             self.maximum - self.default
+         };
+         if extent.abs() < tolerance || (value - self.default).abs() < tolerance {
+             return 0.0;
+         }
+ 

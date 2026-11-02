@@ -1,0 +1,30 @@
+--- crates/shift-font/src/ir/variation.rs
++++ replace AxisMappingBasis::evaluate -> CoreResult<Location> with CoreResult::new()
+@@ -210,26 +210,17 @@
+ 
+     /// Maps a location through this basis, returning its output axes only.
+     ///
+     /// # Errors
+     ///
+     /// Returns [`crate::CoreError::AxisNotFound`] when an output or region axis
+     /// is missing from `axes`.
+     pub fn evaluate(&self, location: &Location, axes: &[Axis]) -> CoreResult<Location> {
+-        let adjustments = self.basis.evaluate(location, axes, None)?;
+-        let mut result = Location::new();
+-
+-        for (axis_id, adjustment) in self.output_axis_ids.iter().zip(adjustments) {
+-            let axis = axes.axis(*axis_id).require(&axis_id)?;
+-            let base = location.value_on(axis);
+-            result.set(*axis_id, base + adjustment);
+-        }
+-
+-        Ok(result)
++        CoreResult::new() /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis {
+     type Error = CoreError;
+ 
+     fn try_from((mapping, axes): (&AxisMapping, &[Axis])) -> CoreResult<Self> {
+         mapping.validate(axes)?;

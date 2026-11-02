@@ -1,0 +1,21 @@
+--- crates/shift-font/src/ir/variation.rs
++++ replace && with || in unmap_location_with_bases
+@@ -363,17 +363,17 @@
+     bases: &[AxisMappingBasis],
+ ) -> ExternalLocation {
+     axes.iter()
+         .filter(|axis| axis.role() == AxisRole::External)
+         .map(|axis| {
+             let target = design.value_on(axis);
+             let mapping = bases
+                 .iter()
+-                .find(|basis| basis.is_independent() && basis.output_axis_ids() == [axis.id()]);
++                .find(|basis| basis.is_independent() || /* ~ changed by cargo-mutants ~ */ basis.output_axis_ids() == [axis.id()]);
+             let value = mapping.map_or(target, |basis| basis.unmap_independent(axis, axes, target));
+             (axis.id(), value)
+         })
+         .collect()
+ }
+ 
+ impl AxisMappingBasis {
+     /// The value on `axis` that this independent mapping takes closest to `target`.

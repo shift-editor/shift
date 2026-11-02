@@ -1,0 +1,21 @@
+--- crates/shift-font/src/ir/variation.rs
++++ replace != with == in <impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis>::try_from
+@@ -249,17 +249,17 @@
+                 .iter()
+                 .map(|axis| {
+                     let base = point.input.value_on(axis);
+                     let output = point.output.get(axis.id()).unwrap_or(base);
+                     output - base
+                 })
+                 .collect();
+             if let Some(previous) = sample_values.get(&input) {
+-                if previous != &deltas {
++                if previous == /* ~ changed by cargo-mutants ~ */ &deltas {
+                     return Err(
+                         mapping.invalid("normalized mapping point inputs have conflicting outputs")
+                     );
+                 }
+                 continue;
+             }
+             sample_values.insert(input, deltas);
+         }

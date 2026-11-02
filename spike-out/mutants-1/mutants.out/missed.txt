@@ -6,3 +6,14 @@ crates/shift-font/src/ir/variation.rs:43:69: replace < with <= in AxisRange::nor
 crates/shift-font/src/ir/variation.rs:53:18: replace < with <= in AxisRange::denormalize
 crates/shift-font/src/ir/variation.rs:55:25: replace > with >= in AxisRange::denormalize
 crates/shift-font/src/ir/variation.rs:89:40: replace < with <= in snap
+crates/shift-font/src/ir/variation.rs:188:9: replace AxisMappingBasis::mapping_id -> AxisMappingId with Default::default()
+crates/shift-font/src/ir/variation.rs:193:9: replace AxisMappingBasis::input_axis_ids -> &[AxisId] with Vec::leak(Vec::new())
+crates/shift-font/src/ir/variation.rs:193:9: replace AxisMappingBasis::input_axis_ids -> &[AxisId] with Vec::leak(vec![Default::default()])
+crates/shift-font/src/ir/variation.rs:208:40: replace && with || in AxisMappingBasis::is_independent
+crates/shift-font/src/ir/variation.rs:371:54: replace && with || in unmap_location_with_bases
+crates/shift-font/src/ir/variation.rs:405:70: delete ! in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:431:35: replace < with == in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:431:35: replace < with <= in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:435:28: replace && with || in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:435:22: replace > with >= in AxisMappingBasis::inverse_candidates
+crates/shift-font/src/ir/variation.rs:435:37: replace < with <= in AxisMappingBasis::inverse_candidates

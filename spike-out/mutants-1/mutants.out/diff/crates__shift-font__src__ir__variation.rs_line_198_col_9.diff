@@ -1,0 +1,21 @@
+--- crates/shift-font/src/ir/variation.rs
++++ replace AxisMappingBasis::output_axis_ids -> &[AxisId] with Vec::leak(Vec::new())
+@@ -190,17 +190,17 @@
+ 
+     /// Returns the mapping's ordered input axes.
+     pub fn input_axis_ids(&self) -> &[AxisId] {
+         &self.input_axis_ids
+     }
+ 
+     /// Returns the mapping's ordered output axes.
+     pub fn output_axis_ids(&self) -> &[AxisId] {
+-        &self.output_axis_ids
++        Vec::leak(Vec::new()) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Returns the Fontdrasil-compiled numeric contribution basis.
+     pub fn basis(&self) -> &VariationBasis {
+         &self.basis
+     }
+ 
+     /// Whether the mapping maps one axis onto itself.

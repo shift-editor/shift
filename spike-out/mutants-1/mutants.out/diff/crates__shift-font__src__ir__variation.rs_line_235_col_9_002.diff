@@ -1,0 +1,74 @@
+--- crates/shift-font/src/ir/variation.rs
++++ replace <impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis>::try_from -> CoreResult<Self> with CoreResult::new(Default::default())
+@@ -227,70 +227,17 @@
+         Ok(result)
+     }
+ }
+ 
+ impl TryFrom<(&AxisMapping, &[Axis])> for AxisMappingBasis {
+     type Error = CoreError;
+ 
+     fn try_from((mapping, axes): (&AxisMapping, &[Axis])) -> CoreResult<Self> {
+-        mapping.validate(axes)?;
+-        let input_axes = mapping.resolve_axes(mapping.inputs(), axes)?;
+-        let output_axes = mapping.resolve_axes(mapping.outputs(), axes)?;
+-        let tagged_axes = input_axes
+-            .iter()
+-            .map(|axis| Ok((mapping.axis_tag(axis)?, axis.id())))
+-            .collect::<CoreResult<Vec<_>>>()?;
+-        let axis_order = tagged_axes.iter().map(|(tag, _)| *tag).collect::<Vec<_>>();
+-        let axis_ids_by_tag = tagged_axes.into_iter().collect::<HashMap<_, _>>();
+-        let mut sample_values: HashMap<NormalizedLocation, Vec<f64>> = HashMap::new();
+-
+-        for point in mapping.points() {
+-            let input = normalized_input(&point.input, &input_axes, &axis_order);
+-            let deltas = output_axes
+-                .iter()
+-                .map(|axis| {
+-                    let base = point.input.value_on(axis);
+-                    let output = point.output.get(axis.id()).unwrap_or(base);
+-                    output - base
+-                })
+-                .collect();
+-            if let Some(previous) = sample_values.get(&input) {
+-                if previous != &deltas {
+-                    return Err(
+-                        mapping.invalid("normalized mapping point inputs have conflicting outputs")
+-                    );
+-                }
+-                continue;
+-            }
+-            sample_values.insert(input, deltas);
+-        }
+-
+-        let default_input: NormalizedLocation = axis_order
+-            .iter()
+-            .map(|tag| (*tag, NormalizedCoord::new(0.0)))
+-            .collect();
+-        sample_values
+-            .entry(default_input)
+-            .or_insert_with(|| vec![0.0; output_axes.len()]);
+-
+-        let model = VariationModel::new(
+-            sample_values.keys().cloned().collect::<HashSet<_>>(),
+-            axis_order,
+-        );
+-        let deltas = model
+-            .deltas_with_rounding::<f64, f64>(&sample_values, RoundingBehaviour::None)
+-            .map_err(|error| mapping.invalid(error.to_string()))?;
+-
+-        Ok(Self {
+-            mapping_id: mapping.id(),
+-            input_axis_ids: mapping.inputs().to_vec(),
+-            output_axis_ids: mapping.outputs().to_vec(),
+-            basis: VariationBasis::from_fontdrasil(deltas, &axis_ids_by_tag),
+-        })
++        CoreResult::new(Default::default()) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ /// Maps `external` through `mappings` into a design-space location.
+ ///
+ /// # Errors
+ ///
+ /// Returns [`CoreError::InvalidAxisMapping`] when a mapping does not fit `axes`, and

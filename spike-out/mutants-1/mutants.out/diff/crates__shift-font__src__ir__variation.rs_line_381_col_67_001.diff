@@ -1,0 +1,21 @@
+--- crates/shift-font/src/ir/variation.rs
++++ replace - with / in AxisMappingBasis::unmap_independent
+@@ -373,17 +373,17 @@
+             (axis.id(), value)
+         })
+         .collect()
+ }
+ 
+ impl AxisMappingBasis {
+     /// The value on `axis` that this independent mapping takes closest to `target`.
+     fn unmap_independent(&self, axis: &Axis, axes: &[Axis], target: f64) -> f64 {
+-        let error = |value: f64| (self.map_one(axis, axes, value) - target).abs();
++        let error = |value: f64| (self.map_one(axis, axes, value) / /* ~ changed by cargo-mutants ~ */ target).abs();
+         self.inverse_candidates(axis, axes, target)
+             .into_iter()
+             .fold(None, |best: Option<(f64, f64)>, candidate| {
+                 let candidate_error = error(candidate);
+                 match best {
+                     Some((_, best_error)) if best_error <= candidate_error => best,
+                     _ => Some((candidate, candidate_error)),
+                 }

@@ -1,0 +1,21 @@
+--- crates/shift-font/src/ir/variation.rs
++++ replace < with <= in snap
+@@ -81,17 +81,17 @@
+ /// Snaps a normalized coordinate to `0` or `±1` when it misses by rounding.
+ ///
+ /// Mapped defaults and extremes are computed through compiled mapping bases,
+ /// so a master authored exactly at the default can normalize to `1e-15`. The
+ /// variation model treats only an exact `0` as the default location.
+ fn snap(normalized: f64) -> f64 {
+     const TOLERANCE: f64 = 1e-9;
+     for anchor in [-1.0, 0.0, 1.0] {
+-        if (normalized - anchor).abs() < TOLERANCE {
++        if (normalized - anchor).abs() <= /* ~ changed by cargo-mutants ~ */ TOLERANCE {
+             return anchor;
+         }
+     }
+     normalized
+ }
+ 
+ impl Font {
+     /// Derives design-space normalization in authoring-axis order.

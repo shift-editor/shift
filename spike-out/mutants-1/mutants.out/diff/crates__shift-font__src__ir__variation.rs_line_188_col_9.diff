@@ -1,0 +1,21 @@
+--- crates/shift-font/src/ir/variation.rs
++++ replace AxisMappingBasis::mapping_id -> AxisMappingId with Default::default()
+@@ -180,17 +180,17 @@
+             input_axis_ids,
+             output_axis_ids,
+             basis,
+         }
+     }
+ 
+     /// Returns the authored mapping identity that produced this basis.
+     pub fn mapping_id(&self) -> AxisMappingId {
+-        self.mapping_id
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Returns the mapping's ordered input axes.
+     pub fn input_axis_ids(&self) -> &[AxisId] {
+         &self.input_axis_ids
+     }
+ 
+     /// Returns the mapping's ordered output axes.

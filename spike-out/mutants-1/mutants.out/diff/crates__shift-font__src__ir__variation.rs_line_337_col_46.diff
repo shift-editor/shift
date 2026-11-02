@@ -1,0 +1,21 @@
+--- crates/shift-font/src/ir/variation.rs
++++ delete ! in map_location_with_bases
+@@ -329,17 +329,17 @@
+     for basis in bases.iter().filter(|basis| basis.is_independent()) {
+         let outputs = basis.evaluate(external.as_untyped(), axes)?;
+         for (axis_id, value) in outputs.iter() {
+             mapped.set(*axis_id, *value);
+         }
+     }
+ 
+     let independently_mapped = mapped.clone();
+-    for basis in bases.iter().filter(|basis| !basis.is_independent()) {
++    for basis in bases.iter().filter(|basis|  /* ~ changed by cargo-mutants ~ */basis.is_independent()) {
+         let outputs = basis.evaluate(independently_mapped.as_untyped(), axes)?;
+         for (axis_id, value) in outputs.iter() {
+             mapped.set(*axis_id, *value);
+         }
+     }
+ 
+     Ok(mapped)
+ }

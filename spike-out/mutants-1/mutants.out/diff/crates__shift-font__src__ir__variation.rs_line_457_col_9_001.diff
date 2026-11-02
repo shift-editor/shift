@@ -1,0 +1,27 @@
+--- crates/shift-font/src/ir/variation.rs
++++ replace AxisMapping::axis_tag -> CoreResult<Tag> with CoreResult::from_iter([Default::default()])
+@@ -449,23 +449,17 @@
+                 axes.axis(*axis_id)
+                     .ok_or_else(|| self.invalid(format!("unknown axis {axis_id}")))
+             })
+             .collect()
+     }
+ 
+     /// The OpenType tag of input `axis`.
+     fn axis_tag(&self, axis: &Axis) -> CoreResult<Tag> {
+-        Tag::from_str(axis.tag()).map_err(|_| {
+-            self.invalid(format!(
+-                "axis {} has invalid tag {:?}",
+-                axis.id(),
+-                axis.tag()
+-            ))
+-        })
++        CoreResult::from_iter([Default::default()]) /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ fn normalized_input(location: &Location, axes: &[&Axis], tags: &[Tag]) -> NormalizedLocation {
+     axes.iter()
+         .zip(tags)
+         .map(|(axis, tag)| {
+             let value = location.value_on(axis);

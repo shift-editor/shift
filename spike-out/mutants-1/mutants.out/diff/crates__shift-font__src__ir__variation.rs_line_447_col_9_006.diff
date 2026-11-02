@@ -1,0 +1,26 @@
+--- crates/shift-font/src/ir/variation.rs
++++ replace AxisMapping::resolve_axes -> CoreResult<Vec<&'a Axis>> with CoreResult::from(vec![Box::leak(Box::new(Default::default()))])
+@@ -439,22 +439,17 @@
+         candidates.sort_by(f64::total_cmp);
+         candidates
+     }
+ }
+ 
+ impl AxisMapping {
+     /// The axes `ids` name, in order.
+     fn resolve_axes<'a>(&self, ids: &[AxisId], axes: &'a [Axis]) -> CoreResult<Vec<&'a Axis>> {
+-        ids.iter()
+-            .map(|axis_id| {
+-                axes.axis(*axis_id)
+-                    .ok_or_else(|| self.invalid(format!("unknown axis {axis_id}")))
+-            })
+-            .collect()
++        CoreResult::from(vec![Box::leak(Box::new(Default::default()))]) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// The OpenType tag of input `axis`.
+     fn axis_tag(&self, axis: &Axis) -> CoreResult<Tag> {
+         Tag::from_str(axis.tag()).map_err(|_| {
+             self.invalid(format!(
+                 "axis {} has invalid tag {:?}",
+                 axis.id(),

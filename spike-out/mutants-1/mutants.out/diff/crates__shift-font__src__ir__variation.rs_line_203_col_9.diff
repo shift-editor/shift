@@ -1,0 +1,21 @@
+--- crates/shift-font/src/ir/variation.rs
++++ replace AxisMappingBasis::basis -> &VariationBasis with Box::leak(Box::new(Default::default()))
+@@ -195,17 +195,17 @@
+ 
+     /// Returns the mapping's ordered output axes.
+     pub fn output_axis_ids(&self) -> &[AxisId] {
+         &self.output_axis_ids
+     }
+ 
+     /// Returns the Fontdrasil-compiled numeric contribution basis.
+     pub fn basis(&self) -> &VariationBasis {
+-        &self.basis
++        Box::leak(Box::new(Default::default())) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Whether the mapping maps one axis onto itself.
+     pub fn is_independent(&self) -> bool {
+         self.input_axis_ids.len() == 1 && self.output_axis_ids == self.input_axis_ids
+     }
+ 
+     /// Maps a location through this basis, returning its output axes only.
