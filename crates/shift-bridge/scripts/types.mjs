@@ -8,7 +8,7 @@
 // The check uses its own target directory: the macros write only when
 // NAPI_TYPE_DEF_TMP_FOLDER and PACK_TS_DIR are set, so a check without them
 // in a shared directory would leave a crate up to date with nothing written.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { generateTypeDef } from "@napi-rs/cli";
 import { cargo, withLock } from "../../../scripts/target-lock.mjs";
@@ -22,7 +22,7 @@ const fragments = join(targetDir, "pack-fragments");
 /** The napi config `napi build` reads, so both write the same index.d.ts. */
 const napiConfig = JSON.parse(readFileSync(join(crate, "package.json"), "utf8")).napi;
 /** Crates whose `#[napi]` items reach index.d.ts. */
-const napiCrates = ["shift-bridge", "shift-wire"];
+const napiCrates = ["shift-bridge"];
 
 mkdirSync(typeDefDir, { recursive: true });
 mkdirSync(fragments, { recursive: true });
@@ -34,6 +34,13 @@ const check = (args) =>
 // Other checkouts sharing target/ check into the same directory, so the
 // check and the read of its definitions and fragments hold one lock.
 await withLock(join(root, "target"), "napi-types", async () => {
+  // generateTypeDef reads every crate's definitions in the directory: drop a
+  // crate's this checkout does not build (one another checkout sharing
+  // target/ still does), or its types land in index.d.ts twice.
+  for (const name of readdirSync(typeDefDir)) {
+    if (!napiCrates.includes(name))
+      rmSync(join(typeDefDir, name), { recursive: true, force: true });
+  }
   // A crate that is up to date but has no definitions would contribute
   // nothing; clean it so the check expands its macros again.
   const missing = new Set([

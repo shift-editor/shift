@@ -3,7 +3,7 @@
 //! These functions hold no state and touch no files: main owns the file and
 //! passes its text in, so reads and writes stay atomic on the JavaScript side.
 
-use shift_wire::bridges::napi::IntoEach;
+use crate::wire_napi::IntoEach;
 use std::collections::HashMap;
 
 use napi::{Error, Result, Status};

@@ -72,7 +72,7 @@ Segment-aware selection bounds are not part of this module. `Contour.selectionBo
 ### Add a new alignment mode
 
 1. Add the variant to `PointAlignment` in `crates/shift-font/src/point_arrange.rs` and its branch in `GlyphLayer::align_points`, with a Rust test.
-2. Add the literal to `AlignPointsIntent.alignment` in `crates/shift-wire/src/intents.rs` and to `AlignmentType` in `packages/editor/src/types/transform.ts`.
+2. Add the literal to `AlignPointsIntent.alignment` in `crates/shift-font/src/intents/` and to `AlignmentType` in `packages/editor/src/types/transform.ts`.
 3. Add a layer-level test alongside the existing suites in `GlyphLayerGeometry.test.ts`.
 
 ### Use a custom compound transform

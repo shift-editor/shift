@@ -8,13 +8,13 @@ use pack::Pack;
 use shift_backends::{
   GlyphIndex, OpenedFont, SourceAtlasDescriptor, build_binary_atlas_page, variable_glyph_inputs,
 };
+use shift_font::wire::InterpolationBasis;
 use shift_font::{GlyphId, SourceId};
 use shift_slug::length::OrOverflow;
 use shift_slug::{
   AuthoredAtlas, Section, VariableAtlas, VariableLayout, build_authored_atlas_page_profiled,
   build_authored_atlas_profiled, retained::compile_page as compile_retained_page,
 };
-use shift_wire::InterpolationBasis;
 use shift_workspace::AcquireScope;
 
 use super::{Bridge, SlugAtlasGeneration, SourceIdentity, log_slug_atlas_profile};
