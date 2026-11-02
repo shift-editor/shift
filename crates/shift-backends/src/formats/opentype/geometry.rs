@@ -1,7 +1,7 @@
-use shift_font::Transform;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
+use shift_font::Transform;
 use shift_slug::{Curve, CurveShape, Point, QuadraticOutline};
 use skrifa::raw::tables::glyf::{
     Anchor as GlyfAnchor, CompositeGlyphFlags, Glyf, Glyph as GlyfGlyph, PointFlags,
@@ -12,8 +12,8 @@ use skrifa::raw::types::{GlyphId, Point as RawPoint};
 
 use crate::font_source::atlas::{RegionRegistry, SourceAtlasError};
 use crate::font_source::{
-    ContourSegmentError, FontReadError, GlyphIndex, GlyphPointKind, PointProvenance,
-    TrueTypePointIndex, inferred_smooth_point_indices,
+    ContourError, FontReadError, GlyphIndex, GlyphPointKind, PointProvenance, TrueTypePointIndex,
+    inferred_smooth_point_indices,
 };
 
 use super::inputs::tuple_region;
@@ -85,7 +85,7 @@ fn curves_from_geometry(
                     control,
                     end,
                 }) => push_quadratic(&mut base, &mut sources, at(start), at(control), at(end)),
-                Ok(PointSegment::Cubic { .. }) | Err(ContourSegmentError::CubicWithoutEndpoint)
+                Ok(PointSegment::Cubic { .. }) | Err(ContourError::CubicWithoutEndpoint)
                     if !allow_cubic =>
                 {
                     return Err(SourceAtlasError::UnsupportedBinary {

@@ -37,23 +37,23 @@ pub(crate) trait ImpliedPoint: KindedPoint + Clone {
 ///
 /// # Errors
 ///
-/// Returns [`ContourSegmentError::Empty`] for no points,
-/// [`ContourSegmentError::DoesNotBeginOnCurve`] for an open contour that
-/// starts with a control, and [`ContourSegmentError::OffCurveNotQuadratic`] for
+/// Returns [`ContourError::Empty`] for no points,
+/// [`ContourError::DoesNotBeginOnCurve`] for an open contour that
+/// starts with a control, and [`ContourError::OffCurveNotQuadratic`] for
 /// a closed contour of controls that are not all quadratic.
 pub(crate) fn normalize_points<T: ImpliedPoint>(
     points: &[T],
     closed: bool,
-) -> Result<Vec<T>, ContourSegmentError> {
+) -> Result<Vec<T>, ContourError> {
     let (Some(first), Some(last)) = (points.first(), points.last()) else {
-        return Err(ContourSegmentError::Empty);
+        return Err(ContourError::Empty);
     };
     let first_on = points
         .iter()
         .position(|point| point.kind() == GlyphPointKind::OnCurve);
     let (start, indexes, all_off_curve): (T, Vec<usize>, bool) = match (closed, first_on) {
         (false, Some(0)) => (first.clone(), (1..points.len()).collect(), false),
-        (false, _) => return Err(ContourSegmentError::DoesNotBeginOnCurve),
+        (false, _) => return Err(ContourError::DoesNotBeginOnCurve),
         (true, Some(start)) => (
             points[start].clone(),
             (1..points.len())
@@ -66,7 +66,7 @@ pub(crate) fn normalize_points<T: ImpliedPoint>(
                 .iter()
                 .any(|point| point.kind() != GlyphPointKind::QuadraticControl)
             {
-                return Err(ContourSegmentError::OffCurveNotQuadratic);
+                return Err(ContourError::OffCurveNotQuadratic);
             }
             (
                 T::implied_between(last, first),
@@ -127,9 +127,9 @@ impl PointSegment {
     }
 }
 
-/// Why a contour's points do not form segments.
+/// Why a contour's points do not normalize or do not form segments.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum ContourSegmentError {
+pub enum ContourError {
     #[error("contour has no points")]
     Empty,
 
@@ -163,14 +163,14 @@ impl<'a, T: KindedPoint> ContourSegments<'a, T> {
     ///
     /// # Errors
     ///
-    /// Returns [`ContourSegmentError::DoesNotBeginOnCurve`] when `points` is
+    /// Returns [`ContourError::DoesNotBeginOnCurve`] when `points` is
     /// empty or its first point is a control.
-    pub(crate) fn new(points: &'a [T], closed: bool) -> Result<Self, ContourSegmentError> {
+    pub(crate) fn new(points: &'a [T], closed: bool) -> Result<Self, ContourError> {
         if points
             .first()
             .is_none_or(|point| point.kind() != GlyphPointKind::OnCurve)
         {
-            return Err(ContourSegmentError::DoesNotBeginOnCurve);
+            return Err(ContourError::DoesNotBeginOnCurve);
         }
 
         let limit = if closed {
@@ -195,7 +195,7 @@ impl<'a, T: KindedPoint> ContourSegments<'a, T> {
         self.cursor + offset < self.limit && self.points[self.index(offset)].kind() == kind
     }
 
-    fn segment(&self) -> Result<(PointSegment, usize), ContourSegmentError> {
+    fn segment(&self) -> Result<(PointSegment, usize), ContourError> {
         let start = self.current;
         match self.points[self.index(0)].kind() {
             GlyphPointKind::OnCurve => Ok((
@@ -207,7 +207,7 @@ impl<'a, T: KindedPoint> ContourSegments<'a, T> {
             )),
             GlyphPointKind::QuadraticControl => {
                 if !self.is(1, GlyphPointKind::OnCurve) {
-                    return Err(ContourSegmentError::QuadraticWithoutEndpoint);
+                    return Err(ContourError::QuadraticWithoutEndpoint);
                 }
                 Ok((
                     PointSegment::Quadratic {
@@ -221,7 +221,7 @@ impl<'a, T: KindedPoint> ContourSegments<'a, T> {
             GlyphPointKind::CubicControl => {
                 if !self.is(1, GlyphPointKind::CubicControl) || !self.is(2, GlyphPointKind::OnCurve)
                 {
-                    return Err(ContourSegmentError::CubicWithoutEndpoint);
+                    return Err(ContourError::CubicWithoutEndpoint);
                 }
                 Ok((
                     PointSegment::Cubic {
@@ -238,7 +238,7 @@ impl<'a, T: KindedPoint> ContourSegments<'a, T> {
 }
 
 impl<T: KindedPoint> Iterator for ContourSegments<'_, T> {
-    type Item = Result<PointSegment, ContourSegmentError>;
+    type Item = Result<PointSegment, ContourError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.cursor >= self.limit {
@@ -264,10 +264,7 @@ mod tests {
     use super::*;
     use GlyphPointKind::{CubicControl as C, OnCurve as On, QuadraticControl as Q};
 
-    fn segments(
-        kinds: &[GlyphPointKind],
-        closed: bool,
-    ) -> Result<Vec<PointSegment>, ContourSegmentError> {
+    fn segments(kinds: &[GlyphPointKind], closed: bool) -> Result<Vec<PointSegment>, ContourError> {
         let points: Vec<_> = kinds.iter().map(|kind| (*kind, ())).collect();
         ContourSegments::new(&points, closed)?.collect()
     }
@@ -340,14 +337,14 @@ mod tests {
             normalize_points(&points, closed).expect_err("rejects")
         };
 
-        assert_eq!(reject(&[], true), ContourSegmentError::Empty);
+        assert_eq!(reject(&[], true), ContourError::Empty);
         assert_eq!(
             reject(&[(Q, 0.0), (On, 1.0)], false),
-            ContourSegmentError::DoesNotBeginOnCurve
+            ContourError::DoesNotBeginOnCurve
         );
         assert_eq!(
             reject(&[(C, 0.0), (C, 1.0)], true),
-            ContourSegmentError::OffCurveNotQuadratic
+            ContourError::OffCurveNotQuadratic
         );
     }
 
@@ -395,31 +392,28 @@ mod tests {
     fn rejects_a_contour_that_begins_off_curve_or_is_empty() {
         assert_eq!(
             segments(&[Q, On], true),
-            Err(ContourSegmentError::DoesNotBeginOnCurve)
+            Err(ContourError::DoesNotBeginOnCurve)
         );
-        assert_eq!(
-            segments(&[], false),
-            Err(ContourSegmentError::DoesNotBeginOnCurve)
-        );
+        assert_eq!(segments(&[], false), Err(ContourError::DoesNotBeginOnCurve));
     }
 
     #[test]
     fn rejects_controls_without_their_endpoint() {
         assert_eq!(
             segments(&[On, Q], false),
-            Err(ContourSegmentError::QuadraticWithoutEndpoint)
+            Err(ContourError::QuadraticWithoutEndpoint)
         );
         assert_eq!(
             segments(&[On, Q, Q], true),
-            Err(ContourSegmentError::QuadraticWithoutEndpoint)
+            Err(ContourError::QuadraticWithoutEndpoint)
         );
         assert_eq!(
             segments(&[On, C, C], false),
-            Err(ContourSegmentError::CubicWithoutEndpoint)
+            Err(ContourError::CubicWithoutEndpoint)
         );
         assert_eq!(
             segments(&[On, C, On], true),
-            Err(ContourSegmentError::CubicWithoutEndpoint)
+            Err(ContourError::CubicWithoutEndpoint)
         );
     }
 
@@ -430,7 +424,7 @@ mod tests {
 
         assert_eq!(
             walk.next(),
-            Some(Err(ContourSegmentError::QuadraticWithoutEndpoint))
+            Some(Err(ContourError::QuadraticWithoutEndpoint))
         );
         assert_eq!(walk.next(), None);
     }
