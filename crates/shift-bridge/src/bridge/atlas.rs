@@ -2,7 +2,7 @@
 //! a generation of packed curves built natively, described here, and then
 //! streamed in chunks by the napi stream exports.
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use pack::Pack;
 use shift_backends::{
@@ -11,8 +11,9 @@ use shift_backends::{
 use shift_font::{GlyphId, SourceId};
 use shift_slug::length::OrOverflow;
 use shift_slug::{
-  AuthoredAtlas, Section, VariableAtlas, VariableLayout, build_authored_atlas_page_profiled,
-  build_authored_atlas_profiled, retained::compile_page as compile_retained_page,
+  AuthoredAtlas, AuthoredAtlasProfile, Section, VariableAtlas, VariableLayout,
+  build_authored_atlas_page_profiled, build_authored_atlas_profiled,
+  retained::compile_page as compile_retained_page,
 };
 use shift_wire::InterpolationBasis;
 use shift_workspace::AcquireScope;
@@ -273,27 +274,8 @@ impl NativeAtlas for Bridge {
     let started = Instant::now();
     self.workspace_mut()?.acquire_all_layers()?;
     let acquisition = started.elapsed();
-    let (authored, profile) =
-      build_authored_atlas_profiled(self.font()?, shift_slug::DEFAULT_BAND_COUNT)?;
-    let started = Instant::now();
-    let layout = authored.atlas().layout(alignment as usize)?;
-    let layout_elapsed = started.elapsed();
-    self.slug_generation = self.slug_generation.checked_add(1).or_overflow()?;
-    let generation = self.slug_generation;
-    let result = slug_atlas(generation, &authored, layout)?;
-    log_slug_atlas_profile(
-      "complete",
-      acquisition,
-      profile,
-      layout_elapsed,
-      total_started.elapsed(),
-    );
-    self.slug_atlas = Some(SlugAtlasGeneration {
-      generation,
-      alignment: alignment as usize,
-      atlas: authored.into_atlas(),
-    });
-    Ok(result)
+    let built = build_authored_atlas_profiled(self.font()?, shift_slug::DEFAULT_BAND_COUNT)?;
+    self.publish_slug_atlas("complete", built, alignment, acquisition, total_started)
   }
 
   fn slug_atlas_cache_revision(&self) -> Result<String, NativeAtlasError> {
@@ -309,27 +291,9 @@ impl NativeAtlas for Bridge {
     let started = Instant::now();
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
     let acquisition = started.elapsed();
-    let (authored, profile) =
+    let built =
       build_authored_atlas_page_profiled(font, &glyph_ids, shift_slug::DEFAULT_BAND_COUNT)?;
-    let started = Instant::now();
-    let layout = authored.atlas().layout(alignment as usize)?;
-    let layout_elapsed = started.elapsed();
-    self.slug_generation = self.slug_generation.checked_add(1).or_overflow()?;
-    let generation = self.slug_generation;
-    let result = slug_atlas(generation, &authored, layout)?;
-    log_slug_atlas_profile(
-      "page",
-      acquisition,
-      profile,
-      layout_elapsed,
-      total_started.elapsed(),
-    );
-    self.slug_atlas = Some(SlugAtlasGeneration {
-      generation,
-      alignment: alignment as usize,
-      atlas: authored.into_atlas(),
-    });
-    Ok(result)
+    self.publish_slug_atlas("page", built, alignment, acquisition, total_started)
   }
 
   fn discard_slug_atlas(&mut self, generation: u32) {
@@ -483,6 +447,44 @@ fn source_atlas_page(
 }
 
 /// The description of a prepared workspace generation.
+impl Bridge {
+  /// Lays out a built atlas, keeps it as the next generation, and describes
+  /// it. Logs the build's profile under `scope` when profiling is on.
+  ///
+  /// # Errors
+  ///
+  /// Returns an error when the layout fails or the generation counter
+  /// overflows; the previous generation is then kept.
+  fn publish_slug_atlas(
+    &mut self,
+    scope: &str,
+    (authored, profile): (AuthoredAtlas, AuthoredAtlasProfile),
+    alignment: u32,
+    acquisition: Duration,
+    total_started: Instant,
+  ) -> Result<SlugAtlas, NativeAtlasError> {
+    let started = Instant::now();
+    let layout = authored.atlas().layout(alignment as usize)?;
+    let layout_elapsed = started.elapsed();
+    self.slug_generation = self.slug_generation.checked_add(1).or_overflow()?;
+    let generation = self.slug_generation;
+    let result = slug_atlas(generation, &authored, layout)?;
+    log_slug_atlas_profile(
+      scope,
+      acquisition,
+      profile,
+      layout_elapsed,
+      total_started.elapsed(),
+    );
+    self.slug_atlas = Some(SlugAtlasGeneration {
+      generation,
+      alignment: alignment as usize,
+      atlas: authored.into_atlas(),
+    });
+    Ok(result)
+  }
+}
+
 fn slug_atlas(
   generation: u32,
   authored: &AuthoredAtlas,
