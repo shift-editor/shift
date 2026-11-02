@@ -1,0 +1,11 @@
+{
+.appVersion = "1225";
+unitsPerEm = 1000;
+fontMaster = ({id = m01;});
+glyphs = (
+{
+glyphname = a;
+layers = ({layerId = m01; width = 500; components = ({name = b; transform = "{1, 0, 0, 1l 0, 0}";});});
+}
+);
+}
