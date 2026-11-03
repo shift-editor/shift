@@ -64,6 +64,9 @@ Mark the lines and say what to check. These are review comments he has made more
 - **Cost per frame or per edit.** A computed that rebuilds a whole tree because it also tracks
   every contour; a filter over all stops per line; a deep compare on every layout; work per drag
   frame with no measurement.
+- **A rule written twice.** A `duplicate-body` hit in `pnpm scan:rust --since <base>` on a
+  function the branch added: say which copy owns the rule and ask the branch to call it.
+  `rust` → "One owner per rule".
 - **Hand-kept tables or helpers a library already has** (feature defaults beside HarfRust's, a
   pointer-drag hook beside drag libraries). Ask whether the library answers it.
 - **Unexplained constants** (`0.2`, a 600-unit stand-in advance): where did the value come from?
