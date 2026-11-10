@@ -82,14 +82,22 @@ export class Editing {
    *
    * @remarks
    * For modes that show glyphs as plain content (Hand, Text). The restore
-   * skips nodes deleted in the meantime.
+   * skips nodes deleted in the meantime or left behind on another page: a
+   * mode switched off by a page change must not edit the page it left.
    *
    * @returns a function that re-enters the suspended nodes.
    */
   suspend(): () => void {
     const nodeIds = this.nodeIds;
     this.clear();
-    return () => this.set(nodeIds.filter((id) => this.#scene.node(id) !== null));
+    return () => this.set(nodeIds.filter((id) => this.#isOnShownPage(id)));
+  }
+
+  #isOnShownPage(nodeId: NodeId): boolean {
+    const page = this.#scene.pageOf(nodeId);
+    if (!page) return false;
+
+    return page.id === this.#scene.shownPage()?.id;
   }
 
   clear(): void {

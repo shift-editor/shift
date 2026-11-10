@@ -344,3 +344,28 @@ fn an_unrecorded_component_follows_while_it_sits_on_its_anchors_and_is_then_reco
         ComponentAlignment::Anchored
     );
 }
+
+#[test]
+fn widening_the_base_left_sidebearing_keeps_unloaded_marks_on_its_anchors() {
+    let mut f = fixture();
+
+    apply(
+        &mut f.workspace,
+        vec![
+            shift_font::ShiftSidebearing {
+                layer_id: f.a_layer,
+                sidebearing: shift_font::Sidebearing::Left,
+                delta: 90.0,
+            }
+            .into(),
+        ],
+    );
+
+    // `a`'s top anchor moved from (250, 500) to (340, 500); the acute's
+    // `_top` is at (100, 500), and the tilde stacks on the acute's `top`.
+    assert_eq!(translation(&f.workspace, f.aacute, &f.acute), (240.0, 0.0));
+    assert_eq!(
+        translation(&f.workspace, f.aacute, &f.tilde),
+        (220.0, 200.0)
+    );
+}

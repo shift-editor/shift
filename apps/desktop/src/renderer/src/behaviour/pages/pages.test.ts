@@ -230,6 +230,16 @@ describe("Text tool on an empty page", () => {
     expect(editor.canvasText()).toBeNull();
   });
 
+  it("gives a caret on a page opened while Text mode is already on", () => {
+    editor.selectTool("text");
+
+    showEmptyPage();
+    editor.typeText("A");
+
+    expect(editor.toolState()).toEqual({ id: "text", state: "editing" });
+    expect(editor.canvasText()).toMatchObject({ items: [expect.anything()] });
+  });
+
   it("keeps the run once something is typed into it", async () => {
     showEmptyPage();
 
