@@ -1,11 +1,11 @@
-version: 0.1.1
+version: 0.2.0
 files:
-  - url: https://github.com/shift-editor/shift/releases/download/v0.1.1/Shift-0.1.1-macOS-x64.zip
-    sha512: sm1pDuBhag5xy8uh6FjlB6af1aVij4zM7e41tM6usj5h/a3c56ZD4+QY+HRWBN7iVfQO3knqsNzL84tnLtfB3Q==
-    size: 147397903
-  - url: https://github.com/shift-editor/shift/releases/download/v0.1.1/Shift-0.1.1-macOS-x64.dmg
-    sha512: o8AAW+gowNOkr1aNLYzHxso9ilCkHGw04iz86zGxgbILMej67ZS6eAhIHxXewpY8sX69lKmcpCf7+KPWE7x4GA==
-    size: 147734562
-path: https://github.com/shift-editor/shift/releases/download/v0.1.1/Shift-0.1.1-macOS-x64.zip
-sha512: sm1pDuBhag5xy8uh6FjlB6af1aVij4zM7e41tM6usj5h/a3c56ZD4+QY+HRWBN7iVfQO3knqsNzL84tnLtfB3Q==
-releaseDate: '2026-10-01T18:31:00.956Z'
+  - url: https://github.com/shift-editor/shift/releases/download/v0.2.0/Shift-0.2.0-macOS-x64.zip
+    sha512: azvP7IUK+9nIoi36mChYKy193i9IXUm9+XYmeQJAh5PounpMBdsJXT6GwkJY2fgU9HV48xSWfKjV2glC25v4pw==
+    size: 164418579
+  - url: https://github.com/shift-editor/shift/releases/download/v0.2.0/Shift-0.2.0-macOS-x64.dmg
+    sha512: 7p+5Yk0TZ0vail18aBr9JngXRDMQo8IT02P7zE78oyWVe3/RcpuvhgdGRQw35Ikh5bRZj28XKtOEvnRjpaM1OQ==
+    size: 164696377
+path: https://github.com/shift-editor/shift/releases/download/v0.2.0/Shift-0.2.0-macOS-x64.zip
+sha512: azvP7IUK+9nIoi36mChYKy193i9IXUm9+XYmeQJAh5PounpMBdsJXT6GwkJY2fgU9HV48xSWfKjV2glC25v4pw==
+releaseDate: '2026-11-10T21:57:26.316Z'

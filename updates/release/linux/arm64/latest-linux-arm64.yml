@@ -1,0 +1,9 @@
+version: 0.2.0
+files:
+  - url: https://github.com/shift-editor/shift/releases/download/v0.2.0/Shift-0.2.0-Linux-arm64.AppImage
+    sha512: /YcRTMxzpCwaBsp71QejYzjaeOXc7TIu08jl3o+6h/K8DQjrGSJ7DSnAoojU0QlEqnEMOIAvz0ocWd/4KWDYMw==
+    size: 155591746
+    blockMapSize: 163726
+path: https://github.com/shift-editor/shift/releases/download/v0.2.0/Shift-0.2.0-Linux-arm64.AppImage
+sha512: /YcRTMxzpCwaBsp71QejYzjaeOXc7TIu08jl3o+6h/K8DQjrGSJ7DSnAoojU0QlEqnEMOIAvz0ocWd/4KWDYMw==
+releaseDate: '2026-11-10T21:58:10.635Z'
