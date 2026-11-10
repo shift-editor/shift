@@ -180,6 +180,12 @@ jobs:
         if: matrix.platform == 'linux'
         run: scripts/build-linux-portable.sh
 
+      # build:native builds the WebAssembly module on the other platforms; the
+      # portable script builds only the bridge and the CLI.
+      - name: Build WASM rules on Linux
+        if: matrix.platform == 'linux'
+        run: pnpm build:wasm
+
       # The app bundles the native workspace's generated clients, which are
       # not committed. The bridge build above wrote index.d.ts and
       # protocol.ts from its own compile (crates/shift-bridge/scripts/build.mjs),
