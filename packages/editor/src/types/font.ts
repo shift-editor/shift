@@ -387,7 +387,7 @@ export interface FontOptions {
   readonly store: FontStore;
   readonly glyphInfo?: {
     getGlyphName(codepoint: number): string | null;
-    getGlyphByName(name: string): { readonly codepoint: number } | null;
+    getGlyphByName(name: string): { readonly codepoint: number | null } | null;
   };
   readonly editCoordinator?: WorkspaceEditCoordinator;
   readonly reader?: GlyphReader;

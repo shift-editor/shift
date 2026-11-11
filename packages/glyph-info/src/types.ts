@@ -14,7 +14,11 @@ export const GLYPH_CATEGORIES = [
 export type GlyphCategory = (typeof GLYPH_CATEGORIES)[number];
 
 export interface Glyph {
-  codepoint: number;
+  /**
+   * The Unicode value; `null` for a glyph no character encodes, such as the
+   * positional form `beh-ar.init`, the half form `k-deva` or the ligature `f_f_i`.
+   */
+  codepoint: number | null;
   name: string;
   category: GlyphCategory;
   subCategory: string | null; // TODO: narrow to GlyphSubCategory union

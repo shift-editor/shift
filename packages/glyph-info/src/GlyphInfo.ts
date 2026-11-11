@@ -158,7 +158,9 @@ export class GlyphInfo {
    * lookups return nothing and {@link search} finds nothing.
    */
   constructor(resources: GlyphInfoResources | GlyphInfoCoreResources) {
-    this.#glyphData = new Map(resources.glyphData.map((g) => [g.codepoint, g]));
+    this.#glyphData = new Map(
+      resources.glyphData.flatMap((g) => (g.codepoint === null ? [] : [[g.codepoint, g] as const])),
+    );
     this.#glyphDataByName = new Map(resources.glyphData.map((g) => [g.name, g]));
     this.#glyphDataByAlias = new Map(this.#glyphDataByName);
     for (const glyph of resources.glyphData) {
@@ -229,7 +231,10 @@ export class GlyphInfo {
     return data.name;
   }
 
-  /** Look up the full metadata record for a canonical glyph name. */
+  /**
+   * Look up the full metadata record for a canonical glyph name, encoded or
+   * not (`beh-ar.init` has no codepoint).
+   */
   getGlyphByName(name: string): Glyph | null {
     return this.#glyphDataByName.get(name) ?? null;
   }
@@ -249,6 +254,7 @@ export class GlyphInfo {
     return glyph ? `${glyph.name}${suffix}` : name;
   }
 
+  /** Every encoded glyph, by codepoint; unencoded forms are found by name. */
   getAllGlyph(): Glyph[] {
     return Array.from(this.#glyphData.values());
   }

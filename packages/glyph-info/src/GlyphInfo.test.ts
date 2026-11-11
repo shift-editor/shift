@@ -125,6 +125,25 @@ describe("resolveGlyphName", () => {
   });
 });
 
+describe("unencoded glyph data", () => {
+  it("finds positional forms, half forms and ligatures by name", () => {
+    expect(db.getGlyphByName("beh-ar.init")).toMatchObject({
+      codepoint: null,
+      script: "arabic",
+      production: "uni0628.init",
+    });
+    expect(db.getGlyphByName("k-deva")).toMatchObject({ codepoint: null, subCategory: "Halfform" });
+    expect(db.getGlyphByName("lam_alef-ar")).toMatchObject({
+      codepoint: null,
+      subCategory: "Ligature",
+    });
+  });
+
+  it("resolves a form's production name to its glyph data name", () => {
+    expect(db.resolveGlyphName("uni0628.init")).toBe("beh-ar.init");
+  });
+});
+
 describe("getAllGlyph", () => {
   it("returns many entries", () => {
     const all = db.getAllGlyph();
@@ -156,7 +175,7 @@ describe("getAllGlyph", () => {
   it("codepoints are all non-negative integers", () => {
     const invalid = db
       .getAllGlyph()
-      .filter((g) => !Number.isInteger(g.codepoint) || g.codepoint < 0);
+      .filter((g) => g.codepoint === null || !Number.isInteger(g.codepoint) || g.codepoint < 0);
 
     expect(invalid).toEqual([]);
   });

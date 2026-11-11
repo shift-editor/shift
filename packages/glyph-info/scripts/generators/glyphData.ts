@@ -27,10 +27,9 @@ export function generateGlyph(xmlPath: string, outputPath: string): number {
   const results: Glyph[] = [];
 
   for (const g of glyphs) {
-    if (!g.unicode) continue;
-
-    const codepoint = parseInt(g.unicode, 16);
-    if (isNaN(codepoint)) continue;
+    // Unencoded entries are positional forms, half forms and ligatures, kept by name.
+    const codepoint = g.unicode ? parseInt(g.unicode, 16) : null;
+    if (codepoint !== null && isNaN(codepoint)) continue;
 
     results.push({
       codepoint,
@@ -43,8 +42,16 @@ export function generateGlyph(xmlPath: string, outputPath: string): number {
     });
   }
 
-  results.sort((a, b) => a.codepoint - b.codepoint);
+  results.sort(encodedFirst);
   writeFileSync(outputPath, JSON.stringify(results, null, 2));
 
   return results.length;
+}
+
+/** Orders encoded entries by codepoint, then unencoded ones in GlyphData order. */
+function encodedFirst(left: Glyph, right: Glyph): number {
+  if (left.codepoint === null) return right.codepoint === null ? 0 : 1;
+  if (right.codepoint === null) return -1;
+
+  return left.codepoint - right.codepoint;
 }
