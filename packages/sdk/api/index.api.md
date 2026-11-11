@@ -209,6 +209,7 @@ export class Designspace {
 // @beta
 export class Editor {
     constructor(options: EditorOptions);
+    activeMetricsLinks(): MetricsLinks | null;
     // (undocumented)
     get activeSource(): Source | null;
     // (undocumented)
@@ -618,6 +619,7 @@ export class Font {
     layerIdForSegment(segmentId: SegmentId): LayerId | null;
     layerState(layerId: LayerId): GlyphLayerState | null;
     layoutText(run: TextRun, location: ExternalAxisLocation, sourceId: SourceId | null): PlacedText | null;
+    linkedSides(glyphId: GlyphId, sourceId: SourceId): readonly SideLink[];
     // (undocumented)
     get loaded(): boolean;
     get loadedCell(): Signal<boolean>;
@@ -636,6 +638,7 @@ export class Font {
     get metricsCell(): Signal<FontMetrics>;
     metricsForLayerSource(sourceId: SourceId): SourceMetrics;
     metricsForSource(sourceId: SourceId): SourceMetrics;
+    metricsKeyProblem(text: string): string | null;
     missingPairOrigin(sourceId: SourceId): MissingKerningOrigin;
     namedInstance(instanceId: NamedInstanceId): NamedInstance | null;
     namedInstanceNamed(name: string): NamedInstance | null;
