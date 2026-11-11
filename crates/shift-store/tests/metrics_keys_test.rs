@@ -77,6 +77,30 @@ fn glyph_and_layer_keys_round_trip_through_a_document() {
 }
 
 #[test]
+fn a_directory_read_without_payloads_still_has_layer_keys() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("Keys.shift");
+    let (font, glyph_id, layer_id) = font_with_keyed_o(o_glyph_keys());
+    drop(ShiftStore::create_document(&path, &font).unwrap());
+
+    let directory = ShiftStore::open_document(&path)
+        .unwrap()
+        .load_font_directory()
+        .unwrap();
+
+    let placeholder = directory.layer(layer_id).unwrap();
+    assert!(placeholder.contours().is_empty());
+    assert_eq!(
+        placeholder.metrics_keys(),
+        font.layer(layer_id).unwrap().metrics_keys()
+    );
+    assert_eq!(
+        directory.glyph(glyph_id).unwrap().metrics_keys(),
+        &o_glyph_keys()
+    );
+}
+
+#[test]
 fn rewriting_a_glyph_clears_a_removed_key() {
     let mut store = ShiftStore::open_memory_for_test().unwrap();
     let (font, glyph_id, _) = font_with_keyed_o(o_glyph_keys());
@@ -100,6 +124,9 @@ fn opening_a_version_4_document_upgrades_it_with_no_keys() {
         "ALTER TABLE glyphs DROP COLUMN left_metrics_key;
          ALTER TABLE glyphs DROP COLUMN right_metrics_key;
          ALTER TABLE glyphs DROP COLUMN width_metrics_key;
+         ALTER TABLE glyph_layers DROP COLUMN left_metrics_key;
+         ALTER TABLE glyph_layers DROP COLUMN right_metrics_key;
+         ALTER TABLE glyph_layers DROP COLUMN width_metrics_key;
          PRAGMA user_version = 4;",
     )
     .unwrap();

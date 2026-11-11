@@ -205,7 +205,7 @@ impl UfoReader {
         }
 
         let mut lib = norad_glyph.lib.clone();
-        *glyph_layer.metrics_keys_mut() = take_metrics_keys(&mut lib).layer;
+        take_metrics_keys(&mut lib);
         if !lib.is_empty() {
             *glyph_layer.lib_mut() = Self::convert_lib(&lib);
         }
@@ -225,8 +225,9 @@ impl UfoReader {
         }
     }
 
-    /// `norad_glyph`'s advance as a layer with no content: what a directory
-    /// holds for the layer before it is loaded. A GLIF height of 0 is no height.
+    /// `norad_glyph`'s advance and metrics keys as a layer with no content:
+    /// what a directory holds for the layer before it is loaded. A GLIF
+    /// height of 0 is no height.
     pub(crate) fn placeholder_layer(
         norad_glyph: &norad::Glyph,
         layer_id: LayerId,
@@ -236,6 +237,7 @@ impl UfoReader {
         if norad_glyph.height != 0.0 {
             layer.set_height(Some(norad_glyph.height));
         }
+        *layer.metrics_keys_mut() = take_metrics_keys(&mut norad_glyph.lib.clone()).layer;
         layer
     }
 

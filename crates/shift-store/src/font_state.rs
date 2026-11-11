@@ -321,6 +321,38 @@ fn load_source_location(
     Ok(location)
 }
 
+/// One row of the `glyph_layers` table: what a directory knows of a layer
+/// without its payload.
+struct LayerRow {
+    id: font::LayerId,
+    glyph_id: font::GlyphId,
+    source_id: font::SourceId,
+    width: f64,
+    height: Option<f64>,
+    metrics_keys: font::MetricsKeys,
+}
+
+impl LayerRow {
+    fn read(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            id: row.get("id")?,
+            glyph_id: row.get("glyph_id")?,
+            source_id: row.get("source_id")?,
+            width: row.get("width")?,
+            height: row.get("height")?,
+            metrics_keys: crate::metrics_keys::read(row)?,
+        })
+    }
+
+    /// The layer with no content, as a directory holds it before loading.
+    fn placeholder(&self) -> font::GlyphLayer {
+        let mut layer = font::GlyphLayer::with_width(self.id, self.source_id, self.width);
+        layer.set_height(self.height);
+        *layer.metrics_keys_mut() = self.metrics_keys.clone();
+        layer
+    }
+}
+
 /// One row of the `glyphs` table, as [`load_glyphs`] reads it.
 struct GlyphRow {
     id: font::GlyphId,
@@ -332,16 +364,7 @@ struct GlyphRow {
 
 impl GlyphRow {
     fn read(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
-        let mut metrics_keys = font::MetricsKeys::new();
-        for (side, column) in [
-            (font::MetricsKeySide::Left, "left_metrics_key"),
-            (font::MetricsKeySide::Right, "right_metrics_key"),
-            (font::MetricsKeySide::Width, "width_metrics_key"),
-        ] {
-            let text: Option<String> = row.get(column)?;
-            metrics_keys.set(side, text.and_then(font::MetricsKey::new));
-        }
-
+        let metrics_keys = crate::metrics_keys::read(row)?;
         Ok(Self {
             id: row.get("id")?,
             name: row.get::<_, Option<String>>("name")?.unwrap_or_default(),
@@ -408,45 +431,33 @@ fn load_glyphs(
     let layer_rows = {
         let mut stmt = conn.prepare(
             "
-            SELECT id, glyph_id, source_id, width, height
+            SELECT id, glyph_id, source_id, width, height,
+                   left_metrics_key, right_metrics_key, width_metrics_key
             FROM glyph_layers
             ORDER BY glyph_id, source_id, id
             ",
         )?;
-        stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, font::LayerId>(0)?,
-                row.get::<_, font::GlyphId>(1)?,
-                row.get::<_, font::SourceId>(2)?,
-                row.get::<_, f64>(3)?,
-                row.get::<_, Option<f64>>(4)?,
-            ))
-        })?
-        .collect::<Result<Vec<_>, _>>()?
+        stmt.query_map([], LayerRow::read)?
+            .collect::<Result<Vec<_>, _>>()?
     };
     let mut loaded_layers = HashMap::new();
     if read == FontRead::WithLayerPayloads {
-        let layer_ids = layer_rows
-            .iter()
-            .map(|(layer_id, _, _, _, _)| *layer_id)
-            .collect::<Vec<_>>();
+        let layer_ids = layer_rows.iter().map(|row| row.id).collect::<Vec<_>>();
         for layer in crate::layer::load_glyph_layers_from_conn(conn, &layer_ids)? {
             loaded_layers.insert(layer.id(), layer);
         }
     }
 
     let mut layers: HashMap<font::GlyphId, Vec<font::GlyphLayer>> = HashMap::new();
-    for (layer_id, glyph_id, source_id, width, height) in layer_rows {
+    for row in layer_rows {
         let layer = if read == FontRead::WithLayerPayloads {
             loaded_layers
-                .remove(&layer_id)
-                .or_missing(StoreEntity::GlyphLayerPayload, &layer_id)?
+                .remove(&row.id)
+                .or_missing(StoreEntity::GlyphLayerPayload, &row.id)?
         } else {
-            let mut layer = font::GlyphLayer::with_width(layer_id, source_id, width);
-            layer.set_height(height);
-            layer
+            row.placeholder()
         };
-        layers.entry(glyph_id).or_default().push(layer);
+        layers.entry(row.glyph_id).or_default().push(layer);
     }
 
     let mut glyphs = Vec::with_capacity(glyph_rows.len());

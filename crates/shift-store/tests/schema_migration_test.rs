@@ -17,6 +17,9 @@ fn downgrade_to_version_2(path: &Path) {
          ALTER TABLE glyphs DROP COLUMN left_metrics_key;
          ALTER TABLE glyphs DROP COLUMN right_metrics_key;
          ALTER TABLE glyphs DROP COLUMN width_metrics_key;
+         ALTER TABLE glyph_layers DROP COLUMN left_metrics_key;
+         ALTER TABLE glyph_layers DROP COLUMN right_metrics_key;
+         ALTER TABLE glyph_layers DROP COLUMN width_metrics_key;
          DROP TABLE scene_nodes;
          PRAGMA user_version = 2;",
     )

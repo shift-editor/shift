@@ -99,3 +99,20 @@ fn saving_as_ufo_writes_the_keys_back_under_glyphslib_names() {
         original_o.layers().values().next().unwrap().metrics_keys()
     );
 }
+
+#[test]
+fn a_lazily_opened_ufo_lists_layer_keys_before_loading_layers() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("Keys.ufo");
+    write_keyed_ufo(&path);
+
+    let opened = shift_backends::AuthoredSource::open(path.to_str().unwrap()).unwrap();
+    let directory = opened.directory;
+
+    let glyph = directory.glyph_by_name("o").unwrap();
+    let placeholder = glyph.layers().values().next().unwrap();
+    assert_eq!(
+        placeholder.metrics_keys(),
+        &keys(&[(MetricsKeySide::Width, "==o*1.2")])
+    );
+}

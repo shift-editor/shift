@@ -12,6 +12,7 @@ mod font_state;
 mod glyph;
 mod import_writer;
 mod layer;
+mod metrics_keys;
 mod numeric;
 mod reader;
 mod recovery;
