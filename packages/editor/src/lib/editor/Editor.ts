@@ -4,6 +4,7 @@ import type {
   TemporaryToolOptions,
   ToolStateScope,
 } from "../../types/editor";
+import type { NewGlyph } from "../../types/font";
 import {
   isAnchorId,
   isContourId,
@@ -665,6 +666,22 @@ export class Editor {
   public createGlyphsForUnicodes(unicodes: readonly Unicode[]): GlyphRecord[] {
     return this.transaction("Generate Glyphs", () =>
       unicodes.map((unicode) => this.font.createGlyphForUnicode(unicode)),
+    );
+  }
+
+  /**
+   * Creates one empty glyph per request as one undoable step, as a language's
+   * missing glyphs are generated.
+   *
+   * @param glyphs - encoded glyphs are named as {@link createGlyphsForUnicodes}
+   * names them; unencoded forms keep their requested name.
+   * @returns The records for the glyphs that were created, in input order.
+   */
+  public generateGlyphs(glyphs: readonly NewGlyph[]): GlyphRecord[] {
+    return this.transaction("Generate Glyphs", () =>
+      glyphs.map(({ name, unicode }) =>
+        unicode === null ? this.font.createGlyph(name) : this.font.createGlyphForUnicode(unicode),
+      ),
     );
   }
 

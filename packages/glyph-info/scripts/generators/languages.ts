@@ -66,6 +66,8 @@ export function generateLanguages(hyperglotPath: string, outputPath: string): nu
       const codepoints = uniqueCodepoints(base);
       if (codepoints.length === 0) continue;
 
+      const marks = resolveAttribute(languages, languageCode, orthography, "marks", new Set());
+
       const scriptIndex = (scriptIndices.get(orthography.script) ?? 0) + 1;
       scriptIndices.set(orthography.script, scriptIndex);
       const scriptSuffix = slugify(orthography.script);
@@ -79,6 +81,7 @@ export function generateLanguages(hyperglotPath: string, outputPath: string): nu
         script: orthography.script,
         scriptCode: scriptCode(scriptCodes, orthography.script),
         baseCodepoints: codepoints,
+        markCodepoints: uniqueCodepoints(marks),
       });
     }
   }

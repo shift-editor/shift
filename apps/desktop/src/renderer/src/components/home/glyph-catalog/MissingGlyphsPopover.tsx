@@ -1,4 +1,5 @@
 import { useMemo, useState, type RefObject } from "react";
+import type { RequiredGlyph } from "@shift/glyph-info";
 import {
   Button,
   Checkbox,
@@ -25,12 +26,13 @@ export interface MissingGlyphsPopoverProps {
   glyphs: readonly LanguageGlyph[] | null;
   canGenerate: boolean;
   onClose: () => void;
-  onGenerate: (codepoints: readonly number[]) => void;
+  onGenerate: (glyphs: readonly RequiredGlyph[]) => void;
 }
 
 /**
- * Lists every character a language requires. Characters the font has show
- * ticked and fixed; ticked missing characters are generated as empty glyphs.
+ * Lists every glyph a language or script group requires, positional forms and
+ * ligatures included. Glyphs the font has show ticked and fixed; ticked
+ * missing glyphs are generated as empty glyphs.
  */
 export const MissingGlyphsPopover = ({
   anchor,
@@ -40,22 +42,23 @@ export const MissingGlyphsPopover = ({
   onClose,
   onGenerate,
 }: MissingGlyphsPopoverProps) => {
-  const selection = useMemberSet<number>();
+  const selection = useMemberSet<string>();
   const selected = selection.values;
   const [scrollTop, setScrollTop] = useState(0);
-  const codepoints = useMemo(() => glyphs?.map(({ codepoint }) => codepoint) ?? [], [glyphs]);
+  const names = useMemo(() => glyphs?.map(({ glyph }) => glyph.name) ?? [], [glyphs]);
   const firstRow = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN_ROWS);
   const lastRow = Math.min(
     glyphs?.length ?? 0,
     Math.ceil((scrollTop + VIEWPORT_HEIGHT) / ROW_HEIGHT) + OVERSCAN_ROWS,
   );
   const visibleGlyphs = glyphs?.slice(firstRow, lastRow) ?? [];
-  const { onMouseDown, itemsToChange, resetRange } = useCheckboxRange(codepoints);
-  const missingCodepoints = useMemo(
-    () => glyphs?.filter(({ present }) => !present).map(({ codepoint }) => codepoint) ?? [],
+  const { onMouseDown, itemsToChange, resetRange } = useCheckboxRange(names);
+  const missingGlyphs = useMemo(
+    () => glyphs?.filter(({ present }) => !present).map(({ glyph }) => glyph) ?? [],
     [glyphs],
   );
-  const allSelected = missingCodepoints.length > 0 && selected.size === missingCodepoints.length;
+  const missingNames = useMemo(() => missingGlyphs.map(({ name }) => name), [missingGlyphs]);
+  const allSelected = missingNames.length > 0 && selected.size === missingNames.length;
 
   const handleOpenChange = (open: boolean) => {
     if (open) return;
@@ -65,16 +68,16 @@ export const MissingGlyphsPopover = ({
     onClose();
   };
 
-  const setChecked = (target: number, checked: boolean) => {
-    const missing = new Set(missingCodepoints);
+  const setChecked = (target: string, checked: boolean) => {
+    const missing = new Set(missingNames);
     selection.setMany(
-      itemsToChange(target).filter((codepoint) => missing.has(codepoint)),
+      itemsToChange(target).filter((name) => missing.has(name)),
       checked,
     );
   };
 
   const generate = () => {
-    onGenerate(missingCodepoints.filter((codepoint) => selected.has(codepoint)));
+    onGenerate(missingGlyphs.filter(({ name }) => selected.has(name)));
     handleOpenChange(false);
   };
 
@@ -101,16 +104,16 @@ export const MissingGlyphsPopover = ({
               onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
             >
               <div className="relative" style={{ height: (glyphs?.length ?? 0) * ROW_HEIGHT }}>
-                {visibleGlyphs.map(({ codepoint, name, present }, index) => (
+                {visibleGlyphs.map(({ glyph: { name }, preview, present }, index) => (
                   <label
-                    key={codepoint}
+                    key={name}
                     className="absolute flex h-10 w-full cursor-pointer select-none items-center gap-2 rounded px-1 text-ui text-primary hover:bg-hover"
                     style={{ top: (firstRow + index) * ROW_HEIGHT }}
                     onMouseDown={onMouseDown}
                   >
                     <Checkbox
-                      checked={present || selected.has(codepoint)}
-                      onCheckedChange={(checked) => setChecked(codepoint, checked)}
+                      checked={present || selected.has(name)}
+                      onCheckedChange={(checked) => setChecked(name, checked)}
                       disabled={present || !canGenerate}
                     />
                     <span className="min-w-0 flex-1 truncate">{name}</span>
@@ -118,7 +121,7 @@ export const MissingGlyphsPopover = ({
                       aria-hidden
                       className="w-10 shrink-0 text-center text-3xl leading-none text-muted"
                     >
-                      {String.fromCodePoint(codepoint)}
+                      {preview}
                     </span>
                   </label>
                 ))}
@@ -130,10 +133,10 @@ export const MissingGlyphsPopover = ({
                 <Button
                   type="button"
                   className="h-7.5 text-ui"
-                  disabled={!canGenerate || missingCodepoints.length === 0}
+                  disabled={!canGenerate || missingNames.length === 0}
                   onClick={() => {
                     selection.clear();
-                    if (!allSelected) selection.setMany(missingCodepoints, true);
+                    if (!allSelected) selection.setMany(missingNames, true);
                   }}
                 >
                   {allSelected ? "Deselect All" : "Select All"}

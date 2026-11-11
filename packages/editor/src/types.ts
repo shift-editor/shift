@@ -10,6 +10,7 @@ export type {
   EngineVariation,
   FontEngine,
   KerningPlace,
+  NewGlyph,
   OpenEdit,
   ReplayedChange,
 } from "./types/font";

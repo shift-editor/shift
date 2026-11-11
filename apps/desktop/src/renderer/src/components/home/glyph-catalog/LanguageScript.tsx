@@ -1,4 +1,4 @@
-import type { LanguageScript as LanguageScriptGroup } from "@shift/glyph-info";
+import type { LanguageScript as LanguageScriptGroup, RequiredGlyph } from "@shift/glyph-info";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@shift/ui";
 import ChevronRightIcon from "@/assets/general/chevron-right.svg";
 import { SidebarRowButton } from "@/components/sidebar";
@@ -10,9 +10,9 @@ export interface LanguageScriptProps {
   group: LanguageScriptGroup;
   selectedLanguageId: string | null;
   canGenerate: boolean;
-  onSelectLanguage: (languageId: string) => void;
-  languageGlyphs: (languageId: string) => LanguageGlyph[];
-  onGenerate: (codepoints: readonly number[]) => void;
+  onSelectLanguage: (setId: string) => void;
+  languageGlyphs: (setId: string) => LanguageGlyph[];
+  onGenerate: (glyphs: readonly RequiredGlyph[]) => void;
 }
 
 export const LanguageScript = ({
@@ -33,11 +33,29 @@ export const LanguageScript = ({
     </CollapsibleTrigger>
     <CollapsiblePanel>
       <div className="flex flex-col gap-1 pt-1">
-        {group.languages.map((coverage) => (
+        {group.groups.map(({ group: scriptGroup, presentCount, requiredCount }) => (
           <Language
-            key={coverage.language.id}
-            coverage={coverage}
-            isActive={selectedLanguageId === coverage.language.id}
+            key={scriptGroup.id}
+            setId={scriptGroup.id}
+            name={scriptGroup.name}
+            presentCount={presentCount}
+            requiredCount={requiredCount}
+            isActive={selectedLanguageId === scriptGroup.id}
+            canGenerate={canGenerate}
+            onSelect={onSelectLanguage}
+            languageGlyphs={languageGlyphs}
+            onGenerate={onGenerate}
+          />
+        ))}
+        {group.languages.map(({ language, presentCount, requiredCount }) => (
+          <Language
+            key={language.id}
+            setId={language.id}
+            name={language.name}
+            title={language.autonym ?? undefined}
+            presentCount={presentCount}
+            requiredCount={requiredCount}
+            isActive={selectedLanguageId === language.id}
             canGenerate={canGenerate}
             onSelect={onSelectLanguage}
             languageGlyphs={languageGlyphs}

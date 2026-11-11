@@ -1,8 +1,10 @@
 import MiniSearch from "minisearch";
-import { alphabetical, ascending, comparing, orderBy } from "@shift/types";
+import { alphabetical, comparing } from "@shift/types";
+import { GlyphSets, createLanguageCatalog } from "./glyphSets.js";
 import type {
   CharsetDefinition,
   CharsetSummary,
+  FontGlyph,
   GlyphCategory,
   GlyphCategoryCatalog,
   GlyphCategorySummary,
@@ -16,8 +18,6 @@ import type {
   GlyphInfoResources,
   Language,
   LanguageCatalog,
-  LanguageCoverage,
-  LanguageScript,
   SearchResult,
 } from "./types.js";
 
@@ -30,11 +30,6 @@ const DEFAULT_GLYPH_CATEGORY_OPTIONS: Required<GlyphCategoryOptions> = {
 
 const byLabel = comparing((summary: GlyphSubCategorySummary) => summary.label, alphabetical);
 const byCategory = comparing((summary: GlyphCategorySummary) => summary.category, alphabetical);
-const byScript = comparing((script: LanguageScript) => script.script, alphabetical);
-const byLanguageName = orderBy<LanguageCoverage>(
-  comparing((coverage) => coverage.language.name, alphabetical),
-  comparing((coverage) => coverage.language.id, alphabetical),
-);
 
 interface GlyphSearchHit {
   id: number;
@@ -148,6 +143,8 @@ export class GlyphInfo {
   #usedBy: Map<number, number[]>;
   #charsets: CharsetDefinition[];
   #languages: Language[];
+  #allGlyphData: readonly Glyph[];
+  #glyphSets: GlyphSets | null = null;
   #searchData: Record<string, unknown>[] = [];
   #searchIndex: MiniSearch | null = null;
   #hasComponentResources = false;
@@ -158,6 +155,7 @@ export class GlyphInfo {
    * lookups return nothing and {@link search} finds nothing.
    */
   constructor(resources: GlyphInfoResources | GlyphInfoCoreResources) {
+    this.#allGlyphData = resources.glyphData;
     this.#glyphData = new Map(
       resources.glyphData.flatMap((g) => (g.codepoint === null ? [] : [[g.codepoint, g] as const])),
     );
@@ -364,66 +362,31 @@ export class GlyphInfo {
   // Languages
 
   /**
-   * Builds language coverage grouped by script for a font's encoded repertoire.
+   * Builds language and script-group coverage for a font, by glyph name.
    *
-   * @param codepoints - Unicode values encoded by the font; duplicates do not increase coverage.
-   * @returns A reusable catalog whose filter preserves the input codepoint order.
+   * @param glyphs - the font's glyphs; one counts for a required glyph when it
+   * encodes the same character or its name resolves to the same GlyphData name.
+   * @param trackedLanguageIds - languages whose scripts get groups in
+   * {@link LanguageCatalog.trackedScripts}.
+   * @returns A catalog whose filter preserves the input glyph order.
    */
-  createLanguageCatalog(codepoints: number[]): LanguageCatalog {
-    const available = new Set(codepoints);
-    const scripts = new Map<string, LanguageScript>();
-    const languagesById = new Map<string, Set<number>>();
-
-    for (const language of this.#languages) {
-      const required = new Set(language.baseCodepoints);
-      languagesById.set(language.id, required);
-
-      let script = scripts.get(language.script);
-      if (!script) {
-        script = { script: language.script, languages: [] };
-        scripts.set(language.script, script);
-      }
-
-      let presentCount = 0;
-      for (const codepoint of required) {
-        if (available.has(codepoint)) presentCount += 1;
-      }
-
-      script.languages.push({
-        language,
-        presentCount,
-        requiredCount: required.size,
-      });
-    }
-
-    const sortedScripts = scripts.values().toArray().sort(byScript);
-    for (const script of sortedScripts) script.languages.sort(byLanguageName);
-
-    const coverageById = new Map(
-      sortedScripts.flatMap((script) =>
-        script.languages.map((coverage) => [coverage.language.id, coverage] as const),
-      ),
+  createLanguageCatalog(
+    glyphs: readonly FontGlyph[],
+    trackedLanguageIds: readonly string[] = [],
+  ): LanguageCatalog {
+    this.#glyphSets ??= new GlyphSets(
+      this.#allGlyphData,
+      (name) => this.#glyphDataByAlias.get(name)?.codepoint ?? null,
+      (codepoint) => this.getGlyphName(codepoint) ?? fallbackGlyphName(codepoint),
     );
 
-    return {
-      scripts: sortedScripts,
-      filter: (languageId) => {
-        const required = languagesById.get(languageId);
-        if (!required) return [];
-
-        return codepoints.filter((codepoint) => required.has(codepoint));
-      },
-      coverage: (languageId) => coverageById.get(languageId) ?? null,
-      required: (languageId) => [...(languagesById.get(languageId) ?? [])].sort(ascending),
-      scriptsFor: (languageIds) => {
-        const tracked = new Set(languageIds);
-
-        return sortedScripts.flatMap((script) => {
-          const languages = script.languages.filter(({ language }) => tracked.has(language.id));
-          return languages.length === 0 ? [] : [{ script: script.script, languages }];
-        });
-      },
-    };
+    return createLanguageCatalog(
+      this.#glyphSets,
+      this.#languages,
+      glyphs,
+      trackedLanguageIds,
+      (name, codepoint) => this.resolveGlyphName(name, codepoint),
+    );
   }
 
   // Search (MiniSearch)
@@ -539,4 +502,10 @@ export class GlyphInfo {
 
     return filtered;
   }
+}
+
+/** The `uniXXXX` / `uXXXXX` name of a character GlyphData does not name. */
+function fallbackGlyphName(codepoint: number): string {
+  const hex = codepoint.toString(16).toUpperCase();
+  return codepoint > 0xffff ? `u${hex}` : `uni${hex.padStart(4, "0")}`;
 }

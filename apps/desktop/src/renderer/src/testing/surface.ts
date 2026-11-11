@@ -19,7 +19,12 @@
  */
 import type { ControlOperation } from "@/agent/AgentControl";
 import type { DeleteMode, Editor } from "@shift/editor";
-import type { GlyphOutlineTarget, PositionGuide, SourceSelectionMode } from "@shift/editor/types";
+import type {
+  GlyphOutlineTarget,
+  NewGlyph,
+  PositionGuide,
+  SourceSelectionMode,
+} from "@shift/editor/types";
 import type { ToolName } from "@shift/editor/tools";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import type { Bounds, Point2D, Rect2D } from "@shift/geo";
@@ -306,6 +311,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   setGlyphIdentity(name: string, newName: string, unicodes: readonly number[]): void;
   /** Creates one glyph per code point, named from Unicode, as the glyph grid's add action does. */
   createGlyphsForUnicodes(unicodes: readonly Unicode[]): GlyphRecord[];
+  /** Creates a language's missing glyphs, letters and forms, as Missing Glyphs → Generate does. */
+  generateGlyphs(glyphs: readonly NewGlyph[]): GlyphRecord[];
   /** Sets the languages the font tracks, as the font info panel does. */
   setLanguages(ids: readonly string[]): void;
 

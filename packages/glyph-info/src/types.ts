@@ -50,6 +50,49 @@ export interface Language {
   /** The script's ISO 15924 code, such as `Arab`. */
   scriptCode: string;
   baseCodepoints: number[];
+  /**
+   * Combining marks the orthography uses. Forms may be built from them (a
+   * Devanagari half form is a consonant and virama), but they are not required.
+   */
+  markCodepoints: number[];
+}
+
+/** A glyph in a font, as language coverage reads it. */
+export interface FontGlyph {
+  readonly name: string;
+  readonly unicodes: readonly number[];
+}
+
+/** A glyph a language or script group needs. */
+export interface RequiredGlyph {
+  /** The GlyphData name, or `uniXXXX` for a character GlyphData does not name. */
+  name: string;
+  /** The Unicode value; `null` for an unencoded form such as `beh-ar.init`. */
+  codepoint: number | null;
+  /** The characters the glyph shapes, in order: one for a letter, several for a ligature. */
+  characters: number[];
+  /**
+   * The glyph's form within a joined word (`init`, `medi` or `fina`), so a
+   * preview can join it; `null` for a glyph that is not a positional form.
+   */
+  position: GlyphPosition | null;
+}
+
+/** The position of a joining letter's form within a word. */
+export type GlyphPosition = "init" | "medi" | "fina";
+
+/** A glyph set a script needs beside its languages, such as Arabic's dotless Basic Shapes. */
+export interface ScriptGroup {
+  /** Unique among script groups and language ids, such as `arabic/basic-shapes`. */
+  id: string;
+  name: string;
+  script: string;
+}
+
+export interface ScriptGroupCoverage {
+  group: ScriptGroup;
+  presentCount: number;
+  requiredCount: number;
 }
 
 export interface LanguageCoverage {
@@ -60,6 +103,8 @@ export interface LanguageCoverage {
 
 export interface LanguageScript {
   script: string;
+  /** Script-wide groups, listed before the languages: Basic Shapes, Ligatures. */
+  groups: ScriptGroupCoverage[];
   languages: LanguageCoverage[];
 }
 
@@ -80,17 +125,29 @@ export const DEFAULT_LANGUAGE_IDS = [
   "urd-arabic",
 ] as const;
 
+/**
+ * Language and script-group coverage for one font. A set id names either a
+ * language (`arb-arabic`) or a script group (`arabic/ligatures`).
+ */
 export interface LanguageCatalog {
-  /** Every known language, grouped by script. */
+  /** Every known language, grouped by script, with no script groups. */
   scripts: LanguageScript[];
-  /** Returns the font's codepoints that the language requires, in input order. */
-  filter(languageId: string): number[];
+  /**
+   * The tracked languages grouped by script, each script with its groups;
+   * unknown ids are skipped.
+   */
+  trackedScripts: LanguageScript[];
+  /** Returns the names of the font's glyphs in a set, in font order. */
+  filter(setId: string): string[];
   /** Returns coverage for one language, or `null` for an unknown id. */
   coverage(languageId: string): LanguageCoverage | null;
-  /** Returns every codepoint the language requires, ascending. */
-  required(languageId: string): number[];
-  /** Groups the given languages by script, skipping unknown ids. */
-  scriptsFor(languageIds: readonly string[]): LanguageScript[];
+  /**
+   * Returns every glyph a set requires: encoded glyphs by codepoint, then
+   * forms in GlyphData order. Empty for an unknown id.
+   */
+  required(setId: string): RequiredGlyph[];
+  /** Whether the font has a required glyph, by its codepoint or its name. */
+  has(glyph: RequiredGlyph): boolean;
 }
 
 export interface SearchResult {
