@@ -62,26 +62,36 @@ pub(crate) fn store_stored_layer_in_tx(
     let decoded_byte_length = encoded_len(stored.decoded_byte_length)?;
     let layer_sql = match mode {
         WriteMode::Insert => {
-            "INSERT INTO glyph_layers (id, glyph_id, source_id, width, height) VALUES (?1, ?2, ?3, ?4, ?5)"
+            "INSERT INTO glyph_layers (id, glyph_id, source_id, width, height,
+                 left_metrics_key, right_metrics_key, width_metrics_key)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
         }
         WriteMode::Upsert => {
             "
-            INSERT INTO glyph_layers (id, glyph_id, source_id, width, height)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO glyph_layers (id, glyph_id, source_id, width, height,
+                left_metrics_key, right_metrics_key, width_metrics_key)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
             ON CONFLICT(id) DO UPDATE SET
                 glyph_id = excluded.glyph_id,
                 source_id = excluded.source_id,
                 width = excluded.width,
-                height = excluded.height
+                height = excluded.height,
+                left_metrics_key = excluded.left_metrics_key,
+                right_metrics_key = excluded.right_metrics_key,
+                width_metrics_key = excluded.width_metrics_key
             "
         }
     };
+    let key = |side| crate::metrics_keys::column(layer.metrics_keys(), side);
     tx.prepare_cached(layer_sql)?.execute(params![
         layer.id(),
         glyph_id,
         layer.source_id().to_string(),
         layer.width(),
         layer.height(),
+        key(font::MetricsKeySide::Left),
+        key(font::MetricsKeySide::Right),
+        key(font::MetricsKeySide::Width),
     ])?;
 
     let payload_sql = match mode {

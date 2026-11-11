@@ -119,6 +119,9 @@ CREATE TABLE IF NOT EXISTS glyph_layers (
     source_id TEXT NOT NULL,
     width REAL NOT NULL DEFAULT 0,
     height REAL,
+    left_metrics_key TEXT,
+    right_metrics_key TEXT,
+    width_metrics_key TEXT,
     FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE,
     FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
 );
@@ -420,13 +423,18 @@ CREATE TABLE scene_nodes (
 );
 "#;
 
-/// Version 4 to 5: glyphs gain optional metrics keys, the text that links
-/// their sidebearings and width to other glyphs' metrics in every source.
-/// Keys for one source only live in the layer payload. This SQL is frozen.
+/// Version 4 to 5: glyphs and layers gain optional metrics keys, the text
+/// that links their sidebearings and width to other glyphs' metrics. A
+/// glyph's keys apply in every source and a layer's in its own. Layer keys
+/// are also in the layer payload; the columns let a directory read them
+/// without loading payloads. This SQL is frozen.
 const MIGRATE_V4_TO_V5: &str = r#"
 ALTER TABLE glyphs ADD COLUMN left_metrics_key TEXT;
 ALTER TABLE glyphs ADD COLUMN right_metrics_key TEXT;
 ALTER TABLE glyphs ADD COLUMN width_metrics_key TEXT;
+ALTER TABLE glyph_layers ADD COLUMN left_metrics_key TEXT;
+ALTER TABLE glyph_layers ADD COLUMN right_metrics_key TEXT;
+ALTER TABLE glyph_layers ADD COLUMN width_metrics_key TEXT;
 "#;
 
 /// The version that added the scene.

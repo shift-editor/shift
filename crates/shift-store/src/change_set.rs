@@ -324,9 +324,18 @@ impl<'a> StoreWriter<'a> {
                         order_index,
                         glyph.category().map(font::GlyphCategory::as_str),
                         glyph.sub_category().map(font::GlyphSubcategory::as_str),
-                        metrics_key_column(glyph, font::MetricsKeySide::Left),
-                        metrics_key_column(glyph, font::MetricsKeySide::Right),
-                        metrics_key_column(glyph, font::MetricsKeySide::Width),
+                        crate::metrics_keys::column(
+                            glyph.metrics_keys(),
+                            font::MetricsKeySide::Left
+                        ),
+                        crate::metrics_keys::column(
+                            glyph.metrics_keys(),
+                            font::MetricsKeySide::Right
+                        ),
+                        crate::metrics_keys::column(
+                            glyph.metrics_keys(),
+                            font::MetricsKeySide::Width
+                        ),
                     ])?;
                 for (unicode_order, unicode) in glyph.unicodes().iter().enumerate() {
                     self.tx.prepare_cached(
@@ -849,9 +858,9 @@ impl<'a> StoreWriter<'a> {
                 order_index,
                 glyph.category().map(font::GlyphCategory::as_str),
                 glyph.sub_category().map(font::GlyphSubcategory::as_str),
-                metrics_key_column(glyph, font::MetricsKeySide::Left),
-                metrics_key_column(glyph, font::MetricsKeySide::Right),
-                metrics_key_column(glyph, font::MetricsKeySide::Width),
+                crate::metrics_keys::column(glyph.metrics_keys(), font::MetricsKeySide::Left),
+                crate::metrics_keys::column(glyph.metrics_keys(), font::MetricsKeySide::Right),
+                crate::metrics_keys::column(glyph.metrics_keys(), font::MetricsKeySide::Width),
             ])?;
         Ok(())
     }
@@ -1328,9 +1337,4 @@ fn typed_json(kind: &'static str, value: impl serde::Serialize) -> serde_json::V
 
 fn require_changed(rows_changed: usize, kind: StoreEntity, id: &str) -> Result<(), StoreError> {
     (rows_changed > 0).then_some(()).or_missing(kind, &id)
-}
-
-/// The `glyphs` column value for the glyph's key on `side`.
-fn metrics_key_column(glyph: &font::Glyph, side: font::MetricsKeySide) -> Option<&str> {
-    glyph.metrics_keys().get(side).map(font::MetricsKey::as_str)
 }
