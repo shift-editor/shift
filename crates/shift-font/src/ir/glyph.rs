@@ -9,7 +9,7 @@ use crate::entity::{
 use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
-use crate::metrics_keys::MetricsKeys;
+use crate::metrics_keys::{MetricsKey, MetricsKeySide, MetricsKeys};
 use crate::point::{Canonical, Point};
 use crate::{CoreError, CoreResult, GlyphName};
 use serde::{Deserialize, Serialize};
@@ -586,6 +586,16 @@ impl Glyph {
         &self.metrics_keys
     }
 
+    /// The key for `side` in `source_id`: the layer's own key, or else the
+    /// glyph's. `None` when neither has one or the glyph has no layer there.
+    pub fn metrics_key(&self, source_id: SourceId, side: MetricsKeySide) -> Option<&MetricsKey> {
+        let layer = self.layer_for_source(source_id)?;
+        layer
+            .metrics_keys()
+            .get(side)
+            .or_else(|| self.metrics_keys.get(side))
+    }
+
     pub fn metrics_keys_mut(&mut self) -> &mut MetricsKeys {
         &mut self.metrics_keys
     }
@@ -747,7 +757,7 @@ mod tests {
         let mut layer = converted(LayerId::new(), SourceId::new());
         layer
             .metrics_keys_mut()
-            .set(crate::MetricsKeySide::Right, crate::MetricsKey::new("=|"));
+            .set(MetricsKeySide::Right, MetricsKey::new("=|"));
 
         let derived = layer.with_derived_entity_ids();
         let fresh = layer.clone_with_fresh_ids(LayerId::new(), SourceId::new());

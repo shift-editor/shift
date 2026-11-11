@@ -17,6 +17,7 @@ use crate::lib_data::{LibData, LibValue};
 use crate::metrics::{
     FontMetrics, MetricDefinition, MetricDefinitionList, MetricKind, MetricValue, StandardMetrics,
 };
+use crate::metrics_keys::MetricsKeys;
 use crate::named_instance::{NamedInstance, validate_named_instances};
 use crate::source::{Source, SourceList};
 use crate::{AxisLabelId, GlyphName, NamedInstanceId};
@@ -1335,6 +1336,23 @@ impl Font {
         let glyph = Arc::make_mut(state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?);
         glyph.set_category(category);
         glyph.set_sub_category(sub_category);
+        self.state = Arc::new(state);
+        Ok(())
+    }
+
+    /// Replaces the metrics keys the glyph has in every source.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::GlyphNotFound`] when the glyph is missing.
+    pub fn set_glyph_metrics_keys(
+        &mut self,
+        glyph_id: GlyphId,
+        metrics_keys: MetricsKeys,
+    ) -> CoreResult<()> {
+        let mut state = (*self.state).clone();
+        let glyph = Arc::make_mut(state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?);
+        *glyph.metrics_keys_mut() = metrics_keys;
         self.state = Arc::new(state);
         Ok(())
     }
