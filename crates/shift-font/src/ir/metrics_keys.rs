@@ -37,6 +37,7 @@ impl std::fmt::Display for MetricsKey {
 
 /// The metric a key sets.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum MetricsKeySide {
     Left,
     Right,

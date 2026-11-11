@@ -1200,3 +1200,37 @@ impl LayerIntent for ReplaceGlyphLayerContent {
         Ok(())
     }
 }
+
+/// Sets or clears one of a layer's metrics keys, for its source only,
+/// overriding the glyph's key for that side. `key` is kept as written; empty
+/// or blank text clears it. The side then follows the key in this same edit.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct SetLayerMetricsKey {
+    pub layer_id: LayerId,
+    pub side: MetricsKeySide,
+    pub key: Option<String>,
+}
+
+impl LayerIntent for SetLayerMetricsKey {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn structural(&self) -> bool {
+        false
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            side,
+            key,
+        } = self;
+        let key = key.clone().and_then(MetricsKey::new);
+        font.edit_layer(*layer_id, |layer| {
+            layer.metrics_keys_mut().set(*side, key);
+            Ok(())
+        })
+    }
+}

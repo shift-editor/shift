@@ -727,3 +727,82 @@ mod perf {
         assert!(scan < Duration::from_millis(2), "{scan:?}");
     }
 }
+
+#[test]
+fn linked_sides_say_where_each_key_is_set_and_what_stops_it() {
+    let (mut font, source) = font();
+    set_key(&mut font, "o", LEFT, "=n");
+    set_key(&mut font, "o", RIGHT, "=o");
+    let o_id = font.glyph_id_by_name("o").unwrap();
+    let layer_id = font
+        .glyph(o_id)
+        .unwrap()
+        .layer_for_source(source)
+        .unwrap()
+        .id();
+    font.apply_intents(&crate::FontIntentSet::from(crate::SetLayerMetricsKey {
+        layer_id,
+        side: WIDTH,
+        key: Some("==H".to_string()),
+    }))
+    .unwrap();
+
+    let sides = font.linked_sides(o_id, source);
+
+    let summary: Vec<(MetricsKeySide, &str, KeyLevel, bool)> = sides
+        .iter()
+        .map(|link| {
+            (
+                link.side,
+                link.key.as_str(),
+                link.level,
+                link.problem.is_some(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            (LEFT, "=n", KeyLevel::Glyph, false),
+            (RIGHT, "=o", KeyLevel::Glyph, true),
+            (WIDTH, "==H", KeyLevel::Layer, true),
+        ]
+    );
+    assert!(
+        font.linked_sides(font.glyph_id_by_name("n").unwrap(), source)
+            .is_empty()
+    );
+}
+
+#[test]
+fn setting_a_key_applies_it_and_clearing_it_keeps_the_value() {
+    let (mut font, source) = font();
+    let o_id = font.glyph_id_by_name("o").unwrap();
+    let set = |key: Option<&str>| crate::SetGlyphMetricsKey {
+        glyph_id: o_id,
+        side: LEFT,
+        key: key.map(str::to_owned),
+    };
+
+    font.apply_intents(&crate::FontIntentSet::from(set(Some("=H"))))
+        .unwrap();
+    let mut evaluator = MetricsKeyEvaluator::new(&font, source).unwrap();
+    assert_eq!(evaluator.current(o_id, LEFT).unwrap(), 80.0);
+
+    font.apply_intents(&crate::FontIntentSet::from(set(None)))
+        .unwrap();
+    assert!(font.linked_sides(o_id, source).is_empty());
+    let mut evaluator = MetricsKeyEvaluator::new(&font, source).unwrap();
+    assert_eq!(evaluator.current(o_id, LEFT).unwrap(), 80.0);
+}
+
+#[test]
+fn a_typed_key_is_checked_against_the_font() {
+    let (font, _) = font();
+    assert_eq!(font.metrics_key_problem("=n+10"), None);
+    assert_eq!(
+        font.metrics_key_problem("=nn").as_deref(),
+        Some("no glyph named `nn`")
+    );
+    assert!(font.metrics_key_problem("=(n").is_some());
+}

@@ -22,7 +22,10 @@ use crate::ir::{
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::linked_metrics::ChangedGlyphs;
 use crate::point_arrange::{DistributeAxis, PointAlignment, Sidebearing};
-use crate::{KerningGroup, KerningGroupId, KerningPair, KerningPosition, KerningSide};
+use crate::{
+    KerningGroup, KerningGroupId, KerningPair, KerningPosition, KerningSide, MetricsKey,
+    MetricsKeySide,
+};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
@@ -152,6 +155,7 @@ font_intents! {
         AlignPoints,
         DistributePoints,
         ShiftSidebearing,
+        SetLayerMetricsKey,
         ReplaceGlyphLayerContent,
     }
     font {
@@ -178,6 +182,7 @@ font_intents! {
         RenameKerningGroup,
         DeleteKerningGroup,
         MaterializeGlyphLayer,
+        SetGlyphMetricsKey,
     }
 }
 

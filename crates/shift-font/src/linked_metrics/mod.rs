@@ -14,12 +14,14 @@ mod apply;
 mod evaluate;
 mod measure;
 mod order;
+mod report;
 mod syntax;
 
 pub use apply::ChangedGlyphs;
 pub use evaluate::MetricsKeyEvaluator;
 pub use measure::Metric;
 pub use order::{LinkedMetricsOrder, LinkedSide, OrderedKey};
+pub use report::{KeyLevel, SideLink};
 pub use syntax::{
     BinaryOp, Expr, Function, KeyBody, KeyScope, Measure, MeasureSide, ParsedMetricsKey, parse,
 };

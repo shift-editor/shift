@@ -37,7 +37,7 @@ impl Font {
                 continue;
             }
             for ordered in self.linked_metrics_order_of(source_id, affected).keys {
-                if !is_affected(&ordered, &changed_here) {
+                if !ordered.is_affected_by(&changed_here) {
                     continue;
                 }
                 let glyph_id = ordered.linked.glyph_id;
@@ -151,6 +151,9 @@ impl Font {
     }
 }
 
-fn is_affected(ordered: &OrderedKey, changed: &BTreeSet<GlyphId>) -> bool {
-    changed.contains(&ordered.linked.glyph_id) || !ordered.reads.is_disjoint(changed)
+impl OrderedKey {
+    /// Whether `changed` holds the key's glyph or a glyph it reads.
+    fn is_affected_by(&self, changed: &BTreeSet<GlyphId>) -> bool {
+        changed.contains(&self.linked.glyph_id) || !self.reads.is_disjoint(changed)
+    }
 }

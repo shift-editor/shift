@@ -470,3 +470,28 @@ impl FontLevelIntent for MaterializeGlyphLayer {
         Ok((layer_ids, None))
     }
 }
+
+/// Sets or clears one of a glyph's metrics keys, which apply in every source
+/// its layers do not override. `key` is kept as written; empty or blank text
+/// clears it. The side then follows the key in this same edit.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct SetGlyphMetricsKey {
+    pub glyph_id: GlyphId,
+    pub side: MetricsKeySide,
+    pub key: Option<String>,
+}
+
+impl FontLevelIntent for SetGlyphMetricsKey {
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Option<GlyphId>)> {
+        let Self {
+            glyph_id,
+            side,
+            key,
+        } = self;
+        let mut keys = font.require_glyph(*glyph_id)?.metrics_keys().clone();
+        keys.set(*side, key.clone().and_then(MetricsKey::new));
+        font.set_glyph_metrics_keys(*glyph_id, keys)?;
+        Ok((Vec::new(), Some(*glyph_id)))
+    }
+}

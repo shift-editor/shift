@@ -27,10 +27,11 @@ use pack::Pack;
 use shift_engine::StoreReadError;
 use shift_engine::scene::{RevisedNode, SceneNode, TextRun};
 use shift_font::glyph_identity::GlyphIdentityChange;
+use shift_font::linked_metrics::SideLink;
 use shift_font::{
     AnchorId, Axis, ComponentId, Counterparts, CounterpartsError, FontChangeFlag, GlyphId,
     GlyphRecords, LayerId, MetricValue, MissingKerningOrigin, NodeId, PointId, ResolvedKerning,
-    Source,
+    Source, SourceId,
 };
 use shift_text::layout::{LayoutError, TextLayout};
 
@@ -187,6 +188,14 @@ pub trait EngineReads {
         glyph: GlyphId,
         codepoint: Option<u32>,
     ) -> Option<GlyphIdentityChange>;
+    /// The linked sides of `glyph` in `source`, each with its key, where the
+    /// key is set and why it cannot be applied: `Font::linked_sides`. Empty
+    /// for a glyph or source the session's font lacks, or a glyph with no
+    /// keys there.
+    fn linked_sides(&self, glyph: GlyphId, source: SourceId) -> Vec<SideLink>;
+    /// Why `text` is not a metrics key the session's font can read, or null
+    /// when it is: `Font::metrics_key_problem`.
+    fn metrics_key_problem(&self, text: String) -> Option<String>;
     /// Every interned source set's weights at a design location, as the
     /// basis the session's font gives each set evaluates them
     /// (`InterpolationBasis::weights_at`): the weights of the sets a frame
@@ -411,6 +420,7 @@ mod exports {
     use std::rc::Rc;
 
     use shift_engine::StoreReadError;
+    use shift_font::linked_metrics::SideLink;
     use shift_font::naming::new_anchor_name;
     use shift_font::{
         AxisMapping, AxisMappingBasis, DesignLocation, ExternalLocation, Font, FontChangeImpact,
@@ -830,6 +840,14 @@ mod exports {
 
         fn glyph_rename(&self, glyph: GlyphId, name: String) -> Option<GlyphIdentityChange> {
             self.session.font().glyph_rename(glyph, &name).ok()
+        }
+
+        fn linked_sides(&self, glyph: GlyphId, source: SourceId) -> Vec<SideLink> {
+            self.session.font().linked_sides(glyph, source)
+        }
+
+        fn metrics_key_problem(&self, text: String) -> Option<String> {
+            self.session.font().metrics_key_problem(&text)
         }
 
         fn glyph_primary_codepoint(
