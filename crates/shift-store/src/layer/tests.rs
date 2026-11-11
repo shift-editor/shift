@@ -24,6 +24,32 @@ fn populated_store() -> (ShiftStore, font::Font) {
     (store, font)
 }
 
+/// Layers stored before metrics keys existed are a MessagePack array of nine
+/// fields. An unkeyed layer must still encode as that array, so old and new
+/// payloads agree, and a keyed layer adds its keys as a tenth.
+#[test]
+fn metrics_keys_are_a_trailing_layer_field_that_unkeyed_layers_omit() {
+    const FIXARRAY_OF_9: u8 = 0x99;
+    const FIXARRAY_OF_10: u8 = 0x9a;
+    let unkeyed = font::GlyphLayer::with_width(
+        font::LayerId::from_raw("layer"),
+        font::SourceId::from_raw("source"),
+        500.0,
+    );
+    let mut keyed = unkeyed.clone();
+    keyed
+        .metrics_keys_mut()
+        .set(font::MetricsKeySide::Left, font::MetricsKey::new("=|n"));
+
+    let unkeyed_bytes = encode_layer(&unkeyed).unwrap();
+    let keyed_bytes = encode_layer(&keyed).unwrap();
+
+    assert_eq!(unkeyed_bytes[0], FIXARRAY_OF_9);
+    assert_eq!(keyed_bytes[0], FIXARRAY_OF_10);
+    assert_eq!(format::decode_layer(&unkeyed_bytes).unwrap(), unkeyed);
+    assert_eq!(format::decode_layer(&keyed_bytes).unwrap(), keyed);
+}
+
 #[test]
 fn sqlite_payload_preserves_canonical_bytes() {
     let font = font::test_support::sample_font();

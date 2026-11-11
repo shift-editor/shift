@@ -321,23 +321,49 @@ fn load_source_location(
     Ok(location)
 }
 
+/// One row of the `glyphs` table, as [`load_glyphs`] reads it.
+struct GlyphRow {
+    id: font::GlyphId,
+    name: String,
+    category: Option<String>,
+    sub_category: Option<String>,
+    metrics_keys: font::MetricsKeys,
+}
+
+impl GlyphRow {
+    fn read(row: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
+        let mut metrics_keys = font::MetricsKeys::new();
+        for (side, column) in [
+            (font::MetricsKeySide::Left, "left_metrics_key"),
+            (font::MetricsKeySide::Right, "right_metrics_key"),
+            (font::MetricsKeySide::Width, "width_metrics_key"),
+        ] {
+            let text: Option<String> = row.get(column)?;
+            metrics_keys.set(side, text.and_then(font::MetricsKey::new));
+        }
+
+        Ok(Self {
+            id: row.get("id")?,
+            name: row.get::<_, Option<String>>("name")?.unwrap_or_default(),
+            category: row.get("category")?,
+            sub_category: row.get("sub_category")?,
+            metrics_keys,
+        })
+    }
+}
+
 fn load_glyphs(
     conn: &rusqlite::Connection,
     read: FontRead,
 ) -> Result<Vec<font::Glyph>, StoreError> {
     let glyph_rows = {
         let mut stmt = conn.prepare(
-            "SELECT id, name, category, sub_category FROM glyphs ORDER BY order_index, id",
+            "SELECT id, name, category, sub_category,
+                    left_metrics_key, right_metrics_key, width_metrics_key
+             FROM glyphs ORDER BY order_index, id",
         )?;
-        stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, font::GlyphId>(0)?,
-                row.get::<_, Option<String>>(1)?.unwrap_or_default(),
-                row.get::<_, Option<String>>(2)?,
-                row.get::<_, Option<String>>(3)?,
-            ))
-        })?
-        .collect::<Result<Vec<_>, _>>()?
+        stmt.query_map([], GlyphRow::read)?
+            .collect::<Result<Vec<_>, _>>()?
     };
 
     let mut unicodes: HashMap<font::GlyphId, Vec<(i64, u32)>> = HashMap::new();
@@ -424,11 +450,19 @@ fn load_glyphs(
     }
 
     let mut glyphs = Vec::with_capacity(glyph_rows.len());
-    for (glyph_id, name, category, sub_category) in glyph_rows {
+    for row in glyph_rows {
+        let GlyphRow {
+            id: glyph_id,
+            name,
+            category,
+            sub_category,
+            metrics_keys,
+        } = row;
         let mut glyph = font::Glyph::with_id(glyph_id, name);
         // A name a later Shift wrote but this one does not know reads as unset.
         glyph.set_category(category.and_then(|category| category.parse().ok()));
         glyph.set_sub_category(sub_category.and_then(|sub_category| sub_category.parse().ok()));
+        *glyph.metrics_keys_mut() = metrics_keys;
         let mut glyph_unicodes = unicodes.remove(&glyph_id).unwrap_or_default();
         glyph_unicodes.sort_by_key(|(order_index, _)| *order_index);
         glyph.set_unicodes(

@@ -1,6 +1,7 @@
 pub(crate) mod glif;
 mod import;
 mod kerning;
+mod metrics_keys;
 mod reader;
 mod source;
 mod writer;

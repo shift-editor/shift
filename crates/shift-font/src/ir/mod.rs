@@ -15,6 +15,7 @@ pub mod guideline;
 pub mod kerning;
 pub mod lib_data;
 pub mod metrics;
+pub mod metrics_keys;
 pub mod named_instance;
 pub(crate) mod persistent;
 pub mod point;
@@ -53,6 +54,7 @@ pub use lib_data::{LibData, LibValue};
 pub use metrics::{
     FontMetrics, MetricDefinition, MetricDefinitionList, MetricKind, MetricValue, StandardMetrics,
 };
+pub use metrics_keys::{MetricsKey, MetricsKeySide, MetricsKeys};
 pub use named_instance::NamedInstance;
 pub use persistent::PersistentMap;
 pub use point::{Point, PointType};
