@@ -46,6 +46,16 @@ pub enum MetricsKeySide {
 
 impl MetricsKeySide {
     pub const ALL: [Self; 3] = [Self::Left, Self::Right, Self::Width];
+
+    /// The sides whose keys would pull an edit of this side back: a right
+    /// sidebearing and a width set the same edge, so editing either holds both.
+    pub fn sides_holding(self) -> &'static [Self] {
+        match self {
+            Self::Left => &[Self::Left],
+            Self::Right => &[Self::Right, Self::Width],
+            Self::Width => &[Self::Width, Self::Right],
+        }
+    }
 }
 
 /// The keys set on a glyph or a layer; each side is optional.

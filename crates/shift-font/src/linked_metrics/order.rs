@@ -218,7 +218,11 @@ impl Font {
 
     /// Every glyph `glyph_id` draws as a component in `source_id`, nested
     /// ones included.
-    fn component_bases_in(&self, source_id: SourceId, glyph_id: GlyphId) -> BTreeSet<GlyphId> {
+    pub(super) fn component_bases_in(
+        &self,
+        source_id: SourceId,
+        glyph_id: GlyphId,
+    ) -> BTreeSet<GlyphId> {
         let mut bases = BTreeSet::new();
         let mut pending = vec![glyph_id];
         while let Some(next) = pending.pop() {

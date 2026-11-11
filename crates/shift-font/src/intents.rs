@@ -24,7 +24,7 @@ use crate::linked_metrics::ChangedGlyphs;
 use crate::point_arrange::{DistributeAxis, PointAlignment, Sidebearing};
 use crate::{
     KerningGroup, KerningGroupId, KerningPair, KerningPosition, KerningSide, MetricsKey,
-    MetricsKeySide,
+    MetricsKeySide, linked_metrics::KeyScope,
 };
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
@@ -183,6 +183,8 @@ font_intents! {
         DeleteKerningGroup,
         MaterializeGlyphLayer,
         SetGlyphMetricsKey,
+        LinkMetricsSide,
+        UnlinkMetricsSide,
     }
 }
 

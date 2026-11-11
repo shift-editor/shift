@@ -27,6 +27,25 @@ export interface EditableSidebarInputProps {
   disabled?: boolean;
   suffix?: string;
   defaultValue?: number;
+  /**
+   * The text to edit instead of the value, such as a metrics key the value
+   * follows. Editing it back unchanged changes nothing.
+   */
+  keyText?: string | null;
+  /**
+   * Takes text starting `=`, or blank text in place of {@link keyText}, as a
+   * key instead of a value.
+   *
+   * @returns Why the key was refused, which the field then shows; null when it was taken.
+   */
+  onKeyCommit?: (text: string) => string | null;
+  /** What the tooltip says; the field's accessible name when omitted. */
+  tooltip?: string;
+}
+
+/** Whether `text` is a key the field passes to `onKeyCommit` rather than a number. */
+function isKeyText(text: string, keyText: string | null): boolean {
+  return text.startsWith("=") || (keyText !== null && text === "");
 }
 
 const parseNumericValue = (input: string): number | null => {
@@ -52,6 +71,9 @@ export const EditableSidebarInput = forwardRef<
       disabled = false,
       suffix = "",
       defaultValue = 0,
+      keyText = null,
+      onKeyCommit,
+      tooltip,
     },
     ref,
   ) => {
@@ -59,6 +81,7 @@ export const EditableSidebarInput = forwardRef<
     const [isEditing, setIsEditing] = useState(false);
     const [editValue, setEditValue] = useState("");
     const [displayValue, setDisplayValue] = useState<number | null>(initialValue);
+    const [refusal, setRefusal] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const focus = useSidebarInputFocus();
 
@@ -71,17 +94,24 @@ export const EditableSidebarInput = forwardRef<
     const handleFocus = useCallback(() => {
       if (disabled) return;
       setIsEditing(true);
-      setEditValue(displayValue === null ? "" : String(displayValue));
+      setEditValue(keyText ?? (displayValue === null ? "" : String(displayValue)));
       focus?.onEditStart();
-    }, [disabled, displayValue, focus]);
+    }, [disabled, displayValue, focus, keyText]);
 
     const handleBlur = useCallback(() => {
       setIsEditing(false);
       focus?.onEditEnd();
+      const text = editValue.trim();
+      if (onKeyCommit && isKeyText(text, keyText)) {
+        setRefusal(text === keyText ? null : onKeyCommit(text));
+        return;
+      }
+
+      setRefusal(null);
       const numericValue = parseNumericValue(editValue) ?? defaultValue;
       setDisplayValue(numericValue);
       if (onValueChange) onValueChange(numericValue);
-    }, [editValue, defaultValue, onValueChange, focus]);
+    }, [editValue, defaultValue, onValueChange, focus, onKeyCommit, keyText]);
 
     const handleKeyDown = useCallback(
       (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -94,7 +124,7 @@ export const EditableSidebarInput = forwardRef<
         }
         if ((event.metaKey || event.ctrlKey) && event.key === "a") inputRef.current.select();
         if (event.key === "Escape") {
-          setEditValue(displayValue === null ? "" : String(displayValue));
+          setEditValue(keyText ?? (displayValue === null ? "" : String(displayValue)));
           setIsEditing(false);
           inputRef.current.blur();
           return;
@@ -111,7 +141,7 @@ export const EditableSidebarInput = forwardRef<
         if (isEditing) setEditValue(String(nextValue));
         if (onValueChange) onValueChange(nextValue);
       },
-      [displayValue, editValue, isEditing, onValueChange],
+      [displayValue, editValue, isEditing, onValueChange, keyText],
     );
 
     const displayText = displayValue === null ? "" : `${displayValue}${suffix}`;
@@ -134,9 +164,10 @@ export const EditableSidebarInput = forwardRef<
             onKeyDown={handleKeyDown}
             onChange={(event) => setEditValue(event.target.value)}
             disabled={disabled}
+            aria-invalid={refusal !== null}
           />
         </TooltipTrigger>
-        <TooltipContent>{ariaLabel}</TooltipContent>
+        <TooltipContent>{refusal ?? tooltip ?? ariaLabel}</TooltipContent>
       </Tooltip>
     );
   },

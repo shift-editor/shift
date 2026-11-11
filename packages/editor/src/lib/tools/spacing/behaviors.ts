@@ -8,6 +8,7 @@ import type {
   PointerMoveEvent,
 } from "../core/GestureDetector";
 import { NUDGES_VALUES, nudgeMagnitude } from "../../../types/nudge";
+import { SIDE_OF_SIDEBEARING } from "../../model/MetricsLinks";
 import type { SidebearingEdit } from "../../model/SidebearingEdit";
 import { sceneVector, scenePoint, vectorBetween } from "../../editor/spaces";
 import type { Editor } from "../../editor/Editor";
@@ -161,7 +162,10 @@ export class SpacingDrag implements Behavior<SpacingState, SpacingTool> {
     hit.select(ctx.editor);
     this.#start = glyphSide.sidebearing;
     this.#targets = SnapTargets.for(hit, layer);
-    const edit = layer.beginSidebearingEdit(hit.sidebearing);
+    // Dragging a linked side breaks its link, in the preview and the commit alike.
+    const links = hit.links(ctx.editor);
+    const side = SIDE_OF_SIDEBEARING[hit.sidebearing];
+    const edit = layer.beginSidebearingEdit(hit.sidebearing, () => links?.unlinkFor(side));
     this.#edit = edit;
     this.#done = ctx.onCancel(() => edit.discard());
     ctx.setState({ type: "dragging", hit, origin: event.origin.scene, snap: null });

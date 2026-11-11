@@ -36,6 +36,25 @@ pub enum KeyScope {
     ThisSource,
 }
 
+impl KeyScope {
+    /// The sources `text` is written for, read off its prefix alone.
+    pub fn of(text: &str) -> Self {
+        Self::split(text).0
+    }
+
+    /// The scope and the expression after its prefix.
+    fn split(text: &str) -> (Self, &str) {
+        let trimmed = text.trim();
+        if let Some(rest) = trimmed.strip_prefix("==") {
+            return (Self::ThisSource, rest);
+        }
+        if let Some(rest) = trimmed.strip_prefix('=') {
+            return (Self::EverySource, rest);
+        }
+        (Self::EverySource, trimmed)
+    }
+}
+
 /// What a key computes.
 #[derive(Clone, Debug, PartialEq)]
 pub enum KeyBody {
@@ -112,14 +131,7 @@ pub fn parse(
     text: &str,
     has_glyph: &impl Fn(&str) -> bool,
 ) -> Result<ParsedMetricsKey, MetricsKeyError> {
-    let trimmed = text.trim();
-    let (scope, body_text) = if let Some(rest) = trimmed.strip_prefix("==") {
-        (KeyScope::ThisSource, rest)
-    } else if let Some(rest) = trimmed.strip_prefix('=') {
-        (KeyScope::EverySource, rest)
-    } else {
-        (KeyScope::EverySource, trimmed)
-    };
+    let (scope, body_text) = KeyScope::split(text);
 
     let tokens = tokenize(body_text, has_glyph)?;
     if let [sign @ (Token::Plus | Token::Minus), Token::Number(offset)] = tokens.as_slice() {

@@ -30,7 +30,6 @@ import type {
   LayerId,
   LayerRead,
   Location,
-  MetricsKeySide,
   PointId,
   SegmentId,
   NamedInstance,
@@ -851,20 +850,6 @@ export class Font {
    */
   metricsKeyProblem(text: string): string | null {
     return this.#requireEngine().metricsKeyProblem(text);
-  }
-
-  /**
-   * Sets or clears a glyph's metrics key for `side`, which applies in every
-   * source whose layer has no key of its own for it. The side follows the
-   * key in the same edit.
-   *
-   * @param key - The key as typed, such as `=n+10`; null clears it.
-   */
-  setGlyphMetricsKey(glyphId: GlyphId, side: MetricsKeySide, key: string | null): void {
-    this.editCoordinator.push({
-      kind: "setGlyphMetricsKey",
-      setGlyphMetricsKey: { glyphId, side, key },
-    });
   }
 
   /**

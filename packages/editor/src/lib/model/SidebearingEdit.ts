@@ -18,18 +18,27 @@ export class SidebearingEdit {
   readonly #layer: GlyphLayer;
   readonly #state: GlyphLayerState;
   readonly #sidebearing: Sidebearing;
+  readonly #unlink: () => void;
 
   #delta = 0;
   #closed = false;
 
   /**
    * @param sidebearing - The sidebearing to change.
+   * @param unlink - Clears the metrics keys that would pull the side back;
+   *   it runs in every preview and in the commit, so a linked side moves as dragged.
    * @throws {Error} When the layer already has an active edit.
    */
-  constructor(layer: GlyphLayer, state: GlyphLayerState, sidebearing: Sidebearing) {
+  constructor(
+    layer: GlyphLayer,
+    state: GlyphLayerState,
+    sidebearing: Sidebearing,
+    unlink: () => void,
+  ) {
     this.#layer = layer;
     this.#state = state;
     this.#sidebearing = sidebearing;
+    this.#unlink = unlink;
 
     state.beginEdit(() => this.#reapply());
   }
@@ -74,6 +83,7 @@ export class SidebearingEdit {
 
   /** The edit for `delta`, as the commit sends it: the left sidebearing moves the outline. */
   #steps(delta: number): void {
+    this.#unlink();
     this.#layer.shiftSidebearing(this.#sidebearing, delta);
   }
 }

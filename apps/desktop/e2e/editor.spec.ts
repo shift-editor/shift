@@ -747,6 +747,28 @@ test.describe("Editor view", () => {
     await expect(advanceInput).toHaveValue(String(initialAdvance + 25));
   });
 
+  test("links a sidebearing by typing a key and breaks the link by typing a value", async ({
+    page,
+    editor,
+  }) => {
+    const leftSidebearing = glyphProperties(page).getByLabel("Left sidebearing", { exact: true });
+
+    await editor.commitInputValue(leftSidebearing, "=50");
+    await expect(leftSidebearing).toHaveValue("50");
+    await leftSidebearing.click();
+    await expect(leftSidebearing).toHaveValue("=50");
+    await editor.press("Escape");
+
+    await editor.commitInputValue(leftSidebearing, "=nosuchglyph");
+    await expect(leftSidebearing).toHaveAttribute("aria-invalid", "true");
+    await expect(leftSidebearing).toHaveValue("50");
+
+    await editor.commitInputValue(leftSidebearing, 60);
+    await expect(leftSidebearing).toHaveValue("60");
+    await leftSidebearing.click();
+    await expect(leftSidebearing).toHaveValue("60");
+  });
+
   test("does not move a selection when its displayed position is reapplied", async ({
     page,
     editor,

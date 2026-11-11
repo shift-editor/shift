@@ -1,7 +1,10 @@
 //! What the editor shows of a glyph's links: each linked side's key, where
 //! it is set, and why it cannot be applied when it cannot.
 
+use std::collections::BTreeSet;
+
 use super::parse;
+use super::syntax::candidate_names;
 use crate::{Font, GlyphId, MetricsKeySide, SourceId};
 
 /// Where a key that applies in a source is set.
@@ -51,7 +54,7 @@ impl Font {
             return Vec::new();
         }
 
-        let order = self.linked_metrics_order(source_id);
+        let order = self.linked_metrics_order_of(source_id, self.keyed_reach(source_id, glyph_id));
         keyed
             .into_iter()
             .map(|(side, key, level)| {
@@ -70,9 +73,40 @@ impl Font {
             .collect()
     }
 
+    /// `glyph_id` and every keyed glyph its keys may reach in `source_id`:
+    /// the glyphs they name, the glyphs those draw as components, and so on
+    /// through those glyphs' keys. Ordering only these finds every problem
+    /// the glyph's keys have, cycles included, without ordering the font.
+    fn keyed_reach(&self, source_id: SourceId, glyph_id: GlyphId) -> BTreeSet<GlyphId> {
+        let mut reach = BTreeSet::new();
+        let mut pending = vec![glyph_id];
+        while let Some(next) = pending.pop() {
+            if !reach.insert(next) {
+                continue;
+            }
+            let Some(glyph) = self.glyph(next) else {
+                continue;
+            };
+            let named = MetricsKeySide::ALL
+                .into_iter()
+                .filter_map(|side| glyph.metrics_key(source_id, side))
+                .flat_map(|key| candidate_names(key.as_str()))
+                .filter_map(|name| self.glyph_id_by_name(name));
+            for named in named {
+                pending.push(named);
+                pending.extend(self.component_bases_in(source_id, named));
+            }
+        }
+        reach
+    }
+
     /// Why `text` is not a key this font can read, or `None` when it is:
-    /// the check a field makes before it sets a key.
+    /// the check a field makes before it sets a key. Blank text is no key,
+    /// which [`crate::LinkMetricsSide`] takes as removing one.
     pub fn metrics_key_problem(&self, text: &str) -> Option<String> {
+        if text.trim().is_empty() {
+            return None;
+        }
         let has_glyph = |name: &str| self.glyph_id_by_name(name).is_some();
         parse(text, &has_glyph).err().map(|error| error.to_string())
     }

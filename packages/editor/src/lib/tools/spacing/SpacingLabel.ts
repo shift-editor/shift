@@ -10,10 +10,19 @@ const PADDING_PX = 4;
 /** Width of one character of the label font; the pill sizes from it, so drawing and hits agree. */
 const CHARACTER_WIDTH_PX = 6;
 
-/** The text a half's pill shows: its sidebearing in whole units. */
-export function spacingLabelText(half: SpacingHalf): string | null {
+/** Marks a value that follows a metrics key, as a key is typed: `=`. */
+const LINKED_MARK = "=";
+
+/**
+ * The text a half's pill shows: its sidebearing in whole units, after `=`
+ * when the side follows a metrics key.
+ */
+export function spacingLabelText(editor: Editor, half: SpacingHalf): string | null {
   const glyphSide = half.glyphSide;
-  return glyphSide ? String(Math.round(glyphSide.sidebearing)) : null;
+  if (!glyphSide) return null;
+
+  const value = String(Math.round(glyphSide.sidebearing));
+  return half.isLinked(editor) ? `${LINKED_MARK}${value}` : value;
 }
 
 /** The middle of a half, in screen pixels: where its pill sits. */
@@ -30,7 +39,7 @@ export function spacingLabelCenter(editor: Editor, half: SpacingHalf): ScreenPoi
 /** A half's pill, in screen pixels; drawing and clicks both use it. */
 export function spacingLabelRect(editor: Editor, half: SpacingHalf): Rect2D | null {
   const center = spacingLabelCenter(editor, half);
-  const text = spacingLabelText(half);
+  const text = spacingLabelText(editor, half);
   if (!center || !text) return null;
 
   const width = text.length * CHARACTER_WIDTH_PX + PADDING_PX * 2;

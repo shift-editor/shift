@@ -17,7 +17,7 @@ use crate::lib_data::{LibData, LibValue};
 use crate::metrics::{
     FontMetrics, MetricDefinition, MetricDefinitionList, MetricKind, MetricValue, StandardMetrics,
 };
-use crate::metrics_keys::MetricsKeys;
+use crate::metrics_keys::{MetricsKey, MetricsKeySide, MetricsKeys};
 use crate::named_instance::{NamedInstance, validate_named_instances};
 use crate::source::{Source, SourceList};
 use crate::{AxisLabelId, GlyphName, NamedInstanceId};
@@ -1344,6 +1344,56 @@ impl Font {
         glyph.set_sub_category(sub_category);
         self.state = Arc::new(state);
         Ok(())
+    }
+
+    /// Sets or clears one of a layer's own metrics keys, re-indexing it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::LayerNotFound`] when the layer is missing.
+    pub fn set_layer_metrics_key(
+        &mut self,
+        layer_id: LayerId,
+        side: MetricsKeySide,
+        key: Option<MetricsKey>,
+    ) -> CoreResult<()> {
+        let before = self.layer_snapshot(layer_id)?;
+        self.require_layer_mut(layer_id)?
+            .metrics_keys_mut()
+            .set(side, key);
+        self.reindex_layer(layer_id, &before)
+    }
+
+    /// Clears `sides`' keys on a layer and on its glyph, so none of them
+    /// applies in the layer's source.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::LayerNotFound`] when the layer is missing.
+    pub fn clear_metrics_keys(
+        &mut self,
+        layer_id: LayerId,
+        sides: &[MetricsKeySide],
+    ) -> CoreResult<()> {
+        let glyph_id = self.require_layer_owner(layer_id)?;
+        for side in sides {
+            if self
+                .require_layer(layer_id)?
+                .metrics_keys()
+                .get(*side)
+                .is_some()
+            {
+                self.set_layer_metrics_key(layer_id, *side, None)?;
+            }
+        }
+        let mut keys = self.require_glyph(glyph_id)?.metrics_keys().clone();
+        if sides.iter().all(|side| keys.get(*side).is_none()) {
+            return Ok(());
+        }
+        for side in sides {
+            keys.set(*side, None);
+        }
+        self.set_glyph_metrics_keys(glyph_id, keys)
     }
 
     /// Replaces the metrics keys the glyph has in every source.

@@ -705,6 +705,10 @@ mod perf {
         let scan = median_time(|_| {
             assert!(!keyed.linked_glyph_ids().is_empty());
         });
+        let linked_id = keyed.glyph_id_by_name(&name(1)).unwrap();
+        let report = median_time(|_| {
+            assert_eq!(keyed.linked_sides(linked_id, source).len(), 2);
+        });
 
         println!("perf_mark linked metrics, {GLYPHS} glyphs, 600 keyed:");
         println!("  edit, no keys in the font:        {baseline:?}");
@@ -712,6 +716,7 @@ mod perf {
         println!("  edit {PER_GROUP} glyphs follow:            {read_by_group:?}");
         println!("  edit {LINKED_TO_ONE} glyphs follow:           {read_by_many:?}");
         println!("  linked_glyph_ids (engine, per edit): {scan:?}");
+        println!("  linked_sides of one glyph (per half drawn): {report:?}");
         if cfg!(debug_assertions) {
             return;
         }
@@ -725,6 +730,7 @@ mod perf {
         );
         assert!(read_by_many < Duration::from_millis(16), "{read_by_many:?}");
         assert!(scan < Duration::from_millis(2), "{scan:?}");
+        assert!(report < Duration::from_micros(200), "{report:?}");
     }
 }
 
@@ -800,6 +806,7 @@ fn setting_a_key_applies_it_and_clearing_it_keeps_the_value() {
 fn a_typed_key_is_checked_against_the_font() {
     let (font, _) = font();
     assert_eq!(font.metrics_key_problem("=n+10"), None);
+    assert_eq!(font.metrics_key_problem("  "), None);
     assert_eq!(
         font.metrics_key_problem("=nn").as_deref(),
         Some("no glyph named `nn`")
@@ -836,4 +843,56 @@ fn undoing_a_glyph_key_reports_the_layer_it_moved() {
     font.apply_change_set(&undo).unwrap();
     let mut evaluator = MetricsKeyEvaluator::new(&font, source).unwrap();
     assert_eq!(evaluator.current(o_id, LEFT).unwrap(), 40.0);
+}
+
+#[test]
+fn linking_puts_a_key_where_its_prefix_says_and_unlinking_clears_what_holds_the_side() {
+    let (mut font, source) = font();
+    let o_id = font.glyph_id_by_name("o").unwrap();
+    let layer_id = font
+        .glyph(o_id)
+        .unwrap()
+        .layer_for_source(source)
+        .unwrap()
+        .id();
+    let link = |side, key: &str| crate::LinkMetricsSide {
+        layer_id,
+        side,
+        key: key.to_owned(),
+    };
+    let levels = |font: &Font| -> Vec<(MetricsKeySide, KeyLevel)> {
+        font.linked_sides(o_id, source)
+            .iter()
+            .map(|link| (link.side, link.level))
+            .collect()
+    };
+
+    font.apply_intents(&crate::FontIntentSet::from(link(LEFT, "==n")))
+        .unwrap();
+    font.apply_intents(&crate::FontIntentSet::from(link(WIDTH, "=n")))
+        .unwrap();
+    assert_eq!(
+        levels(&font),
+        [(LEFT, KeyLevel::Layer), (WIDTH, KeyLevel::Glyph)]
+    );
+
+    // A glyph key replaces the layer's own for that side.
+    font.apply_intents(&crate::FontIntentSet::from(link(LEFT, "=H")))
+        .unwrap();
+    assert_eq!(
+        levels(&font),
+        [(LEFT, KeyLevel::Glyph), (WIDTH, KeyLevel::Glyph)]
+    );
+
+    // The width holds the right sidebearing's edge, so unlinking the right clears it.
+    font.apply_intents(&crate::FontIntentSet::from(crate::UnlinkMetricsSide {
+        layer_id,
+        side: RIGHT,
+    }))
+    .unwrap();
+    assert_eq!(levels(&font), [(LEFT, KeyLevel::Glyph)]);
+
+    font.apply_intents(&crate::FontIntentSet::from(link(LEFT, " ")))
+        .unwrap();
+    assert!(levels(&font).is_empty());
 }

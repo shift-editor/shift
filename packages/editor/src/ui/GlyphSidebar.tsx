@@ -1,7 +1,10 @@
 import { Button, ScrollArea, Separator } from "@shift/ui";
+import type { MetricsKeySide } from "@shift/types";
+import type { SideLink } from "@shift/wasm/protocol";
 import type { ReactNode } from "react";
+import { linkOn, type MetricsLinks } from "../lib/model/MetricsLinks";
 import { useSignalState } from "../lib/signals";
-import { EditableSidebarInput } from "./EditableSidebarInput";
+import { EditableSidebarInput, type EditableSidebarInputProps } from "./EditableSidebarInput";
 import { GlyphIdentityFields } from "./GlyphIdentityFields";
 import { ShiftIcon } from "./ShiftIcon";
 import type { EditorUISession } from "./types";
@@ -20,6 +23,36 @@ export interface GlyphSidebarProps {
   host?: GlyphSidebarHost;
 }
 
+/** What a metric field needs to show and edit the key its side follows. */
+type MetricKeyProps = Pick<
+  EditableSidebarInputProps,
+  "keyText" | "onKeyCommit" | "icon" | "tooltip"
+>;
+
+/**
+ * The key props for the field of `side`: typing `=…` links it, blank text
+ * unlinks it, and a linked field shows the key, a link icon, and why the key
+ * cannot be applied when it cannot.
+ */
+function metricKeyProps(
+  links: MetricsLinks | null,
+  side: MetricsKeySide,
+  name: string,
+  link: SideLink | null,
+  editable: boolean,
+): MetricKeyProps {
+  const onKeyCommit = editable && links ? (text: string) => links.link(side, text) : undefined;
+  if (!link) return { onKeyCommit };
+
+  const problem = link.problem ?? null;
+  return {
+    keyText: link.key,
+    onKeyCommit,
+    icon: <ShiftIcon name="link" className="h-3 w-3 text-muted" />,
+    tooltip: problem === null ? `${name}, linked: ${link.key}` : `${name}, ${link.key}: ${problem}`,
+  };
+}
+
 /**
  * Renders the glyph inspector: the page name, then the glyph's sidebearings, advance, name, and codepoint.
  *
@@ -31,7 +64,7 @@ export interface GlyphSidebarProps {
 export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
   const { editor } = session;
   const zoom = useSignalState(editor.zoomCell);
-  const { glyph, sidebearings, xAdvance, hasLayer } = useGlyphMetrics(editor);
+  const { glyph, sidebearings, xAdvance, hasLayer, linkedSides, links } = useGlyphMetrics(editor);
 
   // Metric edits go through workspace layer intents, which memory sessions lack.
   const editable = session.mode !== "memory" && hasLayer;
@@ -79,6 +112,13 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                   onValueChange={
                     sidebearingsEditable ? (value) => editor.setLeftSidebearing(value) : undefined
                   }
+                  {...metricKeyProps(
+                    links,
+                    "left",
+                    "Left sidebearing",
+                    linkOn(linkedSides, "left"),
+                    sidebearingsEditable,
+                  )}
                 />
                 <div className="px-2">
                   <ShiftIcon name="placeholder-glyph" className="h-[55px] w-8 text-primary" />
@@ -93,6 +133,13 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                   onValueChange={
                     sidebearingsEditable ? (value) => editor.setRightSidebearing(value) : undefined
                   }
+                  {...metricKeyProps(
+                    links,
+                    "right",
+                    "Right sidebearing",
+                    linkOn(linkedSides, "right"),
+                    sidebearingsEditable,
+                  )}
                 />
               </div>
               <div className="mt-2">
@@ -102,6 +149,13 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                   value={glyph ? Math.round(xAdvance) : null}
                   disabled={!editable}
                   onValueChange={editable ? (value) => editor.setXAdvance(value) : undefined}
+                  {...metricKeyProps(
+                    links,
+                    "width",
+                    "Advance width",
+                    linkOn(linkedSides, "width"),
+                    editable,
+                  )}
                 />
               </div>
               <div className="mt-3 w-full">

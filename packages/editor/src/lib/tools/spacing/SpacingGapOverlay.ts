@@ -176,7 +176,7 @@ function drawLabel(
   { hovered, ringed }: { readonly hovered: boolean; readonly ringed: boolean },
 ): void {
   const rect = spacingLabelRect(editor, half);
-  const text = spacingLabelText(half);
+  const text = spacingLabelText(editor, half);
   const glyphSide = half.glyphSide;
   if (!rect || !text || !glyphSide) return;
 
