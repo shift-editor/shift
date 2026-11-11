@@ -16,6 +16,7 @@ import type {
   GlyphState,
   GlyphStructure,
   LayerId,
+  MetricsKeySide,
   PointId,
   PointSeed,
   ReadonlyEntityMap,
@@ -358,6 +359,10 @@ class GlyphLayerWriter {
 
   shiftSidebearing(sidebearing: Sidebearing, delta: number): void {
     this.#workspaceIntents.shiftSidebearing({ sidebearing, delta });
+  }
+
+  setMetricsKey(side: MetricsKeySide, key: string | null): void {
+    this.#workspaceIntents.setLayerMetricsKey({ side, key });
   }
 
   addContour(): ContourId {
@@ -836,6 +841,17 @@ export class GlyphLayer {
    */
   shiftSidebearing(sidebearing: Sidebearing, delta: number): void {
     this.#writer.shiftSidebearing(sidebearing, delta);
+  }
+
+  /**
+   * Sets or clears this source's own metrics key for `side`, which overrides
+   * the glyph's key for that side here only. The side follows the key in the
+   * same edit.
+   *
+   * @param key - The key as typed, such as `==n`; null clears it.
+   */
+  setMetricsKey(side: MetricsKeySide, key: string | null): void {
+    this.#writer.setMetricsKey(side, key);
   }
 
   /**

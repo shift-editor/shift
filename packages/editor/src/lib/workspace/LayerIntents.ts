@@ -28,6 +28,7 @@ import type {
   SetContourStart,
   SetPointSmooth,
   SetPositions,
+  SetLayerMetricsKey,
   SetXAdvance,
   TransformLayer,
 } from "@shift/types";
@@ -173,6 +174,13 @@ export class LayerIntents<TResult = PendingEditId> {
     return this.#sink({
       kind: "transformLayer",
       transformLayer: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  setLayerMetricsKey(payload: Payload<SetLayerMetricsKey>): TResult {
+    return this.#sink({
+      kind: "setLayerMetricsKey",
+      setLayerMetricsKey: { layerId: this.#layerId, ...payload },
     });
   }
 

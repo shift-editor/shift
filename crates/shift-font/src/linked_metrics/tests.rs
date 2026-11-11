@@ -806,3 +806,34 @@ fn a_typed_key_is_checked_against_the_font() {
     );
     assert!(font.metrics_key_problem("=(n").is_some());
 }
+
+#[test]
+fn undoing_a_glyph_key_reports_the_layer_it_moved() {
+    let (mut font, source) = font();
+    let o_id = font.glyph_id_by_name("o").unwrap();
+    let o_layer = font
+        .glyph(o_id)
+        .unwrap()
+        .layer_for_source(source)
+        .unwrap()
+        .id();
+
+    let applied = font
+        .apply_intents(&crate::FontIntentSet::from(crate::SetGlyphMetricsKey {
+            glyph_id: o_id,
+            side: LEFT,
+            key: Some("=n".to_string()),
+        }))
+        .unwrap();
+    let undo = applied.changes.inverted();
+
+    // An editor redraws the layers a replayed change set reports.
+    assert!(
+        undo.touched_layers()
+            .iter()
+            .any(|touched| touched.layer.id() == o_layer)
+    );
+    font.apply_change_set(&undo).unwrap();
+    let mut evaluator = MetricsKeyEvaluator::new(&font, source).unwrap();
+    assert_eq!(evaluator.current(o_id, LEFT).unwrap(), 40.0);
+}

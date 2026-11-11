@@ -18,6 +18,7 @@ import {
   type FontFeature,
   type GlyphIdentityChange,
   type PlacedText,
+  type SideLink,
   type RevisedNode,
   type SceneIntent,
   type TextRun,
@@ -368,6 +369,14 @@ export class SessionEngine implements FontEngine {
 
   glyphPrimaryCodepoint(glyphId: GlyphId, codepoint: number | null): GlyphIdentityChange | null {
     return this.#require().glyphPrimaryCodepoint(glyphId, codepoint);
+  }
+
+  linkedSides(glyphId: GlyphId, sourceId: SourceId): readonly SideLink[] {
+    return this.#session?.linkedSides(glyphId, sourceId) ?? [];
+  }
+
+  metricsKeyProblem(text: string): string | null {
+    return this.#require().metricsKeyProblem(text);
   }
 
   nextGlyphName(name: string): GlyphName {

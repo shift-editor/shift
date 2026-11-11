@@ -59,6 +59,7 @@ import {
   type GlyphRecord,
   type KerningGroupId,
   type KerningPosition,
+  type MetricsKeySide,
   type PointId,
   type SelectableId,
   type NamedInstance,
@@ -69,6 +70,7 @@ import {
   asNodeId,
 } from "@shift/types";
 import { segmentIdFor, type Contour } from "@shift/glyph-state";
+import type { SideLink } from "@shift/wasm/protocol";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 import type {
@@ -802,6 +804,17 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   setAdvanceWidth(width: number): void {
     this.setXAdvance(width);
+  }
+
+  linkMetric(side: MetricsKeySide, key: string): string | null {
+    const links = this.activeMetricsLinks();
+    if (!links)
+      throw new Error("linking a metric needs one open glyph with a layer at the active source");
+    return links.link(side, key);
+  }
+
+  metricsLinks(): readonly SideLink[] {
+    return this.activeMetricsLinks()?.sides ?? [];
   }
   pressAt(position: Point2D, modifiers?: Modifiers): void {
     const screen = this.localToScreen(position);

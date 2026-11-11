@@ -30,6 +30,7 @@ import type {
   LayerId,
   LayerRead,
   Location,
+  MetricsKeySide,
   PointId,
   SegmentId,
   NamedInstance,
@@ -70,6 +71,7 @@ import type {
   FeatureSubstitution,
   FontFeature,
   GlyphIdentityChange,
+  SideLink,
   PlacedText,
   TextRun,
 } from "@shift/wasm/protocol";
@@ -825,6 +827,44 @@ export class Font {
 
     this.updateGlyphIdentity(glyphId, change.name, [...change.unicodes] as Unicode[]);
     return { kind: "changed" };
+  }
+
+  /**
+   * A glyph's linked sides in a source, left, right, then width, as the
+   * engine reads them: each key, where it is set, and why it cannot be
+   * applied. Reading it in a reactive body subscribes to the glyph and layer
+   * revisions, so it reads again after each edit, undo and redo.
+   *
+   * @returns Empty without an engine, or for a glyph with no keys there.
+   */
+  linkedSides(glyphId: GlyphId, sourceId: SourceId): readonly SideLink[] {
+    const engine = this.#store.engine;
+    if (!engine) return [];
+    track(engine.revision("glyphs"));
+    track(engine.revision("layers"));
+    return engine.linkedSides(glyphId, sourceId);
+  }
+
+  /**
+   * Why `text` is not a metrics key this font can read, such as a name no
+   * glyph has; null when it is.
+   */
+  metricsKeyProblem(text: string): string | null {
+    return this.#requireEngine().metricsKeyProblem(text);
+  }
+
+  /**
+   * Sets or clears a glyph's metrics key for `side`, which applies in every
+   * source whose layer has no key of its own for it. The side follows the
+   * key in the same edit.
+   *
+   * @param key - The key as typed, such as `=n+10`; null clears it.
+   */
+  setGlyphMetricsKey(glyphId: GlyphId, side: MetricsKeySide, key: string | null): void {
+    this.editCoordinator.push({
+      kind: "setGlyphMetricsKey",
+      setGlyphMetricsKey: { glyphId, side, key },
+    });
   }
 
   /**

@@ -51,6 +51,7 @@ import type {
   EngineEdits,
   EngineReads,
   GlyphIdentityChange,
+  SideLink,
   InterpolatedMetrics,
   MissingKerningOrigin,
   FeatureSubstitution,
@@ -305,6 +306,16 @@ export class EngineSession {
   /** What making `codepoint` a glyph's primary codepoint does: `Font::glyph_primary_codepoint`. */
   glyphPrimaryCodepoint(glyphId: GlyphId, codepoint: number | null): GlyphIdentityChange | null {
     return this.#reads.glyphPrimaryCodepoint(glyphId, codepoint);
+  }
+
+  /** A glyph's linked sides in a source: `Font::linked_sides`. */
+  linkedSides(glyphId: GlyphId, sourceId: SourceId): readonly SideLink[] {
+    return this.#reads.linkedSides(glyphId, sourceId);
+  }
+
+  /** Why `text` is not a key the font can read, or null: `Font::metrics_key_problem`. */
+  metricsKeyProblem(text: string): string | null {
+    return this.#reads.metricsKeyProblem(text);
   }
 
   /** Where a pair's value comes from at `sourceId` when that source authors no pair for it. */
