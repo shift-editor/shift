@@ -6,10 +6,17 @@
 //! `com.schriftgestaltung.<name>` without saying which; like glyphsLib, Shift
 //! reads those as the layer's, with the `layer.` entry winning when both are
 //! present.
+//!
+//! A key Glyphs cannot read, such as `=max(n, o)`, is written under Shift's
+//! own names instead (`com.shift-editor.glyph.<name>`, `….layer.<name>`):
+//! Glyphs then sees the side's value in the outline and no key, and Shift
+//! reads the expression back, preferring it to a glyphsLib entry.
 
+use shift_font::linked_metrics::is_glyphs_syntax;
 use shift_font::{MetricsKey, MetricsKeySide, MetricsKeys};
 
 const PREFIX: &str = "com.schriftgestaltung.";
+const SHIFT_PREFIX: &str = "com.shift-editor.";
 
 /// The glyphsLib name of each side's key.
 const NAMES: [(MetricsKeySide, &str); 3] = [
@@ -28,6 +35,14 @@ fn layer_entry(name: &str) -> String {
 
 fn unscoped_entry(name: &str) -> String {
     format!("{PREFIX}{name}")
+}
+
+fn shift_glyph_entry(name: &str) -> String {
+    format!("{SHIFT_PREFIX}glyph.{name}")
+}
+
+fn shift_layer_entry(name: &str) -> String {
+    format!("{SHIFT_PREFIX}layer.{name}")
 }
 
 /// The keys one GLIF's lib holds.
@@ -49,8 +64,10 @@ pub(crate) fn take_metrics_keys(lib: &mut plist::Dictionary) -> GlifMetricsKeys 
         let glyph = take_key(lib, &glyph_entry(name));
         let unscoped = take_key(lib, &unscoped_entry(name));
         let layer = take_key(lib, &layer_entry(name)).or(unscoped);
-        keys.glyph.set(side, glyph);
-        keys.layer.set(side, layer);
+        let shift_glyph = take_key(lib, &shift_glyph_entry(name));
+        let shift_layer = take_key(lib, &shift_layer_entry(name));
+        keys.glyph.set(side, shift_glyph.or(glyph));
+        keys.layer.set(side, shift_layer.or(layer));
     }
     keys
 }
@@ -61,7 +78,8 @@ fn take_key(lib: &mut plist::Dictionary, entry: &str) -> Option<MetricsKey> {
     MetricsKey::new(text)
 }
 
-/// Writes `glyph`'s and `layer`'s keys into a GLIF lib as glyphsLib does.
+/// Writes `glyph`'s and `layer`'s keys into a GLIF lib: as glyphsLib does
+/// when Glyphs can read them, under Shift's own names when it cannot.
 pub(crate) fn insert_metrics_keys(
     lib: &mut plist::Dictionary,
     glyph: &MetricsKeys,
@@ -69,10 +87,20 @@ pub(crate) fn insert_metrics_keys(
 ) {
     for (side, name) in NAMES {
         if let Some(key) = glyph.get(side) {
-            lib.insert(glyph_entry(name), plist::Value::String(key.to_string()));
+            let entry = if is_glyphs_syntax(key.as_str()) {
+                glyph_entry(name)
+            } else {
+                shift_glyph_entry(name)
+            };
+            lib.insert(entry, plist::Value::String(key.to_string()));
         }
         if let Some(key) = layer.get(side) {
-            lib.insert(layer_entry(name), plist::Value::String(key.to_string()));
+            let entry = if is_glyphs_syntax(key.as_str()) {
+                layer_entry(name)
+            } else {
+                shift_layer_entry(name)
+            };
+            lib.insert(entry, plist::Value::String(key.to_string()));
         }
     }
 }
@@ -153,6 +181,31 @@ mod tests {
 
         assert_eq!(taken, GlifMetricsKeys::default());
         assert!(glif_lib.contains_key(entry));
+    }
+
+    #[test]
+    fn a_key_glyphs_cannot_read_is_written_under_shifts_names_and_read_back() {
+        let glyph = keys(&[
+            (MetricsKeySide::Left, "=max(n, o)"),
+            (MetricsKeySide::Right, "=n+10"),
+        ]);
+        let layer = keys(&[(MetricsKeySide::Width, "==(n+o)/2")]);
+        let mut glif_lib = plist::Dictionary::new();
+
+        insert_metrics_keys(&mut glif_lib, &glyph, &layer);
+
+        assert_eq!(
+            glif_lib,
+            lib(&[
+                ("com.shift-editor.glyph.leftMetricsKey", text("=max(n, o)")),
+                ("com.schriftgestaltung.glyph.rightMetricsKey", text("=n+10")),
+                ("com.shift-editor.layer.widthMetricsKey", text("==(n+o)/2")),
+            ])
+        );
+        assert_eq!(
+            take_metrics_keys(&mut glif_lib),
+            GlifMetricsKeys { glyph, layer }
+        );
     }
 
     #[test]

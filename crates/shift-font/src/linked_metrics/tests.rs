@@ -896,3 +896,23 @@ fn linking_puts_a_key_where_its_prefix_says_and_unlinking_clears_what_holds_the_
         .unwrap();
     assert!(levels(&font).is_empty());
 }
+
+#[test]
+fn glyphs_syntax_is_one_reference_and_at_most_one_number() {
+    for text in [
+        "n", "=n", "=n+10", "=comma/2", "=|n", "=|", "==m", "=A@200", "=50", "=+25",
+    ] {
+        assert!(is_glyphs_syntax(text), "{text} is Glyphs syntax");
+    }
+    for text in [
+        "=(n+o)/2",
+        "=max(n, o)",
+        "=n+o",
+        "=lsb(n)",
+        "=round(n)",
+        "=-n",
+        "=n*2+1",
+    ] {
+        assert!(!is_glyphs_syntax(text), "{text} is Shift's own");
+    }
+}

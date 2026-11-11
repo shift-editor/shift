@@ -23,7 +23,8 @@ pub use measure::Metric;
 pub use order::{LinkedMetricsOrder, LinkedSide, OrderedKey};
 pub use report::{KeyLevel, SideLink};
 pub use syntax::{
-    BinaryOp, Expr, Function, KeyBody, KeyScope, Measure, MeasureSide, ParsedMetricsKey, parse,
+    BinaryOp, Expr, Function, KeyBody, KeyScope, Measure, MeasureSide, ParsedMetricsKey,
+    is_glyphs_syntax, parse,
 };
 
 use crate::CoreError;

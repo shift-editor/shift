@@ -157,6 +157,38 @@ pub fn parse(
     })
 }
 
+/// Whether Glyphs reads `text` as Shift does: a glyph reference with an
+/// optional `|` and `@` height, a number, or one of those with a single
+/// operator and number (`=n+10`, `=|n`, `==m`, `=A@200`, `=50`, `=+25`).
+/// Brackets, functions and two references are Shift's own. Text that does
+/// not parse is left to its author, as Glyphs syntax.
+///
+/// The shape alone decides, so no font is needed: any word reads as a name.
+pub fn is_glyphs_syntax(text: &str) -> bool {
+    let Ok(key) = parse(text, &|_| true) else {
+        return true;
+    };
+    let KeyBody::Expr(expr) = key.body else {
+        return true;
+    };
+    let is_reference = |expr: &Expr| {
+        matches!(
+            expr,
+            Expr::Measure(Measure {
+                side: MeasureSide::Same | MeasureSide::Opposite,
+                ..
+            })
+        )
+    };
+    match &expr {
+        Expr::Number(_) => true,
+        Expr::Binary { left, right, .. } => {
+            is_reference(left) && matches!(**right, Expr::Number(_))
+        }
+        other => is_reference(other),
+    }
+}
+
 fn syntax(message: impl Into<String>) -> MetricsKeyError {
     MetricsKeyError::Syntax(message.into())
 }
