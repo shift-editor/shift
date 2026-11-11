@@ -7,6 +7,9 @@ use shift_store::{SHIFT_DOCUMENT_SCHEMA_VERSION, ShiftStore};
 const V1_TABLES: &str = r#"
 ALTER TABLE glyphs DROP COLUMN category;
 ALTER TABLE glyphs DROP COLUMN sub_category;
+ALTER TABLE glyphs DROP COLUMN left_metrics_key;
+ALTER TABLE glyphs DROP COLUMN right_metrics_key;
+ALTER TABLE glyphs DROP COLUMN width_metrics_key;
 DROP TABLE scene_nodes;
 
 DROP TABLE kerning_group_members;

@@ -96,7 +96,10 @@ CREATE TABLE IF NOT EXISTS glyphs (
     name TEXT,
     order_index INTEGER NOT NULL DEFAULT 0,
     category TEXT,
-    sub_category TEXT
+    sub_category TEXT,
+    left_metrics_key TEXT,
+    right_metrics_key TEXT,
+    width_metrics_key TEXT
 );
 
 CREATE INDEX IF NOT EXISTS glyphs_name_idx
@@ -277,7 +280,7 @@ CREATE TABLE IF NOT EXISTS workspace_state (
 "#;
 
 pub const SHIFT_APPLICATION_ID: i64 = 0x5348_4654;
-pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 4;
+pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 5;
 
 /// The oldest schema version [`migrate`] can upgrade.
 pub(crate) const OLDEST_MIGRATABLE_SCHEMA_VERSION: i64 = 1;
@@ -417,6 +420,15 @@ CREATE TABLE scene_nodes (
 );
 "#;
 
+/// Version 4 to 5: glyphs gain optional metrics keys, the text that links
+/// their sidebearings and width to other glyphs' metrics in every source.
+/// Keys for one source only live in the layer payload. This SQL is frozen.
+const MIGRATE_V4_TO_V5: &str = r#"
+ALTER TABLE glyphs ADD COLUMN left_metrics_key TEXT;
+ALTER TABLE glyphs ADD COLUMN right_metrics_key TEXT;
+ALTER TABLE glyphs ADD COLUMN width_metrics_key TEXT;
+"#;
+
 /// The version that added the scene.
 const SCENE_SCHEMA_VERSION: i64 = 4;
 
@@ -432,10 +444,11 @@ pub(crate) enum SceneUpgrade {
 
 /// Steps that bring authored tables from one schema version to the next, as
 /// `(version reached, SQL)`, in ascending order.
-const MIGRATIONS: [(i64, &str); 3] = [
+const MIGRATIONS: [(i64, &str); 4] = [
     (2, MIGRATE_V1_TO_V2),
     (3, MIGRATE_V2_TO_V3),
     (4, MIGRATE_V3_TO_V4),
+    (5, MIGRATE_V4_TO_V5),
 ];
 
 /// Upgrades the authored tables of a store at `version` to

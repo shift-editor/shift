@@ -9,6 +9,8 @@ use shift_font::{
 };
 use std::path::{Path, PathBuf};
 
+use super::metrics_keys::insert_metrics_keys;
+
 pub struct UfoWriter;
 
 pub(super) fn ufo_name(kind: &'static str, name: &str) -> FormatBackendResult<Name> {
@@ -297,6 +299,11 @@ impl UfoWriter {
         if !layer.lib().is_empty() {
             norad_glyph.lib = Self::convert_lib(layer.lib());
         }
+        insert_metrics_keys(
+            &mut norad_glyph.lib,
+            glyph.metrics_keys(),
+            layer.metrics_keys(),
+        );
 
         Ok(norad_glyph)
     }
