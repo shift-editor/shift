@@ -2,21 +2,24 @@
 //! `=(n+o)/2` into the sidebearings and widths they link.
 //!
 //! [`parse`] reads a key's text against the font's glyph names.
-//! [`linked_metrics_order`] gathers one source's keys in the order they must
+//! [`crate::Font::linked_metrics_order`] gathers one source's keys in the order they must
 //! be evaluated, and reports the ones that cannot be, such as keys that
 //! depend on each other. [`MetricsKeyEvaluator`] computes a key's value from
-//! the glyphs it names, as that source draws them.
+//! the glyphs it names, as that source draws them, and
+//! [`crate::Font::follow_linked_metrics`] re-applies the keys an edit affects.
 //!
 //! Keys themselves are stored on glyphs and layers ([`crate::MetricsKeys`]).
 
+mod apply;
 mod evaluate;
 mod measure;
 mod order;
 mod syntax;
 
+pub use apply::ChangedGlyphs;
 pub use evaluate::MetricsKeyEvaluator;
 pub use measure::Metric;
-pub use order::{LinkedMetricsOrder, LinkedSide, linked_metrics_order};
+pub use order::{LinkedMetricsOrder, LinkedSide, OrderedKey};
 pub use syntax::{
     BinaryOp, Expr, Function, KeyBody, KeyScope, Measure, MeasureSide, ParsedMetricsKey, parse,
 };
@@ -43,6 +46,8 @@ pub enum MetricsKeyError {
     DivisionByZero,
     #[error("offsets on automatic alignment, such as `=+25`, are not evaluated yet")]
     AutoOffset,
+    #[error("a glyph's right sidebearing and width cannot both be linked")]
+    RightAndWidthBothLinked,
     #[error("these keys depend on each other: {}", .0.join(", "))]
     Cycle(Vec<String>),
     #[error(transparent)]

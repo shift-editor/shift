@@ -374,7 +374,7 @@ impl Parser {
                 _ => return Ok(left),
             };
             self.next += 1;
-            left = binary(op, left, self.term()?);
+            left = Expr::binary(op, left, self.term()?);
         }
     }
 
@@ -387,7 +387,7 @@ impl Parser {
                 _ => return Ok(left),
             };
             self.next += 1;
-            left = binary(op, left, self.factor()?);
+            left = Expr::binary(op, left, self.factor()?);
         }
     }
 
@@ -488,10 +488,36 @@ impl Parser {
     }
 }
 
-fn binary(op: BinaryOp, left: Expr, right: Expr) -> Expr {
-    Expr::Binary {
-        op,
-        left: Box::new(left),
-        right: Box::new(right),
+impl Expr {
+    fn binary(op: BinaryOp, left: Self, right: Self) -> Self {
+        Self::Binary {
+            op,
+            left: Box::new(left),
+            right: Box::new(right),
+        }
     }
+}
+
+/// Every glyph name `text` might mean, read without the font: each word,
+/// and each run of its `-`-separated pieces, so `=A-cy-10` gives `A-cy-10`,
+/// `A-cy`, `A`, `cy-10`, `cy` and `10`. Parsing picks among these; this
+/// over-approximates it, for finding the keys an edit may affect cheaply.
+pub(super) fn candidate_names(text: &str) -> impl Iterator<Item = &str> {
+    text.split(|c: char| !is_name_char(c))
+        .filter(|word| word.starts_with(is_name_start))
+        .flat_map(hyphen_runs)
+}
+
+/// Each run of `word`'s `-`-separated pieces, the whole word included.
+fn hyphen_runs(word: &str) -> Vec<&str> {
+    let hyphens: Vec<usize> = word.match_indices('-').map(|(index, _)| index).collect();
+    let starts = std::iter::once(0).chain(hyphens.iter().map(|index| index + 1));
+    let ends: Vec<usize> = hyphens.iter().copied().chain([word.len()]).collect();
+    starts
+        .flat_map(|start| {
+            ends.iter()
+                .filter(move |&&end| end > start)
+                .map(move |&end| &word[start..end])
+        })
+        .collect()
 }

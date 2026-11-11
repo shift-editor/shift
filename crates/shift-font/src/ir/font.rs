@@ -1154,6 +1154,12 @@ impl Font {
         self.index().composites_of(base_glyph_id)
     }
 
+    /// Every glyph with a metrics key, on itself or on any of its layers, in
+    /// id order. Placeholder layers count: they carry their keys.
+    pub fn metrics_keyed_glyph_ids(&self) -> impl Iterator<Item = GlyphId> + '_ {
+        self.index().metrics_keyed_glyphs().copied()
+    }
+
     /// Glyphs with a loaded layer that has a component of a glyph owning one
     /// of `layer_ids`: the composites that follow those layers' anchors.
     pub fn dependent_glyph_ids<'a>(
@@ -1353,6 +1359,7 @@ impl Font {
         let mut state = (*self.state).clone();
         let glyph = Arc::make_mut(state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?);
         *glyph.metrics_keys_mut() = metrics_keys;
+        state.rebuild_index()?;
         self.state = Arc::new(state);
         Ok(())
     }

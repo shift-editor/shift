@@ -1,32 +1,32 @@
 //! Evaluating a parsed key against one source of a font.
 
 use super::MetricsKeyError;
-use super::measure::{Metric, measure};
+use super::measure::Metric;
 use super::syntax::{BinaryOp, Expr, Function, KeyBody, Measure, MeasureSide, ParsedMetricsKey};
 use crate::projection::FontProjection;
 use crate::{Font, GlyphId, MetricsKeySide, SourceId};
 
-/// The metric `measure` reads for a key on `side`.
-///
-/// # Errors
-///
-/// Returns [`MetricsKeyError::OppositeOfWidth`] for `|` in a width key.
-pub(super) fn measured_metric(
-    side: MetricsKeySide,
-    measure: MeasureSide,
-) -> Result<Metric, MetricsKeyError> {
-    Ok(match (measure, side) {
-        (MeasureSide::Left, _)
-        | (MeasureSide::Same, MetricsKeySide::Left)
-        | (MeasureSide::Opposite, MetricsKeySide::Right) => Metric::LeftSidebearing,
-        (MeasureSide::Right, _)
-        | (MeasureSide::Same, MetricsKeySide::Right)
-        | (MeasureSide::Opposite, MetricsKeySide::Left) => Metric::RightSidebearing,
-        (MeasureSide::Width, _) | (MeasureSide::Same, MetricsKeySide::Width) => Metric::Width,
-        (MeasureSide::Opposite, MetricsKeySide::Width) => {
-            return Err(MetricsKeyError::OppositeOfWidth);
-        }
-    })
+impl MetricsKeySide {
+    /// The metric `measure` reads in a key on this side.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MetricsKeyError::OppositeOfWidth`] for `|` in a width key.
+    pub(super) fn metric_read(self, measure: MeasureSide) -> Result<Metric, MetricsKeyError> {
+        let side = self;
+        Ok(match (measure, side) {
+            (MeasureSide::Left, _)
+            | (MeasureSide::Same, Self::Left)
+            | (MeasureSide::Opposite, Self::Right) => Metric::LeftSidebearing,
+            (MeasureSide::Right, _)
+            | (MeasureSide::Same, Self::Right)
+            | (MeasureSide::Opposite, Self::Left) => Metric::RightSidebearing,
+            (MeasureSide::Width, _) | (MeasureSide::Same, Self::Width) => Metric::Width,
+            (MeasureSide::Opposite, Self::Width) => {
+                return Err(MetricsKeyError::OppositeOfWidth);
+            }
+        })
+    }
 }
 
 /// Evaluates keys in one source, reading other glyphs as that source draws
@@ -67,6 +67,24 @@ impl<'a> MetricsKeyEvaluator<'a> {
         };
         let value = self.value(glyph_id, side, expr)?;
         Ok(value.round())
+    }
+
+    /// What `side` of `glyph_id` measures now, at the outline's extreme.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::evaluate`], for the glyph itself.
+    pub fn current(
+        &mut self,
+        glyph_id: GlyphId,
+        side: MetricsKeySide,
+    ) -> Result<f64, MetricsKeyError> {
+        let own = Measure {
+            glyph: None,
+            side: MeasureSide::Same,
+            at: None,
+        };
+        self.measure(glyph_id, side, &own)
     }
 
     fn value(
@@ -110,14 +128,14 @@ impl<'a> MetricsKeyEvaluator<'a> {
         side: MetricsKeySide,
         measure_ref: &Measure,
     ) -> Result<f64, MetricsKeyError> {
-        let metric = measured_metric(side, measure_ref.side)?;
+        let metric = side.metric_read(measure_ref.side)?;
         let target = measure_ref.glyph_id(self.font, glyph_id)?;
         let name = self.font.require_glyph(target)?.name().to_owned();
         let resolved = self
             .projection
             .glyph(target)?
             .ok_or_else(|| MetricsKeyError::NotDrawn(name.clone()))?;
-        measure(&resolved, &name, metric, measure_ref.at)
+        resolved.measure(&name, metric, measure_ref.at)
     }
 }
 

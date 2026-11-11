@@ -20,6 +20,7 @@ use crate::ir::{
     Transform,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
+use crate::linked_metrics::ChangedGlyphs;
 use crate::point_arrange::{DistributeAxis, PointAlignment, Sidebearing};
 use crate::{KerningGroup, KerningGroupId, KerningPair, KerningPosition, KerningSide};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -443,6 +444,32 @@ impl EditScopes {
         self.layers.iter().map(|(layer_id, _)| layer_id)
     }
 
+    /// The glyphs these scopes changed in `font`, by source: each touched
+    /// layer's glyph in its source, and each touched glyph in all of its.
+    fn changed_glyphs(&self, font: &Font) -> ChangedGlyphs {
+        let mut changed = ChangedGlyphs::new();
+        for layer_id in self.layer_ids() {
+            let (Some(glyph_id), Some(layer)) =
+                (font.glyph_id_by_layer(*layer_id), font.layer(*layer_id))
+            else {
+                continue;
+            };
+            changed
+                .entry(layer.source_id())
+                .or_default()
+                .insert(glyph_id);
+        }
+        for glyph in self.glyph_ids.iter().filter_map(|id| font.glyph(*id)) {
+            for layer in glyph.layers().values() {
+                changed
+                    .entry(layer.source_id())
+                    .or_default()
+                    .insert(glyph.id());
+            }
+        }
+        changed
+    }
+
     /// The change set taking `before` to `after` within these scopes.
     fn diff(self, before: &Font, after: &Font) -> CoreResult<AppliedIntents> {
         let diff = FontDiff { before, after };
@@ -585,6 +612,17 @@ impl Font {
         for (layer_id, structural) in
             realign_attached_components(&before, &mut after, scopes.layer_ids())
         {
+            scopes.touch_layer(layer_id, structural);
+        }
+
+        // Linked glyphs follow the glyphs their keys read, and a moved left
+        // sidebearing carries anchors that attached components follow again.
+        let changed = scopes.changed_glyphs(&after);
+        let linked = after.follow_linked_metrics(changed)?;
+        for layer_id in &linked {
+            scopes.touch_layer(*layer_id, false);
+        }
+        for (layer_id, structural) in realign_attached_components(&before, &mut after, &linked) {
             scopes.touch_layer(layer_id, structural);
         }
 

@@ -335,7 +335,7 @@ fn side(font: &Font, glyph: &str, side: MetricsKeySide) -> LinkedSide {
 }
 
 fn ordered(order: &LinkedMetricsOrder) -> Vec<LinkedSide> {
-    order.keys.iter().map(|(linked, _)| *linked).collect()
+    order.keys.iter().map(|ordered| ordered.linked).collect()
 }
 
 #[test]
@@ -346,7 +346,7 @@ fn keys_come_after_the_keys_they_read() {
     set_key(&mut font, "o", WIDTH, "=n");
     set_key(&mut font, "A", LEFT, "=width(o)/2");
 
-    let order = linked_metrics_order(&font, source);
+    let order = font.linked_metrics_order(source);
 
     assert!(order.problems.is_empty(), "{:?}", order.problems);
     let keys = ordered(&order);
@@ -365,7 +365,7 @@ fn keys_that_depend_on_each_other_are_reported_not_ordered() {
     set_key(&mut font, "H", LEFT, "=o");
     set_key(&mut font, "n", LEFT, "=H@100");
 
-    let order = linked_metrics_order(&font, source);
+    let order = font.linked_metrics_order(source);
 
     assert_eq!(ordered(&order), vec![]);
     let cycles: Vec<LinkedSide> = order
@@ -383,7 +383,7 @@ fn a_glyph_naming_itself_is_a_cycle() {
     let (mut font, source) = font();
     set_key(&mut font, "o", LEFT, "=o+10");
 
-    let order = linked_metrics_order(&font, source);
+    let order = font.linked_metrics_order(source);
 
     assert!(order.keys.is_empty());
     assert!(matches!(
@@ -404,7 +404,7 @@ fn a_key_reading_a_composite_waits_for_its_base_left_sidebearing() {
     set_key(&mut font, "o", LEFT, "=ndot");
     set_key(&mut font, "n", LEFT, "=H");
 
-    let order = linked_metrics_order(&font, source);
+    let order = font.linked_metrics_order(source);
 
     assert_eq!(
         ordered(&order),
@@ -419,7 +419,7 @@ fn unreadable_keys_are_problems_and_the_rest_still_order() {
     set_key(&mut font, "H", LEFT, "=m");
     set_key(&mut font, "n", RIGHT, "=|o");
 
-    let order = linked_metrics_order(&font, source);
+    let order = font.linked_metrics_order(source);
 
     assert_eq!(ordered(&order), vec![side(&font, "n", RIGHT)]);
     assert_eq!(order.problems.len(), 2);
@@ -447,4 +447,283 @@ fn a_layer_key_wins_over_its_glyph_key() {
         Some("==H")
     );
     assert_eq!(glyph.metrics_key(source, RIGHT), None);
+}
+
+/// Keys re-applied by edits: through `Font::apply_intents`, in the same
+/// change set as the edit.
+mod following {
+    use super::*;
+    use crate::{FontIntent, FontIntentSet, ShiftSidebearing, Sidebearing, TranslatePoints};
+
+    fn layer_of(font: &Font, glyph: &str, source: SourceId) -> LayerId {
+        font.glyph_by_name(glyph)
+            .unwrap()
+            .layer_for_source(source)
+            .unwrap()
+            .id()
+    }
+
+    fn sidebearings(font: &Font, source: SourceId, glyph: &str) -> (f64, f64, f64) {
+        let glyph_id = font.glyph_id_by_name(glyph).unwrap();
+        let mut evaluator = MetricsKeyEvaluator::new(font, source).unwrap();
+        (
+            evaluator.current(glyph_id, LEFT).unwrap(),
+            evaluator.current(glyph_id, RIGHT).unwrap(),
+            evaluator.current(glyph_id, WIDTH).unwrap(),
+        )
+    }
+
+    fn shift(font: &mut Font, source: SourceId, glyph: &str, side: Sidebearing, delta: f64) {
+        let layer_id = layer_of(font, glyph, source);
+        font.apply_intents(&FontIntentSet::from(FontIntent::from(ShiftSidebearing {
+            layer_id,
+            sidebearing: side,
+            delta,
+        })))
+        .unwrap();
+    }
+
+    #[test]
+    fn a_linked_side_follows_its_base_in_the_same_change_set() {
+        let (mut font, source) = font();
+        set_key(&mut font, "o", LEFT, "=n");
+        set_key(&mut font, "o", RIGHT, "=n+10");
+        let n_layer = layer_of(&font, "n", source);
+        let o_layer = layer_of(&font, "o", source);
+
+        let applied = font
+            .apply_intents(&FontIntentSet::from(FontIntent::from(ShiftSidebearing {
+                layer_id: n_layer,
+                sidebearing: Sidebearing::Left,
+                delta: 20.0,
+            })))
+            .unwrap();
+
+        assert_eq!(sidebearings(&font, source, "n").0, 70.0);
+        assert_eq!(sidebearings(&font, source, "o"), (70.0, 60.0, 570.0));
+        assert!(
+            applied
+                .layers
+                .iter()
+                .any(|touched| touched.layer.id() == o_layer)
+        );
+
+        font.apply_change_set(&applied.changes.inverted()).unwrap();
+        assert_eq!(sidebearings(&font, source, "o"), (40.0, 40.0, 520.0));
+    }
+
+    #[test]
+    fn editing_a_linked_glyph_puts_its_side_back() {
+        let (mut font, source) = font();
+        set_key(&mut font, "o", LEFT, "=n");
+        let o_layer = layer_of(&font, "o", source);
+        let left_points: Vec<_> = font
+            .layer(o_layer)
+            .unwrap()
+            .points()
+            .filter(|point| point.x() == 40.0)
+            .map(crate::Point::id)
+            .collect();
+
+        font.apply_intents(&FontIntentSet::from(FontIntent::from(TranslatePoints {
+            layer_id: o_layer,
+            point_ids: left_points,
+            dx: -25.0,
+            dy: 0.0,
+        })))
+        .unwrap();
+
+        // The outline grew 25 units to the left and the key moved it back.
+        let (left, right, width) = sidebearings(&font, source, "o");
+        assert_eq!(left, 50.0);
+        assert_eq!(width - left - right, 465.0);
+    }
+
+    #[test]
+    fn a_chain_of_keys_follows_through() {
+        let (mut font, source) = font();
+        set_key(&mut font, "o", LEFT, "=n");
+        set_key(&mut font, "H", LEFT, "=o*2");
+
+        shift(&mut font, source, "n", Sidebearing::Left, 10.0);
+
+        assert_eq!(sidebearings(&font, source, "o").0, 60.0);
+        assert_eq!(sidebearings(&font, source, "H").0, 120.0);
+    }
+
+    #[test]
+    fn a_width_key_follows_its_base() {
+        let (mut font, source) = font();
+        set_key(&mut font, "o", WIDTH, "=width(n)+20");
+
+        shift(&mut font, source, "n", Sidebearing::Right, 30.0);
+
+        assert_eq!(sidebearings(&font, source, "o").2, 550.0);
+    }
+
+    #[test]
+    fn keys_that_cannot_be_applied_leave_the_edit_and_their_sides_alone() {
+        let (mut font, source) = font();
+        set_key(&mut font, "o", LEFT, "=|");
+        set_key(&mut font, "o", RIGHT, "=|");
+        set_key(&mut font, "H", RIGHT, "=n");
+        set_key(&mut font, "H", WIDTH, "=n");
+
+        shift(&mut font, source, "n", Sidebearing::Left, 10.0);
+        shift(&mut font, source, "o", Sidebearing::Left, 5.0);
+
+        assert_eq!(sidebearings(&font, source, "n").0, 60.0);
+        assert_eq!(sidebearings(&font, source, "o").0, 45.0);
+        assert_eq!(sidebearings(&font, source, "H"), (80.0, 80.0, 700.0));
+    }
+
+    #[test]
+    fn an_edit_in_one_source_leaves_the_others_keys_alone() {
+        let (mut font, regular) = font();
+        let weight = Axis::weight();
+        let weight_id = weight.id();
+        font.add_axis(weight).unwrap();
+        font.source_mut(regular)
+            .unwrap()
+            .set_location(DesignLocation::from([(weight_id, 400.0)]));
+        let bold = font.add_source(Source::new(
+            "Bold".to_string(),
+            DesignLocation::from([(weight_id, 700.0)]),
+        ));
+        add_rectangle(&mut font, bold, "n", 560.0, 30.0, 530.0);
+        add_rectangle(&mut font, bold, "o", 580.0, 25.0, 555.0);
+        set_key(&mut font, "o", LEFT, "=n");
+
+        shift(&mut font, bold, "n", Sidebearing::Left, 15.0);
+
+        assert_eq!(sidebearings(&font, bold, "o").0, 45.0);
+        // Regular's `o` was never brought in line with `n`, and still isn't.
+        assert_eq!(sidebearings(&font, regular, "o").0, 40.0);
+    }
+}
+
+/// What linked metrics add to one edit, on a font big enough that a cost per
+/// glyph or per key shows. Run with `cargo test --release -p shift-font --
+/// perf_mark` for timings; budgets are asserted only in release builds.
+mod perf {
+    use std::time::{Duration, Instant};
+
+    use super::*;
+    use crate::{FontIntent, FontIntentSet, ShiftSidebearing, Sidebearing};
+
+    const GLYPHS: usize = 10_000;
+    /// 300 glyphs linked to `g00000`, then 15 groups of 20 linked to one
+    /// base each: a large Latin family's spacing classes.
+    const LINKED_TO_ONE: usize = 300;
+    const GROUPS: usize = 15;
+    const PER_GROUP: usize = 20;
+
+    fn name(index: usize) -> String {
+        format!("g{index:05}")
+    }
+
+    /// The key both sides of glyph `index` get, if any.
+    fn key_of(index: usize) -> Option<String> {
+        if (1..=LINKED_TO_ONE).contains(&index) {
+            return Some(format!("={}", name(0)));
+        }
+        let group = index.checked_sub(1_000)? / 100;
+        let member = index % 100;
+        (group < GROUPS && (1..=PER_GROUP).contains(&member))
+            .then(|| format!("={}+5", name(1_000 + group * 100)))
+    }
+
+    fn large_font(keyed: bool) -> (Font, SourceId) {
+        let mut font = Font::new();
+        let source = font.default_source_id().unwrap();
+        for index in 0..GLYPHS {
+            let mut glyph = Glyph::new(name(index));
+            let mut layer = GlyphLayer::with_width(LayerId::new(), source, 600.0);
+            for contour in 0..2 {
+                let offset = f64::from(u32::try_from(contour * 200).unwrap());
+                layer.add_contour(contour![
+                    (50.0 + offset, 0),
+                    (50.0 + offset, 700),
+                    (150.0 + offset, 700),
+                    (150.0 + offset, 0)
+                ]);
+            }
+            glyph.set_layer(layer);
+            if keyed && let Some(text) = key_of(index) {
+                glyph
+                    .metrics_keys_mut()
+                    .set(LEFT, MetricsKey::new(text.clone()));
+                glyph.metrics_keys_mut().set(RIGHT, MetricsKey::new(text));
+            }
+            font.insert_glyph(glyph).unwrap();
+        }
+        (font, source)
+    }
+
+    /// Median time of `edit` over fifteen runs, after one warm-up run.
+    fn median_time(mut edit: impl FnMut(u32)) -> Duration {
+        edit(0);
+        let mut samples: Vec<Duration> = (1..=15)
+            .map(|run| {
+                let start = Instant::now();
+                edit(run);
+                start.elapsed()
+            })
+            .collect();
+        samples.sort();
+        samples[samples.len() / 2]
+    }
+
+    fn shift_left(font: &mut Font, source: SourceId, glyph: usize) -> Duration {
+        let layer_id = font
+            .glyph_by_name(&name(glyph))
+            .unwrap()
+            .layer_for_source(source)
+            .unwrap()
+            .id();
+        median_time(|run| {
+            let delta = if run % 2 == 0 { 3.0 } else { -3.0 };
+            font.apply_intents(&FontIntentSet::from(FontIntent::from(ShiftSidebearing {
+                layer_id,
+                sidebearing: Sidebearing::Left,
+                delta,
+            })))
+            .unwrap();
+        })
+    }
+
+    #[test]
+    fn perf_mark_linked_metrics_add_little_to_an_edit() {
+        let (mut plain, plain_source) = large_font(false);
+        let (mut keyed, source) = large_font(true);
+        assert_eq!(keyed.metrics_keyed_glyph_ids().count(), 600);
+
+        let baseline = shift_left(&mut plain, plain_source, 5_000);
+        let unread = shift_left(&mut keyed, source, 5_000);
+        let read_by_group = shift_left(&mut keyed, source, 1_000);
+        let read_by_many = shift_left(&mut keyed, source, 0);
+        let scan = median_time(|_| {
+            assert!(!keyed.linked_glyph_ids().is_empty());
+        });
+
+        println!("perf_mark linked metrics, {GLYPHS} glyphs, 600 keyed:");
+        println!("  edit, no keys in the font:        {baseline:?}");
+        println!("  edit no key reads:                {unread:?}");
+        println!("  edit {PER_GROUP} glyphs follow:            {read_by_group:?}");
+        println!("  edit {LINKED_TO_ONE} glyphs follow:           {read_by_many:?}");
+        println!("  linked_glyph_ids (engine, per edit): {scan:?}");
+        if cfg!(debug_assertions) {
+            return;
+        }
+        // About 2x the measured times on a Ryzen 5 5500U (Linux): an edit no
+        // key reads costs ~0.5 ms more than in a font without keys, and one
+        // that 300 glyphs follow ~7.6 ms. The drag preview runs this per frame.
+        assert!(unread < baseline + Duration::from_millis(1), "{unread:?}");
+        assert!(
+            read_by_group < Duration::from_millis(2),
+            "{read_by_group:?}"
+        );
+        assert!(read_by_many < Duration::from_millis(16), "{read_by_many:?}");
+        assert!(scan < Duration::from_millis(2), "{scan:?}");
+    }
 }
