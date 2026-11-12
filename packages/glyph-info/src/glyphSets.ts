@@ -4,6 +4,7 @@ import type {
   Glyph,
   GlyphPosition,
   Language,
+  LetterSkeleton,
   LanguageCatalog,
   LanguageCoverage,
   LanguageScript,
@@ -11,16 +12,6 @@ import type {
   ScriptGroup,
   ScriptGroupCoverage,
 } from "./types.js";
-
-/**
- * Arabic's dotless skeleton (rasm): hamza, alef, dotless beh, hah, dal, reh,
- * seen, sad, tah, ain, kaf, lam, meem, heh, waw, alef maksura, dotless qaf,
- * dotless feh and noon ghunna. Every dotted letter is drawn from one of them.
- */
-const ARABIC_BASIC_SHAPES = [
-  0x0621, 0x0627, 0x062d, 0x062f, 0x0631, 0x0633, 0x0635, 0x0637, 0x0639, 0x0643, 0x0644, 0x0645,
-  0x0647, 0x0648, 0x0649, 0x066e, 0x066f, 0x06a1, 0x06ba,
-];
 
 /** Ligatures a script's shaping always forms, so its languages require them: Arabic's lam-alef. */
 const REQUIRED_LIGATURES: ReadonlyMap<string, RegExp> = new Map([
@@ -72,6 +63,7 @@ const byLanguageName = orderBy<LanguageCoverage>(
 export class GlyphSets {
   readonly #formsByScript: ReadonlyMap<string, readonly Form[]>;
   readonly #nameFor: (codepoint: number) => string;
+  readonly #skeletons: ReadonlyMap<number, number>;
   // non-reactive: memoizes immutable reference data, never read by computed/effects.
   readonly #requiredByLanguage = new Map<string, RequiredGlyph[]>();
 
@@ -79,13 +71,16 @@ export class GlyphSets {
    * @param glyphs - every GlyphData entry, encoded or not.
    * @param codepointFor - resolves a GlyphData, production or alternate name to its codepoint.
    * @param nameFor - names a character's glyph.
+   * @param skeletons - each joining-script letter's dotless skeleton, from Unicode.
    */
   constructor(
     glyphs: readonly Glyph[],
     codepointFor: (name: string) => number | null,
     nameFor: (codepoint: number) => string,
+    skeletons: readonly LetterSkeleton[],
   ) {
     this.#nameFor = nameFor;
+    this.#skeletons = new Map(skeletons.map(({ codepoint, skeleton }) => [codepoint, skeleton]));
     const formsByScript = new Map<string, Form[]>();
     for (const glyph of glyphs) {
       const form = formOf(glyph, codepointFor);
@@ -117,20 +112,21 @@ export class GlyphSets {
    * The script groups shown beside a script's tracked languages.
    *
    * @param script - Hyperglot script name, such as `Arabic`.
-   * @param languages - the script's tracked languages; their characters bound the Ligatures group.
+   * @param languages - the script's tracked languages; their letters bound both groups.
    */
   groupsFor(script: string, languages: readonly Language[]): GroupDefinition[] {
     const key = scriptKey(script);
     const groups: GroupDefinition[] = [];
 
-    if (key === "arabic") {
-      const shapes = new Set(ARABIC_BASIC_SHAPES);
+    const shapes = this.#basicShapes(languages);
+    if (shapes.length > 0) {
+      const shapeSet = new Set(shapes);
       const forms = this.#forms(script).filter(
-        (form) => form.required && within(form.characters, shapes),
+        (form) => form.required && within(form.characters, shapeSet),
       );
       groups.push({
         group: { id: `${key}/basic-shapes`, name: "Basic Shapes", script },
-        required: this.#ordered(ARABIC_BASIC_SHAPES, forms),
+        required: this.#ordered(shapes, forms),
       });
     }
 
@@ -148,6 +144,26 @@ export class GlyphSets {
     }
 
     return groups;
+  }
+
+  /**
+   * The dotless skeletons the languages' letters are drawn on, such as dotless
+   * beh for beh, teh and theh; empty when no letter adds dots to a skeleton,
+   * so scripts without dotted letters get no Basic Shapes group.
+   */
+  #basicShapes(languages: readonly Language[]): number[] {
+    const letters = new Set(languages.flatMap((language) => language.baseCodepoints));
+    const shapes = new Set<number>();
+    let dotted = false;
+    for (const letter of letters) {
+      const skeleton = this.#skeletons.get(letter);
+      if (skeleton === undefined) continue;
+
+      shapes.add(skeleton);
+      if (skeleton !== letter) dotted = true;
+    }
+
+    return dotted ? [...shapes] : [];
   }
 
   #forms(script: string): readonly Form[] {

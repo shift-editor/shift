@@ -18,6 +18,7 @@ import type {
   GlyphInfoResources,
   Language,
   LanguageCatalog,
+  LetterSkeleton,
   SearchResult,
 } from "./types.js";
 
@@ -143,6 +144,7 @@ export class GlyphInfo {
   #usedBy: Map<number, number[]>;
   #charsets: CharsetDefinition[];
   #languages: Language[];
+  #skeletons: readonly LetterSkeleton[];
   #allGlyphData: readonly Glyph[];
   #glyphSets: GlyphSets | null = null;
   #searchData: Record<string, unknown>[] = [];
@@ -178,6 +180,7 @@ export class GlyphInfo {
     this.#usedBy = new Map();
     this.#charsets = resources.charsets;
     this.#languages = resources.languages;
+    this.#skeletons = resources.skeletons;
     if ("searchData" in resources) this.addResources(resources);
   }
 
@@ -378,6 +381,7 @@ export class GlyphInfo {
       this.#allGlyphData,
       (name) => this.#glyphDataByAlias.get(name)?.codepoint ?? null,
       (codepoint) => this.getGlyphName(codepoint) ?? fallbackGlyphName(codepoint),
+      this.#skeletons,
     );
 
     return createLanguageCatalog(

@@ -202,6 +202,12 @@ export interface Decomposition {
   usedBy: Record<string, number[]>;
 }
 
+/** A joining-script letter and the dotless skeleton it is drawn on: teh on dotless beh. */
+export interface LetterSkeleton {
+  codepoint: number;
+  skeleton: number;
+}
+
 export interface GlyphInfoResources extends GlyphInfoCoreResources, GlyphInfoComponentResources {}
 
 /** Names, categories, charsets, and languages: what glyph lists and catalogs need. */
@@ -209,6 +215,8 @@ export interface GlyphInfoCoreResources {
   glyphData: Glyph[];
   charsets: CharsetDefinition[];
   languages: Language[];
+  /** Each joining-script letter's dotless skeleton, from Unicode's ArabicShaping.txt. */
+  skeletons: LetterSkeleton[];
 }
 
 /**

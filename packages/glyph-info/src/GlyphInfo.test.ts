@@ -519,6 +519,32 @@ describe("language coverage catalogs", () => {
     expect(shapes).not.toContain("beh-ar");
   });
 
+  it("draws Basic Shapes from Unicode's skeleton of each tracked letter", () => {
+    const arabic = db
+      .createLanguageCatalog([], ["arb-arabic"])
+      .required("arabic/basic-shapes")
+      .map(({ name }) => name);
+    const withUrdu = db
+      .createLanguageCatalog([], ["arb-arabic", "urd-arabic"])
+      .required("arabic/basic-shapes")
+      .map(({ name }) => name);
+
+    // Teh, theh and beh share dotless beh; teh marbuta's skeleton is ae (dotless teh marbuta).
+    expect(arabic).toEqual(expect.arrayContaining(["behDotless-ar", "ae-ar"]));
+    expect(arabic).not.toContain("teh-ar");
+    expect(arabic).not.toContain("gaf-ar");
+    expect(withUrdu).toContain("gaf-ar");
+  });
+
+  it("gives a script without dotted letters no Basic Shapes group", () => {
+    const catalog = db.createLanguageCatalog([], ["eng-latin", "hin-devanagari"]);
+    const groupNames = catalog.trackedScripts.flatMap(({ groups }) =>
+      groups.map(({ group }) => group.name),
+    );
+
+    expect(groupNames).not.toContain("Basic Shapes");
+  });
+
   it("limits a script's ligatures to the tracked languages' characters", () => {
     const kurdish = db.createLanguageCatalog([], ["ckb-arabic"]);
     const arabic = db.createLanguageCatalog([], ["arb-arabic"]);
