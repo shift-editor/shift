@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { IndicPosition, UnicodeProperties } from "../../src/types.js";
 
 const UCD_FILES = [
+  "ArabicShaping.txt",
   "BidiMirroring.txt",
   "DerivedBidiClass.txt",
   "DerivedGeneralCategory.txt",
@@ -53,6 +54,7 @@ export function generateUnicode(unicodeDir: string, outputPath: string): Record<
     unihanCore: unihanCore(read("Unihan_kUnihanCore2020.txt")),
     specialCasing: specialCasing(read("SpecialCasing.txt")),
     mirrors: mirrors(read("BidiMirroring.txt")),
+    joining: joining(read("ArabicShaping.txt")),
     rightToLeftScripts: rightToLeftScripts(read("DerivedBidiClass.txt"), scriptsOf),
     scriptPunctuation: scriptPunctuation(punctuation, scriptsOf),
     indic: indic(read("IndicSyllabicCategory.txt"), read("IndicPositionalCategory.txt")),
@@ -114,6 +116,14 @@ function specialCasing(text: string): Record<string, number[]> {
   return Object.fromEntries(
     Object.entries(byLanguage).map(([tag, characters]) => [tag, [...characters]]),
   );
+}
+
+/** Letters that join their neighbours, and on which sides, from ArabicShaping.txt. */
+function joining(text: string): UnicodeProperties["joining"] {
+  return ucdLines(text, { rangeField: false }).flatMap(({ first, fields }) => {
+    const type = fields[1];
+    return type === "D" || type === "R" || type === "L" ? [{ codepoint: first, type }] : [];
+  });
 }
 
 function mirrors(text: string): UnicodeProperties["mirrors"] {

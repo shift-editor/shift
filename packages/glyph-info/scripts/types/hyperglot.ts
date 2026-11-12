@@ -23,6 +23,7 @@ export interface HyperglotOrthography {
 export interface HyperglotLanguage {
   name: string;
   preferred_name?: string;
+  speakers?: number;
   orthographies?: HyperglotOrthography[];
   status?: "living" | "historical" | "constructed";
   validity?: "todo" | "draft" | "preliminary" | "verified";

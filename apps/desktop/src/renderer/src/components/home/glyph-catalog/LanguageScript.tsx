@@ -4,6 +4,7 @@ import ChevronRightIcon from "@/assets/general/chevron-right.svg";
 import { SidebarActionSlot, SidebarRowButton } from "@/components/sidebar";
 import type { LanguageGlyph } from "@/types/glyphCatalog";
 import { Language } from "./Language";
+import { languageTooltip } from "./languageText";
 import { ScriptIcon } from "./ScriptIcon";
 import { ScriptLanguagePicker } from "./ScriptLanguagePicker";
 
@@ -68,15 +69,15 @@ export const LanguageScript = ({
             onGenerate={onGenerate}
           />
         ))}
-        {group.languages.map(({ language, presentCount, requiredCount }) => (
+        {group.languages.map((coverage) => (
           <Language
-            key={language.id}
-            setId={language.id}
-            name={language.name}
-            title={language.autonym ?? undefined}
-            presentCount={presentCount}
-            requiredCount={requiredCount}
-            isActive={selectedLanguageId === language.id}
+            key={coverage.language.id}
+            setId={coverage.language.id}
+            name={coverage.language.name}
+            title={languageTooltip(coverage)}
+            presentCount={coverage.presentCount}
+            requiredCount={coverage.requiredCount}
+            isActive={selectedLanguageId === coverage.language.id}
             canGenerate={canGenerate}
             onSelect={onSelectLanguage}
             languageGlyphs={languageGlyphs}

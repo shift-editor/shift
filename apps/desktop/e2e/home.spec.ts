@@ -96,6 +96,18 @@ test.describe("Home view", () => {
     await expect(page.getByRole("button", { name: /^Standard Arabic/ })).toBeVisible();
   });
 
+  test("finds a folded language through the language covering it", async ({ page }) => {
+    const latin = page.getByRole("button", { name: "Latin", exact: true });
+    await latin.click();
+    await latin.hover();
+    await page.getByRole("button", { name: "Add Latin languages" }).click();
+    await page.getByRole("textbox", { name: "Search languages" }).fill("Indonesian");
+
+    const list = page.getByRole("group", { name: "Latin languages to track" });
+    await expect(list.locator("label")).toHaveCount(1);
+    await expect(list.locator("label")).toHaveAttribute("title", /Also covers .*Indonesian/);
+  });
+
   test("the font name opens its info, and the Glyphs tab stays current", async ({ page }) => {
     const glyphs = page.getByRole("tab", { name: "Glyphs", exact: true });
     await expect(glyphs).toHaveAttribute("aria-selected", "true");

@@ -9,7 +9,7 @@ export interface LanguageProps {
   /** A language id (`arb-arabic`) or script group id (`arabic/basic-shapes`). */
   setId: string;
   name: string;
-  /** Shown on hover, such as a language's autonym. */
+  /** Shown on hover: a language's autonym, full support and the languages it covers. */
   title?: string;
   presentCount: number;
   requiredCount: number;
@@ -50,9 +50,7 @@ export const Language = ({
       >
         <GuideSlot className="-ml-2" />
         <span className="min-w-0 flex-1 truncate pl-5 text-left">{name}</span>
-        <span className="shrink-0 text-xs">
-          {presentCount}/{requiredCount}
-        </span>
+        <span className="shrink-0 text-xs">{countLabel(presentCount, requiredCount)}</span>
       </SidebarRowButton>
       <MissingGlyphsPopover
         anchor={rowRef}
@@ -65,3 +63,8 @@ export const Language = ({
     </>
   );
 };
+
+/** "3/10", or "—" for a language that adds nothing beyond its script's Basic set. */
+function countLabel(presentCount: number, requiredCount: number): string {
+  return requiredCount === 0 ? "—" : `${presentCount}/${requiredCount}`;
+}

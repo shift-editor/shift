@@ -1,6 +1,7 @@
 import MiniSearch from "minisearch";
 import { alphabetical, comparing } from "@shift/types";
-import { GlyphSets, createLanguageCatalog } from "./glyphSets.js";
+import { GlyphSets } from "./glyphSets.js";
+import { createLanguageCatalog } from "./languageCatalog.js";
 import type {
   CharsetDefinition,
   CharsetSummary,

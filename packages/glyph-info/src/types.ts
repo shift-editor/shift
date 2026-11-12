@@ -57,6 +57,14 @@ export interface Language {
   markCodepoints: number[];
   /** Punctuation the orthography uses; counted in the script's Punctuation group, not required. */
   punctuationCodepoints: number[];
+  /** First- and second-language speakers, from Hyperglot; ranks a group's members. */
+  speakers: number;
+  /**
+   * The orthography whose support covers this one for type design, or `null`
+   * for one listed in its own right: Algerian Arabic is covered by Standard
+   * Arabic, Indonesian by Malaysian.
+   */
+  coveredBy: string | null;
 }
 
 /** A glyph in a font, as language coverage reads it. */
@@ -113,10 +121,32 @@ export interface ScriptGroupCoverage {
   requiredCount: number;
 }
 
+/**
+ * Coverage of one language: of what it adds beyond its script's Basic set,
+ * and of everything it needs.
+ */
 export interface LanguageCoverage {
   language: Language;
+  /** Present glyphs among those the language adds beyond Basic. */
   presentCount: number;
+  /** Glyphs the language adds beyond Basic. */
   requiredCount: number;
+  /** Present glyphs among everything the language needs, Basic included. */
+  fullPresentCount: number;
+  fullRequiredCount: number;
+  /** Languages this one's support covers fully: Standard Arabic covers Algerian Arabic. */
+  covers: Language[];
+  /**
+   * Varieties folded under this language that need glyphs it lacks, with how
+   * many: Gulf Arabic also uses پ ڤ گ.
+   */
+  varieties: LanguageVariety[];
+}
+
+/** A variety folded under another language, and the glyphs it needs beyond that language. */
+export interface LanguageVariety {
+  language: Language;
+  extraCount: number;
 }
 
 export interface LanguageScript {
@@ -160,10 +190,13 @@ export interface LanguageCatalog {
   /** Returns coverage for one language, or `null` for an unknown id. */
   coverage(languageId: string): LanguageCoverage | null;
   /**
-   * Returns every glyph a set requires: encoded glyphs by codepoint, then
-   * forms in GlyphData order. Empty for an unknown id.
+   * Returns every glyph a set requires, each letter followed by its forms:
+   * for a language, only what it adds beyond its script's Basic set. Empty
+   * for an unknown id.
    */
   required(setId: string): RequiredGlyph[];
+  /** Returns everything a language needs, its script's Basic set included. */
+  requiredFully(languageId: string): RequiredGlyph[];
   /** Whether the font has a required glyph, by its codepoint or its name. */
   has(glyph: RequiredGlyph): boolean;
 }
@@ -220,6 +253,9 @@ export interface Decomposition {
   usedBy: Record<string, number[]>;
 }
 
+/** Unicode's Joining_Type of a letter that joins: dual, right or left. */
+export type JoiningType = "D" | "R" | "L";
+
 /** Where an Indic vowel sign sits around its consonant, from IndicPositionalCategory.txt. */
 export type IndicPosition = "Left" | "Right" | "Top" | "Bottom";
 
@@ -231,6 +267,11 @@ export interface UnicodeProperties {
   specialCasing: Record<string, number[]>;
   /** Characters and the character right-to-left text shows in their place: `(` and `)`. */
   mirrors: { codepoint: number; mirror: number }[];
+  /**
+   * Letters that join their neighbours: `D` both sides (beh: init, medi and
+   * fina forms), `R` the preceding letter only (reh: fina), `L` the following only (init).
+   */
+  joining: { codepoint: number; type: JoiningType }[];
   /** ISO 15924 codes of scripts written right to left. */
   rightToLeftScripts: string[];
   /** Punctuation each script uses as its own (Script or Script_Extensions), by ISO 15924 code. */

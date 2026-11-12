@@ -103,7 +103,7 @@ function scriptChoices(
   const codes = new Set<string>(detected);
   if (current) codes.add(current);
   for (const entry of catalog.scripts) {
-    const supported = entry.languages.some((coverage) => coverage.presentCount > 0);
+    const supported = entry.languages.some((coverage) => coverage.fullPresentCount > 0);
     const code = entry.languages[0]?.language.scriptCode;
     if (supported && code) codes.add(code);
   }
