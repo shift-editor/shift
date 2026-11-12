@@ -123,10 +123,11 @@ export class ComponentPicker {
     const exactMatches = nameMatches.filter(
       (glyph) => search.isExactly(glyph.name) || search.isExactly(glyph.displayName),
     );
-    const resolvedGlyph = glyphInfo.getGlyphByName(glyphInfo.resolveGlyphName(query.trim()));
+    const resolvedCodepoint =
+      glyphInfo.getGlyphByName(glyphInfo.resolveGlyphName(query.trim()))?.codepoint ?? null;
     const matchingCodepoints = [
       ...(queryUnicode === null ? [] : [queryUnicode]),
-      ...(resolvedGlyph ? [resolvedGlyph.codepoint] : []),
+      ...(resolvedCodepoint === null ? [] : [resolvedCodepoint]),
       ...glyphInfo.search(query).map(({ codepoint }) => codepoint),
     ];
     const list = new CandidateList();
@@ -151,7 +152,7 @@ export class ComponentPicker {
     const info = this.#index.glyphInfo.getGlyph(codepoint);
     if (!info || this.#index.fontNames.has(info.name.toLowerCase())) return null;
 
-    return missingCandidate(info);
+    return missingCandidate(info, codepoint);
   }
 }
 
@@ -203,13 +204,13 @@ function existingCandidate(glyph: GlyphCatalogItem): ComponentCandidate {
   };
 }
 
-function missingCandidate(info: GlyphInfoGlyph): ComponentCandidate {
+function missingCandidate(info: GlyphInfoGlyph, codepoint: number): ComponentCandidate {
   return {
     availability: "missing",
     glyphId: null,
     name: info.name as GlyphName,
     displayName: info.name,
-    unicode: info.codepoint,
+    unicode: codepoint,
   };
 }
 

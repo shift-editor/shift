@@ -283,6 +283,7 @@ export class Editor {
     get fps(): Signal<number>;
     // (undocumented)
     fromScreen(screen: ScreenPoint): Coordinates;
+    generateGlyphs(glyphs: readonly NewGlyph[]): GlyphRecord[];
     // (undocumented)
     readonly gesture: EditorGesture;
     getCameraTransform(): CameraTransform;

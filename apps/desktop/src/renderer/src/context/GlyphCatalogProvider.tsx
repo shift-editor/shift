@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useLocation, useNavigate } from "react-router";
 import {
   DEFAULT_LANGUAGE_IDS,
+  glyphPreviewText,
+  type FontGlyph,
   type GlyphCategory,
   type GlyphCategoryCatalog,
   type LanguageCatalog,
 } from "@shift/glyph-info";
-import type { GlyphId, GlyphName } from "@shift/types";
+import type { GlyphId, GlyphName, Unicode } from "@shift/types";
 import { effect, signal, useSignalState } from "@shift/editor/signals";
 import { editorPath, glyphIdFromPath } from "@/lib/editorRoute";
 import { useFontSession } from "@/workspace/WorkspaceContext";
@@ -120,13 +122,17 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     () => glyphInfo.createCategoryCatalog(availableUnicodes),
     [availableUnicodes, glyphInfo],
   );
-  const languageCatalog = useMemo<LanguageCatalog>(
-    () => glyphInfo.createLanguageCatalog(availableUnicodes),
-    [availableUnicodes, glyphInfo],
+  const fontGlyphs = useMemo<FontGlyph[]>(
+    () =>
+      availableGlyphs.map((glyph) => ({
+        name: glyph.name,
+        unicodes: glyph.unicode === null ? [] : [glyph.unicode],
+      })),
+    [availableGlyphs],
   );
-  const languageScripts = useMemo(
-    () => languageCatalog.scriptsFor(trackedLanguageIds),
-    [languageCatalog, trackedLanguageIds],
+  const languageCatalog = useMemo<LanguageCatalog>(
+    () => glyphInfo.createLanguageCatalog(fontGlyphs, trackedLanguageIds),
+    [fontGlyphs, glyphInfo, trackedLanguageIds],
   );
   const visibleCategoryFilters = useMemo<readonly GlyphCategoryFilter[]>(
     () =>
@@ -157,19 +163,31 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
 
   const filteredGlyphs = useMemo(() => {
     const search = NameQuery.from(query);
-    const filteringByGroup = categoryFilters.length > 0 || selectedLanguageId !== null;
+    const searchLimit = Math.max(availableUnicodes.length, 200);
+    if (selectedLanguageId !== null) {
+      const inSet = new Set(languageCatalog.filter(selectedLanguageId));
+      const queryUnicodes = new Set(categoryCatalog.filter({ query, searchLimit }));
+
+      return availableGlyphs.filter((glyph) => {
+        if (!inSet.has(glyph.name)) return false;
+        if (search.isEmpty) return true;
+
+        const unicodeMatched = glyph.unicode !== null && queryUnicodes.has(glyph.unicode);
+        const nameMatched = search.matchesText(glyph.name) || search.matchesText(glyph.displayName);
+        return unicodeMatched || nameMatched;
+      });
+    }
+
     const matchedUnicodes = matchingUnicodes({
       query,
-      searchLimit: Math.max(availableUnicodes.length, 200),
-      selectedLanguageId,
+      searchLimit,
       categoryFilters,
       categoryCatalog,
-      languageCatalog,
     });
 
     return availableGlyphs.filter((glyph) => {
       const unicodeMatched = glyph.unicode !== null && matchedUnicodes.has(glyph.unicode);
-      if (filteringByGroup) return unicodeMatched;
+      if (categoryFilters.length > 0) return unicodeMatched;
       if (search.isEmpty) return true;
 
       const nameMatched = search.matchesText(glyph.name) || search.matchesText(glyph.displayName);
@@ -287,22 +305,25 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   );
 
   const languageGlyphs = useCallback<GlyphCatalogSource["languageGlyphs"]>(
-    (languageId) => {
-      const available = new Set(availableUnicodes);
-      return languageCatalog.required(languageId).map((codepoint) => ({
-        codepoint,
-        name: glyphInfo.getGlyphName(codepoint) ?? fallbackGlyphName(codepoint),
-        present: available.has(codepoint),
-      }));
-    },
-    [availableUnicodes, glyphInfo, languageCatalog],
+    (setId) =>
+      languageCatalog.required(setId).map((glyph) => ({
+        glyph,
+        preview: glyphPreviewText(glyph),
+        present: languageCatalog.has(glyph),
+      })),
+    [languageCatalog],
   );
 
   const generateGlyphs = useCallback<GlyphCatalogSource["generateGlyphs"]>(
-    (codepoints) => {
+    (glyphs) => {
       if (!workspace) throw new Error("preview catalog cannot create glyphs");
 
-      workspace.editor.createGlyphsForUnicodes(codepoints);
+      workspace.editor.generateGlyphs(
+        glyphs.map(({ name, codepoint }) => ({
+          name: name as GlyphName,
+          unicode: codepoint as Unicode | null,
+        })),
+      );
     },
     [workspace],
   );
@@ -311,7 +332,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     availableGlyphs: [...availableGlyphs],
     filteredGlyphs,
     categories: categoryCatalog.categories,
-    languageScripts,
+    languageScripts: languageCatalog.trackedScripts,
     allLanguageScripts: languageCatalog.scripts,
     trackedLanguageIds,
     setTrackedLanguageIds,
@@ -360,31 +381,17 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
 interface UnicodeMatchInput {
   query: string;
   searchLimit: number;
-  selectedLanguageId: string | null;
   categoryFilters: readonly GlyphCategoryFilter[];
   categoryCatalog: GlyphCategoryCatalog;
-  languageCatalog: LanguageCatalog;
 }
 
-/** Codepoints matching the search query within the selected language or categories. */
+/** Codepoints matching the search query within the selected categories. */
 function matchingUnicodes({
   query,
   searchLimit,
-  selectedLanguageId,
   categoryFilters,
   categoryCatalog,
-  languageCatalog,
 }: UnicodeMatchInput): Set<number> {
-  const hasQuery = query.trim() !== "";
-
-  if (selectedLanguageId !== null) {
-    const languageUnicodes = new Set(languageCatalog.filter(selectedLanguageId));
-    if (!hasQuery) return languageUnicodes;
-
-    const queryMatches = categoryCatalog.filter({ query, searchLimit });
-    return new Set(queryMatches.filter((codepoint) => languageUnicodes.has(codepoint)));
-  }
-
   if (categoryFilters.length === 0) {
     return new Set(categoryCatalog.filter({ query, searchLimit }));
   }
@@ -393,11 +400,6 @@ function matchingUnicodes({
     categoryCatalog.filter({ query, category, subCategoryKey, searchLimit }),
   );
   return new Set(categoryMatches);
-}
-
-function fallbackGlyphName(codepoint: number): string {
-  const hex = codepoint.toString(16).toUpperCase();
-  return codepoint > 0xffff ? `u${hex}` : `uni${hex.padStart(4, "0")}`;
 }
 
 function glyphId(glyph: GlyphCatalogItem) {

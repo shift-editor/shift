@@ -182,6 +182,11 @@ export const GlyphCatalogView = () => {
             <LanguageScript
               key={group.script}
               group={group}
+              allLanguages={
+                allLanguageScripts.find(({ script }) => script === group.script) ?? group
+              }
+              trackedLanguageIds={trackedLanguageIds}
+              onTrackLanguages={setTrackedLanguageIds}
               selectedLanguageId={selectedLanguageId}
               canGenerate={canAuthor}
               onSelectLanguage={selectLanguage}

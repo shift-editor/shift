@@ -13,11 +13,13 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: '^(packages/types/src/bridge/generated\.ts|packages/types/__fixtures__/|crates/shift-bridge/index\.(d\.ts|js))'
+        exclude: '^(packages/types/src/bridge/generated\.ts|packages/types/__fixtures__/|crates/shift-bridge/index\.(d\.ts|js)|packages/glyph-info/vendor/unicode/)'
       - id: end-of-file-fixer
-        exclude: '^(packages/types/src/bridge/generated\.ts|packages/types/__fixtures__/|crates/shift-bridge/index\.(d\.ts|js))'
+        exclude: '^(packages/types/src/bridge/generated\.ts|packages/types/__fixtures__/|crates/shift-bridge/index\.(d\.ts|js)|packages/glyph-info/vendor/unicode/)'
       - id: check-yaml
       - id: check-added-large-files
+        # Unicode's kUnihanCore2020 lines, vendored unchanged: the source the CJK core sets come from.
+        exclude: '^packages/glyph-info/vendor/unicode/Unihan_kUnihanCore2020\.txt$'
       - id: check-merge-conflict
 
   # Slop detection
@@ -77,7 +79,7 @@ repos:
         entry: pnpm format:files --no-error-on-unmatched-pattern
         language: system
         types_or: [javascript, jsx, ts, tsx, css, json, markdown]
-        exclude: '^(packages/types/src/bridge/generated\.ts|packages/types/__fixtures__/|crates/shift-bridge/index\.(d\.ts|js))'
+        exclude: '^(packages/types/src/bridge/generated\.ts|packages/types/__fixtures__/|crates/shift-bridge/index\.(d\.ts|js)|packages/glyph-info/vendor/unicode/)'
 
       - id: oxlint
         name: oxlint

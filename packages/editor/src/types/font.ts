@@ -383,11 +383,21 @@ export interface WorkspaceEditCoordinator {
   readonly settledCell: { readonly value: boolean };
 }
 
+/**
+ * A glyph to generate: encoded at `unicode` and named from bundled glyph
+ * metadata, or, when `unicode` is null, an unencoded form such as
+ * `beh-ar.init` created under `name`.
+ */
+export interface NewGlyph {
+  readonly name: GlyphName;
+  readonly unicode: Unicode | null;
+}
+
 export interface FontOptions {
   readonly store: FontStore;
   readonly glyphInfo?: {
     getGlyphName(codepoint: number): string | null;
-    getGlyphByName(name: string): { readonly codepoint: number } | null;
+    getGlyphByName(name: string): { readonly codepoint: number | null } | null;
   };
   readonly editCoordinator?: WorkspaceEditCoordinator;
   readonly reader?: GlyphReader;

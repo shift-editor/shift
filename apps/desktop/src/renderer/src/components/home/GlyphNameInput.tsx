@@ -35,8 +35,8 @@ export const GlyphNameInput = forwardRef<HTMLInputElement, GlyphNameInputProps>(
         return null;
       }
 
-      const resolved = glyphInfo.getGlyphByName(next);
-      editor.font.updateGlyphIdentity(glyph.id, next, resolved ? [resolved.codepoint] : []);
+      const codepoint = glyphInfo.getGlyphByName(next)?.codepoint ?? null;
+      editor.font.updateGlyphIdentity(glyph.id, next, codepoint === null ? [] : [codepoint]);
       return next;
     };
 

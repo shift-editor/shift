@@ -56,6 +56,46 @@ test.describe("Home view", () => {
     await expectPanelSnapshot(fontNavigation(page), "home-language-filtered.png");
   });
 
+  test("generates an unencoded Arabic positional form from Basic Shapes", async ({
+    editor,
+    page,
+  }) => {
+    await page.getByRole("button", { name: "Arabic", exact: true }).click();
+    const basicShapes = page
+      .getByRole("button")
+      .filter({ has: page.getByText("Basic Shapes", { exact: true }) });
+    await expect(basicShapes).toContainText(/0\/\d+/);
+    const required = (await basicShapes.textContent())?.match(/0\/(\d+)/)?.[1];
+    if (!required) throw new Error("Expected Basic Shapes coverage count");
+
+    await basicShapes.click({ button: "right" });
+    const list = page.getByRole("group", { name: "Missing glyphs for Basic Shapes" });
+    await list.getByText("alef-ar.fina", { exact: true }).click();
+    await page.getByRole("button", { name: "Generate" }).click();
+
+    await expect.poll(() => editor.glyphNamed("alef-ar.fina")).toMatchObject({ unicodes: [] });
+    await expect(basicShapes).toContainText(`1/${required}`);
+  });
+
+  test("adds one more language to a script from the script's row", async ({ page }) => {
+    const arabic = page.getByRole("button", { name: "Arabic", exact: true });
+    await arabic.click();
+    const persian = page
+      .getByRole("button")
+      .filter({ has: page.getByText("Iranian Persian", { exact: true }) });
+    await expect(persian).toHaveCount(0);
+
+    await arabic.hover();
+    await page.getByRole("button", { name: "Add Arabic languages" }).click();
+    await page.getByRole("textbox", { name: "Search languages" }).fill("Persian");
+    const list = page.getByRole("group", { name: "Arabic languages to track" });
+    await list.getByText("Iranian Persian", { exact: true }).click();
+    await page.getByRole("button", { name: "Done" }).click();
+
+    await expect(persian).toContainText(/\d+\/\d+/);
+    await expect(page.getByRole("button", { name: /^Standard Arabic/ })).toBeVisible();
+  });
+
   test("the font name opens its info, and the Glyphs tab stays current", async ({ page }) => {
     const glyphs = page.getByRole("tab", { name: "Glyphs", exact: true });
     await expect(glyphs).toHaveAttribute("aria-selected", "true");

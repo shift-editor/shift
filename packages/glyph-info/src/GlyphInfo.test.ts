@@ -125,6 +125,25 @@ describe("resolveGlyphName", () => {
   });
 });
 
+describe("unencoded glyph data", () => {
+  it("finds positional forms, half forms and ligatures by name", () => {
+    expect(db.getGlyphByName("beh-ar.init")).toMatchObject({
+      codepoint: null,
+      script: "arabic",
+      production: "uni0628.init",
+    });
+    expect(db.getGlyphByName("k-deva")).toMatchObject({ codepoint: null, subCategory: "Halfform" });
+    expect(db.getGlyphByName("lam_alef-ar")).toMatchObject({
+      codepoint: null,
+      subCategory: "Ligature",
+    });
+  });
+
+  it("resolves a form's production name to its glyph data name", () => {
+    expect(db.resolveGlyphName("uni0628.init")).toBe("beh-ar.init");
+  });
+});
+
 describe("getAllGlyph", () => {
   it("returns many entries", () => {
     const all = db.getAllGlyph();
@@ -156,7 +175,7 @@ describe("getAllGlyph", () => {
   it("codepoints are all non-negative integers", () => {
     const invalid = db
       .getAllGlyph()
-      .filter((g) => !Number.isInteger(g.codepoint) || g.codepoint < 0);
+      .filter((g) => g.codepoint === null || !Number.isInteger(g.codepoint) || g.codepoint < 0);
 
     expect(invalid).toEqual([]);
   });
@@ -396,7 +415,7 @@ describe("getCharsetCodepoints", () => {
 
 describe("language coverage catalogs", () => {
   it("reports required base-character coverage for primary orthographies", () => {
-    const catalog = db.createLanguageCatalog([0x41, 0x42, 0x61, 0x24]);
+    const catalog = db.createLanguageCatalog(encoded([0x41, 0x42, 0x61, 0x24]));
     const latin = catalog.scripts.find((script) => script.script === "Latin");
     const english = latin?.languages.find(({ language }) => language.id === "eng-latin");
 
@@ -405,32 +424,146 @@ describe("language coverage catalogs", () => {
     expect(english?.requiredCount).toBe(56);
   });
 
-  it("filters the font repertoire by language while preserving input order", () => {
-    const catalog = db.createLanguageCatalog([0x42, 0x24, 0x41, 0x61]);
+  it("filters the font's glyphs by language while preserving font order", () => {
+    const catalog = db.createLanguageCatalog(encoded([0x42, 0x24, 0x41, 0x61]));
 
-    expect(catalog.filter("eng-latin")).toEqual([0x42, 0x41, 0x61]);
+    expect(catalog.filter("eng-latin")).toEqual(["B", "A", "a"]);
     expect(catalog.filter("unknown-language")).toEqual([]);
   });
 
-  it("lists every required base character in codepoint order", () => {
-    const catalog = db.createLanguageCatalog([0x61, 0x62]);
-    const required = catalog.required("eng-latin");
+  it("lists every required character in codepoint order, named from glyph data", () => {
+    const required = db.createLanguageCatalog([]).required("eng-latin");
 
     expect(required).toHaveLength(56);
-    expect(required).toContain(0x61);
-    expect(required).toEqual(required.toSorted(ascending));
-    expect(catalog.required("unknown-language")).toEqual([]);
+    expect(required[0]).toEqual({ name: "A", codepoint: 0x41, characters: [0x41], position: null });
+    const codepoints = required.map(({ codepoint }) => codepoint ?? -1);
+    expect(codepoints).toEqual(codepoints.toSorted(ascending));
+    expect(db.createLanguageCatalog([]).required("unknown-language")).toEqual([]);
+  });
+
+  it("requires an Arabic letter's positional forms after the letter", () => {
+    const names = db
+      .createLanguageCatalog([])
+      .required("arb-arabic")
+      .map(({ name }) => name);
+    const beh = names.indexOf("beh-ar");
+
+    expect(names.slice(beh, beh + 4)).toEqual([
+      "beh-ar",
+      "beh-ar.fina",
+      "beh-ar.medi",
+      "beh-ar.init",
+    ]);
+    expect(names).toContain("lam_alef-ar");
+    expect(names).not.toContain("beh-ar.isol");
+  });
+
+  it("counts a form by its production name and a letter by its codepoint", () => {
+    const catalog = db.createLanguageCatalog([
+      { name: "uni0628.init", unicodes: [] },
+      { name: "myBeh", unicodes: [0x0628] },
+    ]);
+    const behInit = catalog.required("arb-arabic").find(({ name }) => name === "beh-ar.init");
+
+    expect(behInit && catalog.has(behInit)).toBe(true);
+    expect(catalog.coverage("arb-arabic")?.presentCount).toBe(2);
+    expect(catalog.filter("arb-arabic")).toEqual(["uni0628.init", "myBeh"]);
+  });
+
+  it("requires Devanagari half forms built from a consonant and virama", () => {
+    const halfForm = db
+      .createLanguageCatalog([])
+      .required("hin-devanagari")
+      .find(({ name }) => name === "k-deva");
+
+    expect(halfForm).toEqual({
+      name: "k-deva",
+      codepoint: null,
+      characters: [0x0915, 0x094d],
+      position: null,
+    });
+  });
+
+  it("leaves Latin locale alternates and optional ligatures out of a language", () => {
+    const names = db
+      .createLanguageCatalog([])
+      .required("eng-latin")
+      .map(({ name }) => name);
+
+    expect(names).not.toContain("idotaccent");
+    expect(names).not.toContain("f_f_i");
   });
 
   it("groups tracked languages by script and skips unknown ids", () => {
-    const catalog = db.createLanguageCatalog([]);
-    const scripts = catalog.scriptsFor(["rus-cyrillic", "eng-latin", "fra-latin", "nope"]);
+    const catalog = db.createLanguageCatalog(
+      [],
+      ["rus-cyrillic", "eng-latin", "fra-latin", "nope"],
+    );
+    const scripts = catalog.trackedScripts;
 
     expect(scripts.map(({ script }) => script)).toEqual(["Cyrillic", "Latin"]);
     expect(scripts[1]?.languages.map(({ language }) => language.id)).toEqual([
       "eng-latin",
       "fra-latin",
     ]);
+  });
+
+  it("gives tracked Arabic a dotless Basic Shapes group and a Ligatures group", () => {
+    const catalog = db.createLanguageCatalog([], ["arb-arabic"]);
+    const arabic = catalog.trackedScripts.find(({ script }) => script === "Arabic");
+    const shapes = catalog.required("arabic/basic-shapes").map(({ name }) => name);
+
+    expect(arabic?.groups.map(({ group }) => group.name)).toEqual([
+      "Basic Shapes",
+      "Punctuation",
+      "Mirrored",
+      "Ligatures",
+    ]);
+    expect(shapes).toContain("behDotless-ar.init");
+    expect(shapes).toContain("fehDotless-ar.fina");
+    expect(shapes).not.toContain("beh-ar");
+  });
+
+  it("draws Basic Shapes from Unicode's skeleton of each tracked letter", () => {
+    const arabic = db
+      .createLanguageCatalog([], ["arb-arabic"])
+      .required("arabic/basic-shapes")
+      .map(({ name }) => name);
+    const withUrdu = db
+      .createLanguageCatalog([], ["arb-arabic", "urd-arabic"])
+      .required("arabic/basic-shapes")
+      .map(({ name }) => name);
+
+    // Teh, theh and beh share dotless beh; teh marbuta's skeleton is ae (dotless teh marbuta).
+    expect(arabic).toEqual(expect.arrayContaining(["behDotless-ar", "ae-ar"]));
+    expect(arabic).not.toContain("teh-ar");
+    expect(arabic).not.toContain("gaf-ar");
+    expect(withUrdu).toContain("gaf-ar");
+  });
+
+  it("gives a script without dotted letters no Basic Shapes group", () => {
+    const catalog = db.createLanguageCatalog([], ["eng-latin", "hin-devanagari"]);
+    const groupNames = catalog.trackedScripts.flatMap(({ groups }) =>
+      groups.map(({ group }) => group.name),
+    );
+
+    expect(groupNames).not.toContain("Basic Shapes");
+  });
+
+  it("limits a script's ligatures to the tracked languages' characters", () => {
+    const kurdish = db.createLanguageCatalog([], ["ckb-arabic"]);
+    const arabic = db.createLanguageCatalog([], ["arb-arabic"]);
+    const language = kurdish.coverage("ckb-arabic")?.language;
+    const available = new Set([
+      ...(language?.baseCodepoints ?? []),
+      ...(language?.markCodepoints ?? []),
+    ]);
+    const ligatures = kurdish.required("arabic/ligatures");
+
+    expect(ligatures.length).toBeLessThan(arabic.required("arabic/ligatures").length);
+    expect(
+      ligatures.filter(({ characters }) => !characters.every((c) => available.has(c))),
+    ).toEqual([]);
   });
 
   it("resolves every default language id", () => {
@@ -449,6 +582,71 @@ describe("language coverage catalogs", () => {
 
     expect(scripts).toEqual(scripts.toSorted(alphabetical));
     expect(languageNames).toEqual(languageNames.toSorted(alphabetical));
+  });
+});
+
+/** Font glyphs encoding each codepoint, named as glyph data names them. */
+function encoded(codepoints: readonly number[]) {
+  return codepoints.map((codepoint) => ({
+    name: db.getGlyphName(codepoint) ?? `uni${codepoint.toString(16)}`,
+    unicodes: [codepoint],
+  }));
+}
+
+describe("script groups from Unicode data", () => {
+  const groupNames = (catalog: ReturnType<GlyphInfo["createLanguageCatalog"]>, script: string) =>
+    catalog.trackedScripts
+      .find((entry) => entry.script === script)
+      ?.groups.map(({ group }) => group.name) ?? [];
+  const characters = (catalog: ReturnType<GlyphInfo["createLanguageCatalog"]>, setId: string) =>
+    catalog.required(setId).flatMap(({ codepoint }) => (codepoint === null ? [] : [codepoint]));
+
+  it("requires a casing alternate only where SpecialCasing gives the language its own rules", () => {
+    const catalog = db.createLanguageCatalog([]);
+    const has = (languageId: string) =>
+      catalog.required(languageId).some(({ name }) => name === "idotaccent");
+
+    expect(has("tur-latin")).toBe(true);
+    expect(has("eng-latin")).toBe(false);
+  });
+
+  it("lists Indic half forms and vowel signs in reading order", () => {
+    const catalog = db.createLanguageCatalog([], ["hin-devanagari"]);
+    const halfForms = catalog.required("devanagari/half-forms").map(({ name }) => name);
+
+    expect(groupNames(catalog, "Devanagari")).toEqual(
+      expect.arrayContaining(["Half Forms", "Vowel Signs"]),
+    );
+    expect(halfForms).toContain("k-deva");
+    // Vowel sign I sits before its consonant, so it leads; vowel sign U sits below.
+    expect(characters(catalog, "devanagari/vowel-signs")[0]).toBe(0x093f);
+    expect(characters(catalog, "devanagari/vowel-signs").at(-1)).not.toBe(0x093f);
+  });
+
+  it("adds a script's own punctuation to its languages'", () => {
+    const catalog = db.createLanguageCatalog([], ["arb-arabic"]);
+
+    expect(characters(catalog, "arabic/punctuation")).toEqual(
+      expect.arrayContaining([0x060c, 0x061b, 0x061f]),
+    );
+  });
+
+  it("gives right-to-left scripts the mirrored pairs of their punctuation", () => {
+    const catalog = db.createLanguageCatalog([], ["arb-arabic", "eng-latin"]);
+
+    expect(characters(catalog, "arabic/mirrored")).toEqual(
+      expect.arrayContaining([0x28, 0x29, 0xab, 0xbb]),
+    );
+    expect(groupNames(catalog, "Latin")).not.toContain("Mirrored");
+  });
+
+  it("gives Han-writing languages the Unihan core set of each region", () => {
+    const catalog = db.createLanguageCatalog([], ["cmn-chinese"]);
+
+    expect(groupNames(catalog, "Chinese")).toEqual(
+      expect.arrayContaining(["Core: China", "Core: Taiwan", "Core: Japan", "Core: South Korea"]),
+    );
+    expect(catalog.required("chinese/core-g").length).toBeGreaterThan(8000);
   });
 });
 

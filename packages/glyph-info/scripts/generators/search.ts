@@ -4,7 +4,9 @@ import type { Glyph } from "../../src/types.js";
 
 export function generateSearchIndex(glyphDataPath: string, outputPath: string): number {
   const glyphDataRaw: Glyph[] = JSON.parse(readFileSync(glyphDataPath, "utf-8"));
-  const glyphMap = new Map(glyphDataRaw.map((g) => [g.codepoint, g]));
+  const glyphMap = new Map(
+    glyphDataRaw.flatMap((g) => (g.codepoint === null ? [] : [[g.codepoint, g] as const])),
+  );
 
   const records: Array<{
     codepoint: number;

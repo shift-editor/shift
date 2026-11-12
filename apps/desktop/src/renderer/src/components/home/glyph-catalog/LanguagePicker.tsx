@@ -32,7 +32,7 @@ export interface LanguagePickerProps {
 
 /**
  * Chooses which scripts the sidebar tracks; ticking a script tracks all of its
- * languages. Shift-click applies the clicked row's new state to the range from
+ * languages, and a script with only some tracked shows a dash. Shift-click applies the clicked row's new state to the range from
  * the last clicked row.
  */
 export const LanguagePicker = ({
@@ -141,6 +141,9 @@ export const LanguagePicker = ({
                   const trackedCount = script.languages.filter(({ language }) =>
                     checkedIds.has(language.id),
                   ).length;
+                  const languageCount = script.languages.length;
+                  const allTracked = trackedCount === languageCount;
+                  const someTracked = trackedCount > 0 && !allTracked;
                   const supportedCount = script.languages.filter(
                     ({ presentCount, requiredCount }) => presentCount === requiredCount,
                   ).length;
@@ -153,11 +156,17 @@ export const LanguagePicker = ({
                       onMouseDown={onMouseDown}
                     >
                       <Checkbox
-                        checked={trackedCount > 0}
+                        checked={allTracked}
+                        indeterminate={someTracked}
                         onCheckedChange={(checked) => setScriptChecked(script, checked)}
                       />
                       <ScriptIcon script={script.script} />
                       <span className="min-w-0 flex-1 truncate">{script.script}</span>
+                      {trackedCount > 0 && (
+                        <span className="shrink-0 text-xs text-muted">
+                          {trackedCount}/{languageCount}
+                        </span>
+                      )}
                     </label>
                   );
                 })

@@ -13,6 +13,8 @@ const resources: GlyphInfoResources = {
   decomposition: JSON.parse(readFileSync(join(resourcesDir, "decomposition.json"), "utf-8")),
   charsets: JSON.parse(readFileSync(join(resourcesDir, "charsets.json"), "utf-8")),
   languages: JSON.parse(readFileSync(join(resourcesDir, "languages.json"), "utf-8")).languages,
+  skeletons: JSON.parse(readFileSync(join(resourcesDir, "skeletons.json"), "utf-8")).skeletons,
+  unicode: JSON.parse(readFileSync(join(resourcesDir, "unicode.json"), "utf-8")),
   searchData: JSON.parse(readFileSync(join(resourcesDir, "search-data.json"), "utf-8")),
 };
 

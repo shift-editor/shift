@@ -14,7 +14,11 @@ export const GLYPH_CATEGORIES = [
 export type GlyphCategory = (typeof GLYPH_CATEGORIES)[number];
 
 export interface Glyph {
-  codepoint: number;
+  /**
+   * The Unicode value; `null` for a glyph no character encodes, such as the
+   * positional form `beh-ar.init`, the half form `k-deva` or the ligature `f_f_i`.
+   */
+  codepoint: number | null;
   name: string;
   category: GlyphCategory;
   subCategory: string | null; // TODO: narrow to GlyphSubCategory union
@@ -46,6 +50,67 @@ export interface Language {
   /** The script's ISO 15924 code, such as `Arab`. */
   scriptCode: string;
   baseCodepoints: number[];
+  /**
+   * Combining marks the orthography uses. Forms may be built from them (a
+   * Devanagari half form is a consonant and virama), but they are not required.
+   */
+  markCodepoints: number[];
+  /** Punctuation the orthography uses; counted in the script's Punctuation group, not required. */
+  punctuationCodepoints: number[];
+}
+
+/** A glyph in a font, as language coverage reads it. */
+export interface FontGlyph {
+  readonly name: string;
+  readonly unicodes: readonly number[];
+}
+
+/** A glyph a language or script group needs. */
+export interface RequiredGlyph {
+  /** The GlyphData name, or `uniXXXX` for a character GlyphData does not name. */
+  name: string;
+  /** The Unicode value; `null` for an unencoded form such as `beh-ar.init`. */
+  codepoint: number | null;
+  /** The characters the glyph shapes, in order: one for a letter, several for a ligature. */
+  characters: number[];
+  /**
+   * The glyph's form within a joined word (`init`, `medi` or `fina`), so a
+   * preview can join it; `null` for a glyph that is not a positional form.
+   */
+  position: GlyphPosition | null;
+}
+
+/** The position of a joining letter's form within a word. */
+export type GlyphPosition = "init" | "medi" | "fina";
+
+/** A glyph set a script needs beside its languages, such as Arabic's dotless Basic Shapes. */
+export interface ScriptGroup {
+  /** Unique among script groups and language ids, such as `arabic/basic-shapes`. */
+  id: string;
+  name: string;
+  script: string;
+}
+
+/** A script group and every glyph it requires. */
+export interface ScriptGroupDefinition {
+  readonly group: ScriptGroup;
+  readonly required: RequiredGlyph[];
+}
+
+/** What a script's tracked languages share, for building its Unicode-derived groups. */
+export interface ScriptGroupInput {
+  /** Hyperglot script name, such as `Devanagari`. */
+  readonly script: string;
+  readonly languages: readonly Language[];
+  readonly unicode: UnicodeProperties;
+  /** Names a character's glyph. */
+  readonly glyphFor: (codepoint: number) => RequiredGlyph;
+}
+
+export interface ScriptGroupCoverage {
+  group: ScriptGroup;
+  presentCount: number;
+  requiredCount: number;
 }
 
 export interface LanguageCoverage {
@@ -56,6 +121,8 @@ export interface LanguageCoverage {
 
 export interface LanguageScript {
   script: string;
+  /** Script-wide groups, listed before the languages: Basic Shapes, Ligatures. */
+  groups: ScriptGroupCoverage[];
   languages: LanguageCoverage[];
 }
 
@@ -76,17 +143,29 @@ export const DEFAULT_LANGUAGE_IDS = [
   "urd-arabic",
 ] as const;
 
+/**
+ * Language and script-group coverage for one font. A set id names either a
+ * language (`arb-arabic`) or a script group (`arabic/ligatures`).
+ */
 export interface LanguageCatalog {
-  /** Every known language, grouped by script. */
+  /** Every known language, grouped by script, with no script groups. */
   scripts: LanguageScript[];
-  /** Returns the font's codepoints that the language requires, in input order. */
-  filter(languageId: string): number[];
+  /**
+   * The tracked languages grouped by script, each script with its groups;
+   * unknown ids are skipped.
+   */
+  trackedScripts: LanguageScript[];
+  /** Returns the names of the font's glyphs in a set, in font order. */
+  filter(setId: string): string[];
   /** Returns coverage for one language, or `null` for an unknown id. */
   coverage(languageId: string): LanguageCoverage | null;
-  /** Returns every codepoint the language requires, ascending. */
-  required(languageId: string): number[];
-  /** Groups the given languages by script, skipping unknown ids. */
-  scriptsFor(languageIds: readonly string[]): LanguageScript[];
+  /**
+   * Returns every glyph a set requires: encoded glyphs by codepoint, then
+   * forms in GlyphData order. Empty for an unknown id.
+   */
+  required(setId: string): RequiredGlyph[];
+  /** Whether the font has a required glyph, by its codepoint or its name. */
+  has(glyph: RequiredGlyph): boolean;
 }
 
 export interface SearchResult {
@@ -141,6 +220,35 @@ export interface Decomposition {
   usedBy: Record<string, number[]>;
 }
 
+/** Where an Indic vowel sign sits around its consonant, from IndicPositionalCategory.txt. */
+export type IndicPosition = "Left" | "Right" | "Top" | "Bottom";
+
+/** Unicode character properties glyph sets read, generated from vendored UCD files. */
+export interface UnicodeProperties {
+  /** kUnihanCore2020 characters by region source: G China, H Hong Kong, J Japan, K Korea, M Macao, P North Korea, T Taiwan. */
+  unihanCore: Record<string, number[]>;
+  /** For each language tag with its own casing rules (tr, az, lt), every character the rules map. */
+  specialCasing: Record<string, number[]>;
+  /** Characters and the character right-to-left text shows in their place: `(` and `)`. */
+  mirrors: { codepoint: number; mirror: number }[];
+  /** ISO 15924 codes of scripts written right to left. */
+  rightToLeftScripts: string[];
+  /** Punctuation each script uses as its own (Script or Script_Extensions), by ISO 15924 code. */
+  scriptPunctuation: Record<string, number[]>;
+  indic: {
+    consonants: number[];
+    viramas: number[];
+    /** Dependent vowel signs (matras) and where each sits; `null` for a sign split around its consonant. */
+    vowelSigns: { codepoint: number; position: IndicPosition | null }[];
+  };
+}
+
+/** A joining-script letter and the dotless skeleton it is drawn on: teh on dotless beh. */
+export interface LetterSkeleton {
+  codepoint: number;
+  skeleton: number;
+}
+
 export interface GlyphInfoResources extends GlyphInfoCoreResources, GlyphInfoComponentResources {}
 
 /** Names, categories, charsets, and languages: what glyph lists and catalogs need. */
@@ -148,6 +256,9 @@ export interface GlyphInfoCoreResources {
   glyphData: Glyph[];
   charsets: CharsetDefinition[];
   languages: Language[];
+  /** Each joining-script letter's dotless skeleton, from Unicode's ArabicShaping.txt. */
+  skeletons: LetterSkeleton[];
+  unicode: UnicodeProperties;
 }
 
 /**

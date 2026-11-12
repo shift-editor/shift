@@ -75,10 +75,7 @@ export const ScriptPanel = ({ runId, current, onPick }: ScriptPanelProps) => {
 function useLanguageCatalog(): LanguageCatalog {
   const editor = useEditor();
   const entries = useSignalState(editor.font.glyphEntriesCell);
-  return useMemo(
-    () => getGlyphInfo().createLanguageCatalog(entries.flatMap((entry) => [...entry.unicodes])),
-    [entries],
-  );
+  return useMemo(() => getGlyphInfo().createLanguageCatalog(entries), [entries]);
 }
 
 /** Every language with a BCP 47 tag, by name, and the tag each choice sets. */
