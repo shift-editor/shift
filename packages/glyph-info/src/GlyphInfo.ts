@@ -20,6 +20,7 @@ import type {
   LanguageCatalog,
   LetterSkeleton,
   SearchResult,
+  UnicodeProperties,
 } from "./types.js";
 
 const DEFAULT_GLYPH_CATEGORY_OPTIONS: Required<GlyphCategoryOptions> = {
@@ -145,6 +146,7 @@ export class GlyphInfo {
   #charsets: CharsetDefinition[];
   #languages: Language[];
   #skeletons: readonly LetterSkeleton[];
+  #unicode: UnicodeProperties;
   #allGlyphData: readonly Glyph[];
   #glyphSets: GlyphSets | null = null;
   #searchData: Record<string, unknown>[] = [];
@@ -181,6 +183,7 @@ export class GlyphInfo {
     this.#charsets = resources.charsets;
     this.#languages = resources.languages;
     this.#skeletons = resources.skeletons;
+    this.#unicode = resources.unicode;
     if ("searchData" in resources) this.addResources(resources);
   }
 
@@ -382,6 +385,7 @@ export class GlyphInfo {
       (name) => this.#glyphDataByAlias.get(name)?.codepoint ?? null,
       (codepoint) => this.getGlyphName(codepoint) ?? fallbackGlyphName(codepoint),
       this.#skeletons,
+      this.#unicode,
     );
 
     return createLanguageCatalog(

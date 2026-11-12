@@ -67,6 +67,13 @@ export function generateLanguages(hyperglotPath: string, outputPath: string): nu
       if (codepoints.length === 0) continue;
 
       const marks = resolveAttribute(languages, languageCode, orthography, "marks", new Set());
+      const punctuation = resolveAttribute(
+        languages,
+        languageCode,
+        orthography,
+        "punctuation",
+        new Set(),
+      );
 
       const scriptIndex = (scriptIndices.get(orthography.script) ?? 0) + 1;
       scriptIndices.set(orthography.script, scriptIndex);
@@ -82,6 +89,7 @@ export function generateLanguages(hyperglotPath: string, outputPath: string): nu
         scriptCode: scriptCode(scriptCodes, orthography.script),
         baseCodepoints: codepoints,
         markCodepoints: uniqueCodepoints(marks),
+        punctuationCodepoints: uniqueCodepoints(punctuation),
       });
     }
   }

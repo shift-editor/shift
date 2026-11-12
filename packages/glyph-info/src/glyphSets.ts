@@ -1,4 +1,5 @@
 import { alphabetical, ascending, comparing, orderBy } from "@shift/types";
+import { casingCharacters, unicodeGroups } from "./scriptGroups.js";
 import type {
   FontGlyph,
   Glyph,
@@ -9,8 +10,9 @@ import type {
   LanguageCoverage,
   LanguageScript,
   RequiredGlyph,
-  ScriptGroup,
   ScriptGroupCoverage,
+  ScriptGroupDefinition,
+  UnicodeProperties,
 } from "./types.js";
 
 /** Ligatures a script's shaping always forms, so its languages require them: Arabic's lam-alef. */
@@ -20,7 +22,8 @@ const REQUIRED_LIGATURES: ReadonlyMap<string, RegExp> = new Map([
 
 /**
  * Scripts whose unencoded letters are locale alternates (`idotaccent`,
- * `Jacute`), not forms shaping needs, so their languages require none.
+ * `Jacute`), not forms shaping needs. A language requires one only when its
+ * own casing rules (SpecialCasing.txt) map every character the form shows.
  */
 const ALTERNATE_FORM_SCRIPTS: ReadonlySet<string> = new Set(["latin", "cyrillic", "greek"]);
 
@@ -37,11 +40,8 @@ interface Form {
   readonly ligature: boolean;
   /** Needed wherever its letters are: a letter's form, or a ligature such as Arabic's lam-alef. */
   readonly required: boolean;
-}
-
-interface GroupDefinition {
-  readonly group: ScriptGroup;
-  readonly required: RequiredGlyph[];
+  /** A locale alternate (`idotaccent`), required only by languages whose casing rules need it. */
+  readonly alternate: boolean;
 }
 
 const byScript = comparing((script: LanguageScript) => script.script, alphabetical);
@@ -64,21 +64,31 @@ export class GlyphSets {
   readonly #formsByScript: ReadonlyMap<string, readonly Form[]>;
   readonly #nameFor: (codepoint: number) => string;
   readonly #skeletons: ReadonlyMap<number, number>;
+  readonly #unicode: UnicodeProperties;
+  readonly #consonants: ReadonlySet<number>;
+  readonly #viramas: ReadonlySet<number>;
   // non-reactive: memoizes immutable reference data, never read by computed/effects.
   readonly #requiredByLanguage = new Map<string, RequiredGlyph[]>();
+  // non-reactive: memoizes immutable reference data, never read by computed/effects.
+  readonly #groupsByLanguages = new Map<string, ScriptGroupDefinition[]>();
 
   /**
    * @param glyphs - every GlyphData entry, encoded or not.
    * @param codepointFor - resolves a GlyphData, production or alternate name to its codepoint.
    * @param nameFor - names a character's glyph.
    * @param skeletons - each joining-script letter's dotless skeleton, from Unicode.
+   * @param unicode - the other Unicode properties groups read.
    */
   constructor(
     glyphs: readonly Glyph[],
     codepointFor: (name: string) => number | null,
     nameFor: (codepoint: number) => string,
     skeletons: readonly LetterSkeleton[],
+    unicode: UnicodeProperties,
   ) {
+    this.#unicode = unicode;
+    this.#consonants = new Set(unicode.indic.consonants);
+    this.#viramas = new Set(unicode.indic.viramas);
     this.#nameFor = nameFor;
     this.#skeletons = new Map(skeletons.map(({ codepoint, skeleton }) => [codepoint, skeleton]));
     const formsByScript = new Map<string, Form[]>();
@@ -100,8 +110,11 @@ export class GlyphSets {
     if (cached) return cached;
 
     const available = new Set([...language.baseCodepoints, ...language.markCodepoints]);
+    const casing = casingCharacters(this.#unicode, language.id);
     const forms = this.#forms(language.script).filter(
-      (form) => form.required && within(form.characters, available),
+      (form) =>
+        within(form.characters, available) &&
+        (form.required || (form.alternate && casing.size > 0 && within(form.characters, casing))),
     );
     const required = this.#ordered(language.baseCodepoints, forms);
     this.#requiredByLanguage.set(language.id, required);
@@ -112,11 +125,21 @@ export class GlyphSets {
    * The script groups shown beside a script's tracked languages.
    *
    * @param script - Hyperglot script name, such as `Arabic`.
-   * @param languages - the script's tracked languages; their letters bound both groups.
+   * @param languages - the script's tracked languages; their letters bound every group.
    */
-  groupsFor(script: string, languages: readonly Language[]): GroupDefinition[] {
+  groupsFor(script: string, languages: readonly Language[]): ScriptGroupDefinition[] {
+    const cacheKey = [script, ...languages.map(({ id }) => id).sort()].join("\u0000");
+    const cached = this.#groupsByLanguages.get(cacheKey);
+    if (cached) return cached;
+
+    const groups = this.#buildGroups(script, languages);
+    this.#groupsByLanguages.set(cacheKey, groups);
+    return groups;
+  }
+
+  #buildGroups(script: string, languages: readonly Language[]): ScriptGroupDefinition[] {
     const key = scriptKey(script);
-    const groups: GroupDefinition[] = [];
+    const groups: ScriptGroupDefinition[] = [];
 
     const shapes = this.#basicShapes(languages);
     if (shapes.length > 0) {
@@ -133,6 +156,25 @@ export class GlyphSets {
     const available = new Set(
       languages.flatMap((language) => [...language.baseCodepoints, ...language.markCodepoints]),
     );
+    const halfForms = this.#forms(script).filter(
+      (form) => within(form.characters, available) && this.#isHalfForm(form),
+    );
+    if (halfForms.length > 0) {
+      groups.push({
+        group: { id: `${key}/half-forms`, name: "Half Forms", script },
+        required: halfForms.map(requiredForm),
+      });
+    }
+
+    groups.push(
+      ...unicodeGroups({
+        script,
+        languages,
+        unicode: this.#unicode,
+        glyphFor: (codepoint) => this.#glyphFor(codepoint),
+      }),
+    );
+
     const ligatures = this.#forms(script).filter(
       (form) => form.ligature && within(form.characters, available),
     );
@@ -166,6 +208,22 @@ export class GlyphSets {
     return dotted ? [...shapes] : [];
   }
 
+  /** A consonant and virama shown as one glyph, by IndicSyllabicCategory.txt. */
+  #isHalfForm({ characters }: Form): boolean {
+    const [consonant, virama, ...rest] = characters;
+    return (
+      rest.length === 0 &&
+      consonant !== undefined &&
+      virama !== undefined &&
+      this.#consonants.has(consonant) &&
+      this.#viramas.has(virama)
+    );
+  }
+
+  #glyphFor(codepoint: number): RequiredGlyph {
+    return { name: this.#nameFor(codepoint), codepoint, characters: [codepoint], position: null };
+  }
+
   #forms(script: string): readonly Form[] {
     return this.#formsByScript.get(scriptKey(script)) ?? [];
   }
@@ -188,12 +246,7 @@ export class GlyphSets {
 
     const required: RequiredGlyph[] = [];
     for (const codepoint of [...new Set(codepoints)].sort(ascending)) {
-      required.push({
-        name: this.#nameFor(codepoint),
-        codepoint,
-        characters: [codepoint],
-        position: null,
-      });
+      required.push(this.#glyphFor(codepoint));
       for (const form of formsByCharacter.get(codepoint) ?? []) required.push(requiredForm(form));
     }
 
@@ -309,15 +362,17 @@ function formOf(glyph: Glyph, codepointFor: (name: string) => number | null): Fo
   if (!characters) return null;
 
   const ligature = glyph.subCategory === "Ligature";
+  const alternate = !ligature && ALTERNATE_FORM_SCRIPTS.has(glyph.script);
   const required = ligature
     ? (REQUIRED_LIGATURES.get(glyph.script)?.test(glyph.name) ?? false)
-    : !ALTERNATE_FORM_SCRIPTS.has(glyph.script);
+    : !alternate;
   return {
     glyph,
     characters,
     position: (suffix as GlyphPosition | undefined) ?? null,
     ligature,
     required,
+    alternate,
   };
 }
 

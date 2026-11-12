@@ -69,6 +69,10 @@ export type {
   LanguageCoverage,
   /** Groups language coverage entries sharing a script. */
   LanguageScript,
+  /** Where an Indic vowel sign sits around its consonant. */
+  IndicPosition,
+  /** Unicode character properties glyph sets read. */
+  UnicodeProperties,
   /** A joining-script letter and the dotless skeleton it is drawn on. */
   LetterSkeleton,
   /** A glyph a language or script group requires, by name. */

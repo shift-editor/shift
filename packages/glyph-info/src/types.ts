@@ -55,6 +55,8 @@ export interface Language {
    * Devanagari half form is a consonant and virama), but they are not required.
    */
   markCodepoints: number[];
+  /** Punctuation the orthography uses; counted in the script's Punctuation group, not required. */
+  punctuationCodepoints: number[];
 }
 
 /** A glyph in a font, as language coverage reads it. */
@@ -87,6 +89,22 @@ export interface ScriptGroup {
   id: string;
   name: string;
   script: string;
+}
+
+/** A script group and every glyph it requires. */
+export interface ScriptGroupDefinition {
+  readonly group: ScriptGroup;
+  readonly required: RequiredGlyph[];
+}
+
+/** What a script's tracked languages share, for building its Unicode-derived groups. */
+export interface ScriptGroupInput {
+  /** Hyperglot script name, such as `Devanagari`. */
+  readonly script: string;
+  readonly languages: readonly Language[];
+  readonly unicode: UnicodeProperties;
+  /** Names a character's glyph. */
+  readonly glyphFor: (codepoint: number) => RequiredGlyph;
 }
 
 export interface ScriptGroupCoverage {
@@ -202,6 +220,29 @@ export interface Decomposition {
   usedBy: Record<string, number[]>;
 }
 
+/** Where an Indic vowel sign sits around its consonant, from IndicPositionalCategory.txt. */
+export type IndicPosition = "Left" | "Right" | "Top" | "Bottom";
+
+/** Unicode character properties glyph sets read, generated from vendored UCD files. */
+export interface UnicodeProperties {
+  /** kUnihanCore2020 characters by region source: G China, H Hong Kong, J Japan, K Korea, M Macao, P North Korea, T Taiwan. */
+  unihanCore: Record<string, number[]>;
+  /** For each language tag with its own casing rules (tr, az, lt), every character the rules map. */
+  specialCasing: Record<string, number[]>;
+  /** Characters and the character right-to-left text shows in their place: `(` and `)`. */
+  mirrors: { codepoint: number; mirror: number }[];
+  /** ISO 15924 codes of scripts written right to left. */
+  rightToLeftScripts: string[];
+  /** Punctuation each script uses as its own (Script or Script_Extensions), by ISO 15924 code. */
+  scriptPunctuation: Record<string, number[]>;
+  indic: {
+    consonants: number[];
+    viramas: number[];
+    /** Dependent vowel signs (matras) and where each sits; `null` for a sign split around its consonant. */
+    vowelSigns: { codepoint: number; position: IndicPosition | null }[];
+  };
+}
+
 /** A joining-script letter and the dotless skeleton it is drawn on: teh on dotless beh. */
 export interface LetterSkeleton {
   codepoint: number;
@@ -217,6 +258,7 @@ export interface GlyphInfoCoreResources {
   languages: Language[];
   /** Each joining-script letter's dotless skeleton, from Unicode's ArabicShaping.txt. */
   skeletons: LetterSkeleton[];
+  unicode: UnicodeProperties;
 }
 
 /**

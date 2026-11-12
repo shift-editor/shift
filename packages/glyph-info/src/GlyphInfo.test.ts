@@ -513,7 +513,12 @@ describe("language coverage catalogs", () => {
     const arabic = catalog.trackedScripts.find(({ script }) => script === "Arabic");
     const shapes = catalog.required("arabic/basic-shapes").map(({ name }) => name);
 
-    expect(arabic?.groups.map(({ group }) => group.name)).toEqual(["Basic Shapes", "Ligatures"]);
+    expect(arabic?.groups.map(({ group }) => group.name)).toEqual([
+      "Basic Shapes",
+      "Punctuation",
+      "Mirrored",
+      "Ligatures",
+    ]);
     expect(shapes).toContain("behDotless-ar.init");
     expect(shapes).toContain("fehDotless-ar.fina");
     expect(shapes).not.toContain("beh-ar");
@@ -587,6 +592,63 @@ function encoded(codepoints: readonly number[]) {
     unicodes: [codepoint],
   }));
 }
+
+describe("script groups from Unicode data", () => {
+  const groupNames = (catalog: ReturnType<GlyphInfo["createLanguageCatalog"]>, script: string) =>
+    catalog.trackedScripts
+      .find((entry) => entry.script === script)
+      ?.groups.map(({ group }) => group.name) ?? [];
+  const characters = (catalog: ReturnType<GlyphInfo["createLanguageCatalog"]>, setId: string) =>
+    catalog.required(setId).flatMap(({ codepoint }) => (codepoint === null ? [] : [codepoint]));
+
+  it("requires a casing alternate only where SpecialCasing gives the language its own rules", () => {
+    const catalog = db.createLanguageCatalog([]);
+    const has = (languageId: string) =>
+      catalog.required(languageId).some(({ name }) => name === "idotaccent");
+
+    expect(has("tur-latin")).toBe(true);
+    expect(has("eng-latin")).toBe(false);
+  });
+
+  it("lists Indic half forms and vowel signs in reading order", () => {
+    const catalog = db.createLanguageCatalog([], ["hin-devanagari"]);
+    const halfForms = catalog.required("devanagari/half-forms").map(({ name }) => name);
+
+    expect(groupNames(catalog, "Devanagari")).toEqual(
+      expect.arrayContaining(["Half Forms", "Vowel Signs"]),
+    );
+    expect(halfForms).toContain("k-deva");
+    // Vowel sign I sits before its consonant, so it leads; vowel sign U sits below.
+    expect(characters(catalog, "devanagari/vowel-signs")[0]).toBe(0x093f);
+    expect(characters(catalog, "devanagari/vowel-signs").at(-1)).not.toBe(0x093f);
+  });
+
+  it("adds a script's own punctuation to its languages'", () => {
+    const catalog = db.createLanguageCatalog([], ["arb-arabic"]);
+
+    expect(characters(catalog, "arabic/punctuation")).toEqual(
+      expect.arrayContaining([0x060c, 0x061b, 0x061f]),
+    );
+  });
+
+  it("gives right-to-left scripts the mirrored pairs of their punctuation", () => {
+    const catalog = db.createLanguageCatalog([], ["arb-arabic", "eng-latin"]);
+
+    expect(characters(catalog, "arabic/mirrored")).toEqual(
+      expect.arrayContaining([0x28, 0x29, 0xab, 0xbb]),
+    );
+    expect(groupNames(catalog, "Latin")).not.toContain("Mirrored");
+  });
+
+  it("gives Han-writing languages the Unihan core set of each region", () => {
+    const catalog = db.createLanguageCatalog([], ["cmn-chinese"]);
+
+    expect(groupNames(catalog, "Chinese")).toEqual(
+      expect.arrayContaining(["Core: China", "Core: Taiwan", "Core: Japan", "Core: South Korea"]),
+    );
+    expect(catalog.required("chinese/core-g").length).toBeGreaterThan(8000);
+  });
+});
 
 describe("search", () => {
   it("finds dollar sign by name", () => {
