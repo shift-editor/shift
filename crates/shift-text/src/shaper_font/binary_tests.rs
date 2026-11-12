@@ -292,3 +292,95 @@ fn attaches_a_mark_by_the_font_s_own_gpos() {
     assert_eq!(fatha.x_advance, 0);
     assert_ne!((fatha.x_offset, fatha.y_offset), (0, 0));
 }
+
+/// `text` shaped at `location` with `features`, written as `hb-shape` writes
+/// a buffer: `[name=cluster@x,y+advance|…]`, the offset left out when zero.
+fn hb_shape(
+    compiled: &Compiled,
+    text: &str,
+    location: &ExternalLocation,
+    features: &[FeatureSetting],
+) -> String {
+    let shaper = shaper(compiled);
+    let units: Vec<ShapeUnit> = text.chars().map(ShapeUnit::Character).collect();
+    let request = ShapeRequest {
+        units: &units,
+        location,
+        direction: None,
+        script: None,
+        language: None,
+        features,
+    };
+    let glyphs: Vec<String> = shaper
+        .shape(&request)
+        .unwrap()
+        .iter()
+        .map(|glyph| {
+            let name = glyph.glyph_id.map_or_else(
+                || ".notdef".to_string(),
+                |id| compiled.font.glyph(id).unwrap().name().to_string(),
+            );
+            let offset = if (glyph.x_offset, glyph.y_offset) == (0, 0) {
+                String::new()
+            } else {
+                format!("@{},{}", glyph.x_offset, glyph.y_offset)
+            };
+            format!("{name}={}{offset}+{}", glyph.cluster, glyph.x_advance)
+        })
+        .collect();
+    format!("[{}]", glyphs.join("|"))
+}
+
+/// Inter at `wght` `value`.
+fn weight(compiled: &Compiled, value: f64) -> ExternalLocation {
+    let axis = compiled
+        .font
+        .axes()
+        .iter()
+        .find(|axis| axis.tag() == "wght")
+        .unwrap();
+    ExternalLocation::from_map([(axis.id(), value)])
+}
+
+// Expected values are HarfBuzz 14.5.1's, from `hb-shape <font> <text>
+// [--variations=wght=…] [--features=-kern]` (nixpkgs `harfbuzz.dev`), with
+// the fonts as committed. Shaping the binary must match HarfBuzz exactly.
+
+#[test]
+fn shapes_inter_as_harfbuzz_does() {
+    let inter = inter();
+    let default = ExternalLocation::new();
+
+    assert_eq!(hb_shape(&inter, "AV", &default, &[]), "[A=0+1273|V=1+1413]");
+    assert_eq!(
+        hb_shape(&inter, "AV", &weight(&inter, 700.0), &[]),
+        "[A=0+1367|V=1+1529]"
+    );
+    assert_eq!(
+        hb_shape(&inter, "AV", &weight(&inter, 700.0), &[off("kern")]),
+        "[A=0+1529|V=1+1529]"
+    );
+    assert_eq!(
+        hb_shape(&inter, "office", &weight(&inter, 900.0), &[]),
+        "[o=0+1280|f=1+774|f=2+896|i=3+606|c=4+1235|e=5+1242]"
+    );
+}
+
+#[test]
+fn shapes_arabic_as_harfbuzz_does() {
+    let naskh = naskh();
+    let default = ExternalLocation::new();
+
+    assert_eq!(
+        hb_shape(&naskh, "ببب", &default, &[]),
+        "[uniFE90=2+817|uniFE92=1+292|uniFE91=0+275]"
+    );
+    assert_eq!(
+        hb_shape(&naskh, "بَ", &default, &[]),
+        "[uni064E=0@275,26+0|uni0628=0+772]"
+    );
+    assert_eq!(
+        hb_shape(&naskh, "لا", &default, &[]),
+        "[uniFE8E.rlig=1+0|uniFEDF.rlig=0+518]"
+    );
+}
