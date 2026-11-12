@@ -25,6 +25,7 @@ pub(crate) use exports::{TextPlace, TextShaping};
 #[cfg(feature = "engine")]
 mod exports {
     use std::cell::RefCell;
+    use std::sync::Arc;
 
     use shift_font::interpolation::KerningBlend;
     use shift_font::{DesignLocation, ExternalLocation, Font, FontChangeImpact, ShaperFontSource};
@@ -33,7 +34,7 @@ mod exports {
     };
     use shift_text::shape::ShapeError;
     use shift_text::shaper_font::{
-        LiveShaper, ShaperFontError, ShaperFontRequest, ShaperFontState,
+        LiveShaper, ShaperFont, ShaperFontError, ShaperFontRequest, ShaperFontState,
     };
 
     use super::ShapingFailure;
@@ -62,6 +63,9 @@ mod exports {
         /// Whether the session's font may have changed what the shaper reads
         /// since it was last brought up to date.
         stale: bool,
+        /// The shaper is a compiled font's own binary ([`TextShaping::whole`]),
+        /// made once: nothing the session's font holds compiles into it.
+        whole: bool,
     }
 
     impl Default for TextShaping {
@@ -72,6 +76,7 @@ mod exports {
                     shaper: None,
                     failure: None,
                     stale: true,
+                    whole: false,
                 }),
                 placements: RefCell::default(),
             }
@@ -95,6 +100,32 @@ mod exports {
     }
 
     impl TextShaping {
+        /// The shaping of a compiled font's session (TrueType, OpenType):
+        /// the font's own binary as its shaper font, so text shapes with
+        /// every lookup it ships, its `cmap` and its advances. Nothing the
+        /// session's font holds compiles into it, so it is never brought up
+        /// to date. When `font` could not be made, text lays out as typed,
+        /// saying why.
+        pub(crate) fn whole(font: Result<ShaperFont, ShaperFontError>) -> Self {
+            let (shaper, failure) = match font
+                .map_err(ShapingFailure::from)
+                .and_then(|font| Ok(LiveShaper::new(Arc::new(font), [])?))
+            {
+                Ok(shaper) => (Some(shaper), None),
+                Err(failure) => (None, Some(failure)),
+            };
+            Self {
+                state: RefCell::new(ShaperState {
+                    compilation: ShaperFontState::default(),
+                    shaper,
+                    failure,
+                    stale: false,
+                    whole: true,
+                }),
+                placements: RefCell::default(),
+            }
+        }
+
         /// What a change with this impact may change of the shaper: the glyph
         /// directory (order, names, categories, Unicode values) and the axes
         /// and their mappings. Units per em and the feature source have no
@@ -167,6 +198,22 @@ mod exports {
         ) -> R {
             let state = self.current(font, source);
             let class = |glyph| state.compilation.class(glyph);
+            // A compiled font's lines are set from its own vertical metrics,
+            // as a proof of it sets them.
+            let metrics = state
+                .shaper
+                .as_ref()
+                .and_then(|shaper| shaper.font().line_metrics())
+                .map_or_else(
+                    || LineMetrics::at(font, &place.design),
+                    |metrics| LineMetrics {
+                        units_per_em: metrics.units_per_em,
+                        ascender: metrics.ascender,
+                        descender: metrics.descender,
+                        line_gap: metrics.line_gap,
+                        cap_height: metrics.cap_height,
+                    },
+                );
             let layout_font = LayoutFont::new(
                 font,
                 &place.design,
@@ -174,7 +221,7 @@ mod exports {
                 place.kerning,
                 state.shaper(),
                 &class,
-                LineMetrics::at(font, &place.design),
+                metrics,
             );
             with(&layout_font)
         }
@@ -267,7 +314,7 @@ mod exports {
             source: impl FnOnce() -> Result<ShaperFontSource, E>,
         ) -> std::cell::RefMut<'_, ShaperState> {
             let mut state = self.state.borrow_mut();
-            if state.stale {
+            if state.stale && !state.whole {
                 state.stale = false;
                 let updated = source()
                     .map_err(|error| ShapingFailure::Unreadable {
@@ -335,6 +382,8 @@ mod exports {
 
         use shift_engine::scene::{RunSettings, TextItem, TextRun};
         use shift_font::TextItemId;
+
+        use shift_text::shaper_font::ShaperFont;
 
         use super::{TextPlace, TextShaping};
         use crate::engine_reads::{
@@ -582,6 +631,155 @@ mod exports {
             assert_eq!(names(&run(&[])), ["f_i"]);
             assert_eq!(names(&run(&[("liga", true)])), ["f_i"]);
             assert_eq!(names(&run(&[("liga", false)])), ["f", "i"]);
+        }
+
+        /// Inter's variable TTF as a compiled preview's session holds it:
+        /// a header with its axes and mappings and no glyphs, and its
+        /// binary shaping with the ids of the font imported from it.
+        fn compiled_inter() -> (Font, Font, TextShaping) {
+            let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../packages/editor/src/ui/assets/fonts/Inter-VariableFont.ttf");
+            let bytes = std::fs::read(&path).unwrap();
+            let imported = shift_backends::font_loader::FontLoader::new()
+                .read_font(path.to_str().unwrap())
+                .unwrap();
+            let opened = shift_backends::font_loader::FontLoader::new()
+                .open_source(&path)
+                .unwrap();
+            let glyph_ids = shift_backends::font_source::FontSource::directory(&opened)
+                .glyphs()
+                .iter()
+                .map(|glyph| imported.glyph_by_name(&glyph.name).map(Glyph::id))
+                .collect();
+            let mut header = Font::new();
+            for axis in imported.axes() {
+                header.add_axis(axis.clone()).unwrap();
+            }
+            header
+                .set_axis_mappings(imported.axis_mappings().to_vec())
+                .unwrap();
+            let shaping = TextShaping::whole(ShaperFont::from_binary(
+                bytes,
+                glyph_ids,
+                header.axes(),
+                header.axis_mappings(),
+            ));
+            (header, imported, shaping)
+        }
+
+        fn never_read() -> Result<ShaperFontSource, &'static str> {
+            Err("a compiled font's shaper reads no source")
+        }
+
+        #[test]
+        fn a_compiled_font_shapes_with_its_own_lookups_and_lines() {
+            let (header, imported, shaping) = compiled_inter();
+            let request = |shaping_on| LayoutRequest {
+                units: "->"
+                    .chars()
+                    .map(|character| LayoutUnit::Character {
+                        codepoint: u32::from(character),
+                    })
+                    .collect(),
+                options: TextOptions {
+                    shaping: shaping_on,
+                    ..TextOptions::default()
+                },
+            };
+            let place = || TextPlace {
+                design: DesignLocation::new(),
+                external: ExternalLocation::new(),
+                kerning: KerningBlend::default(),
+            };
+
+            let layout = shaping
+                .layout_text(&header, never_read, &request(true), place())
+                .unwrap();
+
+            assert_eq!(layout.unshaped, None);
+            let arrow = imported.glyph_by_name("arrowright").unwrap().id();
+            assert_eq!(
+                layout
+                    .glyphs
+                    .iter()
+                    .map(|glyph| glyph.glyph_id)
+                    .collect::<Vec<_>>(),
+                [Some(arrow)]
+            );
+            // Lines are set from the font's own vertical metrics, not the
+            // header's, which has none.
+            assert!(layout.line_height > 2048.0, "{}", layout.line_height);
+        }
+
+        #[test]
+        fn a_compiled_font_lists_and_applies_the_features_it_ships() {
+            let (header, _, shaping) = compiled_inter();
+
+            let features = shaping.features(&header, never_read).unwrap();
+
+            assert!(features.iter().any(|feature| feature.tag == "ss01"));
+            assert!(
+                shaping
+                    .feature_applies(&header, never_read, "calt", None)
+                    .unwrap()
+            );
+            assert!(
+                !shaping
+                    .feature_applies(&header, never_read, "ss01", None)
+                    .unwrap()
+            );
+            assert!(
+                shaping
+                    .feature_applies(&header, never_read, "ss01", Some(1))
+                    .unwrap()
+            );
+        }
+
+        #[test]
+        fn a_compiled_font_that_cannot_shape_lays_out_as_typed_saying_why() {
+            let header = Font::new();
+            let shaping = TextShaping::whole(ShaperFont::from_binary(
+                b"not a font".to_vec(),
+                Vec::new(),
+                &[],
+                &[],
+            ));
+
+            let layout = laid_out_over(&shaping, &header, "fi");
+            let features = shaping.features(&header, never_read);
+
+            assert!(
+                layout
+                    .unshaped
+                    .as_ref()
+                    .is_some_and(|reason| reason.contains("cannot be read")),
+                "{:?}",
+                layout.unshaped
+            );
+            assert!(matches!(features, Err(FeatureListError::NoShaper { .. })));
+        }
+
+        fn laid_out_over(shaping: &TextShaping, font: &Font, text: &str) -> TextLayout {
+            let request = LayoutRequest {
+                units: text
+                    .chars()
+                    .map(|character| LayoutUnit::Character {
+                        codepoint: u32::from(character),
+                    })
+                    .collect(),
+                options: TextOptions {
+                    shaping: true,
+                    ..TextOptions::default()
+                },
+            };
+            let place = TextPlace {
+                design: DesignLocation::new(),
+                external: ExternalLocation::new(),
+                kerning: KerningBlend::default(),
+            };
+            shaping
+                .layout_text(font, never_read, &request, place)
+                .unwrap()
         }
     }
 }

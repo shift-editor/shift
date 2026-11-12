@@ -133,12 +133,19 @@ export class FontSessionClient {
 
   /**
    * Reads a compiled font's preview as its engine opens it: its font without
-   * glyphs, as named MessagePack.
+   * glyphs and each glyph's id in glyph order, as named MessagePack.
    */
   async sourceHeader(): Promise<Uint8Array> {
     await this.connect();
 
     return this.#workspace().sourceHeader();
+  }
+
+  /** Reads a compiled font's preview file as read, which its engine shapes text with. */
+  async sourceBinary(): Promise<Uint8Array> {
+    await this.connect();
+
+    return this.#workspace().sourceBinary();
   }
 
   /**

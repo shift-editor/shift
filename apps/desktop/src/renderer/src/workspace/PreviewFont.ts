@@ -36,10 +36,11 @@ export interface PreviewFontOptions {
  * does: the engine opens over the preload's reader of the file, and the
  * font's records, glyphs, kerning and text layout come from it, so proof text
  * shapes with the font's own feature code. Nothing is imported or written.
- * A compiled font (TrueType, OpenType) runs on an engine over its header,
- * which maps its locations and evaluates the compiled deltas its glyphs
- * carry; the glyphs come from the utility. Its text lays out as typed: its
- * shaper is the binary itself, which the engine does not shape with yet.
+ * A compiled font (TrueType, OpenType) runs on an engine over its header and
+ * its file: the engine maps its locations, evaluates the compiled deltas its
+ * glyphs carry, and shapes proof text with the binary itself, so its own
+ * `GSUB`, `GPOS` and `cmap` apply and its features list and toggle. The
+ * glyphs come from the utility.
  *
  * @throws When the client has no source, or the file cannot be read.
  */
@@ -53,10 +54,8 @@ export async function openPreviewFont(options: PreviewFontOptions): Promise<Prev
   if (!source) throw new Error("font source connected without a snapshot");
 
   if (!isConvertiblePreviewPath(source.canonicalPath)) {
-    const engine = await SessionEngine.open({
-      kind: "compiled",
-      header: await client.sourceHeader(),
-    });
+    const [header, binary] = await Promise.all([client.sourceHeader(), client.sourceBinary()]);
+    const engine = await SessionEngine.open({ kind: "compiled", header, binary });
     return previewFont(
       new FontStore({ font: source.font, engine }),
       options,

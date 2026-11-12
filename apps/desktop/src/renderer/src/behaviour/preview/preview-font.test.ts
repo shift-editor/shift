@@ -21,6 +21,12 @@ const VARIABLE_TTF = resolve(
   "../../assets/fonts/HostGrotesk-VariableFont_wght.ttf",
 );
 
+/** Inter's variable TrueType font: `calt`, `kern` and stylistic sets in its own GSUB and GPOS. */
+const INTER_TTF = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../../../../../packages/editor/src/ui/assets/fonts/Inter-VariableFont.ttf",
+);
+
 /** What closes after each test: previews, stacks and saved documents. */
 const opened: (() => void)[] = [];
 afterEach(() => {
@@ -50,9 +56,16 @@ async function savedDocument(sourcePath: string): Promise<Font> {
   return reopened.font;
 }
 
-/** The names of the glyphs `text` lays out as, in display order, shaped as proof text is. */
-function shaped(font: Font, text: string): (string | null)[] {
-  const run = { items: typedTextItems(text), settings: { shaping: true, features: {} } };
+/**
+ * The names of the glyphs `text` lays out as, in display order, shaped as
+ * proof text is, with `features` turned on or off.
+ */
+function shaped(
+  font: Font,
+  text: string,
+  features: Readonly<Record<string, boolean>> = {},
+): (string | null)[] {
+  const run = { items: typedTextItems(text), settings: { shaping: true, features } };
   const placed = font.layoutText(run, emptyExternalAxisLocation(), null);
   if (!placed) return [];
   return placed.layout.glyphs.map(({ glyphId }) => (glyphId ? font.glyphName(glyphId) : null));
@@ -154,16 +167,32 @@ describe("a compiled font's preview evaluates its glyphs' deltas in its engine",
       near([21, -12, 555, 508]),
     );
   });
+});
 
-  it("lays proof text out as typed: the binary is its shaper, which the engine does not run", async () => {
-    const font = await preview(VARIABLE_TTF);
+describe("a compiled font's preview shapes proof text with the binary itself", () => {
+  it("substitutes with the font's own GSUB unless a run turns the feature off", async () => {
+    const font = await preview(INTER_TTF);
 
-    expect(
+    expect(shaped(font, "->")).toEqual(["arrowright"]);
+    expect(shaped(font, "->", { calt: false })).toEqual(["hyphen", "greater"]);
+  });
+
+  it("lists the features the font ships, for the Features section to toggle", async () => {
+    const font = await preview(INTER_TTF);
+    const tags = font.fontFeatures().map((feature) => feature.tag);
+
+    expect(tags).toEqual(expect.arrayContaining(["calt", "kern", "ss01", "tnum"]));
+  });
+
+  it("kerns a pair by the font's own GPOS", async () => {
+    const font = await preview(INTER_TTF);
+    const width = (features: Readonly<Record<string, boolean>>) =>
       font.layoutText(
-        { items: typedTextItems("fi"), settings: { shaping: true, features: {} } },
+        { items: typedTextItems("AV"), settings: { shaping: true, features } },
         emptyExternalAxisLocation(),
         null,
-      ),
-    ).toBeNull();
+      )?.layout.width;
+
+    expect(width({})).toBeLessThan(width({ kern: false }) ?? 0);
   });
 });

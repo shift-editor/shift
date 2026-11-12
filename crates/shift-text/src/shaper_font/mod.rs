@@ -15,9 +15,15 @@
 //! `STAT`, which export generates from structured data, are absent; insert
 //! markers record where generated lookups would have gone.
 //!
+//! A compiled font (TrueType, OpenType) is its own shaper font instead
+//! ([`ShaperFont::from_binary`]): nothing is compiled, and [`LiveShaper`]
+//! maps characters and advances glyphs through the font's own `cmap` and
+//! `hmtx`, so every lookup it ships applies, kerning and marks included.
+//!
 //! Adapted from Fontra's `build-shaper-font` (Apache-2.0).
 
 mod axes;
+mod binary;
 mod diagnostics;
 mod glyph_order;
 mod inputs;
@@ -47,6 +53,7 @@ use write_fonts::tables::gdef::GlyphClassDef;
 use write_fonts::types::Tag;
 
 pub use axes::{AxisConversionError, MappingSide, axis_tag, to_ir_axes};
+pub use binary::{BinaryLineMetrics, BinaryShaperError};
 pub use diagnostics::{DiagnosticSeverity, FeatureDiagnostic};
 pub use glyph_order::ShaperGlyphOrder;
 pub use inputs::UnitsPerEm;
@@ -178,6 +185,9 @@ pub struct ShaperFont {
     axes: Vec<IrAxis>,
     axis_ids: Vec<AxisId>,
     insert_markers: Vec<InsertMarker>,
+    /// A whole compiled font ([`Self::from_binary`]), not layout tables
+    /// compiled from feature source.
+    whole: bool,
 }
 
 impl ShaperFont {
@@ -260,6 +270,7 @@ impl ShaperFont {
                 axes: request.axes.axes.clone(),
                 axis_ids: request.axes.ids.clone(),
                 insert_markers: tables::insert_markers(&compilation, &tree),
+                whole: false,
             }),
             diagnostics: feature_diagnostics(&warnings, &tree),
             references,
@@ -378,6 +389,9 @@ pub enum ShaperFontError {
 
     #[error("cannot assemble the shaper font")]
     Assembly(#[from] BuilderError),
+
+    #[error(transparent)]
+    Binary(#[from] BinaryShaperError),
 }
 
 /// Parses `source` as the only file of the feature source; any `include` is
@@ -403,6 +417,8 @@ fn parse_feature_source(
     )
 }
 
+#[cfg(test)]
+mod binary_tests;
 #[cfg(test)]
 mod shape_tests;
 

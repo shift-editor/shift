@@ -220,6 +220,10 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     return this.#serialize(() => this.#bridge.source.fontSourceHeader());
   }
 
+  sourceBinary(): Promise<Uint8Array> {
+    return this.#serialize(() => this.#bridge.source.fontSourceBinary());
+  }
+
   sourceGlyph(glyphId: GlyphId): Promise<readonly GlyphSnapshot[]> {
     return this.#serialize(() => this.#bridge.source.readFontSourceGlyph(glyphId));
   }

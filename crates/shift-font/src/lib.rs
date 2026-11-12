@@ -39,6 +39,7 @@ pub mod anchor_propagation;
 pub mod axis_map;
 pub mod changes;
 pub mod check;
+pub mod compiled_header;
 pub mod composite;
 pub mod contour_edit;
 pub mod curve;
@@ -67,6 +68,7 @@ pub mod test_support;
 
 pub use axis_map::piecewise_map;
 pub use changes::*;
+pub use compiled_header::CompiledHeader;
 pub use contour_edit::{
     ContourEditError, ContourEnd, ContourSide, DeleteMode, EditOption, JoinMode, UnknownEditOption,
 };

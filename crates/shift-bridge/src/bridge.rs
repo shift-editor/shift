@@ -14,9 +14,9 @@ use shift_backends::{
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::{
   AnchorId, Axis as FontAxis, AxisId, AxisMapping as FontAxisMapping, AxisMappingId,
-  AxisMappingPoint as FontAxisMappingPoint, ComponentId, ContourId, Font, Glyph, GlyphId,
-  GlyphLayer, LayerId, Location as FontLocation, MetricId, MetricKind, NamedInstanceId, PointId,
-  SourceId,
+  AxisMappingPoint as FontAxisMappingPoint, CompiledHeader, ComponentId, ContourId, Font, Glyph,
+  GlyphId, GlyphLayer, LayerId, Location as FontLocation, MetricId, MetricKind, NamedInstanceId,
+  PointId, SourceId,
 };
 use shift_slug::{AuthoredAtlasProfile, VariableAtlas};
 use shift_wire::bridges::napi::IntoEach;
@@ -162,15 +162,16 @@ impl RetainedSource {
   }
 
   /// The source's font without glyphs, under the ids its snapshot gives:
-  /// its names, units per em, axes, axis mappings and sources. What a
-  /// window's engine opens to map the source's locations and evaluate the
-  /// compiled deltas its glyphs carry.
+  /// its names, units per em, axes, axis mappings and sources; and each
+  /// glyph's id in glyph order. What a window's engine opens to map the
+  /// source's locations, evaluate the compiled deltas its glyphs carry and
+  /// shape with its binary.
   ///
   /// # Errors
   ///
   /// Returns [`BridgeError::InvalidInput`] when a mapping names an axis the
   /// source lacks, and the font's error when it refuses the mappings.
-  fn header(&self) -> BridgeResult<Font> {
+  fn header(&self) -> BridgeResult<CompiledHeader> {
     let directory = self.font.directory();
     let ids = &self.identity;
     let mut header = Font::empty();
@@ -185,7 +186,23 @@ impl RetainedSource {
     }
     header.set_default_source_id(ids.source_id(directory.default_source())?);
     header.set_axis_mappings(ids.axis_mappings_of(directory)?)?;
-    Ok(header)
+    Ok(CompiledHeader {
+      font: header,
+      glyph_ids: ids.glyph_ids.to_vec(),
+    })
+  }
+
+  /// The compiled font's file as read.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`BridgeError::InvalidInput`] for an authored source (UFO,
+  /// designspace, Glyphs), which has no binary.
+  fn binary(&self) -> BridgeResult<&[u8]> {
+    self.font.binary().ok_or_else(|| BridgeError::InvalidInput {
+      kind: "font source",
+      value: "an authored source has no binary".to_string(),
+    })
   }
 
   /// Maps external axis coordinates, in source axis order, to design values.

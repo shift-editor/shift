@@ -29,6 +29,7 @@ import {
   engineNewFont,
   engineOpen,
   engineOpenResident,
+  engineOpenCompiled,
   enginePreload,
   engineEndPreview,
   enginePreview,
@@ -142,7 +143,7 @@ export class EngineSession {
       case "resident":
         return EngineSession.openResident(store.font, store.scene);
       case "compiled":
-        return EngineSession.openResident(store.header);
+        return new EngineSession(engineOpenCompiled(store.header, store.binary));
     }
   }
 

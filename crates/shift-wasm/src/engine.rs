@@ -22,8 +22,8 @@ use shift_engine::{
     Recording, Replayed, StoreReadError, StoreReaderClient,
 };
 use shift_font::{
-    AppliedIntents, Contour, Font, FontChangeImpact, FontIntent, FontIntentSet, GlyphDataCategory,
-    GlyphId, GlyphLayer, LayerId, NamedGlyph, TouchedLayer,
+    AppliedIntents, CompiledHeader, Contour, Font, FontChangeImpact, FontIntent, FontIntentSet,
+    GlyphDataCategory, GlyphId, GlyphLayer, LayerId, NamedGlyph, TouchedLayer,
 };
 use shift_wire::replacement::FontReplacement;
 use shift_wire::{AnchorData, ComponentData, ContourData, values};
@@ -32,6 +32,7 @@ use wasm_bindgen::prelude::*;
 use crate::engine_reads::{CompiledVariations, FontVariation, InternedIds};
 use crate::page_layout::RunLayouts;
 use crate::shaping::TextShaping;
+use shift_text::shaper_font::ShaperFont;
 
 #[wasm_bindgen(typescript_custom_section)]
 const ENGINE_TYPES: &str = r#"
@@ -544,7 +545,7 @@ pub fn engine_open(
 ) -> Result<u32, JsError> {
     let font: Font = rmp_serde::from_slice(directory)?;
     let session = with_scene(EngineSession::open_directory(font), scene)?;
-    open(session, EngineStore::Host(source))
+    open(session, EngineStore::Host(source), TextShaping::default())
 }
 
 /// Opens a session over a whole font, every layer loaded, as named
@@ -559,7 +560,34 @@ pub fn engine_open(
 pub fn engine_open_resident(font: &[u8], scene: Option<Vec<u8>>) -> Result<u32, JsError> {
     let font: Font = rmp_serde::from_slice(font)?;
     let session = with_scene(EngineSession::open_loaded(font), scene)?;
-    open(session, EngineStore::Resident)
+    open(session, EngineStore::Resident, TextShaping::default())
+}
+
+/// Opens a session over a compiled font (TrueType, OpenType): `header`, a
+/// named MessagePack `CompiledHeader` (its font without glyphs and the id of
+/// each glyph in glyph order), resident, with `binary`, the font's file, as
+/// its shaper font, so its text shapes with every lookup the font ships.
+/// When `binary` cannot shape under the header's glyph ids and axes, the
+/// session still opens and its text lays out as typed, saying why. Returns
+/// its handle.
+///
+/// # Errors
+///
+/// Fails when `header` does not decode to a compiled font's header.
+#[wasm_bindgen(js_name = engineOpenCompiled)]
+pub fn engine_open_compiled(header: &[u8], binary: Vec<u8>) -> Result<u32, JsError> {
+    let CompiledHeader { font, glyph_ids } = rmp_serde::from_slice(header)?;
+    let shaper = ShaperFont::from_binary(
+        binary,
+        glyph_ids.into_iter().map(Some).collect(),
+        font.axes(),
+        font.axis_mappings(),
+    );
+    open(
+        EngineSession::open_loaded(font),
+        EngineStore::Resident,
+        TextShaping::whole(shaper),
+    )
 }
 
 /// A new font with one source and no glyphs, named `family_name`, with
@@ -588,7 +616,7 @@ fn with_scene(session: EngineSession, scene: Option<Vec<u8>>) -> Result<EngineSe
 }
 
 /// Keeps `session`, reading through `store`, and returns its handle.
-fn open(session: EngineSession, store: EngineStore) -> Result<u32, JsError> {
+fn open(session: EngineSession, store: EngineStore, shaping: TextShaping) -> Result<u32, JsError> {
     ENGINES.with_borrow_mut(|engines| {
         let handle = u32::try_from(engines.len())?;
         engines.push(Some(Engine {
@@ -603,7 +631,7 @@ fn open(session: EngineSession, store: EngineStore) -> Result<u32, JsError> {
             replayed_location: None,
             replaced: None,
             variation: RefCell::default(),
-            shaping: TextShaping::default(),
+            shaping,
             page_runs: RefCell::default(),
             records: RefCell::new(RecordCache::default()),
             edit_impact: FontChangeImpact::empty(),
