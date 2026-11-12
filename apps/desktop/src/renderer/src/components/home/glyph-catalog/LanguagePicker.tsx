@@ -19,6 +19,7 @@ import PlusIcon from "@/assets/general/plus.svg";
 import { useSidebarPanelAnchor } from "@/hooks/useSidebarPanelAnchor";
 import { SidebarActionButton } from "@/components/sidebar";
 import { useCheckboxRange } from "@/hooks/useCheckboxRange";
+import { listedIds, listedLanguages } from "./languageText";
 import { ScriptIcon } from "./ScriptIcon";
 import { NameQuery } from "@/lib/utils/NameQuery";
 import { useMemberSet } from "@/hooks/useMemberSet";
@@ -58,7 +59,7 @@ export const LanguagePicker = ({
     if (nextOpen) {
       setQuery("");
       checked.clear();
-      checked.setMany(trackedLanguageIds, true);
+      checked.setMany(listedIds(scripts, trackedLanguageIds), true);
       resetRange();
     }
     setOpen(nextOpen);
@@ -66,15 +67,16 @@ export const LanguagePicker = ({
 
   const setScriptChecked = (target: LanguageScript, isChecked: boolean) => {
     const languageIds = itemsToChange(target).flatMap((script) =>
-      script.languages.map(({ language }) => language.id),
+      listedLanguages(script).map(({ language }) => language.id),
     );
     checked.setMany(languageIds, isChecked);
   };
 
   const apply = () => {
-    const previous = new Set(trackedLanguageIds);
+    const tracked = listedIds(scripts, trackedLanguageIds);
+    const previous = new Set(tracked);
     onApply([
-      ...trackedLanguageIds.filter((languageId) => checkedIds.has(languageId)),
+      ...tracked.filter((languageId) => checkedIds.has(languageId)),
       ...[...checkedIds].filter((languageId) => !previous.has(languageId)),
     ]);
     setOpen(false);
@@ -138,21 +140,23 @@ export const LanguagePicker = ({
                 <div className="px-1 py-4 text-center text-ui text-muted">No scripts found</div>
               ) : (
                 visibleScripts.map((script) => {
-                  const trackedCount = script.languages.filter(({ language }) =>
+                  const languages = listedLanguages(script);
+                  const trackedCount = languages.filter(({ language }) =>
                     checkedIds.has(language.id),
                   ).length;
-                  const languageCount = script.languages.length;
+                  const languageCount = languages.length;
                   const allTracked = trackedCount === languageCount;
                   const someTracked = trackedCount > 0 && !allTracked;
-                  const supportedCount = script.languages.filter(
-                    ({ presentCount, requiredCount }) => presentCount === requiredCount,
+                  const supportedCount = languages.filter(
+                    ({ fullPresentCount, fullRequiredCount }) =>
+                      fullPresentCount === fullRequiredCount,
                   ).length;
 
                   return (
                     <label
                       key={script.script}
                       className="flex cursor-pointer select-none items-center gap-2 rounded px-1 py-1.5 text-ui text-primary hover:bg-hover"
-                      title={`${supportedCount} of ${script.languages.length} languages fully supported`}
+                      title={`${supportedCount} of ${languageCount} languages fully supported`}
                       onMouseDown={onMouseDown}
                     >
                       <Checkbox

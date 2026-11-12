@@ -1,17 +1,13 @@
-import { alphabetical, ascending, comparing, orderBy } from "@shift/types";
+import { ascending, comparing, descending } from "@shift/types";
 import { casingCharacters, unicodeGroups } from "./scriptGroups.js";
 import type {
-  FontGlyph,
   Glyph,
   GlyphPosition,
   Language,
   LetterSkeleton,
-  LanguageCatalog,
-  LanguageCoverage,
-  LanguageScript,
   RequiredGlyph,
-  ScriptGroupCoverage,
   ScriptGroupDefinition,
+  JoiningType,
   UnicodeProperties,
 } from "./types.js";
 
@@ -28,6 +24,13 @@ const REQUIRED_LIGATURES: ReadonlyMap<string, RegExp> = new Map([
 const ALTERNATE_FORM_SCRIPTS: ReadonlySet<string> = new Set(["latin", "cyrillic", "greek"]);
 
 const POSITIONS: ReadonlySet<string> = new Set<GlyphPosition>(["init", "medi", "fina"]);
+
+/** The forms a joining letter takes, in the order the sidebar lists them. */
+const FORMS_BY_JOINING: Record<JoiningType, readonly GlyphPosition[]> = {
+  D: ["fina", "medi", "init"],
+  R: ["fina"],
+  L: ["init"],
+};
 const UNI_SEQUENCE = /^uni((?:[0-9A-Fa-f]{4})+)$/;
 const U_SCALAR = /^u([0-9A-Fa-f]{5,6})$/;
 
@@ -44,11 +47,8 @@ interface Form {
   readonly alternate: boolean;
 }
 
-const byScript = comparing((script: LanguageScript) => script.script, alphabetical);
-const byLanguageName = orderBy<LanguageCoverage>(
-  comparing((coverage) => coverage.language.name, alphabetical),
-  comparing((coverage) => coverage.language.id, alphabetical),
-);
+/** Most-spoken first, so a script's Basic set lists its main language's glyphs in that language's order. */
+const byMostSpoken = comparing((language: Language) => language.speakers, descending);
 
 /**
  * The glyphs languages and script groups require, by glyph name.
@@ -67,8 +67,11 @@ export class GlyphSets {
   readonly #unicode: UnicodeProperties;
   readonly #consonants: ReadonlySet<number>;
   readonly #viramas: ReadonlySet<number>;
+  readonly #joining: ReadonlyMap<number, JoiningType>;
   // non-reactive: memoizes immutable reference data, never read by computed/effects.
   readonly #requiredByLanguage = new Map<string, RequiredGlyph[]>();
+  // non-reactive: memoizes immutable reference data, never read by computed/effects.
+  readonly #basicByScript = new Map<string, RequiredGlyph[]>();
   // non-reactive: memoizes immutable reference data, never read by computed/effects.
   readonly #groupsByLanguages = new Map<string, ScriptGroupDefinition[]>();
 
@@ -89,6 +92,7 @@ export class GlyphSets {
     this.#unicode = unicode;
     this.#consonants = new Set(unicode.indic.consonants);
     this.#viramas = new Set(unicode.indic.viramas);
+    this.#joining = new Map(unicode.joining.map(({ codepoint, type }) => [codepoint, type]));
     this.#nameFor = nameFor;
     this.#skeletons = new Map(skeletons.map(({ codepoint, skeleton }) => [codepoint, skeleton]));
     const formsByScript = new Map<string, Form[]>();
@@ -119,6 +123,42 @@ export class GlyphSets {
     const required = this.#ordered(language.baseCodepoints, forms);
     this.#requiredByLanguage.set(language.id, required);
     return required;
+  }
+
+  /**
+   * A script's Basic set: every glyph the languages of most of its speakers
+   * need, so each language lists only what it adds. Weighing by speakers, not
+   * by language count, keeps Q in Latin's Basic although many small Latin
+   * orthographies skip it. Counts only languages listed in their own right,
+   * and is empty for a script with fewer than two of them, whose one language
+   * then lists everything.
+   *
+   * @param languages - every language of the script, tracked or not.
+   */
+  basicFor(script: string, languages: readonly Language[]): RequiredGlyph[] {
+    const cached = this.#basicByScript.get(script);
+    if (cached) return cached;
+
+    const listed = languages.filter(({ coveredBy }) => coveredBy === null).toSorted(byMostSpoken);
+    const totalSpeakers = listed.reduce((sum, { speakers }) => sum + speakers, 0);
+    const speakersOf = new Map<string, number>();
+    const glyphs = new Map<string, RequiredGlyph>();
+    for (const language of listed) {
+      for (const glyph of this.forLanguage(language)) {
+        if (!glyphs.has(glyph.name)) glyphs.set(glyph.name, glyph);
+        speakersOf.set(glyph.name, (speakersOf.get(glyph.name) ?? 0) + language.speakers);
+      }
+    }
+
+    const basic =
+      listed.length < 2
+        ? []
+        : glyphs
+            .values()
+            .filter(({ name }) => (speakersOf.get(name) ?? 0) * 2 > totalSpeakers)
+            .toArray();
+    this.#basicByScript.set(script, basic);
+    return basic;
   }
 
   /**
@@ -220,6 +260,23 @@ export class GlyphSets {
     );
   }
 
+  /**
+   * A joining letter's positional forms, from its Unicode joining type rather
+   * than from GlyphData, which names forms for common letters only (it has
+   * `beh-ar.init` but not `tehRing-ar.init`).
+   */
+  #positionalForms(letter: RequiredGlyph): RequiredGlyph[] {
+    const type = letter.codepoint === null ? undefined : this.#joining.get(letter.codepoint);
+    if (!type) return [];
+
+    return FORMS_BY_JOINING[type].map((position) => ({
+      name: `${letter.name}.${position}`,
+      codepoint: null,
+      characters: letter.characters,
+      position,
+    }));
+  }
+
   #glyphFor(codepoint: number): RequiredGlyph {
     return { name: this.#nameFor(codepoint), codepoint, characters: [codepoint], position: null };
   }
@@ -246,106 +303,14 @@ export class GlyphSets {
 
     const required: RequiredGlyph[] = [];
     for (const codepoint of [...new Set(codepoints)].sort(ascending)) {
-      required.push(this.#glyphFor(codepoint));
+      const glyph = this.#glyphFor(codepoint);
+      required.push(glyph, ...this.#positionalForms(glyph));
       for (const form of formsByCharacter.get(codepoint) ?? []) required.push(requiredForm(form));
     }
 
     for (const form of compound) required.push(requiredForm(form));
     return required;
   }
-}
-
-/**
- * Builds language and script-group coverage for one font.
- *
- * @param resolveName - maps a font glyph's name to its GlyphData name, so
- * `uni0628.init` counts as `beh-ar.init`.
- */
-export function createLanguageCatalog(
-  sets: GlyphSets,
-  languages: readonly Language[],
-  glyphs: readonly FontGlyph[],
-  trackedLanguageIds: readonly string[],
-  resolveName: (name: string, codepoint: number | null) => string,
-): LanguageCatalog {
-  const codepoints = new Set(glyphs.flatMap((glyph) => glyph.unicodes));
-  const resolvedNames = glyphs.map((glyph) => resolveName(glyph.name, glyph.unicodes[0] ?? null));
-  const names = new Set(resolvedNames);
-  const has = (glyph: RequiredGlyph) =>
-    (glyph.codepoint !== null && codepoints.has(glyph.codepoint)) || names.has(glyph.name);
-  const presentCount = (required: readonly RequiredGlyph[]) =>
-    required.reduce((count, glyph) => (has(glyph) ? count + 1 : count), 0);
-
-  const languagesById = new Map(languages.map((language) => [language.id, language]));
-  const scripts = new Map<string, LanguageScript>();
-  for (const language of languages) {
-    const required = sets.forLanguage(language);
-    const script = scripts.get(language.script) ?? {
-      script: language.script,
-      groups: [],
-      languages: [],
-    };
-    script.languages.push({
-      language,
-      presentCount: presentCount(required),
-      requiredCount: required.length,
-    });
-    scripts.set(language.script, script);
-  }
-
-  const sortedScripts = scripts.values().toArray().sort(byScript);
-  for (const script of sortedScripts) script.languages.sort(byLanguageName);
-
-  const coverageById = new Map(
-    sortedScripts.flatMap((script) =>
-      script.languages.map((coverage) => [coverage.language.id, coverage] as const),
-    ),
-  );
-
-  const tracked = new Set(trackedLanguageIds);
-  const groupRequired = new Map<string, RequiredGlyph[]>();
-  const trackedScripts = sortedScripts.flatMap((script) => {
-    const scriptLanguages = script.languages.filter(({ language }) => tracked.has(language.id));
-    if (scriptLanguages.length === 0) return [];
-
-    const groups = sets
-      .groupsFor(
-        script.script,
-        scriptLanguages.map(({ language }) => language),
-      )
-      .map(({ group, required }): ScriptGroupCoverage => {
-        groupRequired.set(group.id, required);
-        return { group, presentCount: presentCount(required), requiredCount: required.length };
-      });
-    return [{ script: script.script, groups, languages: scriptLanguages }];
-  });
-
-  const required = (setId: string): RequiredGlyph[] => {
-    const language = languagesById.get(setId);
-    if (language) return sets.forLanguage(language);
-
-    return groupRequired.get(setId) ?? [];
-  };
-
-  return {
-    scripts: sortedScripts,
-    trackedScripts,
-    filter: (setId) => {
-      const setGlyphs = required(setId);
-      const setCodepoints = new Set(setGlyphs.flatMap(({ codepoint }) => codepoint ?? []));
-      const setNames = new Set(setGlyphs.map(({ name }) => name));
-
-      return glyphs.flatMap((glyph, index) => {
-        const inSet =
-          glyph.unicodes.some((unicode) => setCodepoints.has(unicode)) ||
-          setNames.has(resolvedNames[index] ?? glyph.name);
-        return inSet ? [glyph.name] : [];
-      });
-    },
-    coverage: (languageId) => coverageById.get(languageId) ?? null,
-    required,
-    has,
-  };
 }
 
 /** Reads an unencoded GlyphData letter as a form, or `null` when it is not one a set needs. */
@@ -361,7 +326,11 @@ function formOf(glyph: Glyph, codepointFor: (name: string) => number | null): Fo
   const characters = charactersOf(glyph, codepointFor);
   if (!characters) return null;
 
-  const ligature = glyph.subCategory === "Ligature";
+  // One letter's positional forms come from its Unicode joining type instead.
+  if (suffix !== undefined && characters.length === 1) return null;
+
+  // GlyphData leaves some ligatures unmarked (qaf_lam_yeh-ar); `_` joins a ligature's parts.
+  const ligature = glyph.subCategory === "Ligature" || baseName(glyph.name).includes("_");
   const alternate = !ligature && ALTERNATE_FORM_SCRIPTS.has(glyph.script);
   const required = ligature
     ? (REQUIRED_LIGATURES.get(glyph.script)?.test(glyph.name) ?? false)

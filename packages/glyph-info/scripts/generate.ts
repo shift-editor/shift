@@ -54,7 +54,7 @@ function generate() {
 
   // Step 4: languages.json
   const languagesPath = join(RESOURCES_DIR, "languages.json");
-  const languageCount = generateLanguages(HYPERGLOT_DIR, languagesPath);
+  const languageCount = generateLanguages(HYPERGLOT_DIR, UNICODE_DIR, languagesPath);
   console.log(`  languages.json: ${languageCount} languages (${formatSize(languagesPath)})`);
 
   // Step 5: skeletons.json

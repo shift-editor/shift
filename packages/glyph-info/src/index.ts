@@ -65,6 +65,8 @@ export type {
   Language,
   /** Provides reusable language coverage grouped by script. */
   LanguageCatalog,
+  /** A variety folded under another language, with the glyphs it needs beyond it. */
+  LanguageVariety,
   /** Reports coverage of one language orthography within a font. */
   LanguageCoverage,
   /** Groups language coverage entries sharing a script. */
