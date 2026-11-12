@@ -55,6 +55,16 @@ python3 generate_anchor_drag_bench.py AnchorDragBench.glyphs
 Used by `apps/desktop/src/renderer/src/perf/textRunDraw.bench.ts` and the desktop `perf`
 Playwright project.
 
+## Noto Naskh Arabic
+
+`noto-naskh-arabic/NotoNaskhArabic-Regular.ttf` is Google's Noto Naskh Arabic
+(2020 release), a compiled font with Arabic joining forms, `rlig` lam-alef
+ligatures and mark attachment in its own `GSUB` and `GPOS`. Tests that shape a
+TrueType preview with the binary itself use it: `ببب` joins to
+`uniFE90 uniFE92 uniFE91` and `لا` to `uniFE8E.rlig uniFEDF.rlig`.
+
+Licensed under the SIL Open Font License 1.1; see `noto-naskh-arabic/LICENSE`.
+
 ## Adding Binary Fonts
 
 To add TTF/OTF test files, you can build them from the UFO sources using fontmake:

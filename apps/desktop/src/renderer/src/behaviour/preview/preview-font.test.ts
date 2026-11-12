@@ -27,6 +27,12 @@ const INTER_TTF = resolve(
   "../../../../../../../packages/editor/src/ui/assets/fonts/Inter-VariableFont.ttf",
 );
 
+/** Noto Naskh Arabic: joining forms and lam-alef ligatures in its own GSUB. */
+const NASKH_TTF = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../../../../../fixtures/fonts/noto-naskh-arabic/NotoNaskhArabic-Regular.ttf",
+);
+
 /** What closes after each test: previews, stacks and saved documents. */
 const opened: (() => void)[] = [];
 afterEach(() => {
@@ -175,6 +181,13 @@ describe("a compiled font's preview shapes proof text with the binary itself", (
 
     expect(shaped(font, "->")).toEqual(["arrowright"]);
     expect(shaped(font, "->", { calt: false })).toEqual(["hyphen", "greater"]);
+  });
+
+  it("joins Arabic with the font's own forms, as a proof of the file does", async () => {
+    const font = await preview(NASKH_TTF);
+
+    expect(shaped(font, "ببب")).toEqual(["uniFE90", "uniFE92", "uniFE91"]);
+    expect(shaped(font, "لا")).toEqual(["uniFE8E.rlig", "uniFEDF.rlig"]);
   });
 
   it("lists the features the font ships, for the Features section to toggle", async () => {

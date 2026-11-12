@@ -21,8 +21,20 @@ struct Compiled {
 }
 
 fn inter() -> Compiled {
+    compiled("packages/editor/src/ui/assets/fonts/Inter-VariableFont.ttf")
+}
+
+/// Noto Naskh Arabic: joining forms, lam-alef ligatures and mark attachment
+/// in its own `GSUB` and `GPOS`.
+fn naskh() -> Compiled {
+    compiled("fixtures/fonts/noto-naskh-arabic/NotoNaskhArabic-Regular.ttf")
+}
+
+/// The compiled font at `path`, from the repository root.
+fn compiled(path: &str) -> Compiled {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../packages/editor/src/ui/assets/fonts/Inter-VariableFont.ttf");
+        .join("../..")
+        .join(path);
     let bytes = std::fs::read(&path).unwrap();
     let font = FontLoader::new().read_font(path.to_str().unwrap()).unwrap();
     let opened = FontLoader::new().open_source(&path).unwrap();
@@ -241,4 +253,42 @@ fn refuses_bytes_that_are_not_a_font() {
         ),
         "{error}"
     );
+}
+
+#[test]
+fn joins_arabic_with_the_font_s_own_forms_and_ligatures() {
+    let compiled = naskh();
+    let shaper = shaper(&compiled);
+
+    // Right to left, so the final form comes first.
+    assert_eq!(
+        names(&shaped(&compiled, &shaper, "ببب", &[])),
+        ["uniFE90", "uniFE92", "uniFE91"]
+    );
+    assert_eq!(
+        names(&shaped(&compiled, &shaper, "لا", &[])),
+        ["uniFE8E.rlig", "uniFEDF.rlig"]
+    );
+}
+
+#[test]
+fn attaches_a_mark_by_the_font_s_own_gpos() {
+    let compiled = naskh();
+    let shaper = shaper(&compiled);
+    let units: Vec<ShapeUnit> = "بَ".chars().map(ShapeUnit::Character).collect();
+    let location = ExternalLocation::new();
+    let request = ShapeRequest {
+        units: &units,
+        location: &location,
+        direction: None,
+        script: None,
+        language: None,
+        features: &[],
+    };
+
+    let shaped = shaper.shape(&request).unwrap();
+    let fatha = shaped.iter().find(|glyph| glyph.is_mark).unwrap();
+
+    assert_eq!(fatha.x_advance, 0);
+    assert_ne!((fatha.x_offset, fatha.y_offset), (0, 0));
 }
