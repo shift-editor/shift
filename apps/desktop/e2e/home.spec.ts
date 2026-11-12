@@ -77,6 +77,25 @@ test.describe("Home view", () => {
     await expect(basicShapes).toContainText(`1/${required}`);
   });
 
+  test("adds one more language to a script from the script's row", async ({ page }) => {
+    const arabic = page.getByRole("button", { name: "Arabic", exact: true });
+    await arabic.click();
+    const persian = page
+      .getByRole("button")
+      .filter({ has: page.getByText("Iranian Persian", { exact: true }) });
+    await expect(persian).toHaveCount(0);
+
+    await arabic.hover();
+    await page.getByRole("button", { name: "Add Arabic languages" }).click();
+    await page.getByRole("textbox", { name: "Search languages" }).fill("Persian");
+    const list = page.getByRole("group", { name: "Arabic languages to track" });
+    await list.getByText("Iranian Persian", { exact: true }).click();
+    await page.getByRole("button", { name: "Done" }).click();
+
+    await expect(persian).toContainText(/\d+\/\d+/);
+    await expect(page.getByRole("button", { name: /^Standard Arabic/ })).toBeVisible();
+  });
+
   test("the font name opens its info, and the Glyphs tab stays current", async ({ page }) => {
     const glyphs = page.getByRole("tab", { name: "Glyphs", exact: true });
     await expect(glyphs).toHaveAttribute("aria-selected", "true");
