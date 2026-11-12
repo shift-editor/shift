@@ -12,10 +12,9 @@
  * `@shift/editor`; the raw exports are for it.
  */
 import { syncTransport } from "@shift/pack";
-import {
+import initModule, {
   engineEditsRequest,
   engineReadsRequest,
-  initSync,
   internName,
   nameOf,
   svgPathsRequest,
@@ -61,8 +60,13 @@ export function initEngine(): Promise<void> {
   return initializing;
 }
 
+/**
+ * Instantiates the module asynchronously: Chromium refuses a synchronous
+ * `WebAssembly.Instance` on the main thread for a module over 8 MB, which a
+ * build without wasm-opt passes.
+ */
 async function instantiate(): Promise<void> {
-  initSync({ module: await engineModule() });
+  await initModule({ module_or_path: await engineModule() });
 }
 
 const names = moduleNames(internName, nameOf);
