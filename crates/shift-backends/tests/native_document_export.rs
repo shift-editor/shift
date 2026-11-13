@@ -73,9 +73,9 @@ fn mapped_weight_interpolation_survives_native_round_trip() {
             .unwrap()
             .id();
         let normalization = font.design_normalization().unwrap();
-        assert_eq!(normalization[0].minimum, 30.0);
-        assert_eq!(normalization[0].default, 86.0);
-        assert_eq!(normalization[0].maximum, 160.0);
+        assert_eq!(normalization[0].range.minimum, 30.0);
+        assert_eq!(normalization[0].range.default, 86.0);
+        assert_eq!(normalization[0].range.maximum, 160.0);
         assert_eq!(font.axes()[0].default(), 400.0);
 
         for (external, x, advance, ascender) in [

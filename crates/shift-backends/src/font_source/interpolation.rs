@@ -1,3 +1,5 @@
+use shift_font::AxisRange;
+
 pub(crate) fn piecewise_map(value: f64, points: &[(f64, f64)]) -> f64 {
     let Some(first) = points.first().copied() else {
         return value;
@@ -26,9 +28,8 @@ pub(crate) fn piecewise_map(value: f64, points: &[(f64, f64)]) -> f64 {
 #[derive(Clone, Debug)]
 pub(crate) struct InterpolationAxis {
     pub(crate) tag: String,
-    pub(crate) minimum: f64,
-    pub(crate) default: f64,
-    pub(crate) maximum: f64,
+    /// The axis's bounds in design space.
+    pub(crate) range: AxisRange,
 }
 
 #[cfg(test)]

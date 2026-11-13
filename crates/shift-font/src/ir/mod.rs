@@ -60,4 +60,4 @@ pub use persistent::PersistentMap;
 pub use point::{Point, PointType};
 pub use segment::{CurveSegment, CurveSegmentIter, PointKinds, SegmentIndexIter, SegmentIndices};
 pub use source::{Source, SourceList, SourceRole};
-pub use variation::{AxisMappingBasis, DesignNormalization};
+pub use variation::{AxisMappingBasis, AxisRange, DesignNormalization};

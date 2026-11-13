@@ -2,29 +2,25 @@ use crate::length::OrOverflow;
 use std::collections::HashMap;
 
 use crate::SlugError;
+use shift_font::AxisRange;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AtlasAxis {
     user_mapping: Box<[(f64, f64)]>,
-    minimum: f64,
-    default: f64,
-    maximum: f64,
+    range: AxisRange,
     normalized_mapping: Box<[(i16, i16)]>,
 }
 
 impl AtlasAxis {
+    /// Makes an axis whose design coordinates normalize over `range`.
     pub fn new(
         user_mapping: Vec<(f64, f64)>,
-        minimum: f64,
-        default: f64,
-        maximum: f64,
+        range: AxisRange,
         normalized_mapping: Vec<(i16, i16)>,
     ) -> Self {
         Self {
             user_mapping: user_mapping.into_boxed_slice(),
-            minimum,
-            default,
-            maximum,
+            range,
             normalized_mapping: normalized_mapping.into_boxed_slice(),
         }
     }
@@ -45,21 +41,8 @@ impl AtlasAxis {
         if !value.is_finite() {
             return Err(SlugError::NonFiniteRetainedCoordinate { axis_index });
         }
-        let normalized = if value == self.default {
-            0.0
-        } else if value < self.default {
-            if self.default == self.minimum {
-                0.0
-            } else {
-                (value - self.default) / (self.default - self.minimum)
-            }
-        } else if self.maximum == self.default {
-            0.0
-        } else {
-            (value - self.default) / (self.maximum - self.default)
-        };
         Ok(apply_mapping(
-            quantize_f2dot14(normalized),
+            quantize_f2dot14(self.range.normalize(value)),
             &self.normalized_mapping,
         ))
     }
