@@ -2,7 +2,12 @@ import type { Canvas, ScreenCanvas, ScreenProjection } from "../../editor/render
 import type { SpacingPalette } from "../../editor/rendering/Theme";
 import type { Editor } from "../../editor/Editor";
 import { spacingBoundary, type SpacingGap, type SpacingSideName } from "../../../types/spacing";
-import { spacingLabelRect, spacingLabelText } from "./SpacingLabel";
+import {
+  spacingLabelRect,
+  spacingLabelSource,
+  spacingLabelText,
+  spacingLabelWidth,
+} from "./SpacingLabel";
 import type { SpacingHalf } from "./RunSpacing";
 
 /**
@@ -175,24 +180,36 @@ function drawLabel(
   half: SpacingHalf,
   { hovered, ringed }: { readonly hovered: boolean; readonly ringed: boolean },
 ): void {
-  const rect = spacingLabelRect(editor, half);
-  const text = spacingLabelText(editor, half);
+  const valueRect = spacingLabelRect(editor, half);
+  const value = spacingLabelText(editor, half);
   const glyphSide = half.glyphSide;
-  if (!rect || !text || !glyphSide) return;
+  if (!valueRect || !value || !glyphSide) return;
+
+  const source = spacingLabelSource(editor, half);
+  const linked = source !== null;
+  const text = linked && hovered ? source : value;
+  const width = spacingLabelWidth(text);
+  const rect = {
+    x: Math.round(valueRect.x + valueRect.width / 2 - width / 2),
+    y: valueRect.y,
+    width,
+    height: valueRect.height,
+  };
+  const tone = labelFill(theme, glyphSide.sidebearing < 0, hovered);
 
   const ctx = screen.ctx;
   ctx.save();
   ctx.beginPath();
   ctx.roundRect(rect.x, rect.y, rect.width, rect.height, rect.height / 2);
-  ctx.fillStyle = labelFill(theme, glyphSide.sidebearing < 0, hovered);
+  ctx.fillStyle = linked ? theme.labelText : tone;
   ctx.fill();
-  if (ringed) {
-    ctx.strokeStyle = theme.labelText;
-    ctx.lineWidth = 1.5;
+  if (linked || ringed) {
+    ctx.strokeStyle = linked ? tone : theme.labelText;
+    ctx.lineWidth = ringed ? 2 : 1.5;
     ctx.stroke();
   }
   ctx.font = theme.labelFont;
-  ctx.fillStyle = theme.labelText;
+  ctx.fillStyle = linked ? tone : theme.labelText;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(text, rect.x + rect.width / 2, rect.y + rect.height / 2);

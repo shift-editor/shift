@@ -120,8 +120,13 @@ export class SpacingHalf {
 
   /** Whether this half's side follows a metrics key at the active source. */
   isLinked(editor: Editor): boolean {
+    return this.linkKey(editor) !== null;
+  }
+
+  /** The metrics key this half's side follows, or null when it follows none. */
+  linkKey(editor: Editor): string | null {
     const links = this.links(editor);
-    return links !== null && links.side(SIDE_OF_SIDEBEARING[this.sidebearing]) !== null;
+    return links?.side(SIDE_OF_SIDEBEARING[this.sidebearing])?.key ?? null;
   }
 
   /**
