@@ -58,6 +58,8 @@ export class Text {
   readonly #glyphsLoadedCell = signal(0);
   // non-reactive: dedupes in-flight glyph loads; only read by the imperative load path
   readonly #loading = new Map<GlyphId, Promise<void>>();
+  // non-reactive: glyphs whose load failed; read with #glyphsLoadedCell, bumped when one is added
+  readonly #unloadable = new Set<GlyphId>();
   readonly #runsByItem: ComputedSignal<ReadonlyMap<TextItemId, TextRunRecord>>;
   // non-reactive: run nodes placed this session that go again if editing leaves them empty;
   // read only when editing ends.
@@ -76,6 +78,8 @@ export class Text {
           new RunText(this.#editor, runIdCell, {
             run: (id) => this.run(id),
             glyphsLoadedCell: this.#glyphsLoadedCell,
+            awaitsGlyph: (glyphId) =>
+              !this.#unloadable.has(glyphId) && !this.#editor.glyphForId(glyphId),
             onLaidOut: (laidOut) => this.#acquireLaidOutGlyphs(laidOut),
           }),
       ),
@@ -573,6 +577,16 @@ export class Text {
   }
 
   /**
+   * The layout a run's glyphs are drawn from: its layout, or, while that
+   * shows a glyph still loading, the last one whose glyphs could all be
+   * drawn. Only drawing reads it; carets, hits and edits read
+   * {@link layoutCell}.
+   */
+  drawnLayoutCell(id: RunId): ComputedSignal<TextLayout | null> {
+    return this.#runs.get(id).drawnLayoutCell;
+  }
+
+  /**
    * Reads pasted or imported proof text into items, as shift-font's
    * `ProofText` parses it: `/name` picks the glyph named `name` (the name
    * ends at a space, which it consumes, or at the next `/`), `//` is a slash and `\n` a line
@@ -716,6 +730,9 @@ export class Text {
       this.#glyphsLoadedCell.update((version) => version + 1);
     } catch (error) {
       console.error("failed to load text glyph", error);
+      // Text waiting on it is drawn without it rather than held.
+      this.#unloadable.add(id);
+      this.#glyphsLoadedCell.update((version) => version + 1);
     } finally {
       this.#loading.delete(id);
     }

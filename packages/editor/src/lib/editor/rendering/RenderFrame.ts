@@ -122,6 +122,7 @@ export class SceneLayer extends CanvasItem<SceneLayerProps> {
     this.#editor.scene.cell.value;
     for (const node of this.#editor.scene.nodesOfKind("textRun")) {
       track(this.#editor.text.layoutCell(node.runId));
+      track(this.#editor.text.drawnLayoutCell(node.runId));
     }
     this.#editor.debugOverlaysCell.value;
 

@@ -20,8 +20,14 @@ import { glyphIdForItem, TextLayout, type TextItem } from "./layout";
 export interface RunTextOwner {
   /** Reactive like `Text.run`. */
   run(id: RunId): TextRunRecord | null;
-  /** Bumped when a glyph the text shows finishes loading. */
+  /** Bumped when a glyph the text shows finishes loading, or fails to. */
   readonly glyphsLoadedCell: Signal<number>;
+  /**
+   * Whether a glyph the text shows has no model yet and may still get one:
+   * not loaded, and its load has not failed. Changes when
+   * {@link glyphsLoadedCell} does.
+   */
+  awaitsGlyph(glyphId: GlyphId): boolean;
   /** Called with each layout Rust returns, such as to load the glyphs shaping substituted in. */
   onLaidOut(laidOut: LaidOutText): void;
 }
@@ -49,10 +55,14 @@ export class RunText {
   readonly #failureCell: ComputedSignal<TextLayoutFailure | null>;
   readonly #reports: Effect;
   readonly #layoutCell: ComputedSignal<TextLayout | null>;
+  readonly #drawnLayoutCell: ComputedSignal<TextLayout | null>;
   readonly #scriptsCell: ComputedSignal<readonly string[]>;
   readonly #directionCell: ComputedSignal<Direction>;
   // non-reactive: glyphs already asked of the engine, read only by the reporting effect
   readonly #preloaded = new Set<GlyphId>();
+  // non-reactive: the last layout whose glyphs could all be drawn, which the
+  // drawn layout keeps while a newer one waits for glyphs to load
+  #drawable: TextLayout | null = null;
 
   constructor(editor: Editor, runIdCell: Signal<RunId>, owner: RunTextOwner) {
     this.#editor = editor;
@@ -122,6 +132,27 @@ export class RunText {
       { name: "text.layoutForRun" },
     );
 
+    this.#drawnLayoutCell = computed(
+      () => {
+        const layout = this.#layoutCell.value;
+        if (!layout) return (this.#drawable = null);
+        // A glyph shaping brought in, such as a ligature, is drawn only once
+        // its model loads. Until then the run's glyphs are drawn as they last
+        // could all be, so the text does not blank for the frames the load
+        // takes. Carets, hits and edits keep the current layout.
+        track(owner.glyphsLoadedCell);
+        const laidOut = this.#laidOutCell.value;
+        const waiting =
+          laidOut?.kind === "placed" &&
+          laidOut.placed.layout.glyphs.some(
+            ({ glyphId }) => glyphId != null && owner.awaitsGlyph(glyphId),
+          );
+        if (waiting && this.#drawable) return this.#drawable;
+        return (this.#drawable = layout);
+      },
+      { name: "text.drawnLayoutForRun" },
+    );
+
     this.#failureCell = computed(
       () => {
         const laidOut = this.#laidOutCell.value;
@@ -162,6 +193,16 @@ export class RunText {
   /** The run's layout; invalidates on content, location, source, glyph loads, and edits layout reads. */
   get layoutCell(): ComputedSignal<TextLayout | null> {
     return this.#layoutCell;
+  }
+
+  /**
+   * The layout the run's glyphs are drawn from: {@link layoutCell}, except
+   * while it shows a glyph whose model is still loading, such as a ligature
+   * shaping just brought in; then the last layout whose glyphs could all be
+   * drawn, so the text does not blank until the load lands.
+   */
+  get drawnLayoutCell(): ComputedSignal<TextLayout | null> {
+    return this.#drawnLayoutCell;
   }
 
   /**

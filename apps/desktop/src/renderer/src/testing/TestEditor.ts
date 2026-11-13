@@ -1636,6 +1636,15 @@ export class TestEditor extends Editor implements EditorTestSurface {
     };
   }
 
+  drawnTextGlyphs(): (string | null)[] {
+    const run = this.textRun;
+    if (!run) return [];
+    const layout = this.text.drawnLayoutCell(run.runId).peek();
+    return (layout?.placedGlyphs ?? []).map(({ glyph }) =>
+      glyph.glyphId ? this.font.glyphName(glyph.glyphId) : null,
+    );
+  }
+
   drawnOutlineIds(glyph: string): DrawnOutlineIds {
     const model = this.glyphForId(this.#glyphNamed(glyph))?.renderModelAt(
       this.externalLocationCell,

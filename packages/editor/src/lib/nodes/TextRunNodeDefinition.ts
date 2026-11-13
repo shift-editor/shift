@@ -463,7 +463,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
         this.#drawSelection(node, ctx);
         return;
       case "content":
-        this.#drawGlyphs(node, ctx, layout);
+        this.#drawGlyphs(node, ctx, this.editor.text.drawnLayoutCell(node.runId).peek() ?? layout);
         return;
       case "controls":
         this.#drawCaret(node, ctx, layout);
