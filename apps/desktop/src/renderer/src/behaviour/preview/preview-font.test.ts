@@ -197,6 +197,21 @@ describe("a compiled font's preview shapes proof text with the binary itself", (
     expect(tags).toEqual(expect.arrayContaining(["calt", "kern", "ss01", "tnum"]));
   });
 
+  it("sets each glyph at the font's own advance with shaping off", async () => {
+    const font = await preview(INTER_TTF);
+    const placed = font.layoutText(
+      { items: typedTextItems("office"), settings: { shaping: false, features: {} } },
+      emptyExternalAxisLocation(),
+      null,
+    );
+
+    // One glyph per character, each where the one before it ends: Inter's
+    // hmtx advances (o 1228, f 758, i 496, c 1170).
+    expect(placed?.layout.glyphs.map((glyph) => glyph.left)).toEqual([
+      0, 1228, 1986, 2744, 3240, 4410,
+    ]);
+  });
+
   it("kerns a pair by the font's own GPOS", async () => {
     const font = await preview(INTER_TTF);
     const width = (features: Readonly<Record<string, boolean>>) =>

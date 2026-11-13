@@ -384,3 +384,27 @@ fn shapes_arabic_as_harfbuzz_does() {
         "[uniFE8E.rlig=1+0|uniFEDF.rlig=0+518]"
     );
 }
+
+#[test]
+fn reads_a_glyph_s_own_advance_at_a_location_as_harfbuzz_does() {
+    let inter = inter();
+    let shaper = shaper(&inter);
+    let a = inter.font.glyph_by_name("A").unwrap().id();
+
+    // `hb-shape … AV --features=-kern [--variations=wght=700]`.
+    assert_eq!(
+        shaper.own_advance(a, &ExternalLocation::new()),
+        Some(1413.0)
+    );
+    assert_eq!(shaper.own_advance(a, &weight(&inter, 700.0)), Some(1529.0));
+}
+
+#[test]
+fn classes_marks_by_the_font_s_own_gdef() {
+    let naskh = naskh();
+    let shaper = shaper(&naskh);
+    let glyph = |name| naskh.font.glyph_by_name(name).unwrap().id();
+
+    assert_eq!(shaper.own_mark(glyph("uni064E")), Some(true));
+    assert_eq!(shaper.own_mark(glyph("uni0628")), Some(false));
+}

@@ -91,6 +91,32 @@ impl LiveShaper {
         self.glyphs.order.glyph(*shaper_glyph)
     }
 
+    /// A whole compiled font's own advance for `glyph` at `location`
+    /// ([`ShaperFont::from_binary`]): its `hmtx` and `HVAR`, as shaping
+    /// starts the glyph from. `None` for a shaper font compiled from feature
+    /// source, which has no advances, and for a glyph the font lacks.
+    pub fn own_advance(&self, glyph: GlyphId, location: &ExternalLocation) -> Option<f64> {
+        if !self.glyphs.whole {
+            return None;
+        }
+        let shaper_glyph = self.glyphs.order.shaper_glyph(glyph)?;
+        let coords = self.normalized_coords(location);
+        self.shaper
+            .own_advance(shaper_glyph, &coords)
+            .map(f64::from)
+    }
+
+    /// Whether a whole compiled font's `GDEF` classes `glyph` as a mark;
+    /// `None` for a shaper font compiled from feature source, whose classes
+    /// come from the live font, and for a glyph the font lacks.
+    pub fn own_mark(&self, glyph: GlyphId) -> Option<bool> {
+        if !self.glyphs.whole {
+            return None;
+        }
+        let shaper_glyph = self.glyphs.order.shaper_glyph(glyph)?;
+        Some(self.shaper.is_mark(shaper_glyph))
+    }
+
     /// Returns the shaper font this shaper uses.
     pub fn font(&self) -> &Arc<ShaperFont> {
         &self.glyphs.font

@@ -712,6 +712,39 @@ mod exports {
         }
 
         #[test]
+        fn a_compiled_font_with_shaping_off_sets_each_glyph_at_its_own_advance() {
+            let (header, _, shaping) = compiled_inter();
+            let request = LayoutRequest {
+                units: "office"
+                    .chars()
+                    .map(|character| LayoutUnit::Character {
+                        codepoint: u32::from(character),
+                    })
+                    .collect(),
+                options: TextOptions {
+                    shaping: false,
+                    ..TextOptions::default()
+                },
+            };
+            let place = TextPlace {
+                design: DesignLocation::new(),
+                external: ExternalLocation::new(),
+                kerning: KerningBlend::default(),
+            };
+
+            let layout = shaping
+                .layout_text(&header, never_read, &request, place)
+                .unwrap();
+
+            // As typed: one glyph per character, no ligature, each starting
+            // where the one before it ends, by Inter's own advances
+            // (`hb-shape --features=-kern,-liga,-calt,-dlig`: o 1228, f 758,
+            // f 758, i 496, c 1170, e 1194).
+            let lefts: Vec<f64> = layout.glyphs.iter().map(|glyph| glyph.left).collect();
+            assert_eq!(lefts, [0.0, 1228.0, 1986.0, 2744.0, 3240.0, 4410.0]);
+        }
+
+        #[test]
         fn a_compiled_font_lists_and_applies_the_features_it_ships() {
             let (header, _, shaping) = compiled_inter();
 

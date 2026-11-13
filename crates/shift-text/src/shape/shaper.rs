@@ -378,6 +378,34 @@ impl Shaper {
         &self.bytes
     }
 
+    /// A glyph's own advance at `coords` in a whole compiled font: its
+    /// `hmtx` advance plus its `HVAR` delta, rounded as HarfBuzz rounds it.
+    /// `None` when the font has no `hmtx`, or no advance for the glyph.
+    pub fn own_advance(&self, shaper_glyph: u32, coords: &[NormalizedCoord]) -> Option<i32> {
+        let font = FontRef::new(&self.bytes).ok()?;
+        let glyph = GlyphId::new(shaper_glyph);
+        let advance = f64::from(font.hmtx().ok()?.advance(glyph)?);
+        let delta = if coords.iter().all(|coord| coord.to_bits() == 0) {
+            0.0
+        } else {
+            font.hvar()
+                .ok()
+                .and_then(|hvar| hvar.advance_width_delta(glyph, coords).ok())
+                .map_or(0.0, |delta| f64::from(delta.to_f32()))
+        };
+        let rounded = (advance + delta).round();
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "a u16 advance plus a delta of a few thousand units fits i32"
+        )]
+        Some(rounded as i32)
+    }
+
+    /// Whether the font's `GDEF` classes a shaper glyph as a mark.
+    pub fn is_mark(&self, shaper_glyph: u32) -> bool {
+        self.marks.contains(&shaper_glyph)
+    }
+
     /// Shapes one run of text.
     ///
     /// `hook`, when given, is told about each layout table and lookup as

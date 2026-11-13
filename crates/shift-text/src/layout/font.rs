@@ -169,7 +169,13 @@ impl<'a> LayoutFont<'a> {
 
     pub(crate) fn class(&self, glyph: GlyphId) -> Option<OpenTypeCategory> {
         match &self.glyphs {
-            Glyphs::Session(session) => (session.classes)(glyph),
+            Glyphs::Session(session) => match session.whole_shaper() {
+                // A compiled font classes its glyphs in its own `GDEF`.
+                Some(shaper) => shaper
+                    .own_mark(glyph)
+                    .and_then(|mark| mark.then_some(OpenTypeCategory::Mark)),
+                None => (session.classes)(glyph),
+            },
             Glyphs::Advances(typed) => typed
                 .glyphs
                 .get(&glyph)
@@ -247,7 +253,27 @@ impl<'a> LayoutFont<'a> {
 }
 
 impl SessionGlyphs<'_> {
+    /// The shaper when it is a whole compiled font, which advances and
+    /// classes its glyphs itself rather than through the live font.
+    fn whole_shaper(&self) -> Option<&LiveShaper> {
+        self.shaper
+            .as_ref()
+            .ok()
+            .copied()
+            .filter(|shaper| shaper.font().is_whole())
+    }
+
     fn resolve(&self, glyph: GlyphId) -> Option<Resolved> {
+        // A compiled font's session font has no glyphs: its advances are the
+        // binary's own, as shaping starts each glyph from them.
+        if let Some(shaper) = self.whole_shaper() {
+            return shaper
+                .own_advance(glyph, &self.external)
+                .map(|advance| Resolved {
+                    advance,
+                    bounds: None,
+                });
+        }
         self.projection
             .borrow_mut()
             .glyph(glyph)
