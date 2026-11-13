@@ -60,7 +60,6 @@ async function atlasPage(): Promise<GlyphAtlasPage> {
     glyphs: [],
     weightSets: descriptor.weightSets,
     weightAxes: [...axes],
-    weightMappingBases: [...mutator.font.getAxisMappingBases()],
     weightEngine: mutator.editCoordinator.engine,
     resolvedWeights: null,
   };

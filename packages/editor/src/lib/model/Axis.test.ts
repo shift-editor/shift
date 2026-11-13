@@ -1,25 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  asAxisId,
-  asSourceId,
-  type Axis as AxisRecord,
-  type AxisId,
-  type AxisKind,
-} from "@shift/types";
-import { createMemoryFontSession } from "../../createMemoryFontSession";
-import type { SystemClipboard } from "../clipboard";
+import { asAxisId, type Axis as AxisRecord, type AxisId, type AxisKind } from "@shift/types";
+import { startMemorySession } from "../../testing/emptyMemorySession";
 import { Axis } from "./Axis";
 import type { Font } from "./Font";
-
-class MemoryClipboard implements SystemClipboard {
-  writeText(): Promise<void> {
-    return Promise.resolve();
-  }
-
-  readText(): Promise<string> {
-    return Promise.resolve("");
-  }
-}
 
 const WEIGHT = asAxisId("axis_wght");
 const OPTICAL = asAxisId("axis_opsz");
@@ -37,46 +20,22 @@ afterEach(() => {
 });
 
 /** A font with a weight range, a fixed optical size and a discrete italic axis. */
-function openFont(): Font {
-  const session = createMemoryFontSession({
-    clipboard: new MemoryClipboard(),
-    source: {
-      font: {
-        metadata: { familyName: "Axes" },
-        metrics: { unitsPerEm: 1000 },
-        metricDefinitions: [],
-        kerning: { groups: [], sources: [] },
-        glyphs: [],
-        sources: [
-          {
-            id: asSourceId("source_regular"),
-            name: "Regular",
-            location: { values: {} },
-            metricValues: {},
-            role: "master",
-          },
-        ],
-        axes: [
-          axis(WEIGHT, "wght", { kind: "continuous", minimum: 100, default: 400, maximum: 900 }),
-          axis(OPTICAL, "opsz", { kind: "continuous", minimum: 12, default: 12, maximum: 12 }),
-          axis(ITALIC, "ital", { kind: "discrete", values: [0, 0.5, 1], default: 0 }),
-        ],
-        axisMappings: [],
-        axisMappingBases: [],
-        namedInstances: [],
-      },
-      records: [],
-      read: () => Promise.resolve([]),
-      glyphPreviews: () => Promise.resolve([]),
-    },
+async function openFont(): Promise<Font> {
+  const session = await startMemorySession({
+    build: () =>
+      [
+        axis(WEIGHT, "wght", { kind: "continuous", minimum: 100, default: 400, maximum: 900 }),
+        axis(OPTICAL, "opsz", { kind: "continuous", minimum: 12, default: 12, maximum: 12 }),
+        axis(ITALIC, "ital", { kind: "discrete", values: [0, 0.5, 1], default: 0 }),
+      ].map((record) => ({ kind: "createAxis", createAxis: { axis: record } })),
   });
   dispose = session.dispose;
   return session.font;
 }
 
 describe("a font's axes answer their range as shift-font does", () => {
-  it("a continuous axis ranges over its authored bounds", () => {
-    const weight = openFont().axis(WEIGHT);
+  it("a continuous axis ranges over its authored bounds", async () => {
+    const weight = (await openFont()).axis(WEIGHT);
 
     expect(weight).toMatchObject({
       isDiscrete: false,
@@ -88,8 +47,8 @@ describe("a font's axes answer their range as shift-font does", () => {
     });
   });
 
-  it("a discrete axis ranges from its smallest to its largest value", () => {
-    const italic = openFont().axis(ITALIC);
+  it("a discrete axis ranges from its smallest to its largest value", async () => {
+    const italic = (await openFont()).axis(ITALIC);
 
     expect(italic).toMatchObject({
       isDiscrete: true,
@@ -101,12 +60,16 @@ describe("a font's axes answer their range as shift-font does", () => {
     });
   });
 
-  it("an axis fixed at one value does not vary", () => {
-    expect(openFont().axis(OPTICAL)).toMatchObject({ minimum: 12, maximum: 12, varies: false });
+  it("an axis fixed at one value does not vary", async () => {
+    expect((await openFont()).axis(OPTICAL)).toMatchObject({
+      minimum: 12,
+      maximum: 12,
+      varies: false,
+    });
   });
 
-  it("a continuous axis accepts finite values inside its range", () => {
-    const weight = openFont().axis(WEIGHT)!;
+  it("a continuous axis accepts finite values inside its range", async () => {
+    const weight = (await openFont()).axis(WEIGHT)!;
 
     expect([100, 650, 900, 950, Number.NaN].map((value) => weight.accepts(value))).toEqual([
       true,
@@ -117,8 +80,8 @@ describe("a font's axes answer their range as shift-font does", () => {
     ]);
   });
 
-  it("a discrete axis accepts only its listed values", () => {
-    const italic = openFont().axis(ITALIC)!;
+  it("a discrete axis accepts only its listed values", async () => {
+    const italic = (await openFont()).axis(ITALIC)!;
 
     expect([0, 0.5, 0.25, 1].map((value) => italic.accepts(value))).toEqual([
       true,
@@ -128,16 +91,16 @@ describe("a font's axes answer their range as shift-font does", () => {
     ]);
   });
 
-  it("normalizes each side of the default to its own extent", () => {
-    const weight = openFont().axis(WEIGHT)!;
+  it("normalizes each side of the default to its own extent", async () => {
+    const weight = (await openFont()).axis(WEIGHT)!;
 
     expect([100, 250, 400, 650, 900].map((value) => weight.normalize(value))).toEqual([
       -1, -0.5, 0, 0.5, 1,
     ]);
   });
 
-  it("the designspace hands out the same axes, in authored order", () => {
-    const font = openFont();
+  it("the designspace hands out the same axes, in authored order", async () => {
+    const font = await openFont();
 
     expect(font.designspace.axes.map(({ tag }) => tag)).toEqual(["wght", "opsz", "ital"]);
     expect(font.designspace.axis(ITALIC)).toBe(font.axis(ITALIC));
@@ -145,8 +108,8 @@ describe("a font's axes answer their range as shift-font does", () => {
 });
 
 describe("an axis builds its edited records", () => {
-  it("moves a continuous axis's bounds and default", () => {
-    const weight = openFont().axis(WEIGHT)!;
+  it("moves a continuous axis's bounds and default", async () => {
+    const weight = (await openFont()).axis(WEIGHT)!;
 
     expect(weight.withMinimum(200).kind).toEqual({
       kind: "continuous",
@@ -158,8 +121,8 @@ describe("an axis builds its edited records", () => {
     expect(weight.withDefault(500).kind).toMatchObject({ minimum: 100, default: 500 });
   });
 
-  it("leaves a discrete axis's range to its values", () => {
-    const italic = openFont().axis(ITALIC)!;
+  it("leaves a discrete axis's range to its values", async () => {
+    const italic = (await openFont()).axis(ITALIC)!;
 
     expect(italic.withMinimum(-1)).toBe(italic.record);
     expect(italic.withMaximum(2)).toBe(italic.record);
@@ -170,10 +133,10 @@ describe("an axis builds its edited records", () => {
     });
   });
 
-  it("turns a range into its bounds and default as ascending values, each once", () => {
-    const optical = openFont().axis(OPTICAL)!;
+  it("turns a range into its bounds and default as ascending values, each once", async () => {
+    const optical = (await openFont()).axis(OPTICAL)!;
 
-    expect(openFont().axis(WEIGHT)!.withKind("discrete").kind).toEqual({
+    expect((await openFont()).axis(WEIGHT)!.withKind("discrete").kind).toEqual({
       kind: "discrete",
       values: [100, 400, 900],
       default: 400,
@@ -185,8 +148,8 @@ describe("an axis builds its edited records", () => {
     });
   });
 
-  it("turns discrete values into the range from the smallest to the largest", () => {
-    const italic = openFont().axis(ITALIC)!;
+  it("turns discrete values into the range from the smallest to the largest", async () => {
+    const italic = (await openFont()).axis(ITALIC)!;
 
     expect(italic.withKind("continuous")).toEqual({
       ...italic.record,
@@ -197,21 +160,21 @@ describe("an axis builds its edited records", () => {
 });
 
 describe("an axis builds its edited style labels", () => {
-  function labelled(): Axis {
-    const weight = openFont().axis(WEIGHT)!;
+  async function labelled(): Promise<Axis> {
+    const weight = (await openFont()).axis(WEIGHT)!;
     const withValue = new Axis(weight.withNewLabel(400, "value"));
     return new Axis(withValue.withNewLabel(700, "range"));
   }
 
-  it("adds value and range labels last, named New style", () => {
-    expect(labelled().labels).toMatchObject([
+  it("adds value and range labels last, named New style", async () => {
+    expect((await labelled()).labels).toMatchObject([
       { name: "New style", value: 400, range: null, elidable: false },
       { name: "New style", value: 700, range: { minimum: 700, maximum: 700 }, elidable: false },
     ]);
   });
 
-  it("renames, moves and links one label, leaving the others", () => {
-    const axis = labelled();
+  it("renames, moves and links one label, leaving the others", async () => {
+    const axis = await labelled();
     const [regular, bold] = axis.labels;
     const renamed = new Axis(axis.withLabelName(regular!.id, "Regular"));
     const moved = new Axis(renamed.withLabelValue(bold!.id, 650));
@@ -223,8 +186,8 @@ describe("an axis builds its edited style labels", () => {
     expect(moved.withLabelLinkedValue(regular!.id, null).labels[0]!.linkedValue).toBeUndefined();
   });
 
-  it("moves one end of a label's range, reading a missing end as its value", () => {
-    const axis = labelled();
+  it("moves one end of a label's range, reading a missing end as its value", async () => {
+    const axis = await labelled();
     const [regular, bold] = axis.labels;
 
     expect(axis.withLabelRange(regular!.id, { maximum: 450 }).labels[0]!.range).toEqual({
@@ -237,8 +200,8 @@ describe("an axis builds its edited style labels", () => {
     });
   });
 
-  it("keeps at most one elidable label", () => {
-    const axis = labelled();
+  it("keeps at most one elidable label", async () => {
+    const axis = await labelled();
     const [regular, bold] = axis.labels;
     const regularElided = new Axis(axis.withLabelElidable(regular!.id, true));
 
@@ -250,8 +213,8 @@ describe("an axis builds its edited style labels", () => {
     ).toEqual([false, false]);
   });
 
-  it("removes one label", () => {
-    const axis = labelled();
+  it("removes one label", async () => {
+    const axis = await labelled();
     const [regular, bold] = axis.labels;
 
     expect(axis.withoutLabel(regular!.id).labels.map(({ id }) => id)).toEqual([bold!.id]);
@@ -259,8 +222,8 @@ describe("an axis builds its edited style labels", () => {
 });
 
 describe("an axis builds its edited fields", () => {
-  it("renames, retags and hides the axis, keeping its range", () => {
-    const weight = openFont().axis(WEIGHT)!;
+  it("renames, retags and hides the axis, keeping its range", async () => {
+    const weight = (await openFont()).axis(WEIGHT)!;
     const renamed = new Axis(weight.withName("Thickness"));
     const retagged = new Axis(renamed.withTag("THCK"));
 

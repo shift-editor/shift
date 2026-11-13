@@ -1,14 +1,16 @@
-export { createMemoryFontSession } from "@shift/editor";
+export { createMemoryFontSession, newMemoryFontSource } from "@shift/editor";
 export type {
   Editor,
   Font,
   Glyph,
   GlyphInvalidation,
   GlyphReader,
+  MemoryEditorOptions,
   MemoryFontSession,
   MemoryFontSessionOptions,
   MemoryFontSource,
   MemoryToolName,
+  NewMemoryFont,
 } from "@shift/editor";
 export type { SystemClipboard } from "@shift/editor/clipboard";
 export { computed, effect, useSignalState } from "@shift/editor/signals";

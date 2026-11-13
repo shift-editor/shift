@@ -2,7 +2,6 @@ import type {
   GlyphId,
   SlugLayout,
   Axis,
-  AxisMappingBasis,
   SlugExactSource,
   SlugPreviewExtents,
   SlugWeightSet,
@@ -26,10 +25,9 @@ export interface GlyphAtlasPage {
   readonly glyphs: readonly GlyphAtlasGlyph[];
   readonly weightSets: readonly SlugWeightSet[];
   readonly weightAxes: readonly Axis[];
-  readonly weightMappingBases: readonly AxisMappingBasis[];
   /**
    * The open document's engine, which evaluates the weight sets from its own
-   * font; null evaluates them statelessly from the bases above.
+   * font; null for a page whose weights are resolved for it.
    */
   readonly weightEngine: FontEngine | null;
   readonly resolvedWeights: readonly number[] | null;

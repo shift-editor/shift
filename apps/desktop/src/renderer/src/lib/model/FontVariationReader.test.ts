@@ -5,7 +5,7 @@ import { FONTS } from "@/testing/fontFixture";
 import { createWorkspaceStack } from "@/testing/workspaceStack";
 
 describe("the font's variation reader follows the window's engine", () => {
-  it("maps through the engine while it is open and statelessly while it is closed", async () => {
+  it("reads nothing while the engine is closed and maps through the new session after reopen", async () => {
     const stack = createWorkspaceStack();
     await stack.openWorkspace(FONTS.mappedWeight);
     const engine = stack.editCoordinator.engine;
@@ -26,7 +26,7 @@ describe("the font's variation reader follows the window's engine", () => {
 
       engine.dispose();
       userWeight.set(400);
-      expect(design.value).toBeCloseTo(86);
+      expect(() => design.value).toThrow("the font's engine is not open");
 
       await engine.reopen();
       userWeight.set(800);

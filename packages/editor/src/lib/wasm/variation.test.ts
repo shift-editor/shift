@@ -7,7 +7,7 @@ import {
   designAxisLocationFromLocation,
   externalAxisLocationFromRecord,
 } from "../variation/location";
-import { EngineVariationReader } from "./variation";
+import { FontVariation } from "./variation";
 
 const axis: Axis = {
   id: mintAxisId(),
@@ -31,10 +31,12 @@ const released: EngineVariation = {
   sourceSetWeights: () => ({ weights: new Float64Array(), starts: [] }),
   designLocation: () => [],
   externalLocation: () => [],
+  variationNumber: () => 0,
+  variationAt: () => [],
 };
 
 describe("the engine's variation reader on a released session", () => {
-  const reader = new EngineVariationReader(released, {
+  const reader = new FontVariation(released, {
     axesCell: signal([axis]),
     mappingBasesCell: signal([]),
     sourcesCell: signal([]),

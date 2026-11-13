@@ -68,7 +68,7 @@ export interface GlyphInvalidation {
 export class FontStore {
   readonly #font: WritableSignal<FontSnapshot | null>;
   readonly #workspace: WritableSignal<WorkspaceSnapshot | null>;
-  readonly #engine: FontEngine | null;
+  readonly #engine: FontEngine;
   readonly #kerning: Signal<Kerning>;
   readonly #committedRevision: WritableSignal<number>;
   readonly #invalidGlyphs: WritableSignal<GlyphInvalidation>;
@@ -104,12 +104,7 @@ export class FontStore {
   // non-reactive: interning table that dedupes projection bases; only read while interning
   readonly #interpolationBases = new Map<string, InterpolationBasis>();
 
-  constructor({
-    font = null,
-    records = [],
-    workspace = null,
-    engine = null,
-  }: FontStoreOptions = {}) {
+  constructor({ font = null, records = [], workspace = null, engine }: FontStoreOptions) {
     this.#engine = engine;
     this.#font = signal(font ?? (workspace ? fontSnapshotFromWorkspace(workspace) : null), {
       name: "fontStore.font",
@@ -136,7 +131,7 @@ export class FontStore {
     });
     this.#kerning = computed(
       () => {
-        if (engine) track(engine.revision("kerning"));
+        track(engine.revision("kerning"));
         return new Kerning(kerningRecords.value, engine);
       },
       { name: "fontStore.kerning" },
@@ -152,8 +147,8 @@ export class FontStore {
     return this.#kerning;
   }
 
-  /** The window's editing engine, which answers kerning and metric reads; null without one. */
-  get engine(): FontEngine | null {
+  /** The font's engine, which answers its variation, kerning, metric and text reads. */
+  get engine(): FontEngine {
     return this.#engine;
   }
 

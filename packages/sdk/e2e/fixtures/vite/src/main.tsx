@@ -15,9 +15,6 @@ interface Point {
 }
 
 const source = interASource();
-const weightAxis = source.font.axes.find((axis) => axis.tag === "wght")!;
-const regular = source.font.sources.find((candidate) => candidate.name === "Regular")!;
-const glyphRecord = source.records[0]!;
 
 let clipboardText = "";
 const clipboard = {
@@ -28,82 +25,92 @@ const clipboard = {
   },
 };
 
-const first = createMemoryFontSession({ source, clipboard });
-const second = createMemoryFontSession({ source, clipboard });
-const lifecycle = createMemoryFontSession({ source, clipboard });
-lifecycle.dispose();
-let secondDisposeThrew = false;
-try {
+async function main() {
+  const [first, second, lifecycle] = await Promise.all([
+    createMemoryFontSession({ source, clipboard }),
+    createMemoryFontSession({ source, clipboard }),
+    createMemoryFontSession({ source, clipboard }),
+  ]);
+  const weightAxis = first.font.axisTagged("wght")!;
+  const regular = first.font.designspace.sourceNamed("Regular")!;
+  const glyphRecord = first.font.entryForName("a" as never)!;
   lifecycle.dispose();
-} catch {
-  secondDisposeThrew = true;
-}
+  let secondDisposeThrew = false;
+  try {
+    lifecycle.dispose();
+  } catch {
+    secondDisposeThrew = true;
+  }
 
-async function placeGlyph(session: MemoryFontSession) {
-  const glyph = await session.font.loadGlyph(glyphRecord.id);
-  session.editor.selectSource(regular.id);
-  const node = session.editor.scene.createNode({
-    kind: "glyph",
-    glyphId: glyph.id,
-    sourceId: regular.id,
-    position: { x: 0, y: 0 },
+  async function placeGlyph(session: MemoryFontSession) {
+    const glyph = await session.font.loadGlyph(glyphRecord.id);
+    session.editor.selectSource(regular.id);
+    const node = session.editor.scene.createNode({
+      kind: "glyph",
+      glyphId: glyph.id,
+      sourceId: regular.id,
+      position: { x: 0, y: 0 },
+    });
+    session.editor.editing.enter(node.id);
+    return node;
+  }
+
+  function regularLayer() {
+    return first.editor.glyphForId(glyphRecord.id)?.layerForSource(regular.id) ?? null;
+  }
+
+  let placedNode: Awaited<ReturnType<typeof placeGlyph>> | null = null;
+
+  window.shiftSdkHarness = {
+    glyphPlaced: () => placedNode !== null,
+    onCurvePointId() {
+      const contour = regularLayer()?.contours[0];
+      return contour?.points.find((point) => point.pointType === "onCurve")?.id ?? null;
+    },
+    pointPosition(pointId: string) {
+      const point = regularLayer()?.point(pointId as never);
+      return point ? { x: point.x, y: point.y } : null;
+    },
+    pointScreenPosition(pointId: string) {
+      const point = regularLayer()?.point(pointId as never);
+      if (!point || !placedNode) return null;
+
+      // Layer points are in the glyph's units, y up; the camera projects scene points.
+      return first.editor.sceneToScreen(
+        first.editor.toScene(placedNode, localPoint(point.x, point.y)),
+      );
+    },
+    zoom: () => first.editor.zoom,
+    pan: () => ({ ...first.editor.pan }),
+    cameraSize: () => ({
+      width: first.editor.camera.logicalWidth,
+      height: first.editor.camera.logicalHeight,
+    }),
+    firstAxis: () => first.editor.externalLocation.get(weightAxis.id as never),
+    secondAxis: () =>
+      second.editor.externalLocation.get(weightAxis.id as never) ?? weightAxis.default,
+    disposedSession: () => ({
+      toolReleased: lifecycle.editor.toolCell.peek() === null,
+      toolsUnregistered: lifecycle.editor.toolRegistryCell.peek().size === 0,
+      secondDisposeThrew,
+    }),
+  };
+
+  const root = createRoot(document.getElementById("root")!);
+  root.render(<ShiftEditorChrome session={first} />);
+  void placeGlyph(first).then((node) => {
+    placedNode = node;
   });
-  session.editor.editing.enter(node.id);
-  return node;
+
+  window.addEventListener("beforeunload", () => {
+    root.unmount();
+    first.dispose();
+    second.dispose();
+  });
 }
 
-function regularLayer() {
-  return first.editor.glyphForId(glyphRecord.id)?.layerForSource(regular.id) ?? null;
-}
-
-let placedNode: Awaited<ReturnType<typeof placeGlyph>> | null = null;
-
-window.shiftSdkHarness = {
-  glyphPlaced: () => placedNode !== null,
-  onCurvePointId() {
-    const contour = regularLayer()?.contours[0];
-    return contour?.points.find((point) => point.pointType === "onCurve")?.id ?? null;
-  },
-  pointPosition(pointId: string) {
-    const point = regularLayer()?.point(pointId as never);
-    return point ? { x: point.x, y: point.y } : null;
-  },
-  pointScreenPosition(pointId: string) {
-    const point = regularLayer()?.point(pointId as never);
-    if (!point || !placedNode) return null;
-
-    // Layer points are in the glyph's units, y up; the camera projects scene points.
-    return first.editor.sceneToScreen(
-      first.editor.toScene(placedNode, localPoint(point.x, point.y)),
-    );
-  },
-  zoom: () => first.editor.zoom,
-  pan: () => ({ ...first.editor.pan }),
-  cameraSize: () => ({
-    width: first.editor.camera.logicalWidth,
-    height: first.editor.camera.logicalHeight,
-  }),
-  firstAxis: () => first.editor.externalLocation.get(weightAxis.id as never),
-  secondAxis: () =>
-    second.editor.externalLocation.get(weightAxis.id as never) ?? weightAxis.kind.default,
-  disposedSession: () => ({
-    toolReleased: lifecycle.editor.toolCell.peek() === null,
-    toolsUnregistered: lifecycle.editor.toolRegistryCell.peek().size === 0,
-    secondDisposeThrew,
-  }),
-};
-
-const root = createRoot(document.getElementById("root")!);
-root.render(<ShiftEditorChrome session={first} />);
-void placeGlyph(first).then((node) => {
-  placedNode = node;
-});
-
-window.addEventListener("beforeunload", () => {
-  root.unmount();
-  first.dispose();
-  second.dispose();
-});
+// Not a top-level await: the consumer builds for browsers that may not support one.
+void main();
 
 declare global {
   interface Window {

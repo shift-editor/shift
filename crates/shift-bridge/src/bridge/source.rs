@@ -1,7 +1,7 @@
 //! A font file opened for browsing rather than editing: its directory read
 //! once, and its glyphs read one at a time, without a workspace or store.
 
-use pack::Pack;
+use pack::{Bytes, Pack};
 use shift_font::GlyphId;
 use shift_wire::{FontSnapshot, GlyphSnapshot};
 use std::path::Path;
@@ -23,6 +23,16 @@ pub(crate) trait NativeSource {
 
   /// Closes the font source, if one is open, with the atlases built from it.
   fn close_font_source(&mut self);
+
+  /// The open font source's font without glyphs (its axes, axis mappings
+  /// and sources, under the ids its directory gives them), as named
+  /// MessagePack: what the window's engine opens for a compiled font.
+  ///
+  /// # Errors
+  ///
+  /// Fails when no font source is open, or its header cannot be built or
+  /// encoded.
+  fn font_source_header(&self) -> Result<Bytes, NativeSourceError>;
 
   /// One glyph of the font source, independent of any location, and every
   /// glyph its components use.
@@ -84,6 +94,13 @@ impl NativeSource for Bridge {
     self.retained_source = None;
     self.slug_atlas = None;
     self.source_atlas_descriptors.clear();
+  }
+
+  fn font_source_header(&self) -> Result<Bytes, NativeSourceError> {
+    let header = self.retained_source()?.header()?;
+    Ok(Bytes(
+      rmp_serde::to_vec_named(&header).map_err(BridgeError::from)?,
+    ))
   }
 
   fn read_font_source_glyph(

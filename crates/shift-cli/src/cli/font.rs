@@ -20,6 +20,22 @@ pub(crate) struct FontInfoArgs {
 }
 
 #[derive(Debug, Args)]
+pub(crate) struct PackFontArgs {
+    /// Font to pack: a .shift document, or a UFO, designspace, Glyphs or compiled font.
+    #[arg(value_hint = ValueHint::AnyPath)]
+    pub path: PathBuf,
+
+    /// Keep only this glyph and the glyphs its components use; repeat to keep several.
+    /// Every glyph, with the font's kerning and features, when omitted.
+    #[arg(long = "glyph", value_name = "NAME")]
+    pub glyphs: Vec<String>,
+
+    /// File to write the packed font to.
+    #[arg(long, short, value_hint = ValueHint::FilePath)]
+    pub output: PathBuf,
+}
+
+#[derive(Debug, Args)]
 pub(crate) struct SetFontArgs {
     /// Canonical SQLite .shift document to edit.
     #[arg(value_hint = ValueHint::FilePath)]

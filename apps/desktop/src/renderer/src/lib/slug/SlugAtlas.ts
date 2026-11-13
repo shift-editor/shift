@@ -156,6 +156,10 @@ export class SlugAtlas {
   weights(coordinates: CatalogLocation): Float32Array<ArrayBuffer> {
     if (this.#resolvedWeights) return this.#resolvedWeights;
 
+    const engine = this.#descriptor.weightEngine;
+    if (!engine) {
+      throw new Error(`resident Slug page ${this.pageIndex} has neither weights nor an engine`);
+    }
     const axes = this.#descriptor.weightAxes;
     if (coordinates.length !== axes.length) {
       throw new Error(
@@ -170,11 +174,10 @@ export class SlugAtlas {
     return new Float32Array(
       atlasWeights(
         axes,
-        this.#descriptor.weightMappingBases,
         this.#descriptor.weightSets,
         this.#descriptor.weightCount,
         externalLocation,
-        this.#descriptor.weightEngine,
+        engine,
       ),
     );
   }

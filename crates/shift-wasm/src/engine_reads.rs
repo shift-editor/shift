@@ -39,7 +39,7 @@ pub use crate::page_layout::{NodeBox, PageLayout, PageLayoutError, PageLayoutReq
 pub use shift_text::shape::{FeatureDefault, FeatureGroup, FontFeature};
 use shift_wire::{
     AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphSnapshot, KerningSnapshot,
-    MetricDefinition, NamedInstance, SourceMetricsInterpolationSnapshot,
+    MetricDefinition, NamedInstance, SourceMetricsInterpolationSnapshot, VariationBasis,
 };
 
 /// What the editor reads from one engine session's font. Glyphs and sources
@@ -208,6 +208,24 @@ pub trait EngineReads {
     /// never interned, or its sources are missing from the font or form no
     /// model.
     fn atlas_weights(&self, sets: Vec<usize>, external: Vec<f64>) -> Option<Vec<f64>>;
+    /// Interns a compiled variation basis, as a compiled font's glyph carries
+    /// its deltas, for [`Self::variation_at`], and returns its number. A
+    /// number stays the basis's for the session's life.
+    fn variation_number(&self, basis: VariationBasis) -> usize;
+    /// The values of the compiled basis interned as `variation` at a design
+    /// location, each axis normalized by its own range, over the session's
+    /// axes: `VariationBasis::evaluate`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CompiledVariationError::NotInterned`] for a number the
+    /// session never gave, and [`CompiledVariationError::Unevaluable`] when
+    /// the basis's regions name an axis the session lacks.
+    fn variation_at(
+        &self,
+        variation: usize,
+        location: Vec<f64>,
+    ) -> Result<Vec<f64>, CompiledVariationError>;
     /// The document's pages, in list order.
     fn scene_pages(&self) -> Vec<SceneNode>;
     /// Every node of the document's scene, each root (pages first among
@@ -282,6 +300,18 @@ pub struct FontHeader {
     pub named_instances: Vec<NamedInstance>,
     /// Tracked Hyperglot language ids; `None` when the font stores no list.
     pub language_ids: Option<Vec<String>>,
+}
+
+/// Why [`EngineReads::variation_at`] could not evaluate a compiled basis.
+/// Details are text: shift-font's errors cannot cross to the editor.
+#[derive(Clone, Debug, PartialEq, Eq, Pack, thiserror::Error)]
+pub enum CompiledVariationError {
+    /// The session never interned a basis as `variation`.
+    #[error("no compiled variation {variation} was interned")]
+    NotInterned { variation: usize },
+    /// The basis cannot be evaluated over the session's axes.
+    #[error("the compiled variation cannot be evaluated: {detail}")]
+    Unevaluable { detail: String },
 }
 
 /// Why [`EngineReads::font_header`] or [`EngineReads::glyph_snapshots`]
@@ -410,7 +440,7 @@ pub struct SourceSetWeights {
 }
 
 #[cfg(feature = "engine")]
-pub(crate) use exports::{FontVariation, InternedIds};
+pub(crate) use exports::{CompiledVariations, FontVariation, InternedIds};
 
 #[cfg(feature = "engine")]
 mod exports {
@@ -420,12 +450,13 @@ mod exports {
     use std::rc::Rc;
 
     use shift_engine::StoreReadError;
+    use shift_font::ir::variation::{map_location_with_bases, unmap_location_with_bases};
     use shift_font::linked_metrics::SideLink;
     use shift_font::naming::new_anchor_name;
     use shift_font::{
-        AxisMapping, AxisMappingBasis, DesignLocation, ExternalLocation, Font, FontChangeImpact,
-        FontCopyId, Glyph, GlyphId, GlyphRecords, InterpolationBasis, Kerning, KerningSide,
-        MissingKerningOrigin, ResolvedKerning, SourceId,
+        AxisMapping, AxisMappingBasis, AxisRole, DesignLocation, ExternalLocation, Font,
+        FontChangeImpact, FontCopyId, Glyph, GlyphId, GlyphRecords, InterpolationBasis, Kerning,
+        KerningSide, Location, MissingKerningOrigin, ResolvedKerning, SourceId, VariationBasis,
     };
     use shift_text::layout::FeatureSetting;
     use shift_wire::values::{self, WireParse};
@@ -433,17 +464,16 @@ mod exports {
     use wasm_bindgen::prelude::*;
 
     use super::{
-        AnchorId, Axis, ComponentId, Counterparts, CounterpartsReadError, EditablePair,
-        EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag, FontFeature,
-        FontHeader, FontRecordsError, GlyphIdentityChange, GlyphSnapshot, InterpolatedMetrics,
-        KerningSnapshot, LayerId, LayoutError, NodeId, PageLayout, PageLayoutError,
-        PageLayoutRequest, PlacedText, PointId, RevisedNode, SceneNode, Source, SourceSetWeights,
-        TextLayoutRequest, engine_reads_request,
+        AnchorId, Axis, CompiledVariationError, ComponentId, Counterparts, CounterpartsReadError,
+        EditablePair, EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag,
+        FontFeature, FontHeader, FontRecordsError, GlyphIdentityChange, GlyphSnapshot,
+        InterpolatedMetrics, KerningSnapshot, LayerId, LayoutError, NodeId, PageLayout,
+        PageLayoutError, PageLayoutRequest, PlacedText, PointId, RevisedNode, SceneNode, Source,
+        SourceSetWeights, TextLayoutRequest, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::page_layout::{PlaceKey, RunLayouts, lay_out_page};
     use crate::shaping::{TextPlace, TextShaping};
-    use crate::variation::{design_values, external_values, to_location, weights_at};
 
     /// The ids a session's reads name by number, each interned once.
     #[derive(Default)]
@@ -459,6 +489,44 @@ mod exports {
         /// no longer has.
         fn source<'f>(&self, number: usize, font: &'f Font) -> Option<&'f Source> {
             font.source(*self.sources.get(number)?)
+        }
+    }
+
+    /// The compiled variation bases a session interned, by number: the
+    /// deltas a compiled font's glyphs carry, sent once each when the glyph
+    /// loads and evaluated by number every frame after.
+    #[derive(Default)]
+    pub(crate) struct CompiledVariations(RefCell<Vec<VariationBasis>>);
+
+    impl CompiledVariations {
+        /// Keeps `basis` and returns its number.
+        fn intern(&self, basis: VariationBasis) -> usize {
+            let mut bases = self.0.borrow_mut();
+            bases.push(basis);
+            bases.len() - 1
+        }
+
+        /// The values of the basis numbered `number` at `location`, as
+        /// numbers in `axes` order.
+        ///
+        /// # Errors
+        ///
+        /// As [`EngineReads::variation_at`].
+        fn at(
+            &self,
+            number: usize,
+            axes: &[Axis],
+            location: &[f64],
+        ) -> Result<Vec<f64>, CompiledVariationError> {
+            let bases = self.0.borrow();
+            let basis = bases
+                .get(number)
+                .ok_or(CompiledVariationError::NotInterned { variation: number })?;
+            basis
+                .evaluate(&to_location(axes, location), axes, None)
+                .map_err(|error| CompiledVariationError::Unevaluable {
+                    detail: error.to_string(),
+                })
         }
     }
 
@@ -922,6 +990,19 @@ mod exports {
             Some(weights)
         }
 
+        fn variation_number(&self, basis: super::VariationBasis) -> usize {
+            self.compiled.intern(basis.into())
+        }
+
+        fn variation_at(
+            &self,
+            variation: usize,
+            location: Vec<f64>,
+        ) -> Result<Vec<f64>, CompiledVariationError> {
+            self.compiled
+                .at(variation, self.session.font().axes(), &location)
+        }
+
         fn design_location(&self, external: Vec<f64>) -> Vec<f64> {
             let font = self.session.font();
             design_values(font.axes(), &self.variation().mappings, &external)
@@ -1214,5 +1295,391 @@ mod exports {
 
     fn design_location(font: &Font, values: &[f64]) -> DesignLocation {
         DesignLocation::from_untyped(to_location(font.axes(), values))
+    }
+
+    /// `basis`'s weights at a design location given as numbers in `axes`
+    /// order; zeros when `axes` lack an axis a region names.
+    fn weights_at(basis: &InterpolationBasis, axes: &[Axis], location: &[f64]) -> Vec<f64> {
+        let location = DesignLocation::from_untyped(to_location(axes, location));
+        basis
+            .weights_at(&location, axes)
+            .unwrap_or_else(|_| vec![0.0; basis.source_ids().len()])
+    }
+
+    /// An external location's design location, both as numbers in `axes`
+    /// order. When the mappings cannot be evaluated, external axes keep their
+    /// values and internal ones take their defaults, as in an unmapped font.
+    fn design_values(axes: &[Axis], mappings: &[AxisMappingBasis], external: &[f64]) -> Vec<f64> {
+        let external = ExternalLocation::from_untyped(to_location(axes, external));
+        match map_location_with_bases(&external, axes, mappings) {
+            Ok(design) => design.as_untyped().values_in(axes),
+            Err(_) => axes
+                .iter()
+                .map(|axis| match axis.role() {
+                    AxisRole::External => external.value_on(axis),
+                    AxisRole::Internal => axis.default(),
+                })
+                .collect(),
+        }
+    }
+
+    /// The external location a design location's mapping came from, both as
+    /// numbers in `axes` order, NaN on internal axes.
+    fn external_values(axes: &[Axis], mappings: &[AxisMappingBasis], design: &[f64]) -> Vec<f64> {
+        let design = DesignLocation::from_untyped(to_location(axes, design));
+        unmap_location_with_bases(&design, axes, mappings)
+            .as_untyped()
+            .values_in(axes)
+    }
+
+    /// A location as numbers in `axes` order, NaN where it omits an axis.
+    fn to_location(axes: &[Axis], values: &[f64]) -> Location {
+        axes.iter()
+            .zip(values)
+            .filter(|(_, value)| !value.is_nan())
+            .map(|(axis, value)| (axis.id(), *value))
+            .collect()
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use shift_font::ir::variation::map_location;
+        use shift_font::{
+            AxisId, AxisMappingId, AxisMappingPoint, AxisSupport, Glyph, GlyphLayer,
+            InterpolationRegion, LayerId, VariationDelta,
+        };
+
+        use super::*;
+        use crate::engine::{engine_open_resident, engine_release};
+        use shift_wire::VariationBasis as WireBasis;
+
+        fn axis(
+            id: &str,
+            tag: &str,
+            [minimum, default, maximum]: [f64; 3],
+            role: AxisRole,
+        ) -> Axis {
+            let mut axis = Axis::continuous_with_id(
+                AxisId::from_raw(id),
+                tag.to_string(),
+                tag.to_string(),
+                minimum,
+                default,
+                maximum,
+            );
+            axis.set_role(role);
+            axis
+        }
+
+        fn axes() -> Vec<Axis> {
+            vec![
+                axis(
+                    "axis_weight",
+                    "wght",
+                    [100.0, 400.0, 900.0],
+                    AxisRole::External,
+                ),
+                axis(
+                    "axis_width",
+                    "wdth",
+                    [50.0, 100.0, 200.0],
+                    AxisRole::External,
+                ),
+                axis(
+                    "axis_optical",
+                    "opsz",
+                    [8.0, 12.0, 72.0],
+                    AxisRole::Internal,
+                ),
+            ]
+        }
+
+        fn location(values: &[(&str, f64)]) -> Location {
+            values
+                .iter()
+                .map(|(axis_id, value)| (AxisId::from_raw(*axis_id), *value))
+                .collect()
+        }
+
+        /// Axis values by axis id.
+        type Values<'a> = &'a [(&'a str, f64)];
+
+        fn mapping(
+            id: &str,
+            inputs: &[&str],
+            outputs: &[&str],
+            points: &[(Values<'_>, Values<'_>)],
+        ) -> AxisMapping {
+            let ids = |ids: &[&str]| ids.iter().map(|id| AxisId::from_raw(*id)).collect();
+            AxisMapping::with_id(
+                AxisMappingId::from_raw(id),
+                id.to_string(),
+                ids(inputs),
+                ids(outputs),
+                points
+                    .iter()
+                    .map(|(input, output)| AxisMappingPoint {
+                        description: None,
+                        input: location(input),
+                        output: location(output),
+                    })
+                    .collect(),
+            )
+        }
+
+        fn weight_curve() -> AxisMapping {
+            mapping(
+                "axisMapping_weight",
+                &["axis_weight"],
+                &["axis_weight"],
+                &[
+                    (&[("axis_weight", 100.0)], &[("axis_weight", 100.0)]),
+                    (&[("axis_weight", 400.0)], &[("axis_weight", 400.0)]),
+                    (&[("axis_weight", 900.0)], &[("axis_weight", 800.0)]),
+                ],
+            )
+        }
+
+        fn reversed() -> AxisMapping {
+            mapping(
+                "axisMapping_reversed",
+                &["axis_weight"],
+                &["axis_weight"],
+                &[
+                    (&[("axis_weight", 100.0)], &[("axis_weight", 900.0)]),
+                    (&[("axis_weight", 900.0)], &[("axis_weight", 100.0)]),
+                ],
+            )
+        }
+
+        fn optical_compensation() -> AxisMapping {
+            mapping(
+                "axisMapping_optical",
+                &["axis_weight", "axis_width"],
+                &["axis_optical"],
+                &[(
+                    &[("axis_weight", 800.0), ("axis_width", 125.0)],
+                    &[("axis_optical", 72.0)],
+                )],
+            )
+        }
+
+        /// A resident session over a font with [`axes`] and `mappings`.
+        struct Session(u32);
+
+        impl Session {
+            fn over(font: &Font) -> Self {
+                let bytes = rmp_serde::to_vec_named(font).unwrap();
+                Self(engine_open_resident(&bytes, None).unwrap())
+            }
+
+            fn mapped(mappings: Vec<AxisMapping>) -> Self {
+                let mut font = Font::new();
+                for axis in axes() {
+                    font.add_axis(axis).unwrap();
+                }
+                font.set_axis_mappings(mappings).unwrap();
+                Self::over(&font)
+            }
+
+            fn read<T>(&self, read: impl FnOnce(&Engine) -> T) -> T {
+                with_engine(self.0, |engine| Ok(read(engine))).unwrap()
+            }
+        }
+
+        impl Drop for Session {
+            fn drop(&mut self) {
+                engine_release(self.0);
+            }
+        }
+
+        fn values(axes: &[Axis], location: &[(&str, f64)]) -> Vec<f64> {
+            self::location(location).values_in(axes)
+        }
+
+        fn assert_close(actual: &[f64], expected: &[f64]) {
+            assert_eq!(
+                actual.len(),
+                expected.len(),
+                "{actual:?} against {expected:?}"
+            );
+            for (actual, expected) in actual.iter().zip(expected) {
+                assert!(
+                    (actual - expected).abs() < 1e-9,
+                    "{actual} against {expected}"
+                );
+            }
+        }
+
+        #[test]
+        fn maps_external_locations_as_fontdrasil_does() {
+            let axes = axes();
+            let cases = [
+                (
+                    vec![weight_curve()],
+                    vec![("axis_weight", 650.0)],
+                    600.0,
+                    None,
+                ),
+                (vec![reversed()], vec![("axis_weight", 250.0)], 650.0, None),
+                (
+                    vec![weight_curve(), optical_compensation()],
+                    vec![("axis_weight", 900.0), ("axis_width", 125.0)],
+                    800.0,
+                    Some(72.0),
+                ),
+            ];
+
+            for (mappings, external, weight, optical) in cases {
+                let session = Session::mapped(mappings);
+                let design =
+                    session.read(|engine| engine.design_location(values(&axes, &external)));
+
+                assert_close(&design[..1], &[weight]);
+                if let Some(optical) = optical {
+                    assert_close(&design[2..], &[optical]);
+                }
+            }
+        }
+
+        #[test]
+        fn maps_through_compiled_bases_as_through_authored_points() {
+            let axes = axes();
+            let sets = [
+                vec![weight_curve()],
+                vec![reversed()],
+                vec![weight_curve(), optical_compensation()],
+            ];
+            for mappings in sets {
+                let session = Session::mapped(mappings.clone());
+                for step in 0..=8 {
+                    let step = f64::from(step);
+                    let external = [
+                        ("axis_weight", 100.0 + 100.0 * step),
+                        ("axis_width", 50.0 + 18.75 * step),
+                    ];
+                    let authored = map_location(
+                        &ExternalLocation::from_untyped(location(&external)),
+                        &axes,
+                        &mappings,
+                    )
+                    .unwrap();
+                    let expected: Vec<f64> = axes
+                        .iter()
+                        .map(|axis| {
+                            authored
+                                .as_untyped()
+                                .get(axis.id())
+                                .unwrap_or_else(|| axis.default())
+                        })
+                        .collect();
+
+                    let design =
+                        session.read(|engine| engine.design_location(values(&axes, &external)));
+
+                    let design: Vec<f64> = axes
+                        .iter()
+                        .zip(design)
+                        .map(|(axis, value)| {
+                            if value.is_nan() {
+                                axis.default()
+                            } else {
+                                value
+                            }
+                        })
+                        .collect();
+                    assert_close(&design, &expected);
+                }
+            }
+        }
+
+        #[test]
+        fn recovers_the_external_controls_of_a_mapped_location() {
+            let axes = axes();
+            let session = Session::mapped(vec![weight_curve(), optical_compensation()]);
+            let external = values(&axes, &[("axis_weight", 700.0), ("axis_width", 125.0)]);
+
+            let recovered = session.read(|engine| {
+                let design = engine.design_location(external.clone());
+                engine.external_location(design)
+            });
+
+            assert_close(&recovered[..2], &external[..2]);
+        }
+
+        #[test]
+        fn maps_an_atlas_location_once_before_weighing_its_sets() {
+            let mut font = Font::new();
+            let regular = font.default_source_id().unwrap();
+            font.add_axis(axes().remove(0)).unwrap();
+            let bold = font.add_source(Source::new(
+                "Bold".to_string(),
+                DesignLocation::from_untyped(location(&[("axis_weight", 800.0)])),
+            ));
+            font.set_axis_mappings(vec![weight_curve()]).unwrap();
+            let session = Session::over(&font);
+
+            let weights = with_engine(session.0, |engine| {
+                let set = engine.ids.source_sets.intern_one(vec![regular, bold])?;
+                let set = usize::try_from(set)?;
+                // External 900 maps to design 800, Bold's location, once.
+                Ok(engine.atlas_weights(vec![set], vec![900.0]))
+            })
+            .unwrap()
+            .unwrap();
+
+            assert_close(&weights, &[0.0, 1.0]);
+        }
+
+        #[test]
+        fn evaluates_an_interned_compiled_basis_by_number() {
+            let session = Session::mapped(Vec::new());
+            let weight = AxisId::from_raw("axis_weight");
+            let heavier = VariationBasis::new(vec![VariationDelta::new(
+                InterpolationRegion::new(vec![AxisSupport::new(weight, 0.0, 1.0, 1.0)]),
+                vec![10.0, -4.0],
+            )]);
+            let axes = axes();
+
+            let [default, halfway, heaviest, missing] = session.read(|engine| {
+                let number = engine.variation_number(WireBasis::from(&heavier));
+                [
+                    engine.variation_at(number, values(&axes, &[("axis_weight", 400.0)])),
+                    engine.variation_at(number, values(&axes, &[("axis_weight", 650.0)])),
+                    engine.variation_at(number, values(&axes, &[("axis_weight", 900.0)])),
+                    engine.variation_at(number + 1, values(&axes, &[("axis_weight", 900.0)])),
+                ]
+            });
+
+            assert_eq!(default, Ok(vec![0.0, 0.0]));
+            assert_eq!(halfway, Ok(vec![5.0, -2.0]));
+            assert_eq!(heaviest, Ok(vec![10.0, -4.0]));
+            assert!(matches!(
+                missing,
+                Err(CompiledVariationError::NotInterned { .. })
+            ));
+        }
+
+        #[test]
+        fn a_resident_session_reads_every_glyph_without_a_store() {
+            let mut font = Font::new();
+            let source = font.default_source_id().unwrap();
+            let mut glyph = Glyph::new("a");
+            glyph.set_layer(GlyphLayer::with_width(LayerId::new(), source, 500.0));
+            let glyph_id = glyph.id();
+            font.insert_glyph(glyph).unwrap();
+            let session = Session::over(&font);
+
+            let (records, snapshots) = session.read(|engine| {
+                (
+                    engine.glyph_records().unwrap(),
+                    engine.glyph_snapshots(vec![glyph_id]).unwrap(),
+                )
+            });
+
+            assert_eq!(records.len(), 1);
+            assert_eq!(snapshots.len(), 1);
+            assert_eq!(snapshots[0].glyph_id, glyph_id);
+        }
     }
 }

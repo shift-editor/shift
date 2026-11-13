@@ -17,7 +17,7 @@ import "@shift-editor/sdk/fonts.css";
 
 ## Create a memory session
 
-A host provides a browser-owned `MemoryFontSource`. Creating a session does not load or place a glyph.
+A host provides a `MemoryFontSource`: a whole font as shift-font's `Font` with every layer, as named MessagePack. `shift-cli font pack <font> --output <file>` writes one from a `.shift` document, a UFO, designspace, Glyphs or compiled font; repeat `--glyph <name>` to keep only those glyphs and the glyphs their components use. `newMemoryFontSource({ familyName, unitsPerEm })` starts a font from nothing. The session opens its own engine over the font, so its variation, kerning and text layout run in the same Rust as the desktop editor's. Creating a session does not place a glyph.
 
 ```tsx
 "use client";
@@ -41,12 +41,16 @@ export function FontEditor({ source }: { source: MemoryFontSource }) {
   const [session, setSession] = useState<MemoryFontSession | null>(null);
 
   useEffect(() => {
-    const next = createMemoryFontSession({ source, clipboard });
     let active = true;
+    let opened: MemoryFontSession | null = null;
 
-    void next.font.loadGlyph(source.records[0]!.id).then((glyph) => {
+    async function open() {
+      const next = await createMemoryFontSession({ source, clipboard });
+      opened = next;
+      if (!active) return next.dispose();
+      const glyph = await next.font.loadGlyph(next.font.glyphRecords()[0]!.id);
       if (!active) return;
-      const sourceId = source.font.sources[0]!.id;
+      const sourceId = next.font.sources[0]!.id;
       next.editor.selectSource(sourceId);
       const node = next.editor.scene.createNode({
         kind: "glyph",
@@ -56,11 +60,12 @@ export function FontEditor({ source }: { source: MemoryFontSource }) {
       });
       next.editor.editing.enter(node.id);
       setSession(next);
-    });
+    }
+    void open();
 
     return () => {
       active = false;
-      next.dispose();
+      opened?.dispose();
     };
   }, [source]);
 
@@ -68,7 +73,7 @@ export function FontEditor({ source }: { source: MemoryFontSource }) {
 }
 ```
 
-The source owns its loaded font data. If it has a `dispose` operation—for example, a future worker-backed WASM source—the host disposes it separately from the editor session.
+The session holds its own copy of the font; the host's bytes can be dropped once it opens.
 
 ## Host capabilities
 
