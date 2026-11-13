@@ -145,17 +145,21 @@ export const EditableSidebarInput = forwardRef<
     );
 
     const displayText = displayValue === null ? "" : `${displayValue}${suffix}`;
+    // A linked field shows its key as a chip (`icon`), so the input itself is
+    // empty until the key is edited.
+    const linkedAtRest = keyText !== null && !isEditing;
+    const shownText = linkedAtRest ? "" : displayText;
 
     return (
-      <Tooltip>
+      <Tooltip disabled={linkedAtRest && refusal === null}>
         <TooltipTrigger>
           <Input
             ref={inputRef}
             aria-label={ariaLabel}
             label={label}
             labelPosition={labelPosition}
-            value={isEditing ? editValue : displayText}
-            icon={icon}
+            value={isEditing ? editValue : shownText}
+            icon={isEditing && keyText !== null ? undefined : icon}
             iconPosition={iconPosition}
             readOnly={!isEditing}
             className={cn("w-full", className)}

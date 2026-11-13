@@ -1,7 +1,7 @@
-import { Button, ScrollArea, Separator } from "@shift/ui";
+import { Button, ScrollArea, Separator, Tooltip } from "@shift/ui";
 import type { MetricsKeySide } from "@shift/types";
 import type { SideLink } from "@shift/wasm/protocol";
-import type { ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { linkOn, type MetricsLinks } from "../lib/model/MetricsLinks";
 import { useSignalState } from "../lib/signals";
 import { EditableSidebarInput, type EditableSidebarInputProps } from "./EditableSidebarInput";
@@ -26,30 +26,71 @@ export interface GlyphSidebarProps {
 /** What a metric field needs to show and edit the key its side follows. */
 type MetricKeyProps = Pick<
   EditableSidebarInputProps,
-  "keyText" | "onKeyCommit" | "icon" | "tooltip"
+  "keyText" | "onKeyCommit" | "icon" | "iconPosition"
 >;
+
+const OPPOSITE_SIDE_NAME: Record<MetricsKeySide, string> = {
+  left: "RSB",
+  right: "LSB",
+  width: "LSB",
+};
+
+/** Characters the chip shows before it truncates; past this the tooltip names the source too. */
+const CHIP_FITS = 9;
+
+/** The chip's tooltip: the value, and the full source when the chip cuts it short. */
+function chipTooltip(source: string, value: number | null): string {
+  const shown = value === null ? "—" : String(value);
+  return source.length > CHIP_FITS ? `${source} = ${shown}` : shown;
+}
+
+/** The key as the chip shows it: no `=` or `==`, `|` spelled out, spaces around operators. */
+function keySource(key: string, side: MetricsKeySide): string {
+  const body = key.replace(/^==?/, "").trim();
+  if (body === "|") return OPPOSITE_SIDE_NAME[side];
+  return body.replace(/\s*([+*/])\s*/g, " $1 ").replace(/\s*-\s*(?=\d)/g, " - ");
+}
 
 /**
  * The key props for the field of `side`: typing `=…` links it, blank text
- * unlinks it, and a linked field shows the key, a link icon, and why the key
- * cannot be applied when it cannot.
+ * unlinks it, and a linked field shows its key as a chip whose tooltip gives
+ * the value, or why the key cannot be applied.
  */
 function metricKeyProps(
   links: MetricsLinks | null,
   side: MetricsKeySide,
-  name: string,
   link: SideLink | null,
   editable: boolean,
+  value: number | null,
 ): MetricKeyProps {
   const onKeyCommit = editable && links ? (text: string) => links.link(side, text) : undefined;
   if (!link) return { onKeyCommit };
 
   const problem = link.problem ?? null;
+  const chipTone =
+    problem === null
+      ? "bg-background text-primary ring-black/15 hover:bg-input hover:ring-black/30"
+      : "bg-destructive-hover text-error ring-error-ring hover:ring-error";
+  const source = keySource(link.key, side);
+  const focusField = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.currentTarget.closest("div")?.querySelector("input")?.focus();
+  };
   return {
     keyText: link.key,
     onKeyCommit,
-    icon: <ShiftIcon name="link" className="h-3 w-3 text-muted" />,
-    tooltip: problem === null ? `${name}, linked: ${link.key}` : `${name}, ${link.key}: ${problem}`,
+    iconPosition: side === "right" ? "left" : "right",
+    icon: (
+      <Tooltip content={problem ?? chipTooltip(source, value)}>
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={focusField}
+          className={`pointer-events-auto flex h-[18px] max-w-[4.5rem] cursor-pointer items-center rounded-[4px] px-1.5 text-ui ring-1 ring-inset transition-colors ${chipTone}`}
+        >
+          <span className="truncate">{source}</span>
+        </button>
+      </Tooltip>
+    ),
   };
 }
 
@@ -115,9 +156,9 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                   {...metricKeyProps(
                     links,
                     "left",
-                    "Left sidebearing",
                     linkOn(linkedSides, "left"),
                     sidebearingsEditable,
+                    leftSidebearing,
                   )}
                 />
                 <div className="px-2">
@@ -136,9 +177,9 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                   {...metricKeyProps(
                     links,
                     "right",
-                    "Right sidebearing",
                     linkOn(linkedSides, "right"),
                     sidebearingsEditable,
+                    rightSidebearing,
                   )}
                 />
               </div>
@@ -152,9 +193,9 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                   {...metricKeyProps(
                     links,
                     "width",
-                    "Advance width",
                     linkOn(linkedSides, "width"),
                     editable,
+                    glyph ? Math.round(xAdvance) : null,
                   )}
                 />
               </div>

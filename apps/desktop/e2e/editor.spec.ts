@@ -751,19 +751,26 @@ test.describe("Editor view", () => {
     page,
     editor,
   }) => {
-    const leftSidebearing = glyphProperties(page).getByLabel("Left sidebearing", { exact: true });
+    const properties = glyphProperties(page);
+    const leftSidebearing = properties.getByLabel("Left sidebearing", { exact: true });
+    // A linked field shows its key as a chip and leaves the input empty.
+    const keyChip = properties.getByRole("button", { name: "50", exact: true });
 
     await editor.commitInputValue(leftSidebearing, "=50");
-    await expect(leftSidebearing).toHaveValue("50");
+    await expect(keyChip).toBeVisible();
+    await expect(leftSidebearing).toHaveValue("");
     await leftSidebearing.click();
     await expect(leftSidebearing).toHaveValue("=50");
+    await expect(keyChip).toBeHidden();
     await editor.press("Escape");
+    await expect(keyChip).toBeVisible();
 
     await editor.commitInputValue(leftSidebearing, "=nosuchglyph");
     await expect(leftSidebearing).toHaveAttribute("aria-invalid", "true");
-    await expect(leftSidebearing).toHaveValue("50");
+    await expect(keyChip).toBeVisible();
 
     await editor.commitInputValue(leftSidebearing, 60);
+    await expect(keyChip).toBeHidden();
     await expect(leftSidebearing).toHaveValue("60");
     await leftSidebearing.click();
     await expect(leftSidebearing).toHaveValue("60");
