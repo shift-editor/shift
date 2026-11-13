@@ -428,14 +428,14 @@ CREATE TABLE scene_nodes (
 /// glyph's keys apply in every source and a layer's in its own. Layer keys
 /// are also in the layer payload; the columns let a directory read them
 /// without loading payloads. This SQL is frozen.
-const MIGRATE_V4_TO_V5: &str = r#"
+const MIGRATE_V4_TO_V5: &str = r"
 ALTER TABLE glyphs ADD COLUMN left_metrics_key TEXT;
 ALTER TABLE glyphs ADD COLUMN right_metrics_key TEXT;
 ALTER TABLE glyphs ADD COLUMN width_metrics_key TEXT;
 ALTER TABLE glyph_layers ADD COLUMN left_metrics_key TEXT;
 ALTER TABLE glyph_layers ADD COLUMN right_metrics_key TEXT;
 ALTER TABLE glyph_layers ADD COLUMN width_metrics_key TEXT;
-"#;
+";
 
 /// The version that added the scene.
 const SCENE_SCHEMA_VERSION: i64 = 4;
