@@ -17,6 +17,8 @@
 //! is the glyph `A-cy` and `=n-10` is `n` minus ten. Parsing therefore takes
 //! the font's glyph names.
 
+use std::collections::HashMap;
+
 use super::MetricsKeyError;
 use crate::GlyphName;
 
@@ -341,21 +343,55 @@ fn word_tokens(
 }
 
 fn split_word(word: &str, calls: bool, has_glyph: &impl Fn(&str) -> bool) -> Option<Vec<Token>> {
-    if let Some(token) = whole_word(word, calls, has_glyph) {
-        return Some(vec![token]);
+    WordSplit {
+        word,
+        has_glyph,
+        tried: HashMap::new(),
+    }
+    .split(0, word.len(), calls)
+}
+
+/// Reads a word as glyph names, numbers and a function joined by `-`,
+/// remembering each piece it has read so a word of many pieces costs a
+/// polynomial number of glyph lookups rather than one per way to split it.
+struct WordSplit<'a, F> {
+    word: &'a str,
+    has_glyph: &'a F,
+    /// Each byte range read so far, and whether it was read as a call.
+    tried: HashMap<(usize, usize, bool), Option<Vec<Token>>>,
+}
+
+impl<F: Fn(&str) -> bool> WordSplit<'_, F> {
+    /// `word[start..end]` as tokens: the whole piece when it is one, otherwise
+    /// split at the last `-` that leaves a readable piece on each side.
+    fn split(&mut self, start: usize, end: usize, calls: bool) -> Option<Vec<Token>> {
+        if let Some(tokens) = self.tried.get(&(start, end, calls)) {
+            return tokens.clone();
+        }
+
+        let piece = &self.word[start..end];
+        let tokens = match whole_word(piece, calls, self.has_glyph) {
+            Some(token) => Some(vec![token]),
+            None => self.split_at_hyphen(start, end, calls),
+        };
+        self.tried.insert((start, end, calls), tokens.clone());
+        tokens
     }
 
-    word.rmatch_indices('-').find_map(|(index, _)| {
-        let (left, right) = (&word[..index], &word[index + 1..]);
-        let left = split_word(left, false, has_glyph)?;
-        let right = split_word(right, calls, has_glyph)?;
-        Some(
-            left.into_iter()
-                .chain([Token::Minus])
-                .chain(right)
-                .collect(),
-        )
-    })
+    fn split_at_hyphen(&mut self, start: usize, end: usize, calls: bool) -> Option<Vec<Token>> {
+        let word = self.word;
+        word[start..end].rmatch_indices('-').find_map(|(index, _)| {
+            let hyphen = start + index;
+            let left = self.split(start, hyphen, false)?;
+            let right = self.split(hyphen + 1, end, calls)?;
+            Some(
+                left.into_iter()
+                    .chain([Token::Minus])
+                    .chain(right)
+                    .collect(),
+            )
+        })
+    }
 }
 
 fn whole_word(word: &str, calls: bool, has_glyph: &impl Fn(&str) -> bool) -> Option<Token> {

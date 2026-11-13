@@ -58,4 +58,6 @@ pub enum MetricsKeyError {
 }
 
 #[cfg(test)]
+mod property_tests;
+#[cfg(test)]
 mod tests;
