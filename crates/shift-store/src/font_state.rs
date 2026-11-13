@@ -203,21 +203,32 @@ fn load_axes(conn: &rusqlite::Connection) -> Result<Vec<font::Axis>, StoreError>
 }
 
 fn load_axis_mappings(conn: &rusqlite::Connection) -> Result<Vec<font::AxisMapping>, StoreError> {
-    let mut stmt =
-        conn.prepare("SELECT mapping_json FROM axis_mappings ORDER BY order_index, id")?;
-    let rows = stmt.query_map([], |row| {
-        let json = row.get::<_, String>(0)?;
-        serde_json::from_str(&json).map_err(json_column_error)
-    })?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(StoreError::from)
+    load_json_rows(
+        conn,
+        "SELECT mapping_json FROM axis_mappings ORDER BY order_index, id",
+    )
 }
 
 fn load_named_instances(
     conn: &rusqlite::Connection,
 ) -> Result<Vec<font::NamedInstance>, StoreError> {
-    let mut stmt =
-        conn.prepare("SELECT instance_json FROM named_instances ORDER BY order_index, id")?;
+    load_json_rows(
+        conn,
+        "SELECT instance_json FROM named_instances ORDER BY order_index, id",
+    )
+}
+
+/// Deserializes the JSON text in the first column of each row `sql` selects.
+///
+/// # Errors
+///
+/// Returns [`StoreError`] when the query fails or a row's JSON does not
+/// deserialize.
+fn load_json_rows<T: serde::de::DeserializeOwned>(
+    conn: &rusqlite::Connection,
+    sql: &str,
+) -> Result<Vec<T>, StoreError> {
+    let mut stmt = conn.prepare(sql)?;
     let rows = stmt.query_map([], |row| {
         let json = row.get::<_, String>(0)?;
         serde_json::from_str(&json).map_err(json_column_error)
@@ -737,5 +748,28 @@ fn lib_value_from_value(value: serde_json::Value) -> Result<font::LibValue, Stor
             .map(font::LibValue::Uid)
             .ok_or_else(|| StoreError::InvalidLibValue("expected uid".to_string())),
         _ => Err(StoreError::InvalidLibValue(format!("unknown type {kind}"))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::load_json_rows;
+
+    #[test]
+    fn json_rows_load_in_query_order_and_reject_malformed_json() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE rows (position INTEGER, json TEXT);
+             INSERT INTO rows VALUES (2, '[2]'), (1, '[1]');",
+        )
+        .unwrap();
+
+        let rows: Vec<Vec<u32>> =
+            load_json_rows(&conn, "SELECT json FROM rows ORDER BY position").unwrap();
+        assert_eq!(rows, vec![vec![1], vec![2]]);
+
+        conn.execute("INSERT INTO rows VALUES (3, 'not json')", [])
+            .unwrap();
+        assert!(load_json_rows::<Vec<u32>>(&conn, "SELECT json FROM rows").is_err());
     }
 }

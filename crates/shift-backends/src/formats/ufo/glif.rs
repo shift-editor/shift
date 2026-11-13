@@ -11,8 +11,8 @@ use crate::font_source::geometry::{
 use crate::font_source::interpolation::InterpolationAxis;
 use crate::font_source::projection::{ProjectionLayer, empty_projection_layer, project_layers};
 use crate::font_source::{
-    AffineTransform, DirectoryGlyphInput, FontDirectory, FontReadError, GlyphAnchor, GlyphIndex,
-    GlyphMetrics, GlyphPointKind, GlyphProjection, PointProvenance, SourceIndex, malformed,
+    DirectoryGlyphInput, FontDirectory, FontReadError, GlyphAnchor, GlyphIndex, GlyphMetrics,
+    GlyphPointKind, GlyphProjection, PointProvenance, SourceIndex, malformed,
 };
 
 pub(crate) struct RetainedGlif {
@@ -131,7 +131,7 @@ fn convert_norad_layer(
         })?;
         components.push(SourceComponent {
             glyph: base,
-            transform: AffineTransform::from(&component.transform),
+            transform: kurbo::Affine::from(component.transform).into(),
         });
     }
     Ok(ProjectionLayer {

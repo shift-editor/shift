@@ -726,12 +726,7 @@ impl Font {
     /// resolvable shape, or an interpolation error for incompatible
     /// referenced geometry.
     pub fn resolve_layer(&self, layer_id: LayerId) -> CoreResult<ResolvedLayerGeometry> {
-        let glyph_id = self.require_layer_owner(layer_id)?;
-        let layer = self.require_layer(layer_id)?;
-        let location = self.require_source(layer.source_id())?.location().clone();
-        let mut projection = self.projection(&location);
-        projection.prepare_layer_tree_from(glyph_id, layer.clone())?;
-
+        let (glyph_id, projection) = self.layer_tree_projection(layer_id)?;
         resolved_layer_geometry_from_layers(glyph_id, &projection.layers)
     }
 
@@ -749,13 +744,27 @@ impl Font {
         layer_id: LayerId,
         component_ids: &HashSet<ComponentId>,
     ) -> CoreResult<Vec<ResolvedContour>> {
+        let (glyph_id, projection) = self.layer_tree_projection(layer_id)?;
+        flatten_selected_component_contours_from_layers(glyph_id, &projection.layers, component_ids)
+    }
+
+    /// A projection at one authored layer's source, with that layer as its
+    /// glyph's shape and its components resolved. Returns the layer's glyph
+    /// with it.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::resolve_layer`].
+    fn layer_tree_projection(
+        &self,
+        layer_id: LayerId,
+    ) -> CoreResult<(GlyphId, FontProjection<'_>)> {
         let glyph_id = self.require_layer_owner(layer_id)?;
         let layer = self.require_layer(layer_id)?;
         let location = self.require_source(layer.source_id())?.location().clone();
         let mut projection = self.projection(&location);
         projection.prepare_layer_tree_from(glyph_id, layer.clone())?;
-
-        flatten_selected_component_contours_from_layers(glyph_id, &projection.layers, component_ids)
+        Ok((glyph_id, projection))
     }
 }
 

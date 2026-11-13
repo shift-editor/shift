@@ -2,7 +2,8 @@
 
 use norad::designspace::{Axis, DesignSpaceDocument, Dimension};
 
-use crate::font_source::{VariationAxisKind, piecewise_map};
+use crate::font_source::VariationAxisKind;
+use shift_font::piecewise_map;
 
 /// Maps and describes a Designspace axis the way designspaceLib does.
 pub(crate) trait DesignspaceAxisExt {

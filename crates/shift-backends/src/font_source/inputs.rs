@@ -2,7 +2,7 @@ use shift_slug::length::OrOverflow;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use rayon::prelude::*;
-use shift_font::AxisRange;
+use shift_font::{AxisRange, Transform};
 use shift_slug::retained::{
     ExactVariant, GlyphInput, PageInput, ProjectedOutline, ProjectedPoint, ProjectedSegment,
 };
@@ -11,11 +11,12 @@ use skrifa::raw::types::F2Dot14;
 use super::atlas::{
     AtlasAxis, AtlasRegion, RegionAxis, RegionRegistry, SourceAtlasError, validate_roots,
 };
-use super::interpolation::piecewise_map;
+use super::segments::{ContourSegments, PointSegment};
 use super::{
-    AffineTransform, FontDirectory, FontReadError, FontSource, GlyphIndex, GlyphPointKind,
-    GlyphProjection, GlyphShape, SourceIndex, VariationAxisKind, VariationRegion,
+    FontDirectory, FontReadError, FontSource, GlyphIndex, GlyphPointKind, GlyphProjection,
+    GlyphShape, SourceIndex, VariationAxisKind, VariationRegion,
 };
+use shift_font::piecewise_map;
 
 #[derive(Clone, Copy)]
 enum ProjectionEvaluation<'a> {
@@ -317,7 +318,7 @@ fn flatten_projection(
         delta_weights,
         regions,
         evaluation,
-        AffineTransform::identity(),
+        Transform::identity(),
         &mut HashSet::new(),
         &mut segments,
     )?;
@@ -332,7 +333,7 @@ fn flatten_shape(
     delta_weights: &BTreeMap<(GlyphIndex, usize), u32>,
     regions: &[AtlasRegion],
     evaluation: ProjectionEvaluation<'_>,
-    transform: AffineTransform,
+    transform: Transform,
     visiting: &mut HashSet<GlyphIndex>,
     segments: &mut Vec<ProjectedSegment>,
 ) -> Result<(), SourceAtlasError> {
@@ -354,7 +355,8 @@ fn flatten_shape(
             .iter()
             .zip(coordinates.chunks_exact(2))
             .map(|(point, values)| {
-                let (x, y) = transform.transform_point(values[0], values[1]);
+                let kurbo::Point { x, y } =
+                    transform.transform_point(kurbo::Point::new(values[0], values[1]));
                 (point.kind, ProjectedPoint { x, y })
             })
             .collect::<Vec<_>>();
@@ -366,7 +368,7 @@ fn flatten_shape(
         let local = values
             .get(cursor..cursor + 6)
             .and_then(|transform_values| transform_values.try_into().ok())
-            .map(AffineTransform::from_values)
+            .map(Transform::from_values)
             .ok_or_else(|| invalid("source atlas component transform is missing"))?;
         let child = projections
             .get(&component.glyph)
@@ -449,55 +451,28 @@ fn append_contour(
     closed: bool,
     segments: &mut Vec<ProjectedSegment>,
 ) -> Result<(), SourceAtlasError> {
-    if points.is_empty() || points[0].0 != GlyphPointKind::OnCurve {
-        return Err(invalid("source atlas contour does not begin on-curve").into());
-    }
-    let start = points[0].1;
-    let mut current = start;
-    let limit = if closed {
-        points.len() + 1
-    } else {
-        points.len()
-    };
-    let mut cursor = 1;
-    while cursor < limit {
-        match points[cursor % points.len()].0 {
-            GlyphPointKind::OnCurve => {
-                let end = points[cursor % points.len()].1;
-                segments.push(ProjectedSegment::Line([current, end]));
-                current = end;
-                cursor += 1;
-            }
-            GlyphPointKind::QuadraticControl => {
-                if cursor + 1 >= limit
-                    || points[(cursor + 1) % points.len()].0 != GlyphPointKind::OnCurve
-                {
-                    return Err(invalid("source atlas quadratic control has no endpoint").into());
-                }
-                let control = points[cursor % points.len()].1;
-                let end = points[(cursor + 1) % points.len()].1;
-                segments.push(ProjectedSegment::Quadratic([current, control, end]));
-                current = end;
-                cursor += 2;
-            }
-            GlyphPointKind::CubicControl => {
-                if cursor + 2 >= limit
-                    || points[(cursor + 1) % points.len()].0 != GlyphPointKind::CubicControl
-                    || points[(cursor + 2) % points.len()].0 != GlyphPointKind::OnCurve
-                {
-                    return Err(invalid("source atlas cubic controls have no endpoint").into());
-                }
-                let first = points[cursor % points.len()].1;
-                let second = points[(cursor + 1) % points.len()].1;
-                let end = points[(cursor + 2) % points.len()].1;
-                segments.push(ProjectedSegment::Cubic([current, first, second, end]));
-                current = end;
-                cursor += 3;
-            }
-        }
+    let at = |index: usize| points[index].1;
+    let mut current = 0;
+    for segment in ContourSegments::new(points, closed)? {
+        let segment = segment?;
+        segments.push(match segment {
+            PointSegment::Line { start, end } => ProjectedSegment::Line([at(start), at(end)]),
+            PointSegment::Quadratic {
+                start,
+                control,
+                end,
+            } => ProjectedSegment::Quadratic([at(start), at(control), at(end)]),
+            PointSegment::Cubic {
+                start,
+                first,
+                second,
+                end,
+            } => ProjectedSegment::Cubic([at(start), at(first), at(second), at(end)]),
+        });
+        current = segment.end();
     }
     if !closed && points.len() > 1 {
-        segments.push(ProjectedSegment::Line([current, start]));
+        segments.push(ProjectedSegment::Line([at(current), at(0)]));
     }
     Ok(())
 }

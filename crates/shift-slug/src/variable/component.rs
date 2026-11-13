@@ -62,6 +62,12 @@ pub struct VariableComponentSource {
     pub center_y: f32,
 }
 
+/// The CPU reference for `compose_affine` and `component_affine` in
+/// `shaders/slug-variable.wgsl`.
+///
+/// It stays `f32` and separate from `shift_font::Transform` on purpose: the
+/// GPU composes component matrices in `f32`, and this copy must round the same
+/// way so CPU and GPU resolution agree.
 #[derive(Clone, Copy, Debug, Default)]
 struct Affine {
     xx: f32,

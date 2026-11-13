@@ -140,3 +140,18 @@ fn rejects_malformed_color_names_and_values_at_their_lines() {
         .collect();
     assert_eq!(lines, vec![Some(21), Some(22)]);
 }
+
+#[test]
+fn hex_colors_take_alpha_only_where_accepted() {
+    assert_eq!(
+        HexColor::Opaque.normalize("#1A1B26"),
+        Some("#1a1b26".to_string())
+    );
+    assert_eq!(HexColor::Opaque.normalize("1a1b2620"), None);
+    assert_eq!(
+        HexColor::WithAlpha.normalize("1A1B2620"),
+        Some("#1a1b2620".to_string())
+    );
+    assert_eq!(HexColor::WithAlpha.normalize("#1a1b2"), None);
+    assert_eq!(HexColor::WithAlpha.normalize("#1a1b2g"), None);
+}

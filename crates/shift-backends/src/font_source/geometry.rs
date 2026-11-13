@@ -1,6 +1,8 @@
+use shift_font::Transform;
+
+use crate::font_source::segments::{ContourSegments, ImpliedPoint, normalize_points};
 use crate::font_source::{
-    AffineTransform, FontReadError, GlyphAnchor, GlyphIndex, GlyphPoint, GlyphPointKind,
-    PointProvenance,
+    FontReadError, GlyphAnchor, GlyphIndex, GlyphPoint, GlyphPointKind, PointProvenance,
 };
 
 /// Maximum tangent-angle difference used to infer smooth binary outline points.
@@ -24,7 +26,7 @@ pub(crate) struct SourceContour {
 #[derive(Clone, Debug)]
 pub(crate) struct SourceComponent {
     pub(crate) glyph: GlyphIndex,
-    pub(crate) transform: AffineTransform,
+    pub(crate) transform: Transform,
 }
 
 #[derive(Clone, Debug)]
@@ -115,10 +117,7 @@ pub(crate) fn normalize_contour(
     points: Vec<ContourPoint>,
     closed: bool,
 ) -> Result<SourceContour, FontReadError> {
-    if points.is_empty() {
-        return Err(invalid_segment("contour has no points"));
-    }
-    let points = points
+    let points: Vec<_> = points
         .into_iter()
         .map(|point| GlyphPoint {
             x: point.x,
@@ -127,67 +126,8 @@ pub(crate) fn normalize_contour(
             smooth: point.smooth,
             provenance: point.provenance,
         })
-        .collect::<Vec<_>>();
-    let first_on = points
-        .iter()
-        .position(|point| point.kind == GlyphPointKind::OnCurve);
-    let (start, indexes, all_off_curve) = match (closed, first_on) {
-        (false, Some(0)) => (
-            points[0].clone(),
-            (1..points.len()).collect::<Vec<_>>(),
-            false,
-        ),
-        (false, _) => return Err(invalid_segment("open contour does not begin on-curve")),
-        (true, Some(start)) => (
-            points[start].clone(),
-            (1..points.len())
-                .map(|offset| (start + offset) % points.len())
-                .collect(),
-            false,
-        ),
-        (true, None) => {
-            if points
-                .iter()
-                .any(|point| point.kind != GlyphPointKind::QuadraticControl)
-            {
-                return Err(invalid_segment(
-                    "closed contour without an endpoint contains non-quadratic controls",
-                ));
-            }
-            (
-                GlyphPoint::implied_between(
-                    points.last().expect("contour is non-empty"),
-                    &points[0],
-                ),
-                (0..points.len()).collect(),
-                true,
-            )
-        }
-    };
-
-    let mut normalized = Vec::with_capacity(points.len() * 2);
-    normalized.push(start);
-    for (position, index) in indexes.iter().copied().enumerate() {
-        let point = &points[index];
-        normalized.push(point.clone());
-        let next = if index + 1 < points.len() {
-            Some(index + 1)
-        } else if closed {
-            Some(0)
-        } else {
-            None
-        };
-        let closes_all_off_curve = all_off_curve && position + 1 == indexes.len();
-        if point.kind == GlyphPointKind::QuadraticControl
-            && !closes_all_off_curve
-            && next.is_some_and(|next| points[next].kind == GlyphPointKind::QuadraticControl)
-        {
-            normalized.push(GlyphPoint::implied_between(
-                point,
-                &points[next.expect("next was checked")],
-            ));
-        }
-    }
+        .collect();
+    let normalized = normalize_points(&points, closed)?;
     validate_contour_points(&normalized, closed)?;
     Ok(SourceContour {
         points: normalized,
@@ -195,9 +135,7 @@ pub(crate) fn normalize_contour(
     })
 }
 
-impl GlyphPoint {
-    /// The on-curve point a quadratic outline implies halfway between two
-    /// off-curve points.
+impl ImpliedPoint for GlyphPoint {
     fn implied_between(first: &Self, second: &Self) -> Self {
         Self {
             x: (first.x + second.x) * 0.5,
@@ -210,40 +148,8 @@ impl GlyphPoint {
 }
 
 fn validate_contour_points(points: &[GlyphPoint], closed: bool) -> Result<(), FontReadError> {
-    if points[0].kind != GlyphPointKind::OnCurve {
-        return Err(invalid_segment(
-            "normalized contour does not begin on-curve",
-        ));
-    }
-    let limit = if closed {
-        points.len() + 1
-    } else {
-        points.len()
-    };
-    let mut cursor = 1;
-    while cursor < limit {
-        match points[cursor % points.len()].kind {
-            GlyphPointKind::OnCurve => cursor += 1,
-            GlyphPointKind::QuadraticControl => {
-                if cursor + 1 >= limit
-                    || points[(cursor + 1) % points.len()].kind != GlyphPointKind::OnCurve
-                {
-                    return Err(invalid_segment(
-                        "quadratic control is not followed by an endpoint",
-                    ));
-                }
-                cursor += 2;
-            }
-            GlyphPointKind::CubicControl => {
-                if cursor + 2 >= limit
-                    || points[(cursor + 1) % points.len()].kind != GlyphPointKind::CubicControl
-                    || points[(cursor + 2) % points.len()].kind != GlyphPointKind::OnCurve
-                {
-                    return Err(invalid_segment("invalid cubic point sequence"));
-                }
-                cursor += 3;
-            }
-        }
+    for segment in ContourSegments::new(points, closed)? {
+        segment?;
     }
     Ok(())
 }

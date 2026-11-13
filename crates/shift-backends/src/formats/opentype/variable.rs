@@ -1,6 +1,7 @@
+use shift_font::Transform;
 use skrifa::raw::types::Point as RawPoint;
 
-use crate::font_source::{AffineTransform, FontReadError};
+use crate::font_source::FontReadError;
 
 pub(super) fn infer_tuple_deltas(
     points: &[RawPoint<i32>],
@@ -86,10 +87,8 @@ fn interpolate_delta_coordinate(
         + (second_delta - first_delta) * f64::from(point - first) / f64::from(second - first)
 }
 
-pub(super) fn component_transform(
-    component: &skrifa::raw::tables::glyf::Component,
-) -> AffineTransform {
-    AffineTransform {
+pub(super) fn component_transform(component: &skrifa::raw::tables::glyf::Component) -> Transform {
+    Transform {
         xx: f64::from(component.transform.xx.to_f32()),
         xy: f64::from(component.transform.yx.to_f32()),
         yx: f64::from(component.transform.xy.to_f32()),

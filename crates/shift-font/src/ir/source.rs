@@ -54,39 +54,11 @@ pub struct Source {
 
 impl Source {
     pub fn new(name: String, location: DesignLocation) -> Self {
-        Self {
-            id: SourceId::new(),
-            name,
-            location,
-            metric_values: BTreeMap::new(),
-            italic_angle: None,
-            line_gap: None,
-            underline_position: None,
-            underline_thickness: None,
-            filename: None,
-            color: None,
-            lib: LibData::new(),
-            role: SourceRole::Master,
-            layer_name: None,
-        }
+        Self::with_id(SourceId::new(), name, location, None)
     }
 
     pub fn with_filename(name: String, location: DesignLocation, filename: String) -> Self {
-        Self {
-            id: SourceId::new(),
-            name,
-            location,
-            metric_values: BTreeMap::new(),
-            italic_angle: None,
-            line_gap: None,
-            underline_position: None,
-            underline_thickness: None,
-            filename: Some(filename),
-            color: None,
-            lib: LibData::new(),
-            role: SourceRole::Master,
-            layer_name: None,
-        }
+        Self::with_id(SourceId::new(), name, location, Some(filename))
     }
 
     pub fn with_id(
@@ -124,19 +96,8 @@ impl Source {
     /// UFO background layer) but is not a designspace master.
     pub fn layer(name: String) -> Self {
         Self {
-            id: SourceId::new(),
-            name,
-            location: DesignLocation::new(),
-            metric_values: BTreeMap::new(),
-            italic_angle: None,
-            line_gap: None,
-            underline_position: None,
-            underline_thickness: None,
-            filename: None,
-            color: None,
-            lib: LibData::new(),
             role: SourceRole::Layer,
-            layer_name: None,
+            ..Self::new(name, DesignLocation::new())
         }
     }
 
@@ -426,6 +387,19 @@ mod tests {
         let source = Source::new("Regular".to_string(), location);
         assert_eq!(source.name(), "Regular");
         assert_eq!(source.location().get(&axis_id), Some(400.0));
+    }
+
+    #[test]
+    fn constructors_differ_only_in_id_filename_and_role() {
+        let named = Source::with_filename("Bold".into(), DesignLocation::new(), "Bold.ufo".into());
+        let layer = Source::layer("background".into());
+
+        assert_eq!(named.filename(), Some("Bold.ufo"));
+        assert_eq!(named.role(), SourceRole::Master);
+        assert_eq!(layer.role(), SourceRole::Layer);
+        assert_eq!(layer.filename(), None);
+        assert!(layer.location().is_empty());
+        assert_ne!(named.id(), layer.id());
     }
 
     #[test]

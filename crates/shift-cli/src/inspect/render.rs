@@ -39,43 +39,30 @@ impl RenderMode {
     }
 
     fn muted_text(self, value: &str) -> String {
-        match self {
-            Self::Plain => value.to_string(),
-            Self::Styled => format!(
-                "{}{}{}",
-                anstyle::Style::new()
-                    .fg_color(Some(AnsiColor::BrightBlack.into()))
-                    .render(),
-                value,
-                anstyle::Reset.render()
-            ),
-        }
+        self.paint(
+            value,
+            anstyle::Style::new().fg_color(Some(AnsiColor::BrightBlack.into())),
+        )
     }
 
     fn styled_title(self, value: &str) -> String {
-        match self {
-            Self::Plain => value.to_string(),
-            Self::Styled => format!(
-                "{}{}{}",
-                anstyle::Style::new().bold().render(),
-                value,
-                anstyle::Reset.render()
-            ),
-        }
+        self.paint(value, anstyle::Style::new().bold())
     }
 
     fn styled_section(self, value: &str) -> String {
+        self.paint(
+            value,
+            anstyle::Style::new()
+                .bold()
+                .fg_color(Some(AnsiColor::BrightCyan.into())),
+        )
+    }
+
+    /// `value` in `style` when styled, and as it is when plain.
+    fn paint(self, value: &str, style: anstyle::Style) -> String {
         match self {
             Self::Plain => value.to_string(),
-            Self::Styled => format!(
-                "{}{}{}",
-                anstyle::Style::new()
-                    .bold()
-                    .fg_color(Some(AnsiColor::BrightCyan.into()))
-                    .render(),
-                value,
-                anstyle::Reset.render()
-            ),
+            Self::Styled => format!("{}{value}{}", style.render(), anstyle::Reset.render()),
         }
     }
 
@@ -511,5 +498,19 @@ fn compact_id(value: &str) -> String {
         value.to_string()
     } else {
         format!("{}...", value.chars().take(HEAD).collect::<String>())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RenderMode;
+
+    #[test]
+    fn plain_text_is_unstyled_and_styled_text_resets_after_itself() {
+        assert_eq!(RenderMode::Plain.styled_section("Sources"), "Sources");
+        assert_eq!(
+            RenderMode::Styled.styled_title("Font"),
+            "\u{1b}[1mFont\u{1b}[0m"
+        );
     }
 }

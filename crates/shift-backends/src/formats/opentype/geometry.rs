@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::Path;
 
+use shift_font::Transform;
 use shift_slug::{Curve, CurveShape, Point, QuadraticOutline};
 use skrifa::raw::tables::glyf::{
     Anchor as GlyfAnchor, CompositeGlyphFlags, Glyf, Glyph as GlyfGlyph, PointFlags,
@@ -11,13 +12,16 @@ use skrifa::raw::types::{GlyphId, Point as RawPoint};
 
 use crate::font_source::atlas::{RegionRegistry, SourceAtlasError};
 use crate::font_source::{
-    AffineTransform, FontReadError, GlyphIndex, GlyphPointKind, PointProvenance,
-    TrueTypePointIndex, inferred_smooth_point_indices,
+    ContourError, FontReadError, GlyphIndex, GlyphPointKind, PointProvenance, TrueTypePointIndex,
+    inferred_smooth_point_indices,
 };
 
 use super::inputs::tuple_region;
 use super::variable::{approximate_hypot, component_transform, infer_tuple_deltas};
 use crate::font_source::malformed;
+use crate::font_source::segments::{
+    ContourSegments, ImpliedPoint, KindedPoint, PointSegment, normalize_points,
+};
 use crate::numeric::lossy_f32;
 
 pub(super) struct VariableCurves {
@@ -70,74 +74,38 @@ fn curves_from_geometry(
 
     for contour in &geometry.contours {
         let points = &contour.points;
-        if points.is_empty() || points[0].kind != GlyphPointKind::OnCurve {
-            return Err(invalid_geometry(
-                "normalized binary atlas contour does not begin on-curve",
-            ));
-        }
-        let mut current = &points[0].position;
-        let mut cursor = 1;
-        while cursor <= points.len() {
-            let point = &points[cursor % points.len()];
-            match point.kind {
-                GlyphPointKind::OnCurve => {
-                    push_line(&mut base, &mut sources, current, &point.position);
-                    current = &point.position;
-                    cursor += 1;
+        let at = |index: usize| &points[index].position;
+        for segment in ContourSegments::new(points, true)? {
+            match segment {
+                Ok(PointSegment::Line { start, end }) => {
+                    push_line(&mut base, &mut sources, at(start), at(end));
                 }
-                GlyphPointKind::QuadraticControl => {
-                    if cursor + 1 > points.len() {
-                        return Err(invalid_geometry(
-                            "quadratic control is missing its endpoint",
-                        ));
-                    }
-                    let endpoint = &points[(cursor + 1) % points.len()];
-                    if endpoint.kind != GlyphPointKind::OnCurve {
-                        return Err(invalid_geometry(
-                            "quadratic control is not followed by an endpoint",
-                        ));
-                    }
-                    push_quadratic(
-                        &mut base,
-                        &mut sources,
-                        current,
-                        &point.position,
-                        &endpoint.position,
-                    );
-                    current = &endpoint.position;
-                    cursor += 2;
+                Ok(PointSegment::Quadratic {
+                    start,
+                    control,
+                    end,
+                }) => push_quadratic(&mut base, &mut sources, at(start), at(control), at(end)),
+                Ok(PointSegment::Cubic { .. }) | Err(ContourError::CubicWithoutEndpoint)
+                    if !allow_cubic =>
+                {
+                    return Err(SourceAtlasError::UnsupportedBinary {
+                        details: "cubic glyf contours are not supported",
+                    });
                 }
-                GlyphPointKind::CubicControl => {
-                    if !allow_cubic {
-                        return Err(SourceAtlasError::UnsupportedBinary {
-                            details: "cubic glyf contours are not supported",
-                        });
-                    }
-                    if cursor + 2 > points.len() {
-                        return Err(invalid_geometry(
-                            "cubic controls are missing their endpoint",
-                        ));
-                    }
-                    let second = &points[cursor + 1];
-                    let endpoint = &points[(cursor + 2) % points.len()];
-                    if second.kind != GlyphPointKind::CubicControl
-                        || endpoint.kind != GlyphPointKind::OnCurve
-                    {
-                        return Err(invalid_geometry(
-                            "cubic controls are not followed by an endpoint",
-                        ));
-                    }
-                    push_cubic(
-                        &mut base,
-                        &mut sources,
-                        current,
-                        &point.position,
-                        &second.position,
-                        &endpoint.position,
-                    );
-                    current = &endpoint.position;
-                    cursor += 3;
-                }
+                Ok(PointSegment::Cubic {
+                    start,
+                    first,
+                    second,
+                    end,
+                }) => push_cubic(
+                    &mut base,
+                    &mut sources,
+                    at(start),
+                    at(first),
+                    at(second),
+                    at(end),
+                ),
+                Err(error) => return Err(error.into()),
             }
         }
     }
@@ -236,40 +204,7 @@ fn push_cubic(
 }
 
 fn normalize_contour(points: &[VariablePoint]) -> Result<VariableContour, SourceAtlasError> {
-    if points.is_empty() {
-        return Err(invalid_geometry("binary atlas contour has no points"));
-    }
-    let first_on = points
-        .iter()
-        .position(|point| point.kind == GlyphPointKind::OnCurve);
-    let (start, indexes, all_off_curve) = match first_on {
-        Some(start) => (
-            points[start].clone(),
-            (1..points.len())
-                .map(|offset| (start + offset) % points.len())
-                .collect::<Vec<_>>(),
-            false,
-        ),
-        None => (
-            VariablePoint::midpoint(points.last().expect("contour is non-empty"), &points[0]),
-            (0..points.len()).collect(),
-            true,
-        ),
-    };
-    let mut normalized = Vec::with_capacity(points.len() * 2);
-    normalized.push(start);
-    for (position, index) in indexes.iter().copied().enumerate() {
-        let point = &points[index];
-        normalized.push(point.clone());
-        let next = (index + 1) % points.len();
-        let closes_all_off_curve = all_off_curve && position + 1 == indexes.len();
-        if point.kind == GlyphPointKind::QuadraticControl
-            && !closes_all_off_curve
-            && points[next].kind == GlyphPointKind::QuadraticControl
-        {
-            normalized.push(VariablePoint::midpoint(point, &points[next]));
-        }
-    }
+    let mut normalized = normalize_points(points, true)?;
     for index in inferred_smooth_point_indices(
         &normalized,
         true,
@@ -322,19 +257,18 @@ impl VariablePosition {
         Point::new(lossy_f32(self.x + delta.0), lossy_f32(self.y + delta.1))
     }
 
-    fn transformed(&self, transform: AffineTransform) -> Self {
-        let mut transformed = Self::new(
-            transform.xx * self.x + transform.yx * self.y,
-            transform.xy * self.x + transform.yy * self.y,
-        );
+    /// The position and its deltas under `transform`'s linear part: a
+    /// glyf component's offset is added separately, as a variable position.
+    fn transformed(&self, transform: Transform) -> Self {
+        let linear = kurbo::Affine::from(transform).with_translation(kurbo::Vec2::ZERO);
+        let map = |x: f64, y: f64| {
+            let kurbo::Point { x, y } = linear * kurbo::Point::new(x, y);
+            (x, y)
+        };
+        let (x, y) = map(self.x, self.y);
+        let mut transformed = Self::new(x, y);
         for (weight, (x, y)) in &self.deltas {
-            transformed.add_delta(
-                *weight,
-                (
-                    transform.xx * x + transform.yx * y,
-                    transform.xy * x + transform.yy * y,
-                ),
-            );
+            transformed.add_delta(*weight, map(*x, *y));
         }
         transformed
     }
@@ -378,14 +312,20 @@ pub(super) struct VariablePoint {
     pub(super) provenance: PointProvenance,
 }
 
-impl VariablePoint {
-    pub(super) fn midpoint(first: &Self, second: &Self) -> Self {
+impl ImpliedPoint for VariablePoint {
+    fn implied_between(first: &Self, second: &Self) -> Self {
         Self {
             position: VariablePosition::midpoint(&first.position, &second.position),
             kind: GlyphPointKind::OnCurve,
             smooth: false,
             provenance: PointProvenance::Implied,
         }
+    }
+}
+
+impl KindedPoint for VariablePoint {
+    fn kind(&self) -> GlyphPointKind {
+        self.kind
     }
 }
 
@@ -403,7 +343,7 @@ pub(super) struct VariableGeometry {
 #[derive(Clone, Debug)]
 pub(super) struct VariableComponent {
     pub(super) glyph: GlyphIndex,
-    pub(super) transform: AffineTransform,
+    pub(super) transform: Transform,
     pub(super) translation: VariablePosition,
 }
 
@@ -741,7 +681,7 @@ impl<'a, 'registry> ExpressionResolver<'a, 'registry> {
 
 fn transform_and_translate(
     point: &VariablePosition,
-    transform: AffineTransform,
+    transform: Transform,
     translation: &VariablePosition,
 ) -> VariablePosition {
     let mut point = point.transformed(transform);

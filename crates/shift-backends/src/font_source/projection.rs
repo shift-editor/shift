@@ -4,7 +4,10 @@ use std::str::FromStr;
 use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
 use fontdrasil::types::Tag;
 use fontdrasil::variations::{RoundingBehaviour, VariationModel};
-use shift_font::{AxisId, AxisKind, Font, Location, MetricKind, Source as FontSource};
+use shift_font::{
+    AxisId, AxisKind, Font, Location, MetricKind, Source as FontSource,
+    virtual_default_coefficients,
+};
 
 use super::geometry::SourceGeometry;
 use super::interpolation::InterpolationAxis;
@@ -509,7 +512,7 @@ fn variation_from_layers(
         .collect::<Vec<_>>();
     let default_location = normalized_location(&defaults, axes, &tags);
     if let Entry::Vacant(entry) = samples.entry(default_location) {
-        let coefficients = virtual_default_coefficients(&normalized_sources)?;
+        let coefficients = virtual_default_coefficients(normalized_sources.iter())?;
         let value_count = reference.values.len();
         let mut values = vec![0.0; value_count];
         for ((_, _, layer), coefficient) in layers.iter().zip(coefficients) {
@@ -578,47 +581,6 @@ fn normalized_location(
             (*tag, NormalizedCoord::new(normalized))
         })
         .collect()
-}
-
-fn virtual_default_coefficients(sources: &[NormalizedLocation]) -> Option<Vec<f64>> {
-    let mut negative: Option<(usize, Tag, f64)> = None;
-    let mut positive: Option<(usize, Tag, f64)> = None;
-    for (index, location) in sources.iter().enumerate() {
-        let nonzero = location
-            .iter()
-            .filter_map(|(tag, coordinate)| {
-                let value = coordinate.to_f64();
-                (value != 0.0).then_some((*tag, value))
-            })
-            .collect::<Vec<_>>();
-        let [(tag, value)] = nonzero.as_slice() else {
-            continue;
-        };
-        if *value < 0.0
-            && negative
-                .as_ref()
-                .is_none_or(|(_, _, current)| *value > *current)
-        {
-            negative = Some((index, *tag, *value));
-        }
-        if *value > 0.0
-            && positive
-                .as_ref()
-                .is_none_or(|(_, _, current)| *value < *current)
-        {
-            positive = Some((index, *tag, *value));
-        }
-    }
-    let (negative_index, negative_axis, negative_value) = negative?;
-    let (positive_index, positive_axis, positive_value) = positive?;
-    if negative_axis != positive_axis {
-        return None;
-    }
-    let span = positive_value - negative_value;
-    let mut coefficients = vec![0.0; sources.len()];
-    coefficients[negative_index] = positive_value / span;
-    coefficients[positive_index] = -negative_value / span;
-    Some(coefficients)
 }
 
 fn invalid(details: &str) -> FontReadError {

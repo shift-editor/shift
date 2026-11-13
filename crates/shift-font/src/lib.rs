@@ -36,6 +36,7 @@
 pub mod anchor_attachment;
 pub mod anchor_name;
 pub mod anchor_propagation;
+pub mod axis_map;
 pub mod changes;
 pub mod check;
 pub mod composite;
@@ -64,6 +65,7 @@ pub mod svg_path;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 
+pub use axis_map::piecewise_map;
 pub use changes::*;
 pub use contour_edit::{
     ContourEditError, ContourEnd, ContourSide, DeleteMode, EditOption, JoinMode, UnknownEditOption,
