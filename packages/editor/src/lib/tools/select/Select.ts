@@ -164,7 +164,19 @@ export class Select extends BaseTool<SelectState, Select> {
         return { state };
 
       case "pointerMove":
-        this.editor.hover.clear();
+        // What a double-click opens (a glyph in the text, a component) is
+        // highlighted, as in a document; points and segments, which only
+        // editing uses, are not.
+        switch (event.target.kind) {
+          case "text":
+            this.editor.hover.set(event.target.itemId);
+            break;
+          case "component":
+            this.editor.hover.set(event.target.id);
+            break;
+          default:
+            this.editor.hover.clear();
+        }
         return { state };
 
       case "dragStart":

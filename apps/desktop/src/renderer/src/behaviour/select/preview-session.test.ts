@@ -71,6 +71,18 @@ describe("double-clicking in a preview", () => {
     expect(editor.canvasText()).toMatchObject({ editedItemId: editor.canvasText()!.items[1]!.id });
   });
 
+  it("highlights a glyph in the text under the pointer, as a document does", async () => {
+    editor.selectTool("text");
+    editor.typeText("A");
+    await editor.pressKey("Escape");
+    await editor.pressKey("Escape");
+    const second = editor.canvasText()!.glyphs[1]!;
+
+    editor.movePointerTo({ x: second.origin.x + 150, y: 150 });
+
+    expect(editor.canvasText()).toMatchObject({ hoveredItemId: editor.canvasText()!.items[1]!.id });
+  });
+
   it("leaves a point as it was rather than making it smooth", async () => {
     const { lone } = await editor.draw({
       contours: [{ points: [{ x: 300, y: 300, name: "lone" }] }],
@@ -88,6 +100,15 @@ describe("double-clicking a component in a preview", () => {
     file: FONTS.mutatorSansLightCondensed,
     glyph: "Adieresis",
     mode: "preview",
+  });
+
+  it("highlights the component under the pointer", async () => {
+    composite.selectTool("select");
+    const [a] = await composite.components();
+
+    composite.movePointerTo({ x: 200, y: 182 });
+
+    expect(composite.hoveredId()).toBe(a!.id);
   });
 
   it("opens its base glyph next to the open glyph, to look at", async () => {
