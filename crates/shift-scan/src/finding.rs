@@ -17,15 +17,23 @@ pub(crate) enum Kind {
     /// A `From`/`TryFrom` impl whose struct literal reads four or more fields
     /// straight off its parameter.
     FieldCopyConversion,
+    /// A function body alike one elsewhere in the workspace: the same tokens
+    /// or the same arithmetic, which one owner should compute once.
+    DuplicateBody,
+    /// `collect::<Vec<_>>()` where the field, argument or return type already
+    /// fixes the collection, or only to call `into_boxed_slice`.
+    CollectTurbofish,
 }
 
 impl Kind {
-    pub(crate) const ALL: [Self; 5] = [
+    pub(crate) const ALL: [Self; 7] = [
         Self::MethodCandidate,
         Self::TraitCandidate,
         Self::LongChain,
         Self::RepeatedErrorMapping,
         Self::FieldCopyConversion,
+        Self::DuplicateBody,
+        Self::CollectTurbofish,
     ];
 
     pub(crate) fn as_str(self) -> &'static str {
@@ -35,6 +43,8 @@ impl Kind {
             Self::LongChain => "long-chain",
             Self::RepeatedErrorMapping => "repeated-error-mapping",
             Self::FieldCopyConversion => "field-copy-conversion",
+            Self::DuplicateBody => "duplicate-body",
+            Self::CollectTurbofish => "collect-turbofish",
         }
     }
 
