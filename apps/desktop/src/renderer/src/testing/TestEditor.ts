@@ -202,13 +202,15 @@ export async function startTestEditor(
 
 /**
  * Opens a saved document with `glyphName` open, and returns it as the surface
- * behaviour tests use.
+ * behaviour tests use. `sessionMode` is what the editor may change, a
+ * workspace by default; a preview looks at the file's own glyphs read-only.
  */
 export async function openTestEditor(
   sourcePath: string,
   glyphName: string,
+  sessionMode: FontSessionMode = "workspace",
 ): Promise<EditorTestSurface> {
-  return new TestEditor().openSession(sourcePath, glyphName);
+  return new TestEditor(sessionMode).openSession(sourcePath, glyphName);
 }
 
 /**

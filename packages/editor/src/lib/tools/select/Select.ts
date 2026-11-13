@@ -146,6 +146,13 @@ export class Select extends BaseTool<SelectState, Select> {
     switch (event.type) {
       case "click":
       case "doubleClick":
+        // A node's double-click only changes what is shown (a text glyph
+        // opened in place, a component's base glyph opened after it), never
+        // the font, so a preview runs it as a document does. What would
+        // change the font, such as making a point smooth, stays refused.
+        if (event.type === "doubleClick" && this.editor.doubleClickNode(event.target)) {
+          return { state };
+        }
         switch (event.target.kind) {
           case "point":
           case "segment":
