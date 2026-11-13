@@ -824,11 +824,10 @@ export class Font {
    * applied. Reading it in a reactive body subscribes to the glyph and layer
    * revisions, so it reads again after each edit, undo and redo.
    *
-   * @returns Empty without an engine, or for a glyph with no keys there.
+   * @returns Empty for a glyph with no keys there.
    */
   linkedSides(glyphId: GlyphId, sourceId: SourceId): readonly SideLink[] {
     const engine = this.#store.engine;
-    if (!engine) return [];
     track(engine.revision("glyphs"));
     track(engine.revision("layers"));
     return engine.linkedSides(glyphId, sourceId);
@@ -839,7 +838,7 @@ export class Font {
    * glyph has; null when it is.
    */
   metricsKeyProblem(text: string): string | null {
-    return this.#requireEngine().metricsKeyProblem(text);
+    return this.#store.engine.metricsKeyProblem(text);
   }
 
   /**
