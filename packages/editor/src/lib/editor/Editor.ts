@@ -337,6 +337,11 @@ export class Editor {
       this.sessionMode === "workspace" ? this.font.editCoordinator : null,
     );
     this.history.onCaptureFinishing((changed) => this.#runContentHooks(changed));
+    // A preview looks at its font as a document does, and refuses every
+    // change at the font, saying the font is read-only.
+    if (this.sessionMode === "preview") {
+      this.font.refuseEdits(() => this.notifyPreviewMutationAttempt());
+    }
     this.pages = new Pages(this);
     sceneDocument.followReplays((location) => this.pages.reveal(location));
     // A session without a document starts with one page; setup, not an edit.
@@ -1875,6 +1880,8 @@ export class Editor {
    * @returns The value returned by `body`.
    */
   public transaction<TResult>(label: string, body: () => TResult): TResult {
+    // A read-only font refuses each edit `body` makes; there is nothing to group.
+    if (this.font.refusesEdits) return body();
     return this.font.editCoordinator.transaction(label, body);
   }
 

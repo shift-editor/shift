@@ -1,4 +1,4 @@
-import { BaseTool, type ToolEvent, type ToolName } from "../core";
+import { BaseTool, type ToolName } from "../core";
 import { edgeToCursor, type BoundingRectEdge } from "./cursor";
 import type { SelectState, SelectBehavior } from "./types";
 import {
@@ -84,8 +84,6 @@ export class Select extends BaseTool<SelectState, Select> {
   }
 
   override getCursor(state: SelectState): CursorType {
-    if (this.editor.sessionMode === "preview") return { type: "default" };
-
     switch (state.type) {
       case "translating":
         return this.#dropsOnOpenEnd() ? { type: "end" } : { type: "move" };
@@ -137,71 +135,6 @@ export class Select extends BaseTool<SelectState, Select> {
     return { type: "default" };
   }
 
-  protected override preTransition(
-    state: SelectState,
-    event: ToolEvent,
-  ): { state: SelectState } | null {
-    if (this.editor.sessionMode !== "preview") return null;
-
-    switch (event.type) {
-      case "click":
-      case "doubleClick":
-        // A node's double-click only changes what is shown (a text glyph
-        // opened in place, a component's base glyph opened after it), never
-        // the font, so a preview runs it as a document does. What would
-        // change the font, such as making a point smooth, stays refused.
-        if (event.type === "doubleClick" && this.editor.doubleClickNode(event.target)) {
-          return { state };
-        }
-        // Clicking a point, segment or anchor is the start of editing it, so
-        // the preview says it is read-only. A component is clicked to open
-        // its base glyph (the click before a double-click), which it allows.
-        switch (event.target.kind) {
-          case "point":
-          case "segment":
-          case "anchor":
-            this.editor.notifyPreviewMutationAttempt();
-        }
-
-        return { state };
-
-      case "pointerMove":
-        // What a double-click opens (a glyph in the text, a component) is
-        // highlighted, as in a document; points and segments, which only
-        // editing uses, are not.
-        switch (event.target.kind) {
-          case "text":
-            this.editor.hover.set(event.target.itemId);
-            break;
-          case "component":
-            this.editor.hover.set(event.target.id);
-            break;
-          default:
-            this.editor.hover.clear();
-        }
-        return { state };
-
-      case "dragStart":
-        this.editor.selection.clear();
-        return {
-          state: {
-            type: "brushing",
-            selection: {
-              startPos: event.origin.scene,
-              currentPos: event.coords.scene,
-              initialSelection: [],
-            },
-          },
-        };
-
-      case "keyDown":
-        return event.key === "Escape" ? null : { state };
-
-      default:
-        return null;
-    }
-  }
-
   protected override isEditing(state: SelectState): boolean {
     return (
       state.type === "translating" ||
@@ -236,7 +169,7 @@ export class Select extends BaseTool<SelectState, Select> {
   override drawOverlay(canvas: Canvas): void {
     // TODO: perhaps there should be a way for tools to turn on/off bounding box
     // rendering without it having to be a commit in the Select Tool
-    if (this.editor.sessionMode !== "preview" && !this.isEditing(this.state)) {
+    if (!this.isEditing(this.state)) {
       this.boundingBox.draw(canvas);
     }
 

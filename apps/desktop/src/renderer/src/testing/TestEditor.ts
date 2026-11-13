@@ -128,6 +128,7 @@ import type {
   ToolShortcut,
 } from "./surface";
 import { drawFixture } from "./drawFixture";
+import { buildFont, type FontFixture } from "./fonts";
 import { createStubContext } from "./stubCanvas";
 import { SurfaceActions } from "./SurfaceActions";
 import { WindowTabs } from "@/lib/tabs/WindowTabs";
@@ -740,7 +741,13 @@ export class TestEditor extends Editor implements EditorTestSurface {
     fixture: F,
     options: DrawOptions = {},
   ): Promise<Record<PointNames<F>, PointId>> {
-    return drawFixture(this, fixture, options);
+    // A test draws its fixture even into a preview's read-only font.
+    return this.font.whileEditable(() => drawFixture(this, fixture, options));
+  }
+
+  /** Builds `fixture` into the font, even a preview's read-only one. */
+  async build(fixture: FontFixture): Promise<void> {
+    await this.font.whileEditable(() => buildFont(this, fixture));
   }
 
   select(ids: readonly PointId[]): void {

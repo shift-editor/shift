@@ -95,6 +95,7 @@ import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/varia
 import { uniqueInOrder } from "../utils/utils";
 import { fallbackGlyphNameForUnicode, parseCodepoint } from "../utils/unicode";
 import { createBatchRequest } from "../utils/batchRequest";
+import { EditGate } from "./EditGate";
 
 /**
  * Directory queries over the store's committed glyph index.
@@ -293,6 +294,8 @@ export class Font {
   readonly #glyphInfo: NonNullable<FontOptions["glyphInfo"]> | null;
   readonly #reader: GlyphReader | null;
   readonly #editCoordinator: NonNullable<FontOptions["editCoordinator"]> | null;
+  /** Whether the font takes edits; a preview's refuses them. */
+  readonly #edits = new EditGate();
   readonly #glyphsEffect: Effect;
 
   /**
@@ -1108,7 +1111,7 @@ export class Font {
         continue;
       }
 
-      layers.push(new GlyphLayer(source, this.#editCoordinator, state));
+      layers.push(new GlyphLayer(source, this.#editCoordinator, state, this.#edits));
     }
 
     return layers;
@@ -1609,6 +1612,35 @@ export class Font {
   /** @knipclassignore — used by VariationPanel component */
   isVariable(): boolean {
     return this.getAxes().length > 0;
+  }
+
+  /**
+   * Refuses every edit from now on: a layer edit changes nothing and calls
+   * `onRefused` instead. A preview's editor makes its font read-only so.
+   *
+   * @internal
+   */
+  refuseEdits(onRefused: () => void): void {
+    this.#edits.refuse(onRefused);
+  }
+
+  /**
+   * Whether the font refuses edits now ({@link refuseEdits}).
+   *
+   * @internal
+   */
+  get refusesEdits(): boolean {
+    return this.#edits.closed;
+  }
+
+  /**
+   * Runs `body` with the font taking edits, for a test that builds a
+   * preview's font before looking at it. Not for production code.
+   *
+   * @internal
+   */
+  whileEditable<T>(body: () => Promise<T>): Promise<T> {
+    return this.#edits.whileOpen(body);
   }
 
   /**

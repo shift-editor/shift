@@ -75,11 +75,6 @@ export class Marquee implements SelectBehavior {
     ctx: ToolContext<SelectState>,
     initialSelection: readonly SelectableId[],
   ): void {
-    if (ctx.editor.sessionMode === "preview") {
-      ctx.editor.selection.clear();
-      return;
-    }
-
     const ids = this.getIdsInRect(rect, ctx);
     ctx.editor.selection.select([...initialSelection, ...ids]);
   }
