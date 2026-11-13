@@ -128,6 +128,7 @@ import type {
   ToolShortcut,
 } from "./surface";
 import { drawFixture } from "./drawFixture";
+import { buildFont, type FontFixture } from "./fonts";
 import { createStubContext } from "./stubCanvas";
 import { SurfaceActions } from "./SurfaceActions";
 import { WindowTabs } from "@/lib/tabs/WindowTabs";
@@ -202,13 +203,15 @@ export async function startTestEditor(
 
 /**
  * Opens a saved document with `glyphName` open, and returns it as the surface
- * behaviour tests use.
+ * behaviour tests use. `sessionMode` is what the editor may change, a
+ * workspace by default; a preview looks at the file's own glyphs read-only.
  */
 export async function openTestEditor(
   sourcePath: string,
   glyphName: string,
+  sessionMode: FontSessionMode = "workspace",
 ): Promise<EditorTestSurface> {
-  return new TestEditor().openSession(sourcePath, glyphName);
+  return new TestEditor(sessionMode).openSession(sourcePath, glyphName);
 }
 
 /**
@@ -273,6 +276,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
   /** The overlay frames {@link recordCanvas} has recorded, each the lines it strokes. */
   /** The ids outlines go by in {@link latestCanvasFrame} and {@link drawnOutlineIds}. */
   readonly #outlineIds = new Map<Path2D, number>();
+  /** How many times a preview said it is read-only, for {@link readOnlyNotices}. */
+  #readOnlyNotices = 0;
   /** How many times the canvas text was laid out, once {@link textLayoutCount} first counts. */
   #textLayouts: { count: number } | null = null;
   /** The Kerning tool's uncommitted preview, discarded by {@link cancelGesture}. */
@@ -288,6 +293,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     const clipboard = new InMemorySystemClipboard();
     super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode });
     this.#stack = stack;
+    this.on("previewMutationAttempted", () => this.#readOnlyNotices++);
     this.#tabs = new WindowTabs(this);
     this.#clipboard = clipboard;
     this.#reads = {
@@ -735,7 +741,13 @@ export class TestEditor extends Editor implements EditorTestSurface {
     fixture: F,
     options: DrawOptions = {},
   ): Promise<Record<PointNames<F>, PointId>> {
-    return drawFixture(this, fixture, options);
+    // A test draws its fixture even into a preview's read-only font.
+    return this.font.whileEditable(() => drawFixture(this, fixture, options));
+  }
+
+  /** Builds `fixture` into the font, even a preview's read-only one. */
+  async build(fixture: FontFixture): Promise<void> {
+    await this.font.whileEditable(() => buildFont(this, fixture));
   }
 
   select(ids: readonly PointId[]): void {
@@ -1634,6 +1646,19 @@ export class TestEditor extends Editor implements EditorTestSurface {
       fills: (frame?.fills ?? []).map((path) => this.#outlineId(path)),
       strokes: (frame?.strokes ?? []).map((path) => this.#outlineId(path)),
     };
+  }
+
+  readOnlyNotices(): number {
+    return this.#readOnlyNotices;
+  }
+
+  drawnTextGlyphs(): (string | null)[] {
+    const run = this.textRun;
+    if (!run) return [];
+    const layout = this.text.drawnLayoutCell(run.runId).peek();
+    return (layout?.placedGlyphs ?? []).map(({ glyph }) =>
+      glyph.glyphId ? this.font.glyphName(glyph.glyphId) : null,
+    );
   }
 
   drawnOutlineIds(glyph: string): DrawnOutlineIds {

@@ -111,6 +111,7 @@ import type {
   ComponentTransformSelectionLayer,
 } from "../../types/componentTransform";
 import { PositionEdits } from "./positions";
+import { EditGate } from "./EditGate";
 
 export {
   GlyphGeometry,
@@ -155,6 +156,10 @@ const POSITIONS_PER_NAMED_MOVE = 16;
 class GlyphLayerWriter {
   readonly #editCoordinator: NonNullable<FontOptions["editCoordinator"]> | null;
   readonly #intents: LayerIntents<void> | null;
+  /** Whether the font takes edits; a preview's refuses them. */
+  readonly #gate: EditGate;
+  /** Where a refused edit's intents go: nowhere. */
+  readonly #refused: LayerIntents<void>;
   readonly #state: GlyphEditState;
   /** The intents being collected instead of pushed, for a preview or {@link together}; null otherwise. */
   #collecting: FontIntent[] | null = null;
@@ -165,18 +170,24 @@ class GlyphLayerWriter {
     editCoordinator: NonNullable<FontOptions["editCoordinator"]> | null,
     layerId: LayerId,
     state: GlyphEditState,
+    gate: EditGate,
   ) {
     this.#editCoordinator = editCoordinator;
+    this.#gate = gate;
     this.#intents = editCoordinator
       ? new LayerIntents<void>((intent) => this.#send(intent), layerId)
       : null;
+    this.#refused = new LayerIntents<void>((intent) => {
+      if (this.#collecting) this.#collecting.push(intent);
+      else gate.refuses();
+    }, layerId);
     this.#state = state;
   }
 
   /** Collects `intent` for the preview or batch being gathered, or pushes it. */
   #send(intent: FontIntent): void {
     if (this.#collecting) this.#collecting.push(intent);
-    else this.#editCoordinator?.push(intent);
+    else if (!this.#gate.refuses()) this.#editCoordinator?.push(intent);
   }
 
   get geometry(): GlyphGeometry {
@@ -213,7 +224,7 @@ class GlyphLayerWriter {
     } finally {
       this.#collecting = null;
     }
-    if (intents.length > 0) editCoordinator.pushAll(intents);
+    if (intents.length > 0 && !this.#gate.refuses()) editCoordinator.pushAll(intents);
     return result;
   }
 
@@ -226,6 +237,12 @@ class GlyphLayerWriter {
    * @throws When there is no engine to ask, or it rejects the intents.
    */
   preview(steps: () => void): void {
+    // A refused gesture shows the layer as it began.
+    if (this.#gate.closed) {
+      this.#gate.refuses();
+      this.#state.state.showPreview(null);
+      return;
+    }
     const editCoordinator = this.#editCoordinator;
     if (!editCoordinator) throw new Error("a preview needs the window's editing engine");
     if (this.#collecting) throw new Error("a preview is already being collected");
@@ -258,7 +275,7 @@ class GlyphLayerWriter {
    */
   previewInText(steps: () => void): void {
     const editCoordinator = this.#editCoordinator;
-    if (!editCoordinator || this.#collecting) return;
+    if (!editCoordinator || this.#collecting || this.#gate.closed) return;
 
     const intents: FontIntent[] = [];
     this.#collecting = intents;
@@ -279,6 +296,7 @@ class GlyphLayerWriter {
   applyPositionPatch(updates: GlyphLayerPositions): void {
     const patch = GlyphLayerPositionPatch.from(updates);
     if (patch.isEmpty) return;
+    if (!this.#collecting && this.#gate.refuses()) return;
 
     if (!this.#intents) {
       this.#state.state.patchPositions(patch.positions);
@@ -580,6 +598,8 @@ class GlyphLayerWriter {
   }
 
   get #workspaceIntents(): LayerIntents<void> {
+    // A read-only font takes the edit and drops it, saying so.
+    if (this.#gate.closed) return this.#refused;
     if (!this.#intents) throw new Error("glyph layer operation requires a workspace");
     return this.#intents;
   }
@@ -614,12 +634,15 @@ export class GlyphLayer {
     source: Source,
     editCoordinator: NonNullable<FontOptions["editCoordinator"]> | null,
     state: GlyphLayerState,
+    gate: EditGate = new EditGate(),
   ) {
     this.#sourceCell = signal(source, { name: "glyphLayer.source" });
-    this.#writer = new GlyphLayerWriter(editCoordinator, state.layerId, {
-      state,
-      geometry: state.geometryCell,
-    });
+    this.#writer = new GlyphLayerWriter(
+      editCoordinator,
+      state.layerId,
+      { state, geometry: state.geometryCell },
+      gate,
+    );
     this.positions = new PositionEdits(this);
     this.#editBaseGeometry = computed(
       () => {

@@ -25,14 +25,24 @@ pub(crate) trait NativeSource {
   fn close_font_source(&mut self);
 
   /// The open font source's font without glyphs (its axes, axis mappings
-  /// and sources, under the ids its directory gives them), as named
-  /// MessagePack: what the window's engine opens for a compiled font.
+  /// and sources, under the ids its directory gives them) and the id of
+  /// each of its glyphs in glyph order, as a named MessagePack
+  /// `CompiledHeader`: what the window's engine opens for a compiled font.
   ///
   /// # Errors
   ///
   /// Fails when no font source is open, or its header cannot be built or
   /// encoded.
   fn font_source_header(&self) -> Result<Bytes, NativeSourceError>;
+
+  /// The open font source's file as read, for a compiled font (TrueType,
+  /// OpenType): what the window's engine shapes its text with.
+  ///
+  /// # Errors
+  ///
+  /// Fails when no font source is open, or the open one is an authored
+  /// source (UFO, designspace, Glyphs), which has no binary.
+  fn font_source_binary(&self) -> Result<Bytes, NativeSourceError>;
 
   /// One glyph of the font source, independent of any location, and every
   /// glyph its components use.
@@ -101,6 +111,11 @@ impl NativeSource for Bridge {
     Ok(Bytes(
       rmp_serde::to_vec_named(&header).map_err(BridgeError::from)?,
     ))
+  }
+
+  fn font_source_binary(&self) -> Result<Bytes, NativeSourceError> {
+    let binary = self.retained_source()?.binary()?;
+    Ok(Bytes(binary.to_vec()))
   }
 
   fn read_font_source_glyph(

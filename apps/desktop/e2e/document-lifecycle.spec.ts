@@ -269,7 +269,7 @@ test.describe("opening a font through the application shell", () => {
     await expect(notice).toBeHidden();
   });
 
-  test("preview canvas clicks explain restrictions while marquee stays selection-free", async ({
+  test("a preview selects as a document does and explains why a drag changes nothing", async ({
     electronApp,
     page,
   }) => {
@@ -281,6 +281,7 @@ test.describe("opening a font through the application shell", () => {
     await expect(canvas).toBeVisible();
     await expect.poll(async () => (await previewEditor.editorView()).glyph).not.toBeNull();
 
+    // A point, a segment's midpoint, and empty canvas below the glyph.
     const targets = await glyphClickTargets(workspacePage);
     const bounds = await previewEditor.canvasBounds();
     const notice = workspacePage.getByRole("dialog", {
@@ -295,29 +296,35 @@ test.describe("opening a font through the application shell", () => {
       expect(target.y, targetContext).toBeLessThanOrEqual(bounds.height);
     }
 
+    // Looking works as in a document: hovering and selecting say nothing.
     for (const point of targets.slice(0, 2)) {
       await workspacePage.mouse.move(bounds.x + point.x, bounds.y + point.y);
-      await expect.poll(() => previewEditor.hoverId()).toBeNull();
+      await expect.poll(() => previewEditor.hoverId()).not.toBeNull();
       await canvas.click({ position: point });
-      await expect(notice).toBeVisible();
-      await expect.poll(() => previewEditor.selectionIds()).toEqual([]);
-      await notice.getByRole("button", { name: "OK", exact: true }).click();
+      await expect.poll(() => previewEditor.selectionIds()).not.toEqual([]);
       await expect(notice).toBeHidden();
     }
 
-    await canvas.click({ position: targets[2]! });
-    await expect(notice).toBeHidden();
-
+    // Dragging a point would change the font: nothing moves, and the preview says why.
     const point = targets[0]!;
     await workspacePage.mouse.move(bounds.x + point.x, bounds.y + point.y);
     await workspacePage.mouse.down();
     await workspacePage.mouse.move(bounds.x + point.x + 30, bounds.y + point.y + 30, { steps: 5 });
-    await expect.poll(() => previewEditor.toolState()).toBe("brushing");
-    await expect.poll(() => previewEditor.selectionIds()).toEqual([]);
+    await workspacePage.mouse.up();
+    await expect(notice).toBeVisible();
+    await expect.poll(() => previewEditor.toolState()).toBe("ready");
+    await notice.getByRole("button", { name: "OK", exact: true }).click();
     await expect(notice).toBeHidden();
+
+    // A marquee from empty canvas selects, as in a document.
+    const corner = { x: bounds.x + bounds.width - 40, y: bounds.y + 40 };
+    await workspacePage.mouse.move(corner.x, corner.y);
+    await workspacePage.mouse.down();
+    await workspacePage.mouse.move(corner.x - 60, corner.y + 60, { steps: 5 });
+    await expect.poll(() => previewEditor.toolState()).toBe("brushing");
     await workspacePage.mouse.up();
     await expect.poll(() => previewEditor.toolState()).toBe("ready");
-    await expect.poll(() => previewEditor.selectionIds()).toEqual([]);
+    await expect(notice).toBeHidden();
   });
 });
 

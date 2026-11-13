@@ -112,6 +112,7 @@ export {
   engineNewFont,
   engineNextGlyphName,
   engineOpen,
+  engineOpenCompiled,
   engineOpenResident,
   enginePreload,
   enginePreview,

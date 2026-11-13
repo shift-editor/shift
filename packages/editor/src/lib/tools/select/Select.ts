@@ -1,4 +1,4 @@
-import { BaseTool, type ToolEvent, type ToolName } from "../core";
+import { BaseTool, type ToolName } from "../core";
 import { edgeToCursor, type BoundingRectEdge } from "./cursor";
 import type { SelectState, SelectBehavior } from "./types";
 import {
@@ -15,6 +15,7 @@ import {
   SelectHover,
   SegmentDoubleClick,
   NodeDoubleClick,
+  RefuseReadOnlyEdit,
 } from "./behaviors";
 import type { Point2D } from "@shift/geo";
 import type { SelectableId } from "@shift/types";
@@ -50,6 +51,7 @@ export class Select extends BaseTool<SelectState, Select> {
     new Rotate(),
     new BendCurve(),
     new Translate(),
+    new RefuseReadOnlyEdit(),
     new Marquee(),
     new SelectHover(),
   ];
@@ -84,8 +86,6 @@ export class Select extends BaseTool<SelectState, Select> {
   }
 
   override getCursor(state: SelectState): CursorType {
-    if (this.editor.sessionMode === "preview") return { type: "default" };
-
     switch (state.type) {
       case "translating":
         return this.#dropsOnOpenEnd() ? { type: "end" } : { type: "move" };
@@ -137,50 +137,6 @@ export class Select extends BaseTool<SelectState, Select> {
     return { type: "default" };
   }
 
-  protected override preTransition(
-    state: SelectState,
-    event: ToolEvent,
-  ): { state: SelectState } | null {
-    if (this.editor.sessionMode !== "preview") return null;
-
-    switch (event.type) {
-      case "click":
-      case "doubleClick":
-        switch (event.target.kind) {
-          case "point":
-          case "segment":
-          case "anchor":
-          case "component":
-            this.editor.notifyPreviewMutationAttempt();
-        }
-
-        return { state };
-
-      case "pointerMove":
-        this.editor.hover.clear();
-        return { state };
-
-      case "dragStart":
-        this.editor.selection.clear();
-        return {
-          state: {
-            type: "brushing",
-            selection: {
-              startPos: event.origin.scene,
-              currentPos: event.coords.scene,
-              initialSelection: [],
-            },
-          },
-        };
-
-      case "keyDown":
-        return event.key === "Escape" ? null : { state };
-
-      default:
-        return null;
-    }
-  }
-
   protected override isEditing(state: SelectState): boolean {
     return (
       state.type === "translating" ||
@@ -215,7 +171,7 @@ export class Select extends BaseTool<SelectState, Select> {
   override drawOverlay(canvas: Canvas): void {
     // TODO: perhaps there should be a way for tools to turn on/off bounding box
     // rendering without it having to be a commit in the Select Tool
-    if (this.editor.sessionMode !== "preview" && !this.isEditing(this.state)) {
+    if (!this.isEditing(this.state)) {
       this.boundingBox.draw(canvas);
     }
 

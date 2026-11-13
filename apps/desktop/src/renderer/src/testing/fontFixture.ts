@@ -29,9 +29,10 @@
  */
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach } from "vitest";
-import { buildFont, FONT_FILES, WEIGHT, type FontFixture, type FontName } from "./fonts";
+import { FONT_FILES, WEIGHT, type FontFixture, type FontName } from "./fonts";
+import type { FontSessionMode } from "@shared/workspace/lanes";
 import type { EditorTestSurface } from "./surface";
-import { openTestEditor, startTestEditor } from "./TestEditor";
+import { openTestEditor, startTestEditor, TestEditor } from "./TestEditor";
 
 const FONTS_DIRECTORY = fileURLToPath(
   new URL("../../../../../../fixtures/fonts/", import.meta.url),
@@ -52,6 +53,8 @@ export type { FontFixture, GlyphEntry } from "./fonts";
 export interface OpenFontFixture {
   readonly file: FontFile;
   readonly glyph: string;
+  /** How the editor may change the font; a workspace when omitted. */
+  readonly mode?: FontSessionMode;
 }
 
 /**
@@ -61,10 +64,13 @@ export interface OpenFontFixture {
 export async function startEditorWith(
   fixture: FontFixture | OpenFontFixture = {},
 ): Promise<EditorTestSurface> {
-  if (fixture.file !== undefined) return openTestEditor(fixture.file, fixture.glyph);
+  if (fixture.file !== undefined) {
+    return openTestEditor(fixture.file, fixture.glyph, fixture.mode);
+  }
 
   const editor = await startTestEditor(fixture.mode);
-  await buildFont(editor, fixture);
+  if (!(editor instanceof TestEditor)) throw new Error("Expected a TestEditor");
+  await editor.build(fixture);
   return editor;
 }
 

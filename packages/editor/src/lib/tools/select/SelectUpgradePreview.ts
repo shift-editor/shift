@@ -18,8 +18,7 @@ export class SelectUpgradePreview extends CanvasItem<readonly Point2D[]> {
 
   protected props(): readonly Point2D[] | null {
     const editor = this.#select.editor;
-    if (editor.sessionMode === "preview" || this.#select.stateCell.value.type !== "ready")
-      return null;
+    if (this.#select.stateCell.value.type !== "ready") return null;
     if (!editor.input.modifiersCell.value.metaKey || !editor.input.pointerCell.value) return null;
 
     const hover = editor.hover.entryCell.value;

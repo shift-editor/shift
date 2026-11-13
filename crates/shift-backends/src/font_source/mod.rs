@@ -76,6 +76,15 @@ impl OpenedFont {
             Self::Glyphs(font) => Some(font),
         }
     }
+
+    /// The compiled font's bytes, as read from its file, for a TrueType or
+    /// OpenType source; `None` for an authored one.
+    pub fn binary(&self) -> Option<&[u8]> {
+        match self {
+            Self::OpenType(font) => Some(font.bytes()),
+            Self::Ufo(_) | Self::Designspace(_) | Self::Glyphs(_) => None,
+        }
+    }
 }
 
 impl FontSource for OpenedFont {

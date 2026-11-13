@@ -57,6 +57,8 @@ thiserror = "2"
 wasm-bindgen = "=0.2.121"
 
 [dev-dependencies]
+# Imports the compiled fonts the whole-font shaping tests shape.
+shift-backends = { workspace = true }
 shift-font = { workspace = true, features = ["test-support"] }
 # The compile counter the shaping tests read.
 shift-text = { workspace = true, features = ["test-support"] }

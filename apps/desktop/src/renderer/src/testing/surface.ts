@@ -595,6 +595,17 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   latestCanvasFrame(): CanvasFrame;
   /** The ids of the outlines the canvas draws for the glyph named `glyph` now. Test-only. */
   drawnOutlineIds(glyph: string): DrawnOutlineIds;
+  /**
+   * The names of the glyphs the canvas text's run is drawn with now, in
+   * layout order: what {@link canvasText} places, or the last glyphs that
+   * could all be drawn while one it places is still loading. Test-only.
+   */
+  drawnTextGlyphs(): (string | null)[];
+  /**
+   * How many times a preview has said it is read-only (the notice shown when
+   * a gesture would change the font) since the editor opened. Test-only.
+   */
+  readOnlyNotices(): number;
   /** Whether the glyph named `name` has loaded, so the canvas can draw it. Test-only: not agent data. */
   glyphLoaded(name: string): boolean;
   /**

@@ -91,6 +91,32 @@ impl LiveShaper {
         self.glyphs.order.glyph(*shaper_glyph)
     }
 
+    /// A whole compiled font's own advance for `glyph` at `location`
+    /// ([`ShaperFont::from_binary`]): its `hmtx` and `HVAR`, as shaping
+    /// starts the glyph from. `None` for a shaper font compiled from feature
+    /// source, which has no advances, and for a glyph the font lacks.
+    pub fn own_advance(&self, glyph: GlyphId, location: &ExternalLocation) -> Option<f64> {
+        if !self.glyphs.whole {
+            return None;
+        }
+        let shaper_glyph = self.glyphs.order.shaper_glyph(glyph)?;
+        let coords = self.normalized_coords(location);
+        self.shaper
+            .own_advance(shaper_glyph, &coords)
+            .map(f64::from)
+    }
+
+    /// Whether a whole compiled font's `GDEF` classes `glyph` as a mark;
+    /// `None` for a shaper font compiled from feature source, whose classes
+    /// come from the live font, and for a glyph the font lacks.
+    pub fn own_mark(&self, glyph: GlyphId) -> Option<bool> {
+        if !self.glyphs.whole {
+            return None;
+        }
+        let shaper_glyph = self.glyphs.order.shaper_glyph(glyph)?;
+        Some(self.shaper.is_mark(shaper_glyph))
+    }
+
     /// Returns the shaper font this shaper uses.
     pub fn font(&self) -> &Arc<ShaperFont> {
         &self.glyphs.font
@@ -243,19 +269,27 @@ impl LiveShaper {
 /// place in the shaper font's glyph order, characters mapped through live
 /// Unicode values, and zero advances, which the editor replaces with live
 /// ones.
+///
+/// A whole compiled font ([`ShaperFont::from_binary`]) maps characters and
+/// advances its glyphs itself: its own `cmap` and `hmtx`, never the live
+/// font's.
 struct LiveGlyphs {
     font: Arc<ShaperFont>,
     order: ShaperGlyphOrder,
     /// Shaper glyph id each character maps to.
     characters: HashMap<u32, u32>,
+    /// The font is whole, with its own character map and advances.
+    whole: bool,
 }
 
 impl LiveGlyphs {
     fn new(font: Arc<ShaperFont>) -> Self {
+        let whole = font.is_whole();
         Self {
             order: font.glyph_order().clone(),
+            characters: character_glyphs(font.own_characters()),
             font,
-            characters: HashMap::new(),
+            whole,
         }
     }
 
@@ -264,6 +298,9 @@ impl LiveGlyphs {
     }
 
     fn set_characters(&mut self, characters: impl IntoIterator<Item = (u32, GlyphId)>) {
+        if self.whole {
+            return;
+        }
         let order = &self.order;
         self.characters = character_glyphs(
             characters
@@ -288,11 +325,16 @@ impl GlyphSource for LiveGlyphs {
     }
 
     fn character_glyph(&self, codepoint: u32) -> Option<u32> {
+        // A whole font's own `cmap` maps in shaping, variation sequences
+        // included.
+        if self.whole {
+            return None;
+        }
         self.characters.get(&codepoint).copied()
     }
 
     fn advance(&self, _shaper_glyph: u32) -> Option<i32> {
-        Some(0)
+        (!self.whole).then_some(0)
     }
 }
 
@@ -318,6 +360,9 @@ impl GlyphSource for AdvancedGlyphs<'_> {
     }
 
     fn advance(&self, shaper_glyph: u32) -> Option<i32> {
+        if self.glyphs.whole {
+            return None;
+        }
         let glyph = self.glyphs.order.glyph(shaper_glyph)?;
         Some(self.advances.advance(glyph).unwrap_or(0))
     }

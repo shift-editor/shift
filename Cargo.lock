@@ -2645,6 +2645,7 @@ dependencies = [
  "rmp-serde",
  "serde",
  "serde-wasm-bindgen",
+ "shift-backends",
  "shift-engine",
  "shift-font",
  "shift-layout",
