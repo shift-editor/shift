@@ -1,4 +1,6 @@
 import type { GlyphSidebearings } from "@shift/glyph-state";
+import type { SideLink } from "@shift/wasm/protocol";
+import type { MetricsLinks } from "../lib/model/MetricsLinks";
 import { useMemo } from "react";
 import type { Editor } from "../lib/editor/Editor";
 import type { Glyph } from "../lib/model/Glyph";
@@ -12,6 +14,10 @@ export interface GlyphMetricsState {
   readonly xAdvance: number;
   /** Whether the displayed glyph has an authored layer at the active source or location. */
   readonly hasLayer: boolean;
+  /** The glyph's linked sides at the active source; none between sources. */
+  readonly linkedSides: readonly SideLink[];
+  /** The glyph's metrics keys at the active source, to change; null between sources. */
+  readonly links: MetricsLinks | null;
 }
 
 const EMPTY_METRICS: GlyphMetricsState = {
@@ -19,6 +25,8 @@ const EMPTY_METRICS: GlyphMetricsState = {
   sidebearings: EMPTY_SIDEBEARINGS,
   xAdvance: 0,
   hasLayer: false,
+  linkedSides: [],
+  links: null,
 };
 
 /**
@@ -51,6 +59,8 @@ export function useGlyphMetrics(editor: Editor): GlyphMetricsState {
           hasLayer: activeSourceId
             ? glyph.layerForSource(activeSourceId) !== null
             : glyph.layerAt(externalLocation) !== null,
+          linkedSides: activeSourceId ? editor.font.linkedSides(glyph.id, activeSourceId) : [],
+          links: editor.activeMetricsLinks(),
         };
       }),
     [editor],

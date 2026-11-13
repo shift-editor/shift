@@ -17,6 +17,7 @@ use crate::lib_data::{LibData, LibValue};
 use crate::metrics::{
     FontMetrics, MetricDefinition, MetricDefinitionList, MetricKind, MetricValue, StandardMetrics,
 };
+use crate::metrics_keys::{MetricsKey, MetricsKeySide, MetricsKeys};
 use crate::named_instance::{NamedInstance, validate_named_instances};
 use crate::source::{Source, SourceList};
 use crate::{AxisLabelId, GlyphName, NamedInstanceId};
@@ -1153,6 +1154,12 @@ impl Font {
         self.index().composites_of(base_glyph_id)
     }
 
+    /// Every glyph with a metrics key, on itself or on any of its layers, in
+    /// id order. Placeholder layers count: they carry their keys.
+    pub fn metrics_keyed_glyph_ids(&self) -> impl Iterator<Item = GlyphId> + '_ {
+        self.index().metrics_keyed_glyphs().copied()
+    }
+
     /// Glyphs with a loaded layer that has a component of a glyph owning one
     /// of `layer_ids`: the composites that follow those layers' anchors.
     pub fn dependent_glyph_ids<'a>(
@@ -1335,6 +1342,74 @@ impl Font {
         let glyph = Arc::make_mut(state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?);
         glyph.set_category(category);
         glyph.set_sub_category(sub_category);
+        self.state = Arc::new(state);
+        Ok(())
+    }
+
+    /// Sets or clears one of a layer's own metrics keys, re-indexing it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::LayerNotFound`] when the layer is missing.
+    pub fn set_layer_metrics_key(
+        &mut self,
+        layer_id: LayerId,
+        side: MetricsKeySide,
+        key: Option<MetricsKey>,
+    ) -> CoreResult<()> {
+        let before = self.layer_snapshot(layer_id)?;
+        self.require_layer_mut(layer_id)?
+            .metrics_keys_mut()
+            .set(side, key);
+        self.reindex_layer(layer_id, &before)
+    }
+
+    /// Clears `sides`' keys on a layer and on its glyph, so none of them
+    /// applies in the layer's source.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::LayerNotFound`] when the layer is missing.
+    pub fn clear_metrics_keys(
+        &mut self,
+        layer_id: LayerId,
+        sides: &[MetricsKeySide],
+    ) -> CoreResult<()> {
+        let glyph_id = self.require_layer_owner(layer_id)?;
+        for side in sides {
+            if self
+                .require_layer(layer_id)?
+                .metrics_keys()
+                .get(*side)
+                .is_some()
+            {
+                self.set_layer_metrics_key(layer_id, *side, None)?;
+            }
+        }
+        let mut keys = self.require_glyph(glyph_id)?.metrics_keys().clone();
+        if sides.iter().all(|side| keys.get(*side).is_none()) {
+            return Ok(());
+        }
+        for side in sides {
+            keys.set(*side, None);
+        }
+        self.set_glyph_metrics_keys(glyph_id, keys)
+    }
+
+    /// Replaces the metrics keys the glyph has in every source.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::GlyphNotFound`] when the glyph is missing.
+    pub fn set_glyph_metrics_keys(
+        &mut self,
+        glyph_id: GlyphId,
+        metrics_keys: MetricsKeys,
+    ) -> CoreResult<()> {
+        let mut state = (*self.state).clone();
+        let glyph = Arc::make_mut(state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?);
+        *glyph.metrics_keys_mut() = metrics_keys;
+        state.rebuild_index()?;
         self.state = Arc::new(state);
         Ok(())
     }

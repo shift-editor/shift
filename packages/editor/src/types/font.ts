@@ -38,6 +38,7 @@ import type {
   FontChangeFlag,
   FontFeature,
   GlyphIdentityChange,
+  SideLink,
   TextRun,
   PlacedText,
 } from "@shift/wasm/protocol";
@@ -166,6 +167,19 @@ export interface FontEngine {
    * for a glyph the engine's font lacks.
    */
   glyphPrimaryCodepoint(glyphId: GlyphId, codepoint: number | null): GlyphIdentityChange | null;
+
+  /**
+   * The linked sides of a glyph in a source, left, right, then width, each
+   * with its key, where it is set and why it cannot be applied, as shift-font
+   * decides (`Font::linked_sides`). Empty for a glyph with no keys there.
+   */
+  linkedSides(glyphId: GlyphId, sourceId: SourceId): readonly SideLink[];
+
+  /**
+   * Why `text` is not a metrics key the engine's font can read, or null when
+   * it is (`Font::metrics_key_problem`).
+   */
+  metricsKeyProblem(text: string): string | null;
 
   /**
    * Interpolates the masters' source metrics at a design location.

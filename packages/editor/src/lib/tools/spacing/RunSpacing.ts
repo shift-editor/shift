@@ -1,6 +1,7 @@
 import type { Editor } from "../../editor/Editor";
 import { track } from "../../signals";
 import type { GlyphLayer } from "../../model/Glyph";
+import { MetricsLinks, SIDE_OF_SIDEBEARING } from "../../model/MetricsLinks";
 import type { ScenePoint } from "../../../types/coordinates";
 import {
   isKernedGap,
@@ -96,13 +97,36 @@ export class SpacingHalf {
    */
   set(editor: Editor, value: number): boolean {
     const glyphSide = this.glyphSide;
-    const layer = this.layer(editor);
+    const links = this.links(editor);
     const rounded = Math.round(value);
-    if (!glyphSide || !layer || rounded === Math.round(glyphSide.sidebearing)) return false;
+    if (!glyphSide || !links || rounded === Math.round(glyphSide.sidebearing)) return false;
 
-    if (this.sidebearing === "rsb") layer.setRightSidebearing(rounded);
-    else layer.setLeftSidebearing(rounded);
+    // A typed value replaces a key the side followed, in the same undo step.
+    editor.transaction("Set sidebearing", () => {
+      links.unlinkFor(SIDE_OF_SIDEBEARING[this.sidebearing]);
+      if (this.sidebearing === "rsb") links.layer.setRightSidebearing(rounded);
+      else links.layer.setLeftSidebearing(rounded);
+    });
     return true;
+  }
+
+  /** The metrics keys of this half's glyph at the active source, or null when it cannot be edited there. */
+  links(editor: Editor): MetricsLinks | null {
+    const glyphSide = this.glyphSide;
+    const layer = this.layer(editor);
+    if (!glyphSide || !layer) return null;
+    return new MetricsLinks(editor.font, glyphSide.glyphId, layer);
+  }
+
+  /** Whether this half's side follows a metrics key at the active source. */
+  isLinked(editor: Editor): boolean {
+    return this.linkKey(editor) !== null;
+  }
+
+  /** The metrics key this half's side follows, or null when it follows none. */
+  linkKey(editor: Editor): string | null {
+    const links = this.links(editor);
+    return links?.side(SIDE_OF_SIDEBEARING[this.sidebearing])?.key ?? null;
   }
 
   /**

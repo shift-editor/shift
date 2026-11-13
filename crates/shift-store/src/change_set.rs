@@ -314,8 +314,9 @@ impl<'a> StoreWriter<'a> {
             WriteMode::Insert => {
                 self.tx
                     .prepare_cached(
-                        "INSERT INTO glyphs (id, name, order_index, category, sub_category)
-                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                        "INSERT INTO glyphs (id, name, order_index, category, sub_category,
+                         left_metrics_key, right_metrics_key, width_metrics_key)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                     )?
                     .execute(params![
                         glyph.id(),
@@ -323,6 +324,18 @@ impl<'a> StoreWriter<'a> {
                         order_index,
                         glyph.category().map(font::GlyphCategory::as_str),
                         glyph.sub_category().map(font::GlyphSubcategory::as_str),
+                        crate::metrics_keys::column(
+                            glyph.metrics_keys(),
+                            font::MetricsKeySide::Left
+                        ),
+                        crate::metrics_keys::column(
+                            glyph.metrics_keys(),
+                            font::MetricsKeySide::Right
+                        ),
+                        crate::metrics_keys::column(
+                            glyph.metrics_keys(),
+                            font::MetricsKeySide::Width
+                        ),
                     ])?;
                 for (unicode_order, unicode) in glyph.unicodes().iter().enumerate() {
                     self.tx.prepare_cached(
@@ -826,13 +839,17 @@ impl<'a> StoreWriter<'a> {
         self.tx
             .prepare_cached(
                 "
-            INSERT INTO glyphs (id, name, order_index, category, sub_category)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO glyphs (id, name, order_index, category, sub_category,
+                left_metrics_key, right_metrics_key, width_metrics_key)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
             ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 order_index = excluded.order_index,
                 category = excluded.category,
-                sub_category = excluded.sub_category
+                sub_category = excluded.sub_category,
+                left_metrics_key = excluded.left_metrics_key,
+                right_metrics_key = excluded.right_metrics_key,
+                width_metrics_key = excluded.width_metrics_key
             ",
             )?
             .execute(params![
@@ -841,6 +858,9 @@ impl<'a> StoreWriter<'a> {
                 order_index,
                 glyph.category().map(font::GlyphCategory::as_str),
                 glyph.sub_category().map(font::GlyphSubcategory::as_str),
+                crate::metrics_keys::column(glyph.metrics_keys(), font::MetricsKeySide::Left),
+                crate::metrics_keys::column(glyph.metrics_keys(), font::MetricsKeySide::Right),
+                crate::metrics_keys::column(glyph.metrics_keys(), font::MetricsKeySide::Width),
             ])?;
         Ok(())
     }

@@ -122,8 +122,11 @@ impl EngineSession {
 
     /// Loads everything applying `set` reads: the layers it names, the
     /// glyphs its components are built from (see
-    /// [`FontIntentSet::component_bases`]), and the composites that follow
-    /// anchors it moves, each with every glyph it is built from.
+    /// [`FontIntentSet::component_bases`]), the composites that follow
+    /// anchors it moves, and every glyph linked by metrics keys and the
+    /// glyphs those keys name, which the edit may re-apply (see
+    /// [`Font::linked_glyph_ids`]); each with every glyph
+    /// it is built from.
     ///
     /// # Errors
     ///
@@ -140,6 +143,7 @@ impl EngineSession {
         let mut roots = set.component_bases(&self.font);
         let anchor_edits: Vec<LayerId> = set.layers_with_anchor_edits().into_iter().collect();
         roots.extend(self.dependents(source, &anchor_edits)?);
+        roots.extend(self.font.linked_glyph_ids());
         self.load_glyph_closure(source, roots)
     }
 

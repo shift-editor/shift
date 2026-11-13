@@ -470,3 +470,88 @@ impl FontLevelIntent for MaterializeGlyphLayer {
         Ok((layer_ids, None))
     }
 }
+
+/// Sets or clears one of a glyph's metrics keys, which apply in every source
+/// its layers do not override. `key` is kept as written; empty or blank text
+/// clears it. The side then follows the key in this same edit.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct SetGlyphMetricsKey {
+    pub glyph_id: GlyphId,
+    pub side: MetricsKeySide,
+    pub key: Option<String>,
+}
+
+impl FontLevelIntent for SetGlyphMetricsKey {
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Option<GlyphId>)> {
+        let Self {
+            glyph_id,
+            side,
+            key,
+        } = self;
+        let mut keys = font.require_glyph(*glyph_id)?.metrics_keys().clone();
+        keys.set(*side, key.clone().and_then(MetricsKey::new));
+        font.set_glyph_metrics_keys(*glyph_id, keys)?;
+        Ok((Vec::new(), Some(*glyph_id)))
+    }
+}
+
+/// Links one side of a layer's glyph with `key`, as typing it does: a key
+/// starting `==` is the layer's own, for its source only; any other is the
+/// glyph's, for every source, and clears a key the layer had of its own for
+/// the side so the glyph's applies. Blank text removes the side's key,
+/// wherever it is set. The side then follows the key in this same edit.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct LinkMetricsSide {
+    pub layer_id: LayerId,
+    pub side: MetricsKeySide,
+    pub key: String,
+}
+
+impl FontLevelIntent for LinkMetricsSide {
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Option<GlyphId>)> {
+        let Self {
+            layer_id,
+            side,
+            key,
+        } = self;
+        let glyph_id = font.require_layer_owner(*layer_id)?;
+        let Some(key) = MetricsKey::new(key.clone()) else {
+            font.clear_metrics_keys(*layer_id, &[*side])?;
+            return Ok((vec![*layer_id], Some(glyph_id)));
+        };
+
+        match KeyScope::of(key.as_str()) {
+            KeyScope::ThisSource => {
+                font.set_layer_metrics_key(*layer_id, *side, Some(key))?;
+            }
+            KeyScope::EverySource => {
+                font.set_layer_metrics_key(*layer_id, *side, None)?;
+                let mut keys = font.require_glyph(glyph_id)?.metrics_keys().clone();
+                keys.set(*side, Some(key));
+                font.set_glyph_metrics_keys(glyph_id, keys)?;
+            }
+        }
+        Ok((vec![*layer_id], Some(glyph_id)))
+    }
+}
+
+/// Clears the keys that would pull an edit of one side of a layer's glyph
+/// back, where each is set, as typing or dragging a value does: a right
+/// sidebearing and a width hold each other ([`MetricsKeySide::sides_holding`]).
+/// A glyph's key stops applying in every source.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct UnlinkMetricsSide {
+    pub layer_id: LayerId,
+    pub side: MetricsKeySide,
+}
+
+impl FontLevelIntent for UnlinkMetricsSide {
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Option<GlyphId>)> {
+        let glyph_id = font.require_layer_owner(self.layer_id)?;
+        font.clear_metrics_keys(self.layer_id, self.side.sides_holding())?;
+        Ok((vec![self.layer_id], Some(glyph_id)))
+    }
+}

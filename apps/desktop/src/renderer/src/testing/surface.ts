@@ -37,6 +37,7 @@ import type {
   GlyphName,
   GlyphRecord,
   KerningPosition,
+  MetricsKeySide,
   PointId,
   SelectableId,
   Axis,
@@ -45,6 +46,7 @@ import type {
   SourceMetrics,
   Unicode,
 } from "@shift/types";
+import type { SideLink } from "@shift/wasm/protocol";
 import type { CommandId, EditorCommandId } from "@shared/commands";
 import type { WorkspaceDocumentState } from "@shared/workspace/lanes";
 import type { DrawOptions, GlyphFixture, PointNames } from "./fixtures";
@@ -291,6 +293,13 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   setLeftSidebearing(value: number): void;
   /** Sets the open glyph's right sidebearing by changing its advance, as the sidebar's RSB field does. */
   setRightSidebearing(value: number): void;
+  /**
+   * Links one side of the open glyph with a metrics key, as typing `=…` into
+   * its sidebar field does.
+   *
+   * @returns Why the key was refused, such as a name no glyph has; null when it was set.
+   */
+  linkMetric(side: MetricsKeySide, key: string): string | null;
   /** Adds an anchor at a glyph-local position in every source being edited, and selects it. */
   addAnchorAt(position: Point2D): boolean;
   /** Renames an anchor in every source being edited, as the sidebar's anchor name field does. */
@@ -540,6 +549,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   textLayoutFailure(): TextLayoutFailureRead | null;
   /** What the Spacing tool shows; null when it is not active. */
   spacingTool(): SpacingToolState | null;
+  /** The open glyph's linked sides at the active source, as its sidebar fields show them. */
+  metricsLinks(): readonly SideLink[];
   /** What the Kerning tool shows; null when it is not active. */
   kerningTool(): KerningToolState | null;
   /** The open glyph's outline as the canvas draws it now, a gesture's uncommitted preview included. */

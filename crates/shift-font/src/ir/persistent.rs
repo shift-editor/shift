@@ -207,6 +207,11 @@ where
         self.0.get(key).into_iter().flat_map(PersistentSet::iter)
     }
 
+    /// Every key with at least one value, in key order.
+    pub(crate) fn keys(&self) -> impl Iterator<Item = &K> {
+        self.0.iter().map(|(key, _)| key)
+    }
+
     pub(crate) fn insert(&mut self, key: K, value: V) {
         self.0.get_or_default(key).insert(value);
     }

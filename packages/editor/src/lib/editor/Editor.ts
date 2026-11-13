@@ -28,6 +28,7 @@ import {
   type SegmentId,
   type SelectableId,
   type ShiftId,
+  type MetricsKeySide,
 } from "@shift/types";
 import { isSegmentId, type GlyphGeometry } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "../../types/variation";
@@ -105,6 +106,7 @@ import { EditorHistory } from "./history/EditorHistory";
 import type { Font } from "../model/Font";
 import type { FontStore } from "../model/FontStore";
 import type { Glyph, GlyphLayer } from "../model/Glyph";
+import { MetricsLinks } from "../model/MetricsLinks";
 import { AnchorEdits } from "../model/anchors/AnchorEdits";
 import type { DeleteMode, GlyphGeometrySelection } from "../../types/glyph";
 import type { Modifiers } from "../tools/core/GestureDetector";
@@ -1180,6 +1182,19 @@ export class Editor {
   }
 
   /**
+   * The metrics keys of the scene's only glyph at the active source.
+   *
+   * @returns null with no glyph or several, no active source, or no layer there.
+   */
+  public activeMetricsLinks(): MetricsLinks | null {
+    const node = this.scene.only("glyph");
+    const layer = this.#soleActiveLayer();
+    if (!node || !layer) return null;
+
+    return new MetricsLinks(this.font, node.glyphId, layer);
+  }
+
+  /**
    * Returns a loaded glyph's layer at a source.
    *
    * @returns null when the glyph is not loaded or has no layer at that source.
@@ -1877,7 +1892,7 @@ export class Editor {
    * @param width - New advance width in UPM units.
    */
   public setXAdvance(width: number): void {
-    this.#soleActiveLayer()?.setXAdvance(width);
+    this.#setUnlinked("width", "Set advance width", (layer) => layer.setXAdvance(width));
   }
 
   /**
@@ -1886,7 +1901,7 @@ export class Editor {
    * @param value - Desired left sidebearing in UPM units.
    */
   public setLeftSidebearing(value: number): void {
-    this.#soleActiveLayer()?.setLeftSidebearing(value);
+    this.#setUnlinked("left", "Set left sidebearing", (layer) => layer.setLeftSidebearing(value));
   }
 
   /**
@@ -1895,7 +1910,23 @@ export class Editor {
    * @param value - Desired right sidebearing in UPM units.
    */
   public setRightSidebearing(value: number): void {
-    this.#soleActiveLayer()?.setRightSidebearing(value);
+    this.#setUnlinked("right", "Set right sidebearing", (layer) =>
+      layer.setRightSidebearing(value),
+    );
+  }
+
+  /**
+   * Sets one metric of the current glyph layer, first breaking the links that
+   * would pull it back, as one undo step: a typed value replaces a key.
+   */
+  #setUnlinked(side: MetricsKeySide, label: string, set: (layer: GlyphLayer) => void): void {
+    const links = this.activeMetricsLinks();
+    if (!links) return;
+
+    this.transaction(label, () => {
+      links.unlinkFor(side);
+      set(links.layer);
+    });
   }
 
   public get screenMousePositionCell(): Signal<ScreenPoint> {

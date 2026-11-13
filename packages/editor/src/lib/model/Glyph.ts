@@ -16,6 +16,7 @@ import type {
   GlyphState,
   GlyphStructure,
   LayerId,
+  MetricsKeySide,
   PointId,
   PointSeed,
   ReadonlyEntityMap,
@@ -167,12 +168,15 @@ class GlyphLayerWriter {
   ) {
     this.#editCoordinator = editCoordinator;
     this.#intents = editCoordinator
-      ? new LayerIntents<void>((intent) => {
-          if (this.#collecting) this.#collecting.push(intent);
-          else editCoordinator.push(intent);
-        }, layerId)
+      ? new LayerIntents<void>((intent) => this.#send(intent), layerId)
       : null;
     this.#state = state;
+  }
+
+  /** Collects `intent` for the preview or batch being gathered, or pushes it. */
+  #send(intent: FontIntent): void {
+    if (this.#collecting) this.#collecting.push(intent);
+    else this.#editCoordinator?.push(intent);
   }
 
   get geometry(): GlyphGeometry {
@@ -358,6 +362,20 @@ class GlyphLayerWriter {
 
   shiftSidebearing(sidebearing: Sidebearing, delta: number): void {
     this.#workspaceIntents.shiftSidebearing({ sidebearing, delta });
+  }
+
+  linkMetricsSide(side: MetricsKeySide, key: string): void {
+    this.#send({
+      kind: "linkMetricsSide",
+      linkMetricsSide: { layerId: this.layerState.layerId, side, key },
+    });
+  }
+
+  unlinkMetricsSide(side: MetricsKeySide): void {
+    this.#send({
+      kind: "unlinkMetricsSide",
+      unlinkMetricsSide: { layerId: this.layerState.layerId, side },
+    });
   }
 
   addContour(): ContourId {
@@ -839,6 +857,25 @@ export class GlyphLayer {
   }
 
   /**
+   * Links `side` of this layer's glyph with `key`, as typing it does: Rust
+   * puts a `==` key on this layer and any other on the glyph, and blank text
+   * removes the side's key. The side follows the key in the same edit; a
+   * preview of the layer collects it, and a commit keeps it with the layer's
+   * change.
+   */
+  linkMetricsSide(side: MetricsKeySide, key: string): void {
+    this.#writer.linkMetricsSide(side, key);
+  }
+
+  /**
+   * Clears the metrics keys that would pull an edit of `side` back, where
+   * each is set, as typing or dragging a value does.
+   */
+  unlinkMetricsSide(side: MetricsKeySide): void {
+    this.#writer.unlinkMetricsSide(side);
+  }
+
+  /**
    * Apply a sparse point/anchor position patch to Rust and local geometry.
    *
    * Use this for one-shot edits and undo/redo of position operations. The bridge
@@ -882,9 +919,10 @@ export class GlyphLayer {
    * Begins one reversible preview cycle that changes one sidebearing of this layer.
    *
    * @param sidebearing - `"lsb"` moves the whole outline with the advance; `"rsb"` moves only the advance.
+   * @param unlink - Clears the metrics keys that would pull the side back, as part of the edit.
    */
-  beginSidebearingEdit(sidebearing: Sidebearing): SidebearingEdit {
-    return new SidebearingEdit(this, this.#writer.layerState, sidebearing);
+  beginSidebearingEdit(sidebearing: Sidebearing, unlink: () => void = () => {}): SidebearingEdit {
+    return new SidebearingEdit(this, this.#writer.layerState, sidebearing, unlink);
   }
 
   /** Begins one reversible preview cycle that moves, scales, or rotates this whole layer. */

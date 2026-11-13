@@ -31,6 +31,9 @@ pub(super) struct FontIndex {
     /// the composites that follow it without scanning every layer. Derived
     /// anchored placement retires this.
     by_component_base: PersistentMultiMap<GlyphId, LayerId>,
+    /// Each glyph with metrics keys, and where its keys are, so an edit
+    /// finds the linked glyphs without scanning every glyph.
+    metrics_keyed: PersistentMultiMap<GlyphId, KeyHolder>,
     /// Every point, contour, component, anchor, and guideline id in the font.
     pub(super) entity_ids: PersistentSet<GlyphEntityId>,
 }
@@ -93,6 +96,12 @@ impl FontIndex {
     /// [`CoreError::DuplicateGlyphLayer`], or a duplicate entity id error for
     /// the first key a unique index already holds. The index is then partly
     /// updated, so insert into a copy and keep it only on success.
+    /// Every glyph with a metrics key on itself or on one of its layers, in
+    /// id order.
+    pub(super) fn metrics_keyed_glyphs(&self) -> impl Iterator<Item = &GlyphId> {
+        self.metrics_keyed.keys()
+    }
+
     pub(super) fn try_insert(&mut self, entries: IndexEntries) -> CoreResult<()> {
         self.by_name.try_extend(entries.names).or_duplicate()?;
         self.owners.try_extend(entries.owners).or_duplicate()?;
@@ -104,6 +113,7 @@ impl FontIndex {
             .or_duplicate()?;
         self.by_unicode.extend(entries.unicodes);
         self.by_component_base.extend(entries.component_bases);
+        self.metrics_keyed.extend(entries.metrics_keyed);
         Ok(())
     }
 
@@ -113,6 +123,7 @@ impl FontIndex {
         self.owners.remove_all(&entries.owners);
         self.by_glyph_source.remove_all(&entries.glyph_sources);
         self.by_component_base.remove_all(&entries.component_bases);
+        self.metrics_keyed.remove_all(&entries.metrics_keyed);
         self.entity_ids.remove_all(&entries.entity_ids);
     }
 
@@ -181,6 +192,7 @@ pub(super) struct IndexEntries {
     owners: Vec<(LayerId, GlyphId)>,
     glyph_sources: Vec<(GlyphSource, LayerId)>,
     component_bases: Vec<(GlyphId, LayerId)>,
+    metrics_keyed: Vec<(GlyphId, KeyHolder)>,
     entity_ids: Vec<GlyphEntityId>,
 }
 
@@ -205,6 +217,9 @@ impl IndexEntries {
         for unicode in glyph.unicodes() {
             entries.unicodes.push((*unicode, glyph_id));
         }
+        if !glyph.metrics_keys().is_empty() {
+            entries.metrics_keyed.push((glyph_id, KeyHolder::Glyph));
+        }
         for layer in glyph.layers().values() {
             entries.add_layer_records(glyph_id, layer);
         }
@@ -228,7 +243,18 @@ impl IndexEntries {
             self.component_bases
                 .push((component.base_glyph_id(), layer_id));
         }
+        if !layer.metrics_keys().is_empty() {
+            self.metrics_keyed
+                .push((glyph_id, KeyHolder::Layer(layer_id)));
+        }
     }
+}
+
+/// Where a glyph's metrics keys are: on the glyph, or on one of its layers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(super) enum KeyHolder {
+    Glyph,
+    Layer(LayerId),
 }
 
 /// The layer slot a glyph has for one source.

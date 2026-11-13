@@ -258,8 +258,17 @@ fn a_version_3_document_upgrades_to_one_page_and_keeps_its_scene_edits() {
     let path = temp.path().join("Old.shift");
     drop(ShiftStore::create_document(&path, &sample_font()).unwrap());
     let conn = rusqlite::Connection::open(&path).unwrap();
-    conn.execute_batch("DROP TABLE scene_nodes; PRAGMA user_version = 3;")
-        .unwrap();
+    conn.execute_batch(
+        "ALTER TABLE glyphs DROP COLUMN left_metrics_key;
+         ALTER TABLE glyphs DROP COLUMN right_metrics_key;
+         ALTER TABLE glyphs DROP COLUMN width_metrics_key;
+         ALTER TABLE glyph_layers DROP COLUMN left_metrics_key;
+         ALTER TABLE glyph_layers DROP COLUMN right_metrics_key;
+         ALTER TABLE glyph_layers DROP COLUMN width_metrics_key;
+         DROP TABLE scene_nodes;
+         PRAGMA user_version = 3;",
+    )
+    .unwrap();
     drop(conn);
 
     let recovery = temp.path().join("Old.recovery");

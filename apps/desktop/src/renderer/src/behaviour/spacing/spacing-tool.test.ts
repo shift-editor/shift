@@ -171,6 +171,36 @@ describe("dragging a sidebearing", () => {
   });
 });
 
+describe("dragging or typing a linked sidebearing", () => {
+  // The open A's RSB follows a constant key: 150, so its advance is 450.
+  beforeEach(async () => {
+    editor.linkMetric("right", "=150");
+    await editor.settle();
+  });
+
+  it("moves the side as dragged and breaks the link, as one undo step", async () => {
+    await editor.dragFrom({ x: 400, y: 200 }, { x: 420, y: 200 });
+
+    expect((await editor.drawnGlyph("A")).sidebearings).toEqual({ lsb: 100, rsb: 170 });
+    expect(editor.metricsLinks()).toEqual([]);
+    await editor.undo();
+    expect((await editor.drawnGlyph("A")).sidebearings).toEqual({ lsb: 100, rsb: 150 });
+    expect(editor.metricsLinks()).toMatchObject([{ side: "right", key: "=150" }]);
+  });
+
+  it("takes a typed value and breaks the link", async () => {
+    editor.movePointerTo({ x: 400, y: 200 });
+    const { top, bottom } = editor.spacingTool()!.hovered!.gap;
+    await editor.clickAt({ x: 375, y: (top + bottom) / 2 });
+
+    editor.typeSidebearing(120);
+    await editor.settle();
+
+    expect((await editor.drawnGlyph("A")).sidebearings).toEqual({ lsb: 100, rsb: 120 });
+    expect(editor.metricsLinks()).toEqual([]);
+  });
+});
+
 describe("typing a sidebearing", () => {
   /** The left half's value, in its middle: between the outline edge at 300 and the boundary at 500. */
   let leftValue: Point2D;

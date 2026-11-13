@@ -655,8 +655,8 @@ These are allowed to jump around when energy is high, but they should not silent
 
 - [ ] Draggable sidebearing handles in editor
 - [ ] Numeric sidebearing input in glyph info panel
-- [ ] Link sidebearings (left = right)
-- [ ] Copy metrics from another glyph
+- [x] Link sidebearings (left = right)
+- [x] Copy metrics from another glyph
 
 **Spacing View**
 
