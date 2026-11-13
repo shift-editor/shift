@@ -15,6 +15,7 @@ import {
   SelectHover,
   SegmentDoubleClick,
   NodeDoubleClick,
+  RefuseReadOnlyEdit,
 } from "./behaviors";
 import type { Point2D } from "@shift/geo";
 import type { SelectableId } from "@shift/types";
@@ -50,6 +51,7 @@ export class Select extends BaseTool<SelectState, Select> {
     new Rotate(),
     new BendCurve(),
     new Translate(),
+    new RefuseReadOnlyEdit(),
     new Marquee(),
     new SelectHover(),
   ];

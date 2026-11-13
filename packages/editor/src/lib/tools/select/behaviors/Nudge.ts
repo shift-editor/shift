@@ -46,7 +46,7 @@ export class Nudge implements SelectBehavior {
   }
 }
 
-function nudgeDelta(event: KeyDownEvent): Point2D | null {
+export function nudgeDelta(event: KeyDownEvent): Point2D | null {
   const nudgeValue =
     NUDGES_VALUES[nudgeMagnitude({ accel: event.accelKey, shift: event.shiftKey })];
 
