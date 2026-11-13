@@ -153,11 +153,13 @@ export class Select extends BaseTool<SelectState, Select> {
         if (event.type === "doubleClick" && this.editor.doubleClickNode(event.target)) {
           return { state };
         }
+        // Clicking a point, segment or anchor is the start of editing it, so
+        // the preview says it is read-only. A component is clicked to open
+        // its base glyph (the click before a double-click), which it allows.
         switch (event.target.kind) {
           case "point":
           case "segment":
           case "anchor":
-          case "component":
             this.editor.notifyPreviewMutationAttempt();
         }
 

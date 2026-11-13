@@ -601,6 +601,11 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
    * could all be drawn while one it places is still loading. Test-only.
    */
   drawnTextGlyphs(): (string | null)[];
+  /**
+   * How many times a preview has said it is read-only (the notice shown when
+   * a gesture would change the font) since the editor opened. Test-only.
+   */
+  readOnlyNotices(): number;
   /** Whether the glyph named `name` has loaded, so the canvas can draw it. Test-only: not agent data. */
   glyphLoaded(name: string): boolean;
   /**

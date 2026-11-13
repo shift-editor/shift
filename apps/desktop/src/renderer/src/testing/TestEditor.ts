@@ -275,6 +275,8 @@ export class TestEditor extends Editor implements EditorTestSurface {
   /** The overlay frames {@link recordCanvas} has recorded, each the lines it strokes. */
   /** The ids outlines go by in {@link latestCanvasFrame} and {@link drawnOutlineIds}. */
   readonly #outlineIds = new Map<Path2D, number>();
+  /** How many times a preview said it is read-only, for {@link readOnlyNotices}. */
+  #readOnlyNotices = 0;
   /** How many times the canvas text was laid out, once {@link textLayoutCount} first counts. */
   #textLayouts: { count: number } | null = null;
   /** The Kerning tool's uncommitted preview, discarded by {@link cancelGesture}. */
@@ -290,6 +292,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     const clipboard = new InMemorySystemClipboard();
     super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode });
     this.#stack = stack;
+    this.on("previewMutationAttempted", () => this.#readOnlyNotices++);
     this.#tabs = new WindowTabs(this);
     this.#clipboard = clipboard;
     this.#reads = {
@@ -1636,6 +1639,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
       fills: (frame?.fills ?? []).map((path) => this.#outlineId(path)),
       strokes: (frame?.strokes ?? []).map((path) => this.#outlineId(path)),
     };
+  }
+
+  readOnlyNotices(): number {
+    return this.#readOnlyNotices;
   }
 
   drawnTextGlyphs(): (string | null)[] {

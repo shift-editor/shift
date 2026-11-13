@@ -83,6 +83,12 @@ describe("double-clicking in a preview", () => {
     expect(editor.canvasText()).toMatchObject({ hoveredItemId: editor.canvasText()!.items[1]!.id });
   });
 
+  it("says it is read-only when a point is clicked, as editing it would change the font", async () => {
+    await editor.clickAt({ x: 100, y: 100 });
+
+    expect(editor.readOnlyNotices()).toBe(1);
+  });
+
   it("leaves a point as it was rather than making it smooth", async () => {
     const { lone } = await editor.draw({
       contours: [{ points: [{ x: 300, y: 300, name: "lone" }] }],
@@ -121,5 +127,7 @@ describe("double-clicking a component in a preview", () => {
       glyphs: [{ name: "Adieresis" }, { name: "A" }],
       editedItemId: composite.canvasText()!.items[1]!.id,
     });
+    // Opening it changes nothing, so the preview does not say it is read-only.
+    expect(composite.readOnlyNotices()).toBe(0);
   });
 });
