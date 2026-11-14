@@ -148,6 +148,10 @@ An edit should cost what the edited thing costs, not what the font costs. A `Fon
 
 When the editor needs a shift-font rule synchronously, write it as a plain-data function in shift-font that native callers use, and export that function from `crates/shift-wasm`. Don't write a second Rust version for WebAssembly, and don't re-declare its types there: a `FontFeature` or `FeatureGroup` copied into `shift-wasm` beside `shift-text`'s is two enums to keep in sync. Derive the wire format on the original type, or convert with one `From`. The export only converts numbers to and from shift-font types; "Choosing a route" in `crates/shift-wasm/docs/DOCS.md` says what belongs there and what may stay in TypeScript.
 
+## The scan ratchet
+
+`pnpm scan:rust --check` (CI) holds every `shift-scan` kind's count per crate to `crates/shift-scan/baseline.json`: a branch may not add a hit, and a branch that fixes some runs `pnpm scan:rust --update` and commits the lower number. The kinds are listed in `crates/shift-scan/docs/DOCS.md`.
+
 ## Review checklist
 
 - [ ] No `CoreError::*NotFound`, `SlugError::LengthOverflow`, or `StoreError::MissingEntity` built inline where a helper above applies.

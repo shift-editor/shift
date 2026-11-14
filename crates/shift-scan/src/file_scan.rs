@@ -4,11 +4,12 @@ use std::path::Path;
 use quote::ToTokens;
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
-use syn::{Expr, FnArg, ImplItem, Type};
+use syn::{Expr, FnArg, ImplItem};
 
 use crate::chain::MethodChain;
 use crate::collect::{self, KnownType};
 use crate::finding::{Finding, Kind};
+use crate::syntax;
 
 /// A chain this long or longer is reported.
 const LONG_CHAIN_STEPS: usize = 6;
@@ -85,27 +86,6 @@ impl<'a> FileScan<'a> {
         });
     }
 
-    /// The type a parameter is about: `&Font`, `&mut Font` and `Font` are all `Font`.
-    fn subject(ty: &Type) -> Option<String> {
-        match ty {
-            Type::Reference(reference) => Self::subject(&reference.elem),
-            Type::Path(path) => path
-                .path
-                .segments
-                .last()
-                .map(|segment| segment.ident.to_string()),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn is_test(attrs: &[syn::Attribute]) -> bool {
-        attrs.iter().any(|attr| {
-            attr.path().is_ident("test")
-                || (attr.path().is_ident("cfg")
-                    && attr.to_token_stream().to_string().contains("test"))
-        })
-    }
-
     /// What a closure's error is built by: the function it calls, or the
     /// variant it names. `None` for anything more involved.
     fn error_built(body: &Expr) -> Option<String> {
@@ -159,7 +139,7 @@ impl<'a> FileScan<'a> {
     }
 
     fn record_inherent_methods(&mut self, item: &syn::ItemImpl) {
-        let Some(self_type) = Self::subject(&item.self_ty) else {
+        let Some(self_type) = syntax::type_name(&item.self_ty) else {
             return;
         };
         for method in &item.items {
@@ -183,7 +163,7 @@ impl<'a> FileScan<'a> {
         };
         let mut literals = StructLiterals::default();
         literals.visit_block(body);
-        let self_type = Self::subject(&item.self_ty).unwrap_or_default();
+        let self_type = syntax::type_name(&item.self_ty).unwrap_or_default();
         for literal in literals.found {
             let copied = literal
                 .fields
@@ -247,17 +227,17 @@ impl<'ast> Visit<'ast> for StructLiterals {
 
 impl<'ast> Visit<'ast> for FileScan<'_> {
     fn visit_item_mod(&mut self, module: &'ast syn::ItemMod) {
-        if !Self::is_test(&module.attrs) {
+        if !syntax::is_test(&module.attrs) {
             visit::visit_item_mod(self, module);
         }
     }
 
     fn visit_item_fn(&mut self, function: &'ast syn::ItemFn) {
-        if Self::is_test(&function.attrs) || function.sig.ident == "main" {
+        if syntax::is_test(&function.attrs) || function.sig.ident == "main" {
             return;
         }
         let subject = function.sig.inputs.first().and_then(|input| match input {
-            FnArg::Typed(typed) => Self::subject(&typed.ty),
+            FnArg::Typed(typed) => syntax::type_name(&typed.ty),
             FnArg::Receiver(_) => None,
         });
         let is_method_subject = |subject: &String| {
@@ -275,7 +255,7 @@ impl<'ast> Visit<'ast> for FileScan<'_> {
     }
 
     fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
-        if Self::is_test(&item.attrs) {
+        if syntax::is_test(&item.attrs) {
             return;
         }
         match &item.trait_ {
@@ -295,7 +275,7 @@ impl<'ast> Visit<'ast> for FileScan<'_> {
     }
 
     fn visit_impl_item_fn(&mut self, method: &'ast syn::ImplItemFn) {
-        if !Self::is_test(&method.attrs) {
+        if !syntax::is_test(&method.attrs) {
             self.check_tail(&method.block);
             visit::visit_impl_item_fn(self, method);
         }

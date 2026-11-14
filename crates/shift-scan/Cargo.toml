@@ -2,14 +2,15 @@
 name = "shift-scan"
 version = "0.1.0"
 edition = "2024"
-description = "Reports Rust structure worth a reviewer's look: free functions that read as methods, shapes several types share, long method chains and duplicated function bodies"
+description = "Reports Rust structure worth a reviewer's look, and holds each kind's count to a checked-in baseline"
 license.workspace = true
 publish = false
 
 [dependencies]
 proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"
-syn = { version = "2", features = ["full", "visit"] }
+serde_json = "1"
+syn = { version = "2", features = ["full", "visit", "visit-mut"] }
 
 [lints]
 workspace = true
