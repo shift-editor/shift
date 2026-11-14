@@ -36,6 +36,7 @@ import type { NativeDialogs } from "../dialogs/NativeDialogs";
 import { electronNativeDialogs } from "../dialogs/electronNativeDialogs";
 import { shiftProductName } from "../release";
 import { AppUpdater } from "../update/AppUpdater";
+import { isChannelClosed } from "../../shared/workspace/channel";
 import { isConvertiblePreviewPath } from "../../shared/workspace/previewConversion";
 import { FONT_FOLDER_EXTENSIONS, OPEN_FONT_EXTENSIONS } from "../../shared/openFontExtensions";
 import { ShiftMcpServer } from "@shift/mcp";
@@ -1041,14 +1042,17 @@ export class App {
    * Builds a recent file's thumbnail specimen in its session's utility process.
    *
    * @remarks
-   * Runs detached from the open or save that triggered it; failures such as
-   * the session closing mid-build leave the previous thumbnail in place.
+   * Runs detached from the open or save that triggered it. When the session
+   * closes mid-build, the previous thumbnail stays and the next open builds
+   * it again; only a font that can't be read is recorded as a failure.
    */
   async #buildSpecimen(visit: RecentDocumentVisit, session: FontSessionHost): Promise<void> {
     try {
       const specimen = await session.workspaceProcess.specimen(visit.path);
       this.#recents?.setSpecimen(visit, specimen);
     } catch (error) {
+      if (isChannelClosed(error)) return;
+
       this.#log.warn("building recent file specimen failed", visit.path, error);
       this.#recents?.setSpecimenFailure(
         visit,

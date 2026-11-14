@@ -19,6 +19,25 @@ export type Transport = {
   close(): void;
 };
 
+/**
+ * Why a call never got its answer: the channel closed first, from either
+ * side, as when a window closes mid-request.
+ *
+ * @remarks
+ * Not a failure of the request itself, so callers that remember failures,
+ * such as a recent file's preview, should not record it. The error keeps its
+ * name when it crosses to another process; check it with
+ * {@link isChannelClosed}, not `instanceof`.
+ */
+export class ChannelClosedError extends Error {
+  override name = "ChannelClosedError";
+}
+
+/** Whether `error` means the channel closed before the call was answered, here or in another process. */
+export function isChannelClosed(error: unknown): boolean {
+  return error instanceof Error && error.name === "ChannelClosedError";
+}
+
 /** Contract shape for one lane's request/response operations. */
 export type CallMap = Record<string, { request: unknown; response: unknown }>;
 
@@ -81,7 +100,7 @@ export class Channel<Calls extends CallMap, Events extends EventMap> {
   constructor(transport: Transport) {
     this.#transport = transport;
     transport.onMessage((message) => this.#handleMessage(message.data));
-    transport.onClose(() => this.#disconnect(new Error("channel closed"), false));
+    transport.onClose(() => this.#disconnect(new ChannelClosedError("channel closed"), false));
   }
 
   /** Returns whether this lane can no longer accept calls or events. */
@@ -104,7 +123,7 @@ export class Channel<Calls extends CallMap, Events extends EventMap> {
     transfer?: unknown[],
   ): Promise<Calls[T]["response"]> {
     if (this.#disposed) {
-      return Promise.reject(this.#closedError ?? new Error("channel disposed"));
+      return Promise.reject(this.#closedError ?? new ChannelClosedError("channel disposed"));
     }
 
     this.#nextRequestId += 1;
@@ -140,7 +159,7 @@ export class Channel<Calls extends CallMap, Events extends EventMap> {
 
   /** Rejects all pending calls, drops listeners, and closes the transport. */
   dispose(): void {
-    this.#disconnect(new Error("channel disposed"), true);
+    this.#disconnect(new ChannelClosedError("channel disposed"), true);
   }
 
   #disconnect(error: Error, closeTransport: boolean): void {
@@ -169,7 +188,7 @@ export class Channel<Calls extends CallMap, Events extends EventMap> {
     }
 
     if (isCloseEnvelope(data)) {
-      this.#disconnect(new Error("channel closed"), true);
+      this.#disconnect(new ChannelClosedError("channel closed"), true);
     }
   }
 

@@ -3,10 +3,12 @@ import { MessageChannel } from "node:worker_threads";
 import {
   Channel,
   domPortTransport,
+  isChannelClosed,
   nodePortTransport,
   serveChannel,
   type ChannelServer,
 } from "./channel";
+import { fromTransportError, toTransportError } from "../errors";
 
 type TestCalls = {
   "math.add": { request: { a: number; b: number }; response: number };
@@ -140,6 +142,25 @@ describe("channel dispose", () => {
     client.dispose();
 
     await expect(pending).rejects.toThrow("channel disposed");
+  });
+
+  it("rejects in-flight calls as closed, even after crossing to another process", async () => {
+    const { client } = createLane();
+    const pending = client.call("task.slow", undefined);
+
+    client.dispose();
+    const error = await pending.catch((reason: unknown) => reason);
+
+    expect(isChannelClosed(error)).toBe(true);
+    expect(isChannelClosed(fromTransportError(toTransportError(error)))).toBe(true);
+  });
+
+  it("does not read a handler's own failure as the channel closing", async () => {
+    const { client } = createLane();
+
+    const error = await client.call("math.explode", undefined).catch((reason: unknown) => reason);
+
+    expect(isChannelClosed(error)).toBe(false);
   });
 
   it("rejects calls made after dispose instead of hanging", async () => {
