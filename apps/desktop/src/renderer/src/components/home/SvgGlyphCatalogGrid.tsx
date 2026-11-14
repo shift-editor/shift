@@ -226,7 +226,6 @@ export function SvgGlyphCatalogGrid({
                   aria-label={glyphActionLabel?.(cell.glyph) ?? `Open ${cell.glyph.displayName}`}
                   variant="ghost"
                   aria-pressed={selection.has(cell.glyph.id)}
-                  isActive={selection.has(cell.glyph.id)}
                   className="flex w-full items-center justify-center overflow-hidden p-0"
                   // The tile's border and the rule above the name take three pixels of its height.
                   style={{ height: cell.cellRect.height - targetFrame.layout.nameHeight - 3 }}
