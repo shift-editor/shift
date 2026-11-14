@@ -119,6 +119,21 @@ simulatedUpdateTest(
   },
 );
 
+const simulatedWorkspaceUpdateTest = authoredTest.extend({ simulatedUpdate: true });
+
+simulatedWorkspaceUpdateTest(
+  "The update strip sits above the glyph canvas",
+  async ({ editor, page }) => {
+    await editor.openGlyphByName("A");
+    const strip = page.getByRole("status", { name: /9\.9\.9 update$/ });
+
+    await expect(strip.getByText("Update available")).toBeVisible({ timeout: 15_000 });
+    // A click lands only on the topmost element, so this fails while the canvas covers the strip.
+    await strip.getByRole("button", { name: "Download" }).click();
+    await expect(strip.getByText("Downloaded")).toBeVisible({ timeout: 15_000 });
+  },
+);
+
 launcherTest("Feedback opens a modeless composer", async ({ electronApp, page }) => {
   const feedbackOpened = electronApp.waitForEvent("window");
 

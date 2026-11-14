@@ -48,8 +48,8 @@ export function UpdateStrip({ className }: UpdateStripProps) {
     <div
       role="status"
       aria-label={label}
-      // Above the glyph grid's and canvas's own layers, which go up to z-4.
-      className={cn("pointer-events-none absolute z-10 flex", className)}
+      // Above the glyph grid and the canvas, which sits at z-20 (Canvas.tsx).
+      className={cn("pointer-events-none absolute z-30 flex", className)}
     >
       <UpdateStripView
         notice={notice}

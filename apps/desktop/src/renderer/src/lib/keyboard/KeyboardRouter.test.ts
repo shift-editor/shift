@@ -250,6 +250,40 @@ describe("KeyboardRouter", () => {
     });
   });
 
+  describe("grid shortcut", () => {
+    it("shows and hides the grid with G on the canvas", async () => {
+      expect(await router.handleKeyDown(createKeyboardEvent({ key: "g", code: "KeyG" }))).toBe(
+        true,
+      );
+      expect(editor.gridSettings()).toMatchObject({ visible: true, snap: false });
+
+      await router.handleKeyDown(createKeyboardEvent({ key: "g", code: "KeyG" }));
+      expect(editor.gridSettings()).toMatchObject({ visible: false });
+    });
+
+    it("toggles snapping to the grid with Shift+G on the canvas", async () => {
+      const shiftG = createKeyboardEvent({ key: "G", code: "KeyG", shiftKey: true });
+
+      expect(await router.handleKeyDown(shiftG)).toBe(true);
+      expect(editor.gridSettings()).toMatchObject({ visible: false, snap: true });
+    });
+
+    it("leaves Cmd+G alone", async () => {
+      await router.handleKeyDown(createKeyboardEvent({ key: "g", code: "KeyG", metaKey: true }));
+
+      expect(editor.gridSettings()).toMatchObject({ visible: false, snap: false });
+    });
+
+    it("types G instead of toggling the grid in Text mode", async () => {
+      editor.selectTool("text");
+
+      const handled = await router.handleKeyDown(createKeyboardEvent({ key: "g", code: "KeyG" }));
+
+      expect(handled).toBe(false);
+      expect(editor.gridSettings()).toMatchObject({ visible: false, snap: false });
+    });
+  });
+
   describe("right sidebar shortcuts", () => {
     it.each([
       {

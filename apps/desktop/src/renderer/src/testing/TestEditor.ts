@@ -23,7 +23,7 @@ import {
   type ScreenPoint,
   type ScreenVector,
 } from "@shift/editor/spaces";
-import { Editor } from "@shift/editor";
+import { Editor, type GridSettings, type GridSettingsChange } from "@shift/editor";
 import { featureReadMessage } from "@shift/editor/text";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import { effect } from "@shift/editor/signals";
@@ -1757,6 +1757,14 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   zoomLevel(): number {
     return this.zoom;
+  }
+
+  gridSettings(): GridSettings {
+    return this.grid.settings;
+  }
+
+  setGrid(change: GridSettingsChange): void {
+    this.grid.update(change);
   }
 
   canvasOffset(): ScreenVector {

@@ -34,6 +34,8 @@ export class GlyphsTransform implements TransformTarget {
   readonly #editor: Editor;
   readonly #parts: readonly GlyphsTransformPart[];
   readonly #glyphIds: ReadonlySet<GlyphId>;
+  /** Glyphs in a text run sit on the run's layout, not the edited glyph's grid. */
+  readonly gridOrigin = null;
 
   /**
    * @param bounds - Box enclosing every part, in the selection node's units.
