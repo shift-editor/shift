@@ -33,6 +33,7 @@ import {
 import { isSegmentId, type GlyphGeometry } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "../../types/variation";
 import type { SourceSelectionMode } from "../../types/sourceSelection";
+import type { GridStorage } from "../../types/grid";
 import type {
   Coordinates,
   LocalBounds,
@@ -351,7 +352,7 @@ export class Editor {
     // A document's scene has its first page already.
     if (this.#sessionScene) this.history.withoutRecording(() => this.pages.ensure());
     this.hover = new Hover();
-    this.grid = new Grid();
+    this.grid = new Grid(this.sessionMode === "workspace" ? this.#gridStorage() : null);
     this.snapping = new Snapping(this);
     this.#selectedPoints = computed(
       () => this.#resolveSelectedPoints(this.selection.stateCell.value.ids),
@@ -1625,6 +1626,19 @@ export class Editor {
     this.font.editCoordinator.transaction("Set languages", () => {
       this.font.setLanguageIds(ids);
     });
+  }
+
+  /** The font's grid, written as one undoable step per change. */
+  #gridStorage(): GridStorage {
+    return {
+      gridCell: this.font.gridCell,
+      revisionCell: this.font.gridRevisionCell,
+      write: (cells) => {
+        this.font.editCoordinator.transaction("Change grid", () => {
+          this.font.setGrid(cells);
+        });
+      },
+    };
   }
 
   /** Return the shared external location to the font default. */

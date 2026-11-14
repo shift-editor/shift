@@ -300,6 +300,8 @@ pub struct FontHeader {
     pub named_instances: Vec<NamedInstance>,
     /// Tracked Hyperglot language ids; `None` when the font stores no list.
     pub language_ids: Option<Vec<String>>,
+    /// The grid the font is drawn on; `None` when it stores none.
+    pub grid: Option<shift_font::Grid>,
 }
 
 /// Why [`EngineReads::variation_at`] could not evaluate a compiled basis.
@@ -1092,6 +1094,7 @@ mod exports {
                     .map(wire::NamedInstance::from)
                     .collect(),
                 language_ids: font.language_ids(),
+                grid: font.grid(),
             })
         }
 

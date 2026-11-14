@@ -15,9 +15,9 @@ use crate::interpolation::GlyphInterpolationValues;
 use crate::ir::{
     Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Component, ComponentAlignment,
     ComponentId, Contour, ContourId, DecomposedTransform, DesignLocation, Font, FontMetadata,
-    Glyph, GlyphId, GlyphLayer, GlyphName, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition,
-    MetricId, MetricValue, NamedInstance, NamedInstanceId, PointId, PointType, Source, SourceId,
-    Transform,
+    GRID_LIB_KEY, Glyph, GlyphId, GlyphLayer, GlyphName, Grid, LANGUAGES_LIB_KEY, LayerId,
+    LibValue, MetricDefinition, MetricId, MetricValue, NamedInstance, NamedInstanceId, PointId,
+    PointType, Source, SourceId, Transform,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::linked_metrics::ChangedGlyphs;
@@ -163,6 +163,7 @@ font_intents! {
         UpdateGlyph,
         UpdateFontMetadata,
         SetLanguages,
+        SetGrid,
         CreateAxis,
         UpdateAxis,
         DeleteAxis,
@@ -765,6 +766,19 @@ impl Font {
             .collect();
         let value = LibValue::Array(values);
         self.lib_mut().set(LANGUAGES_LIB_KEY.to_string(), value);
+    }
+
+    fn apply_set_grid(&mut self, grid: Option<Grid>) -> CoreResult<()> {
+        match grid {
+            Some(grid) => {
+                let grid = grid.validate()?;
+                self.lib_mut().set(GRID_LIB_KEY.to_string(), grid.to_lib());
+            }
+            None => {
+                self.lib_mut().remove(GRID_LIB_KEY);
+            }
+        }
+        Ok(())
     }
 
     fn apply_create_axis(&mut self, axis: &Axis) -> CoreResult<()> {

@@ -552,6 +552,7 @@ export class EngineSession {
       ...header,
       sourceMetricsInterpolation: header.sourceMetricsInterpolation ?? null,
       languageIds: header.languageIds ?? null,
+      grid: header.grid ?? null,
     };
   }
 

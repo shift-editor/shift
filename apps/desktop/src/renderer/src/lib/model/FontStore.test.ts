@@ -380,6 +380,7 @@ function snapshot(workspaceId: string, layerId: LayerId): WorkspaceSnapshot {
     axisMappingBases: [],
     namedInstances: [],
     languageIds: null,
+    grid: null,
     kerning: { groups: [], sources: [] },
   };
 }

@@ -317,6 +317,8 @@ pub struct FontSnapshot {
     pub named_instances: Vec<NamedInstance>,
     /// Tracked Hyperglot language ids; `None` when the font stores no list.
     pub language_ids: Option<Vec<String>>,
+    /// The grid the font is drawn on; `None` when it stores none.
+    pub grid: Option<crate::Grid>,
     pub kerning: KerningSnapshot,
 }
 

@@ -11,6 +11,7 @@ pub mod font;
 pub mod glyph;
 pub mod glyph_category;
 pub mod glyph_name;
+pub mod grid;
 pub mod guideline;
 pub mod kerning;
 pub mod lib_data;
@@ -45,6 +46,7 @@ pub use glyph_category::{
     OpenTypeCategories, OpenTypeCategory, RecordCategory, UnknownGlyphCategory,
 };
 pub use glyph_name::{GlyphName, GlyphNameError};
+pub use grid::{GRID_LIB_KEY, Grid, MAX_GRID_SUBDIVISIONS};
 pub use guideline::{Guideline, GuidelineOrientation};
 pub use kerning::{
     Kerning, KerningGroup, KerningPair, KerningPosition, KerningSide, ResolvedKerning,

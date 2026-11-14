@@ -82,6 +82,21 @@ impl FontLevelIntent for SetLanguages {
     }
 }
 
+/// Replaces the grid the font is drawn on, stored under [`crate::GRID_LIB_KEY`];
+/// `None` removes it, so the editor falls back to its default grid.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct SetGrid {
+    pub grid: Option<Grid>,
+}
+
+impl FontLevelIntent for SetGrid {
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Option<GlyphId>)> {
+        font.apply_set_grid(self.grid)?;
+        Ok((Vec::new(), None))
+    }
+}
+
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct CreateAxis {
