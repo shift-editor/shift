@@ -21,7 +21,7 @@ use authoring::{
 };
 use clap::Parser;
 use cli::{
-    AxisCommand, Cli, Command, CompileArgs, ExportArgs, FontCommand, GlyphCommand, InstanceCommand,
+    AxisCommand, Cli, Command, DocumentOutputArgs, FontCommand, GlyphCommand, InstanceCommand,
     KerningCommand, KerningGroupCommand, LayerCommand, SkillCommand, SourceCommand,
 };
 use glyph_inspect::GlyphInspection;
@@ -230,11 +230,11 @@ fn write_authoring_result(
     }
 }
 
-fn compile(args: CompileArgs) -> miette::Result<FontExportResult> {
+fn compile(args: DocumentOutputArgs) -> miette::Result<FontExportResult> {
     export_document(&args.path, args.output, ExportFormat::Ttf)
 }
 
-fn export(args: ExportArgs) -> miette::Result<FontExportResult> {
+fn export(args: DocumentOutputArgs) -> miette::Result<FontExportResult> {
     let format = ExportFormat::from_path(&args.output).into_diagnostic()?;
     export_document(&args.path, args.output, format)
 }
@@ -331,7 +331,7 @@ mod tests {
         let output_path = temp.path().join("Dogfood.ttf");
         drop(ShiftStore::create_document(&source_path, &sample_variable_font()).unwrap());
 
-        let result = compile(CompileArgs {
+        let result = compile(DocumentOutputArgs {
             path: source_path,
             output: output_path.clone(),
         })

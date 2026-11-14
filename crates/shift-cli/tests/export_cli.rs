@@ -35,7 +35,7 @@ fn single_master_document(dir: &Path) -> Fixture<String> {
     Ok(path)
 }
 
-fn read(path: &Path) -> Fixture<Font> {
+fn read_exported(path: &Path) -> Fixture<Font> {
     Ok(FontLoader::new().read_font(&utf8(path)?)?)
 }
 
@@ -60,7 +60,7 @@ fn exports_a_designspace_with_one_ufo_per_master() {
     for ufo in ["Dogfood.ufo", "Dogfood-Medium.ufo", "Dogfood-Bold.ufo"] {
         assert!(out.join(ufo).is_dir(), "{ufo} should be written");
     }
-    let exported = read(&designspace).unwrap();
+    let exported = read_exported(&designspace).unwrap();
     let names: Vec<_> = exported
         .sources()
         .iter()
@@ -79,7 +79,7 @@ fn exports_a_single_master_font_as_a_ufo() {
     let output = shift(&["export", &document, "--output", ufo.to_str().unwrap()]);
 
     assert!(output.status.success(), "{}", stderr(&output));
-    let exported = read(&ufo).unwrap();
+    let exported = read_exported(&ufo).unwrap();
     let authored = load_font(&document);
     assert_eq!(
         exported.glyph_by_name("A").unwrap().unicodes(),
