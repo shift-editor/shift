@@ -19,6 +19,7 @@ use crate::{
 mod kerning;
 mod layer_match;
 mod metrics;
+mod static_instance;
 mod values;
 
 pub use kerning::{KerningBlend, MissingKerningOrigin};

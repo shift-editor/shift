@@ -1,4 +1,7 @@
-use crate::{CoreResult, DesignLocation, Font, GlyphId, Kerning, SourceId};
+use crate::{
+    CoreResult, DesignLocation, Font, GlyphId, Kerning, KerningPair, KerningPosition, KerningSide,
+    SourceId,
+};
 
 use super::InterpolationBasis;
 
@@ -164,6 +167,42 @@ impl KerningBlend {
         self.values(kerning, [(first, second)])
             .pop()
             .unwrap_or_default()
+    }
+
+    /// Returns the value an authored `pair` blends to, as a font compiled
+    /// from `kerning` applies it to every glyph pair it covers that no more
+    /// specific pair takes.
+    ///
+    /// Each source contributes its own value for `pair` or, where it authors
+    /// none, the pair compilers fill it with: the group pair, when one side
+    /// of `pair` is a glyph whose group at that position kerns against the
+    /// other side's group. A glyph pair resolves as [`Self::value`] does.
+    pub fn pair_value(&self, kerning: &Kerning, pair: &KerningPair) -> f64 {
+        let group_pair = match (&pair.first, &pair.second) {
+            (KerningSide::Glyph(first), KerningSide::Glyph(second)) => {
+                return self.value(kerning, *first, *second);
+            }
+            (KerningSide::Glyph(first), KerningSide::Group(second)) => kerning
+                .group_of(KerningPosition::First, *first)
+                .map(|first| KerningPair::groups(*first, *second)),
+            (KerningSide::Group(first), KerningSide::Glyph(second)) => kerning
+                .group_of(KerningPosition::Second, *second)
+                .map(|second| KerningPair::groups(*first, *second)),
+            (KerningSide::Group(_), KerningSide::Group(_)) => None,
+        };
+        let fills = std::iter::once(pair).chain(group_pair.as_ref());
+
+        self.sources
+            .iter()
+            .filter_map(|(source_id, weight)| {
+                let source = kerning.source(*source_id)?;
+                let value = fills
+                    .clone()
+                    .find_map(|candidate| source.value(candidate))?;
+                Some(weight * value)
+            })
+            // From +0: an empty f64 `sum` is -0, which would read as a kern.
+            .fold(0.0, |total, value| total + value)
     }
 
     /// Returns [`Self::value`] for each of `pairs`, in order, looking each

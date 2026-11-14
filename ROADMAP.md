@@ -646,7 +646,7 @@ These are allowed to jump around when energy is high, but they should not silent
 
 - [x] Explicit named-instance IR, persistence, and `fvar` compilation
 - [ ] Instance preview panel
-- [ ] Batch instance export
+- [x] Batch instance export (`shift-cli compile --static`: one static TTF per named instance)
 - [x] STAT table generation
 
 ---

@@ -7,9 +7,10 @@
 //! Source exports write each UFO atomically, and a designspace's UFOs before
 //! the XML that names them.
 //!
-//! Formats still to come: WOFF2 and WOFF (a TTF re-encoded, which needs an
-//! encoder crate that passes `cargo deny`), static instances (one binary per
-//! named instance), and a Glyphs writer (`glyphs-reader` only reads).
+//! Static instances, one binary per named instance, are exported by
+//! `FontExporter::export_static_instances`. Still to come: WOFF2 and WOFF (a
+//! TTF re-encoded, which needs an encoder crate that passes `cargo deny`) and
+//! a Glyphs writer (`glyphs-reader` only reads).
 
 use std::path::{Path, PathBuf};
 
@@ -164,6 +165,23 @@ pub enum ExportError {
         source: std::io::Error,
     },
 
+    #[error("this variable font has no named instances to export as static fonts")]
+    NoNamedInstances,
+
+    #[error("cannot evaluate instance {instance:?}: {source}")]
+    StaticInstance {
+        instance: String,
+        #[source]
+        source: shift_font::CoreError,
+    },
+
+    #[error("failed to create export directory {path}: {source}")]
+    CreateDirectory {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
     #[error("failed to write {} sources to {path}: {source}", format.name())]
     WriteSources {
         format: ExportFormat,
@@ -233,7 +251,11 @@ impl FontExporter {
         strip_compiler_version(&bytes)
     }
 
-    fn export_ttf(&self, font: &impl FontView, output_path: &Path) -> Result<(), ExportError> {
+    pub(crate) fn export_ttf(
+        &self,
+        font: &impl FontView,
+        output_path: &Path,
+    ) -> Result<(), ExportError> {
         let bytes = self.compile_ttf(font)?;
         write_file_atomic(output_path, &bytes).map_err(|source| ExportError::WriteOutput {
             path: output_path.to_path_buf(),
