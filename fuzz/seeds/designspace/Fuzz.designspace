@@ -1,0 +1,23 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<designspace format="5.0">
+  <axes>
+    <axis name="Resolution" tag="RESO" default="8" minimum="4" maximum="16">
+      <map input="4" output="40"/>
+      <map input="8" output="80"/>
+      <map input="16" output="160"/>
+    </axis>
+  </axes>
+  <sources>
+    <source filename="Light.ufo" name="Light" stylename="Light">
+      <location><dimension name="Resolution" xvalue="80"/></location>
+    </source>
+    <source filename="Bold.ufo" name="Bold" stylename="Bold">
+      <location><dimension name="Resolution" xvalue="160"/></location>
+    </source>
+  </sources>
+  <instances>
+    <instance name="Coarse" stylename="Coarse" familyname="Fuzz">
+      <location><dimension name="Resolution" uservalue="4"/></location>
+    </instance>
+  </instances>
+</designspace>

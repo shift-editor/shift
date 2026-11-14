@@ -48,6 +48,9 @@ exceptions = [
   # Persistent collections behind shift-font's ir/persistent.rs.
   { crate = "imbl", allow = ["MPL-2.0"] },
   { crate = "imbl-sized-chunks", allow = ["MPL-2.0"] },
+  # libFuzzer's bundled LLVM sources; NCSA is BSD-style. Only the fuzz
+  # targets in fuzz/ link it, never a shipped binary.
+  { crate = "libfuzzer-sys", allow = ["NCSA"] },
 ]
 
 [bans]

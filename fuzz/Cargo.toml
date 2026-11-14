@@ -1,0 +1,33 @@
+[package]
+name = "shift-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license.workspace = true
+description = "cargo-fuzz targets for Shift's source readers and writers"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+norad = "0.18.4"
+shift-backends = { workspace = true }
+tempfile = "3"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "designspace_round_trip"
+path = "fuzz_targets/designspace_round_trip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "glif_round_trip"
+path = "fuzz_targets/glif_round_trip.rs"
+test = false
+doc = false
+bench = false
