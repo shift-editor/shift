@@ -194,6 +194,12 @@ fn stream_designspace(
         },
         &ids,
     );
+    // Sources are registered default first; the font lists them as the
+    // document does.
+    let document_order: Vec<_> = (0..document.sources.len())
+        .map(|index| ids.source_id(&index.to_string()))
+        .collect();
+    header.set_source_order(&document_order)?;
 
     let stream = GlifGlyphStream::from_sources(&ids, &directories, header.lib_mut());
     let mut report = import_kerning(

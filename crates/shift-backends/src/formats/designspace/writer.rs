@@ -240,6 +240,26 @@ impl DesignspaceWriter {
             .map(Source::id)
     }
 
+    /// The font's masters in source order, each with the UFO file group it is
+    /// written into.
+    fn masters_in_order<'a>(
+        font: &'a Font,
+        groups: &'a [UfoFileGroup],
+    ) -> impl Iterator<Item = (&'a Source, &'a UfoFileGroup)> {
+        font.sources()
+            .iter()
+            .filter(|source| source.is_master())
+            .filter_map(move |source| {
+                let group = groups.iter().find(|group| {
+                    group
+                        .sources
+                        .iter()
+                        .any(|grouped| grouped.id() == source.id())
+                })?;
+                Some((source, group))
+            })
+    }
+
     /// The `layer` attribute for a master's `<source>` entry: absent for the
     /// file's default layer, otherwise the UFO layer holding its data.
     fn ds_layer_attr<'a>(source: &'a Source, file_default: Option<&SourceId>) -> Option<&'a str> {
@@ -432,17 +452,15 @@ impl DesignspaceWriter {
             })?;
 
         let mut wrote_source = false;
-        for group in groups {
-            for source in group.sources.iter().filter(|source| source.is_master()) {
-                Self::write_axisless_source(
-                    &mut writer,
-                    font,
-                    &group.filename,
-                    source.name(),
-                    Self::ds_layer_attr(source, group.file_default.as_ref()),
-                )?;
-                wrote_source = true;
-            }
+        for (source, group) in Self::masters_in_order(font, groups) {
+            Self::write_axisless_source(
+                &mut writer,
+                font,
+                &group.filename,
+                source.name(),
+                Self::ds_layer_attr(source, group.file_default.as_ref()),
+            )?;
+            wrote_source = true;
         }
 
         if !wrote_source {
@@ -538,18 +556,17 @@ impl DesignspaceWriter {
             return Self::save_axisless_designspace(font, path, &groups);
         }
 
-        let mut sources = Vec::new();
-        for group in &groups {
-            for source in group.sources.iter().filter(|source| source.is_master()) {
-                sources.push(Self::source(
+        let mut sources: Vec<_> = Self::masters_in_order(font, &groups)
+            .map(|(source, group)| {
+                Self::source(
                     source,
                     font,
                     &group.filename,
                     Self::ds_layer_attr(source, group.file_default.as_ref()),
                     axes,
-                ));
-            }
-        }
+                )
+            })
+            .collect();
 
         if sources.is_empty() {
             sources.push(DsSource {
