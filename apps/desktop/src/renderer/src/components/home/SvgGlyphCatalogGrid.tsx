@@ -115,6 +115,7 @@ export function SvgGlyphCatalogGrid({
   return (
     <GlyphContextMenu
       glyphAt={(event) => selecting.glyphAt(event.clientX, event.clientY)}
+      glyphs={glyphs}
       selection={selection}
       selectGlyphs={selectGlyphs}
       openGlyph={openGlyph}

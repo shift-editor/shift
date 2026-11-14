@@ -141,6 +141,48 @@ test.describe("SVG glyph catalog fallback", () => {
     await expect.poll(width).toBeGreaterThanOrEqual(220);
   });
 
+  test("tags, duplicates and spaces the selected glyphs from the right-click menu", async ({
+    editor,
+    page,
+  }) => {
+    const svg = glyphCatalogSvg(page);
+    await expect(svg).toHaveAttribute("data-grid-readiness", "Complete");
+    const tiles = svg.getByRole("button", { name: /^Open / });
+    const selected = svg.getByRole("button", { name: /^Open /, pressed: true });
+    const total = (await editor.glyphNames()).length;
+    await tiles.nth(0).click();
+    await tiles.nth(1).click({ modifiers: ["Shift"] });
+
+    // Right-clicking inside the selection keeps it, and the menu acts on both glyphs.
+    await tiles.nth(1).click({ button: "right" });
+    await expect(page.getByRole("menuitem", { name: "Copy Names" })).toBeVisible();
+    // The open menu hides the grid from roles, so the pressed tiles are read by attribute.
+    await expect(svg.locator('button[aria-pressed="true"]')).toHaveCount(2);
+    await expect(page.getByRole("menuitem", { name: "Rename" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Tag yellow" }).click();
+    await page.getByRole("button", { name: "Show yellow glyphs" }).click();
+    await expect(page.getByTestId("glyph-count")).toHaveText(`2 yellow of ${total}`);
+
+    // The copies take the colour, so the filtered grid now shows four, and they are selected.
+    await tiles.nth(0).click();
+    await tiles.nth(1).click({ modifiers: ["Shift"] });
+    await tiles.nth(0).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Duplicate" }).click();
+    await expect(page.getByTestId("glyph-count")).toHaveText(`4 yellow of ${total + 2}`);
+    await expect(selected).toHaveCount(2);
+
+    await tiles.nth(0).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Set Sidebearings…" }).click();
+    const dialog = page.getByRole("dialog", { name: "Set Sidebearings" });
+    const set = dialog.getByRole("button", { name: "Set", exact: true });
+    await dialog.getByRole("textbox", { name: "Left sidebearing" }).fill("wide");
+    await expect(set).toHaveAttribute("aria-disabled", "true");
+    await dialog.getByRole("textbox", { name: "Left sidebearing" }).fill("30");
+    await expect(set).toHaveAttribute("aria-disabled", "false");
+    await set.click();
+    await expect(dialog).toBeHidden();
+  });
+
   test("shows the system character for an empty encoded glyph", async ({ editor, page }) => {
     const [name] = await editor.createGlyphsForUnicodes([0x3042]);
     if (!name) throw new Error("Expected an empty Hiragana glyph");

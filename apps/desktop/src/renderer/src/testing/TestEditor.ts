@@ -61,6 +61,7 @@ import {
   type KerningPosition,
   type MetricsKeySide,
   type MarkColor,
+  type SidebearingEdit,
   type PointId,
   type SelectableId,
   type NamedInstance,
@@ -1257,6 +1258,34 @@ export class TestEditor extends Editor implements EditorTestSurface {
   async tagGlyphs(names: readonly string[], color: MarkColor | null): Promise<void> {
     this.#actions.tagGlyphs(names, color);
     await this.settle();
+  }
+
+  async duplicateGlyphs(names: readonly string[]): Promise<void> {
+    await this.#actions.duplicateGlyphs(names);
+  }
+
+  async decomposeGlyphs(names: readonly string[]): Promise<void> {
+    this.#actions.decomposeGlyphs(names);
+    await this.settle();
+  }
+
+  async setSidebearings(
+    names: readonly string[],
+    left: SidebearingEdit,
+    right: SidebearingEdit,
+    allMasters = false,
+  ): Promise<void> {
+    this.#actions.setSidebearings(names, left, right, allMasters);
+    await this.settle();
+  }
+
+  async openGlyphsAsText(names: readonly string[]): Promise<string | null> {
+    return this.#actions.openGlyphsAsText(names);
+  }
+
+  pageText(pageId: string): string {
+    const runs = this.scene.children(asNodeId(pageId)).filter((node) => node.kind === "textRun");
+    return runs.map((run) => this.text.formatItems(this.text.items(run))).join("\n");
   }
 
   async renameSource(source: string, name: string): Promise<void> {

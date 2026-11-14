@@ -517,23 +517,37 @@ impl FontLevelIntent for LinkMetricsSide {
             key,
         } = self;
         let glyph_id = font.require_layer_owner(*layer_id)?;
-        let Some(key) = MetricsKey::new(key.clone()) else {
-            font.clear_metrics_keys(*layer_id, &[*side])?;
-            return Ok((vec![*layer_id], vec![glyph_id]));
+        font.link_metrics_side(*layer_id, *side, key)?;
+        Ok((vec![*layer_id], vec![glyph_id]))
+    }
+}
+
+impl Font {
+    /// Links one side of a layer's glyph with `key`: see [`LinkMetricsSide`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::LayerNotFound`] when the layer is missing.
+    pub(crate) fn link_metrics_side(
+        &mut self,
+        layer_id: LayerId,
+        side: MetricsKeySide,
+        key: &str,
+    ) -> CoreResult<()> {
+        let glyph_id = self.require_layer_owner(layer_id)?;
+        let Some(key) = MetricsKey::new(key) else {
+            return self.clear_metrics_keys(layer_id, &[side]);
         };
 
         match KeyScope::of(key.as_str()) {
-            KeyScope::ThisSource => {
-                font.set_layer_metrics_key(*layer_id, *side, Some(key))?;
-            }
+            KeyScope::ThisSource => self.set_layer_metrics_key(layer_id, side, Some(key)),
             KeyScope::EverySource => {
-                font.set_layer_metrics_key(*layer_id, *side, None)?;
-                let mut keys = font.require_glyph(glyph_id)?.metrics_keys().clone();
-                keys.set(*side, Some(key));
-                font.set_glyph_metrics_keys(glyph_id, keys)?;
+                self.set_layer_metrics_key(layer_id, side, None)?;
+                let mut keys = self.require_glyph(glyph_id)?.metrics_keys().clone();
+                keys.set(side, Some(key));
+                self.set_glyph_metrics_keys(glyph_id, keys)
             }
         }
-        Ok((vec![*layer_id], vec![glyph_id]))
     }
 }
 

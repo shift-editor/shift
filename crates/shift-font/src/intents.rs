@@ -30,9 +30,11 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
 mod font_intents;
+mod glyph_intents;
 mod layer_intents;
 
 pub use font_intents::*;
+pub use glyph_intents::*;
 pub use layer_intents::*;
 
 /// A point to create, with stable identity minted by a trusted caller.
@@ -186,6 +188,9 @@ font_intents! {
         LinkMetricsSide,
         UnlinkMetricsSide,
         SetMarkColor,
+        DuplicateGlyphs,
+        DecomposeGlyphs,
+        SetSidebearings,
     }
 }
 
@@ -1171,6 +1176,9 @@ impl FontDiff<'_> {
 
 #[cfg(test)]
 mod replacement_tests;
+
+#[cfg(test)]
+mod glyph_tests;
 
 #[cfg(test)]
 mod kerning_tests;

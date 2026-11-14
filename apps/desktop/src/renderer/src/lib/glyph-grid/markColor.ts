@@ -1,5 +1,25 @@
 import type { MarkColor, NamedMarkColor } from "@shift/types";
 
+/** The seven colours offered first wherever a glyph is tagged, in swatch order. */
+export const MAIN_MARK_COLORS = [
+  "red",
+  "orange",
+  "yellow",
+  "darkGreen",
+  "darkBlue",
+  "purple",
+  "magenta",
+] as const satisfies readonly NamedMarkColor[];
+
+/** The other five named colours, offered under More. */
+export const MORE_MARK_COLORS = [
+  "brown",
+  "lightGreen",
+  "lightBlue",
+  "lightGray",
+  "charcoal",
+] as const satisfies readonly NamedMarkColor[];
+
 /** Each named colour's theme token and the name people read. */
 const NAMED: Record<NamedMarkColor, { readonly token: string; readonly label: string }> = {
   red: { token: "--color-tag-red", label: "red" },
