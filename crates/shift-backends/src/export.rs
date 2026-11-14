@@ -65,20 +65,6 @@ impl ExportFormat {
         }
     }
 
-    /// Returns the format a path's extension names, ignoring case.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ExportError::UnsupportedFormat`] when the path has no
-    /// extension or one no format uses.
-    pub fn from_path(path: &Path) -> Result<Self, ExportError> {
-        let extension = path
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .unwrap_or_default();
-        Self::try_from(extension)
-    }
-
     /// The error for a source writer that could not write this format to `path`.
     fn write_error(self, path: &Path, source: FormatBackendError) -> ExportError {
         ExportError::WriteSources {

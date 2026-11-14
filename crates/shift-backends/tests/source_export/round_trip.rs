@@ -177,7 +177,7 @@ fn dot_layer(source: SourceId, scale: f64) -> GlyphLayer {
     layer
 }
 
-fn export(font: &Font, path: &Path, format: ExportFormat) -> Result<(), ExportError> {
+fn export_as(font: &Font, path: &Path, format: ExportFormat) -> Result<(), ExportError> {
     FontExporter::new()
         .export(
             font,
@@ -209,7 +209,7 @@ fn designspace_export_of_a_font_made_in_shift_reads_back_unchanged() -> Fixture<
     let path = temp.path().join("Solenoid.designspace");
     let font = dot_matrix_font()?;
 
-    export(&font, &path, ExportFormat::Designspace)?;
+    export_as(&font, &path, ExportFormat::Designspace)?;
 
     assert_same(&read_designspace(&path)?, &font)
 }
@@ -219,7 +219,7 @@ fn designspace_export_writes_one_ufo_per_master_named_after_it() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("Solenoid.designspace");
 
-    export(
+    export_as(
         &dot_matrix_font().unwrap(),
         &path,
         ExportFormat::Designspace,
@@ -248,9 +248,9 @@ fn designspace_export_twice_reads_back_the_same_font() -> Fixture<()> {
     let path = temp.path().join("Solenoid.designspace");
     let font = dot_matrix_font()?;
 
-    export(&font, &path, ExportFormat::Designspace)?;
+    export_as(&font, &path, ExportFormat::Designspace)?;
     let first = read_designspace(&path)?;
-    export(&first, &path, ExportFormat::Designspace)?;
+    export_as(&first, &path, ExportFormat::Designspace)?;
 
     assert_same(&read_designspace(&path)?, &font)
 }
@@ -266,57 +266,43 @@ fn ufo_export_of_a_single_master_font_reads_back_unchanged() -> Fixture<()> {
         .ok_or("a new font has a default source")?;
     add_glyphs_and_kerning(&mut font, &[(regular, 1.0)])?;
 
-    export(&font, &path, ExportFormat::Ufo)?;
+    export_as(&font, &path, ExportFormat::Ufo)?;
 
     let read = UfoReader::new().load(path.to_str().ok_or("temp paths are UTF-8")?)?;
     assert_same(&read, &font)
 }
 
-#[test]
-fn ufo_export_refuses_a_font_with_several_masters() {
-    let temp = tempfile::tempdir().unwrap();
-    let path = temp.path().join("Solenoid.ufo");
-
-    let result = export(&dot_matrix_font().unwrap(), &path, ExportFormat::Ufo);
-
-    assert!(matches!(
-        result,
-        Err(ExportError::UfoNeedsOneMaster { master_count: 3 })
-    ));
-    assert!(!path.exists());
-}
+/// Whether an export error is the refusal a case expects.
+type IsRefusal = fn(&ExportError) -> bool;
 
 #[test]
-fn source_export_rejects_a_path_with_another_format_extension() {
-    let temp = tempfile::tempdir().unwrap();
-    let path = temp.path().join("Solenoid.ufo");
+fn export_refuses_a_ufo_of_several_masters_or_a_path_for_another_format() {
+    let font = dot_matrix_font().unwrap();
+    let refusals: [(ExportFormat, IsRefusal); 2] = [
+        (ExportFormat::Ufo, |error| {
+            matches!(error, ExportError::UfoNeedsOneMaster { master_count: 3 })
+        }),
+        (ExportFormat::Designspace, |error| {
+            matches!(
+                error,
+                ExportError::OutputExtensionMismatch {
+                    format: ExportFormat::Designspace,
+                    ..
+                }
+            )
+        }),
+    ];
 
-    let result = export(
-        &dot_matrix_font().unwrap(),
-        &path,
-        ExportFormat::Designspace,
-    );
+    for (format, refused) in refusals {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("Solenoid.ufo");
 
-    assert!(matches!(
-        result,
-        Err(ExportError::OutputExtensionMismatch {
-            format: ExportFormat::Designspace,
-            ..
-        })
-    ));
-    assert!(!path.exists());
-}
+        let result = export_as(&font, &path, format);
 
-#[test]
-fn export_format_follows_the_path_extension() {
-    let format = |path: &str| ExportFormat::from_path(Path::new(path)).ok();
-
-    assert_eq!(
-        format("a/Solenoid.designspace"),
-        Some(ExportFormat::Designspace)
-    );
-    assert_eq!(format("Solenoid.UFO"), Some(ExportFormat::Ufo));
-    assert_eq!(format("Solenoid.ttf"), Some(ExportFormat::Ttf));
-    assert_eq!(format("Solenoid.glyphs"), None);
-    assert_eq!(format("Solenoid"), None);
+        assert!(
+            result.as_ref().is_err_and(refused),
+            "{format:?} export to a .ufo path: {result:?}"
+        );
+        assert!(!path.exists());
+    }
 }
