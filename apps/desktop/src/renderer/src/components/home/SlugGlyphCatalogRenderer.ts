@@ -29,7 +29,6 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
   readonly #onEditGlyph: ((glyph: GlyphCatalogItem) => void) | null;
   readonly #onEditingUnavailable: () => void;
   readonly #openGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null;
-  readonly #selectGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null;
   readonly #onReadyChange: (ready: boolean) => void;
   readonly #onUnavailable: () => void;
   readonly #overlay: GlyphCatalogOverlay;
@@ -68,7 +67,6 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
    * @param onEditGlyph - Starts inline naming, or null for read-only sessions.
    * @param onEditingUnavailable - Ends editing when its cell leaves the frame.
    * @param openGlyph - Opens a double-clicked preview cell, or null when interaction is disabled.
-   * @param selectGlyph - Selects a clicked preview cell, or null when interaction is disabled.
    * @param onReadyChange - Publishes whether the selected renderer has a complete frame.
    * @param onUnavailable - Reports a selected Slug renderer that cannot present a frame.
    * @param signal - Cancels initialization when the owning catalog is disposed.
@@ -86,7 +84,6 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     onEditGlyph: ((glyph: GlyphCatalogItem) => void) | null,
     onEditingUnavailable: () => void,
     openGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null,
-    selectGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null,
     onReadyChange: (ready: boolean) => void,
     onUnavailable: () => void,
     signal: AbortSignal,
@@ -115,7 +112,6 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
       onEditGlyph,
       onEditingUnavailable,
       openGlyph,
-      selectGlyph,
       onReadyChange,
       onUnavailable,
       layer,
@@ -134,7 +130,6 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     onEditGlyph: ((glyph: GlyphCatalogItem) => void) | null,
     onEditingUnavailable: () => void,
     openGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null,
-    selectGlyph: ((glyph: GlyphCatalogItem) => Promise<void>) | null,
     onReadyChange: (ready: boolean) => void,
     onUnavailable: () => void,
     layer: ResidentGlyphLayer,
@@ -145,7 +140,6 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     this.#onEditGlyph = onEditGlyph;
     this.#onEditingUnavailable = onEditingUnavailable;
     this.#openGlyph = openGlyph;
-    this.#selectGlyph = selectGlyph;
     this.#onReadyChange = onReadyChange;
     this.#onUnavailable = onUnavailable;
     this.#layer = layer;
@@ -195,6 +189,11 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
         this.#activeFrame = frame;
         this.#updateResidency();
       }
+    }
+    // Selection is drawn by the overlay alone, so it never waits for glyphs to load.
+    if (this.#activeFrame && this.#activeFrame !== frame) {
+      const { selection, selectionBox } = frame;
+      this.#activeFrame = { ...this.#activeFrame, selection, selectionBox };
     }
 
     this.#overlay.setInputContainer(inputContainer);
@@ -501,7 +500,8 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     this.#overlay.draw(this.#container, frame, {
       hoveredPreviewIndex: hoveredPreview?.catalogIndex ?? null,
       hoveredNameIndex: hoveredName?.catalogIndex ?? null,
-      selectedGlyphId: input.selectedGlyphId,
+      selection: input.selection,
+      selectionBox: input.selectionBox,
       emptyGlyphIds,
     });
 
@@ -659,10 +659,6 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
       this.#onEditGlyph(nameCell.glyph);
       return;
     }
-
-    const previewCell = layout.hit(frame, point, "preview");
-    if (!previewCell || !this.#selectGlyph) return;
-    void this.#run(this.#selectGlyph, previewCell.glyph);
   };
 
   glyphAt(clientX: number, clientY: number): GlyphCatalogItem | null {

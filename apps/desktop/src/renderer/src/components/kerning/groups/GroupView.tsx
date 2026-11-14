@@ -8,7 +8,7 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 import { AddMembersPanel } from "./AddMembersPanel";
 import { GroupPreview } from "./GroupPreview";
 import { GroupsSidePanel } from "./GroupsSidePanel";
-import { GlyphSelection } from "../../glyph-grid/GlyphSelection";
+import { GlyphSelection } from "@/lib/glyph-grid/GlyphSelection";
 import { glyphName } from "./previewGlyphs";
 
 /** The glyph edge a pair position kerns through: a first glyph's right edge, a second's left. */

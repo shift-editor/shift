@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { asNodeId, type GlyphId } from "@shift/types";
 import { useTestEditor } from "@/testing/fontFixture";
+import { GlyphSelection } from "@/lib/glyph-grid/GlyphSelection";
 import { GLYPHS_TAB_ID, WindowTabs } from "./WindowTabs";
 
 describe("window tabs", () => {
@@ -59,6 +60,16 @@ describe("window tabs", () => {
     expect(editor.shownPageId()).toEqual(selectionPage);
     expect(editor.editorView().glyph?.name).toBe("tab.one");
     expect(glyphTabs()).toEqual([]);
+  });
+
+  it("keeps the grid's selection and names its last glyph for the sidebar", () => {
+    const both = GlyphSelection.empty([glyphA, glyphB]).all();
+
+    tabs.selectGlyphs(both);
+    tabs.openPage(firstPageId());
+
+    expect(tabs.gridSelectionCell.peek().ids).toEqual([glyphA, glyphB]);
+    expect(tabs.selectedGlyphCell.peek()).toBe(glyphB);
   });
 
   it("gives a page one tab however often it is opened", () => {

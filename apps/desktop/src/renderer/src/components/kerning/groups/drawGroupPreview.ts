@@ -2,7 +2,7 @@ import type { Editor } from "@shift/editor";
 import type { KerningPairPosition } from "@shift/editor/model";
 import { track } from "@shift/editor/signals";
 import type { GlyphId } from "@shift/types";
-import type { GlyphSelection } from "../../glyph-grid/GlyphSelection";
+import type { GlyphSelection } from "@/lib/glyph-grid/GlyphSelection";
 import { PreviewLayout, type PreviewWord } from "./PreviewLayout";
 import { fillGlyph, previewGlyph, type PreviewGlyph } from "./previewGlyphs";
 

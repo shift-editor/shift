@@ -4,7 +4,7 @@ import { effect } from "@shift/editor/signals";
 import type { GlyphId } from "@shift/types";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { drawGroupPreview, type MemberWord } from "./drawGroupPreview";
-import type { GlyphSelection } from "../../glyph-grid/GlyphSelection";
+import type { GlyphSelection } from "@/lib/glyph-grid/GlyphSelection";
 import { copyGlyphNames } from "../../glyph-grid/glyphNames";
 import { useGlyphSelection } from "../../glyph-grid/useGlyphSelection";
 import type { PreviewLayout } from "./PreviewLayout";

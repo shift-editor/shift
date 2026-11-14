@@ -4,6 +4,8 @@ import { GlyphContextMenu } from "./GlyphContextMenu";
 import { GlyphNameInput } from "./GlyphNameInput";
 import { selectGlyphCatalogRenderer } from "./selectGlyphCatalogRenderer";
 import { SlugGlyphCatalogRenderer } from "./SlugGlyphCatalogRenderer";
+import { useCatalogSelection } from "./useCatalogSelection";
+import { useRevealSelectedGlyph } from "./useRevealSelectedGlyph";
 import { useTheme } from "@/context/ThemeContext";
 import type {
   GlyphCatalogControllerFrame,
@@ -23,8 +25,8 @@ export function SlugGlyphCatalogSurface({
   observeAtlasInvalidation,
   canAuthor,
   openGlyph,
-  selectedGlyphId,
-  selectGlyph,
+  selection,
+  selectGlyphs,
   onPendingGlyphName,
   onSelected,
   onFallback,
@@ -44,6 +46,19 @@ export function SlugGlyphCatalogSurface({
   >([0, 0]);
   const [ready, setReady] = useState(false);
   const [editingGlyph, setEditingGlyph] = useState<GlyphCatalogItem | null>(null);
+  const layout = useMemo(
+    () => new GlyphCatalogLayout(viewportWidth, viewportHeight, glyphs.length),
+    [glyphs.length, viewportHeight, viewportWidth],
+  );
+  const selecting = useCatalogSelection({
+    containerRef,
+    layout,
+    glyphs,
+    selection,
+    selectGlyphs,
+    openGlyph,
+  });
+  const selectionBox = selecting.box;
   const controllerFrame = useMemo<GlyphCatalogControllerFrame>(
     () => ({
       glyphs,
@@ -53,16 +68,23 @@ export function SlugGlyphCatalogSurface({
       resolvedTheme,
       active,
       editingGlyphId: editingGlyph?.id ?? null,
-      selectedGlyphId,
+      selection,
+      selectionBox,
     }),
-    [active, editingGlyph, glyphs, location, metrics, resolvedTheme, selectedGlyphId, sourceId],
+    [
+      active,
+      editingGlyph,
+      glyphs,
+      location,
+      metrics,
+      resolvedTheme,
+      selection,
+      selectionBox,
+      sourceId,
+    ],
   );
   const controllerFrameRef = useRef(controllerFrame);
   controllerFrameRef.current = controllerFrame;
-  const layout = useMemo(
-    () => new GlyphCatalogLayout(viewportWidth, viewportHeight, glyphs.length),
-    [glyphs.length, viewportHeight, viewportWidth],
-  );
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -118,7 +140,6 @@ export function SlugGlyphCatalogSurface({
             onEditGlyph,
             onEditingUnavailable,
             openGlyph,
-            selectGlyph,
             onReadyChange,
             onUnavailable,
             abort.signal,
@@ -160,23 +181,19 @@ export function SlugGlyphCatalogSurface({
     onSelected,
     onUnavailable,
     openGlyph,
-    selectGlyph,
   ]);
 
   useLayoutEffect(() => {
     rendererRef.current?.update(controllerFrame, inputContainerRef.current);
   }, [controllerFrame]);
 
-  // Scrolls a newly selected glyph into view, such as one just created; one already visible stays put.
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    if (!container || selectedGlyphId === null) return;
-
-    const index = glyphs.findIndex((glyph) => glyph.id === selectedGlyphId);
-    const scrollTop = layout.scrollTopToReveal(index, container.scrollTop);
-    if (scrollTop !== null) container.scrollTop = scrollTop;
-    // Only a change of selection reveals; scrolling away from the selection is the user's.
-  }, [selectedGlyphId]);
+  useRevealSelectedGlyph({
+    containerRef,
+    layout,
+    glyphs,
+    selection,
+    dragging: selectionBox !== null,
+  });
 
   useLayoutEffect(() => {
     if (!editingGlyph) return;
@@ -188,14 +205,18 @@ export function SlugGlyphCatalogSurface({
   return (
     <GlyphContextMenu
       glyphAt={(event) => rendererRef.current?.glyphAt(event.clientX, event.clientY) ?? null}
-      selectGlyph={selectGlyph}
+      selection={selection}
+      selectGlyphs={selectGlyphs}
       openGlyph={openGlyph}
       renameGlyph={canAuthor ? setEditingGlyph : undefined}
     >
       <div
         ref={containerRef}
-        className="absolute inset-0 overflow-x-hidden overflow-y-auto"
+        className="absolute inset-0 overflow-x-hidden overflow-y-auto outline-none"
         aria-label="Glyph catalog"
+        role="group"
+        tabIndex={0}
+        {...selecting.handlers}
       >
         <div aria-hidden="true" style={{ height: layout.totalHeight, width: 1 }} />
       </div>

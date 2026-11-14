@@ -1,10 +1,17 @@
+import type { Rect2D } from "@shift/geo";
 import type { GlyphId } from "@shift/types";
 import { Canvas2DSurface } from "@shift/editor/rendering";
 import { fitCanvasText } from "@/lib/graphics/canvasText";
+import type { GlyphSelection } from "@/lib/glyph-grid/GlyphSelection";
 import type { GlyphCatalogFrame } from "@/types/glyphCatalog";
 
 const LABEL_HORIZONTAL_INSET = 8;
 const HOVER_RADIUS = 4;
+/** The selection ring sits this far outside a glyph's preview, and is this wide. */
+const SELECTION_RING_OFFSET = 2;
+const SELECTION_RING_WIDTH = 2;
+/** How opaque the fill of the box dragged to select glyphs is. */
+const SELECTION_BOX_FILL_ALPHA = 0.12;
 
 /** Owns the Canvas2D catalog chrome and temporary DOM input placement. */
 /** What the overlay marks on top of the glyphs. */
@@ -13,7 +20,9 @@ export interface GlyphCatalogOverlayState {
   readonly hoveredPreviewIndex: number | null;
   /** The cell whose name is under the pointer, by catalog index. */
   readonly hoveredNameIndex: number | null;
-  readonly selectedGlyphId: GlyphId | null;
+  readonly selection: GlyphSelection;
+  /** The box being dragged to select glyphs, in the scrolled content; null when none is. */
+  readonly selectionBox: Rect2D | null;
   /** Glyphs with no outline, drawn as their character in a muted colour. */
   readonly emptyGlyphIds: ReadonlySet<GlyphId>;
 }
@@ -46,18 +55,20 @@ export class GlyphCatalogOverlay {
   }
 
   draw(container: HTMLElement, frame: GlyphCatalogFrame, state: GlyphCatalogOverlayState): void {
-    const { hoveredPreviewIndex, hoveredNameIndex, selectedGlyphId, emptyGlyphIds } = state;
+    const { hoveredPreviewIndex, hoveredNameIndex, selection, selectionBox, emptyGlyphIds } = state;
     const context = Canvas2DSurface.from(this.#canvas).ctx;
     const style = getComputedStyle(container);
     const mutedColor = style.getPropertyValue("--color-muted").trim() || style.color;
     const hoverColor = style.getPropertyValue("--color-hover").trim() || style.color;
     const inputColor = style.getPropertyValue("--color-input").trim() || hoverColor;
+    const accentColor = style.getPropertyValue("--color-accent").trim() || style.color;
     const fontFamily = style.fontFamily;
     context.clearRect(0, 0, frame.layout.viewportWidth, frame.layout.viewportHeight);
 
     for (const cell of frame.cells) {
-      // The selected glyph keeps the hover fill, so it stays marked once the pointer leaves.
-      if (cell.catalogIndex === hoveredPreviewIndex || cell.glyph.id === selectedGlyphId) {
+      const selected = selection.has(cell.glyph.id);
+      // A selected glyph keeps the hover fill, so it stays marked once the pointer leaves.
+      if (cell.catalogIndex === hoveredPreviewIndex || selected) {
         context.fillStyle = hoverColor;
         context.beginPath();
         context.roundRect(
@@ -68,6 +79,22 @@ export class GlyphCatalogOverlay {
           HOVER_RADIUS,
         );
         context.fill();
+      }
+
+      // The ring goes outside the preview and leaves the name alone.
+      if (selected) {
+        const offset = SELECTION_RING_OFFSET + SELECTION_RING_WIDTH / 2;
+        context.strokeStyle = accentColor;
+        context.lineWidth = SELECTION_RING_WIDTH;
+        context.beginPath();
+        context.roundRect(
+          cell.previewRect.x - offset,
+          cell.previewRect.y - offset,
+          cell.previewRect.width + 2 * offset,
+          cell.previewRect.height + 2 * offset,
+          HOVER_RADIUS + offset,
+        );
+        context.stroke();
       }
 
       if (cell.glyph.unicode !== null && emptyGlyphIds.has(cell.glyph.id)) {
@@ -107,6 +134,22 @@ export class GlyphCatalogOverlay {
         ),
         cell.nameRect.x + cell.nameRect.width / 2,
         cell.nameRect.y + cell.nameRect.height / 2,
+      );
+    }
+
+    if (selectionBox) {
+      const top = selectionBox.top - frame.scrollTop;
+      context.strokeStyle = accentColor;
+      context.fillStyle = accentColor;
+      context.lineWidth = 1;
+      context.globalAlpha = SELECTION_BOX_FILL_ALPHA;
+      context.fillRect(selectionBox.left, top, selectionBox.width, selectionBox.height);
+      context.globalAlpha = 1;
+      context.strokeRect(
+        selectionBox.left + 0.5,
+        top + 0.5,
+        selectionBox.width,
+        selectionBox.height,
       );
     }
 

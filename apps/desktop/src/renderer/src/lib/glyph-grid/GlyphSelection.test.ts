@@ -49,6 +49,30 @@ describe("glyph selection", () => {
     expect(none.step(1, false).ids).toEqual([u]);
   });
 
+  it("moves a row at a time when the step is a row's worth of glyphs", () => {
+    const first = none.click(u, plain);
+
+    expect(first.step(3, false).ids).toEqual([ucircumflex]);
+    expect(first.step(3, true).ids).toEqual([u, uacute, ubreve, ucircumflex]);
+    expect(first.step(3, false).step(3, false).ids).toEqual([udieresis]);
+  });
+
+  it("selects the glyphs a dragged box touches, added to a kept selection", () => {
+    const one = none.click(u, plain);
+
+    expect(one.box([ubreve, ucircumflex], null).ids).toEqual([ubreve, ucircumflex]);
+    expect(one.box([ubreve, ucircumflex], one).ids).toEqual([u, ubreve, ucircumflex]);
+    expect(one.box([], null).ids).toEqual([]);
+  });
+
+  it("names the glyph last moved to as primary while it is selected", () => {
+    const two = none.click(uacute, plain).click(udieresis, command);
+
+    expect(two.primary).toBe(udieresis);
+    expect(two.click(udieresis, command).primary).toBe(uacute);
+    expect(none.primary).toBeNull();
+  });
+
   it("drops glyphs that left the grid", () => {
     const after = none.drag(u, uacute).withGlyphs([uacute, ubreve]);
 

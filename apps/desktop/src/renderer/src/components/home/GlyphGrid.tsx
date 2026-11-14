@@ -1,8 +1,10 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSignalState } from "@shift/editor/signals";
 import { useLocation } from "react-router";
 import { GlyphCatalogBackendGate } from "./GlyphCatalogBackendGate";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { getShiftHost } from "@/host/shiftHost";
+import { useFontSession } from "@/workspace/WorkspaceContext";
 
 /** Coordinates shared catalog data and session-fixed backend selection. */
 export const GlyphGrid = memo(function GlyphGrid() {
@@ -17,9 +19,16 @@ export const GlyphGrid = memo(function GlyphGrid() {
     glyphPreviews,
     canAuthor,
     openGlyph,
-    selectedGlyphId,
-    selectGlyph,
+    selectGlyphs,
   } = useGlyphCatalog();
+  // Read here rather than through the catalog, whose other readers would rerender on every drag.
+  const windowSelection = useSignalState(useFontSession().tabs.gridSelectionCell);
+  const glyphIds = useMemo(() => filteredGlyphs.map((glyph) => glyph.id), [filteredGlyphs]);
+  // Glyphs a filter hides leave the selection drawn; the next click selects among those shown.
+  const selection = useMemo(
+    () => windowSelection.withGlyphs(glyphIds),
+    [glyphIds, windowSelection],
+  );
   const [catalogReady, setCatalogReady] = useState(false);
   const workspaceReadyRef = useRef(false);
 
@@ -66,8 +75,8 @@ export const GlyphGrid = memo(function GlyphGrid() {
         glyphPreviews={glyphPreviews}
         canAuthor={canAuthor}
         openGlyph={openGlyph}
-        selectedGlyphId={selectedGlyphId}
-        selectGlyph={selectGlyph}
+        selection={selection}
+        selectGlyphs={selectGlyphs}
         onFirstFrame={handleCatalogReady}
         onUnavailable={handleCatalogUnavailable}
       />

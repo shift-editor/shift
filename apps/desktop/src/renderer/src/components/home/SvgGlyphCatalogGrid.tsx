@@ -4,9 +4,13 @@ import { GlyphContextMenu } from "./GlyphContextMenu";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { GlyphNameInput } from "./GlyphNameInput";
 import { GlyphPreviewLayout } from "./GlyphPreviewLayout";
+import { useCatalogSelection } from "./useCatalogSelection";
 import { useGlyphPreviewFrame } from "./useGlyphPreviewFrame";
+import { useRevealSelectedGlyph } from "./useRevealSelectedGlyph";
 import type { GlyphId } from "@shift/types";
 import type { SvgGlyphCatalogGridProps } from "@/types/glyphCatalog";
+
+const PLAIN_CLICK = { range: false, toggle: false };
 
 /** Renders the portable catalog as virtualized React cells with native DOM interaction. */
 export function SvgGlyphCatalogGrid({
@@ -18,8 +22,8 @@ export function SvgGlyphCatalogGrid({
   glyphPreviews,
   canAuthor,
   openGlyph,
-  selectedGlyphId,
-  selectGlyph,
+  selection,
+  selectGlyphs,
   onPendingGlyphName,
   onFirstFrame,
   onUnavailable,
@@ -37,6 +41,14 @@ export function SvgGlyphCatalogGrid({
     [glyphs.length, viewportHeight, viewportWidth],
   );
   const targetFrame = useMemo(() => layout.frame(glyphs, scrollTop), [glyphs, layout, scrollTop]);
+  const selecting = useCatalogSelection({
+    containerRef,
+    layout,
+    glyphs,
+    selection,
+    selectGlyphs,
+    openGlyph,
+  });
   const [, previews, readiness, cacheBytes] = useGlyphPreviewFrame(
     targetFrame,
     location,
@@ -72,16 +84,13 @@ export function SvgGlyphCatalogGrid({
     }
   }, [editingGlyphId, targetFrame.cells]);
 
-  // Scrolls a newly selected glyph into view, such as one just created; one already visible stays put.
-  useLayoutEffect(() => {
-    const container = containerRef.current;
-    if (!container || selectedGlyphId === null) return;
-
-    const index = glyphs.findIndex((glyph) => glyph.id === selectedGlyphId);
-    const scrollTop = layout.scrollTopToReveal(index, container.scrollTop);
-    if (scrollTop !== null) container.scrollTop = scrollTop;
-    // Only a change of selection reveals; scrolling away from the selection is the user's.
-  }, [selectedGlyphId]);
+  useRevealSelectedGlyph({
+    containerRef,
+    layout,
+    glyphs,
+    selection,
+    dragging: selecting.box !== null,
+  });
 
   useLayoutEffect(() => {
     if (!editingGlyphId) return;
@@ -103,12 +112,9 @@ export function SvgGlyphCatalogGrid({
 
   return (
     <GlyphContextMenu
-      glyphAt={(event) => {
-        const cell = (event.target as Element).closest("[data-glyph-id]");
-        const glyphId = cell?.getAttribute("data-glyph-id");
-        return glyphs.find((glyph) => glyph.id === glyphId) ?? null;
-      }}
-      selectGlyph={selectGlyph}
+      glyphAt={(event) => selecting.glyphAt(event.clientX, event.clientY)}
+      selection={selection}
+      selectGlyphs={selectGlyphs}
       openGlyph={openGlyph}
       renameGlyph={canAuthor ? (glyph) => setEditingGlyphId(glyph.id) : undefined}
     >
@@ -120,8 +126,16 @@ export function SvgGlyphCatalogGrid({
         data-grid-readiness={readiness}
         data-preview-cache-bytes={cacheBytes}
         data-first-glyph-name={glyphs[0]?.displayName}
-        className="absolute inset-0 overflow-x-hidden overflow-y-auto"
+        className="absolute inset-0 overflow-x-hidden overflow-y-auto outline-none"
+        role="group"
+        tabIndex={0}
         onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+        onDoubleClick={(event) => {
+          // A press captures the pointer, so its clicks arrive here, not on the glyph.
+          const glyph = selecting.glyphAt(event.clientX, event.clientY);
+          if (glyph) void handleOpenGlyph(glyph.id);
+        }}
+        {...selecting.handlers}
       >
         <div className="relative" style={{ height: layout.totalHeight, width: "100%" }}>
           {targetFrame.cells.map((cell) => {
@@ -203,20 +217,42 @@ export function SvgGlyphCatalogGrid({
                 <Button
                   aria-label={glyphActionLabel?.(cell.glyph) ?? `Open ${cell.glyph.displayName}`}
                   variant="ghost"
-                  aria-pressed={cell.glyph.id === selectedGlyphId}
-                  isActive={cell.glyph.id === selectedGlyphId}
+                  aria-pressed={selection.has(cell.glyph.id)}
+                  isActive={selection.has(cell.glyph.id)}
                   className="flex w-full items-center justify-center overflow-hidden p-0 hover:bg-hover"
                   style={{ height: cell.previewRect.height }}
-                  onClick={() => void selectGlyph(cell.glyph)}
-                  onDoubleClick={async () => handleOpenGlyph(cell.glyph.id)}
+                  // The pointer selects on press; this is the keyboard's Enter and Space.
+                  onClick={(event) => {
+                    if (event.detail === 0)
+                      selectGlyphs(selection.click(cell.glyph.id, PLAIN_CLICK));
+                  }}
                 >
                   {previewContent}
                 </Button>
+                {selection.has(cell.glyph.id) ? (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-x-0 top-0 rounded outline-2 outline-offset-2 outline-accent"
+                    style={{ height: cell.previewRect.height }}
+                  />
+                ) : null}
                 <div style={{ height: targetFrame.layout.nameGap }} />
                 {nameCell}
               </div>
             );
           })}
+          {selecting.box ? (
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute border border-accent bg-accent/10"
+              style={{
+                height: selecting.box.height,
+                left: selecting.box.left,
+                top: selecting.box.top,
+                width: selecting.box.width,
+              }}
+            />
+          ) : null}
         </div>
       </div>
     </GlyphContextMenu>
