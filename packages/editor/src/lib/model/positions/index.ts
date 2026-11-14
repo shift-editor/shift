@@ -1,6 +1,6 @@
 export { AngleSnap } from "./AngleSnap";
 export { DirectionSnap } from "./DirectionSnap";
-export { GridSnap } from "./GridSnap";
+export { GridSnap, MIN_GRID_LINE_GAP_PX, visibleGridStep } from "./GridSnap";
 export { MetricSnap, standardMetricLines } from "./MetricSnap";
 export { MoveEdit } from "./MoveEdit";
 export { MovementAxis } from "./MovementAxis";

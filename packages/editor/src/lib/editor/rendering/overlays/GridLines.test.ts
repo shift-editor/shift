@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  FULL_GRID_LINE_GAP_PX,
-  MIN_GRID_LINE_GAP_PX,
-  gridAxisLines,
-  gridLineOpacity,
-} from "./GridLines";
+import { MIN_GRID_LINE_GAP_PX } from "../../../model/positions";
+import { FULL_GRID_LINE_GAP_PX, gridAxisLines, gridLineOpacity } from "./GridLines";
 
 describe("grid lines along one axis", () => {
   it("draws grid lines on multiples of the spacing, counted from the origin", () => {

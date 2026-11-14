@@ -142,7 +142,7 @@ export class Translate implements SelectBehavior {
         return state.type === "translating" && !state.translate.accelKey;
       },
     };
-    const snap = editor.snapping.toGrid(condition);
+    const snap = editor.snapping.toGrid(editor.selectionNode(), condition);
     return snap ? { origin, snap } : null;
   }
 

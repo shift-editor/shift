@@ -5,7 +5,8 @@ import type { Font } from "../model/Font";
 import type { GlyphLayer } from "../model/Glyph";
 import { GridSnap, MetricSnap, PointAlignmentSnap, SnapSet } from "../model/positions";
 import type { Grid } from "./Grid";
-import type { LocalBounds } from "../../types/coordinates";
+import { sceneVector, screenVector } from "./spaces";
+import type { LocalBounds, LocalVector, SceneVector, ScreenVector } from "../../types/coordinates";
 import type { ShiftNode } from "../../types/node";
 import type { PositionCondition, PositionSnapProvider } from "../../types/positionEdit";
 
@@ -19,6 +20,10 @@ export interface SnappingContext {
   /** Snap distance in scene units at the current zoom, for a layer placed in no node. */
   readonly hitRadius: number;
   visibleLocalBounds(node: ShiftNode): LocalBounds | null;
+  /** A canvas displacement in scene units at the current zoom. */
+  toSceneVector(vector: ScreenVector): SceneVector;
+  /** A scene displacement in the units of `node`. */
+  toLocalVector(node: ShiftNode, vector: SceneVector): LocalVector;
 }
 
 /** Options for one layer's snap set. */
@@ -72,7 +77,7 @@ export class Snapping {
       acrossAdvance(MetricSnap.standard(font.metricsForSource(layer.sourceId), hitRadius), layer),
       PointAlignmentSnap.to(targets, hitRadius).marking(marked),
     ];
-    const grid = this.toGrid();
+    const grid = this.toGrid(node);
     if (grid) providers.push(grid);
 
     return SnapSet.nearest(providers, options.condition);
@@ -82,14 +87,32 @@ export class Snapping {
    * Builds the grid snap for moves that have no layer targets, such as a component's placement.
    *
    * @remarks
-   * Frozen when built, like {@link forLayer}.
+   * Frozen when built, like {@link forLayer}: it snaps to the grid lines on
+   * screen at the zoom of that moment.
    *
+   * @param node - Node whose units the snapped positions are in; null for scene units.
    * @param condition - Per-frame switch, such as a held modifier suspending it.
-   * @returns null while snapping to the grid is off.
+   * @returns null while snapping to the grid is off, or when no grid lines are on screen.
    */
-  toGrid(condition?: PositionCondition): GridSnap | null {
+  toGrid(node: ShiftNode | null, condition?: PositionCondition): GridSnap | null {
     const settings = this.#context.grid.settings;
-    return settings.snap ? GridSnap.of(settings, condition) : null;
+    if (!settings.snap) return null;
+
+    return GridSnap.of(settings, this.#pixelsPerUnit(node), condition);
+  }
+
+  /** Screen pixels per unit of `node` on each axis at the current zoom. */
+  #pixelsPerUnit(node: ShiftNode | null): Point2D {
+    return {
+      x: 1 / this.#unitsPerPixel(node, screenVector(1, 0)),
+      y: 1 / this.#unitsPerPixel(node, screenVector(0, 1)),
+    };
+  }
+
+  #unitsPerPixel(node: ShiftNode | null, pixel: ScreenVector): number {
+    const scene = this.#context.toSceneVector(pixel);
+    const units = node ? this.#context.toLocalVector(node, scene) : sceneVector(scene.x, scene.y);
+    return Math.hypot(units.x, units.y);
   }
 
   /**

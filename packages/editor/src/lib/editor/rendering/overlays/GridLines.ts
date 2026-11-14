@@ -1,9 +1,7 @@
 import type { Bounds } from "@shift/geo";
 import type { GridSettings } from "../../../../types/grid";
+import { MIN_GRID_LINE_GAP_PX, visibleGridStep } from "../../../model/positions";
 import type { Canvas } from "../Canvas";
-
-/** Lines closer together than this on screen are left out, so a zoomed-out grid never turns into a wash. */
-export const MIN_GRID_LINE_GAP_PX = 12;
 
 /** Lines this far apart on screen or more draw at full strength; closer ones fade toward the minimum gap. */
 export const FULL_GRID_LINE_GAP_PX = 32;
@@ -88,14 +86,10 @@ export function gridAxisLines(
   subdivisions: number,
   pxPerUnit: number,
 ): GridAxisLines {
-  if (!(spacing > 0) || spacing * pxPerUnit < MIN_GRID_LINE_GAP_PX) {
-    return { major: [], minor: [] };
-  }
+  const lineStep = visibleGridStep(spacing, subdivisions, pxPerUnit);
+  if (lineStep === null) return { major: [], minor: [] };
 
-  const step = spacing / subdivisions;
-  const showMinor = subdivisions > 1 && step * pxPerUnit >= MIN_GRID_LINE_GAP_PX;
-  const lineStep = showMinor ? step : spacing;
-  const perMajor = showMinor ? subdivisions : 1;
+  const perMajor = lineStep < spacing ? subdivisions : 1;
   const major: number[] = [];
   const minor: number[] = [];
 

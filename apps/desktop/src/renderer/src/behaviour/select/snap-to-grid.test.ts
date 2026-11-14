@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { PointId } from "@shift/types";
 import { square } from "@/testing/fixtures";
+import { MIN_GRID_LINE_GAP_PX } from "@shift/editor";
 import { useTestEditor } from "@/testing/fontFixture";
 
 // Away from the test font's metrics and from the other points, so only the grid can snap.
@@ -65,6 +66,33 @@ describe("dragging points snaps them to the grid while snapping to it is on", ()
     await editor.dragFrom({ x: 330, y: 160 }, { x: 412, y: xHeight - editor.hitDistance() / 2 });
 
     expect(await editor.point(corner)).toMatchObject({ x: 400, y: xHeight });
+  });
+});
+
+describe("snapping follows the grid lines on screen", () => {
+  /** Zooms so one glyph unit spans `px` screen pixels. */
+  function zoomToPixelsPerUnit(px: number): void {
+    editor.setZoom(editor.zoomLevel() * px * editor.pixelSize());
+  }
+
+  it("snaps only to grid lines once subdivision lines sit too close to show", async () => {
+    editor.setGrid({ spacingX: 100, spacingY: 100, subdivisions: 2, snap: true });
+    zoomToPixelsPerUnit((MIN_GRID_LINE_GAP_PX * 1.5) / 100);
+
+    await editor.dragFrom({ x: 330, y: 160 }, { x: 438, y: 262 });
+
+    expect(await editor.point(corner)).toMatchObject({ x: 400, y: 300 });
+  });
+
+  it("stops snapping once the whole grid sits too close to show", async () => {
+    editor.setGrid({ spacingX: 100, spacingY: 100, snap: true });
+    zoomToPixelsPerUnit((MIN_GRID_LINE_GAP_PX * 0.8) / 100);
+
+    await editor.dragFrom({ x: 330, y: 160 }, { x: 412, y: 291 });
+
+    const dropped = await editor.point(corner);
+    expect(dropped?.x).toBeCloseTo(412);
+    expect(dropped?.y).toBeCloseTo(291);
   });
 });
 
