@@ -25,35 +25,33 @@
   "duplicate-type": {
     "pack": { "src": 1, "tests": 0 },
     "shift-backends": { "src": 20, "tests": 0 },
-    "shift-bridge": { "src": 25, "tests": 0 },
+    "shift-bridge": { "src": 51, "tests": 0 },
     "shift-cli": { "src": 35, "tests": 0 },
     "shift-config": { "src": 6, "tests": 0 },
     "shift-engine": { "src": 8, "tests": 0 },
-    "shift-font": { "src": 60, "tests": 0 },
+    "shift-font": { "src": 94, "tests": 0 },
     "shift-layout": { "src": 1, "tests": 0 },
     "shift-proof": { "src": 10, "tests": 0 },
     "shift-scan": { "src": 3, "tests": 0 },
     "shift-slug": { "src": 22, "tests": 0 },
     "shift-specimen": { "src": 5, "tests": 0 },
     "shift-store": { "src": 8, "tests": 0 },
-    "shift-text": { "src": 17, "tests": 0 },
+    "shift-text": { "src": 18, "tests": 0 },
     "shift-wasm": { "src": 21, "tests": 0 },
-    "shift-wire": { "src": 60, "tests": 0 },
     "shift-workspace": { "src": 5, "tests": 0 }
   },
   "field-copy-conversion": {
-    "shift-bridge": { "src": 3, "tests": 0 },
+    "shift-bridge": { "src": 8, "tests": 0 },
     "shift-cli": { "src": 1, "tests": 0 },
-    "shift-wire": { "src": 7, "tests": 0 }
+    "shift-font": { "src": 2, "tests": 0 }
   },
   "generic-suffix": {
-    "shift-bridge": { "src": 2, "tests": 0 },
+    "shift-bridge": { "src": 7, "tests": 0 },
     "shift-cli": { "src": 1, "tests": 0 },
-    "shift-font": { "src": 5, "tests": 0 },
+    "shift-font": { "src": 10, "tests": 0 },
     "shift-store": { "src": 3, "tests": 0 },
     "shift-text": { "src": 1, "tests": 0 },
-    "shift-wasm": { "src": 2, "tests": 0 },
-    "shift-wire": { "src": 10, "tests": 0 }
+    "shift-wasm": { "src": 2, "tests": 0 }
   },
   "get-prefix": {
     "shift-backends": { "src": 3, "tests": 0 },
@@ -65,7 +63,7 @@
   "id-param-name": {
     "shift-backends": { "src": 5, "tests": 0 },
     "shift-font": { "src": 3, "tests": 0 },
-    "shift-text": { "src": 15, "tests": 0 },
+    "shift-text": { "src": 17, "tests": 0 },
     "shift-wasm": { "src": 8, "tests": 0 }
   },
   "inline-not-found": {
@@ -81,7 +79,7 @@
     "shift-backends": { "src": 0, "tests": 7 },
     "shift-bridge": { "src": 0, "tests": 1 },
     "shift-font": { "src": 0, "tests": 8 },
-    "shift-wasm": { "src": 0, "tests": 2 }
+    "shift-wasm": { "src": 0, "tests": 3 }
   },
   "leaked-static": {
     "shift-font": { "src": 1, "tests": 0 }
@@ -105,20 +103,19 @@
     "shift-bridge": { "src": 0, "tests": 10 },
     "shift-cli": { "src": 0, "tests": 34 },
     "shift-engine": { "src": 0, "tests": 9 },
-    "shift-font": { "src": 0, "tests": 36 },
+    "shift-font": { "src": 0, "tests": 37 },
     "shift-layout": { "src": 0, "tests": 1 },
     "shift-slug": { "src": 0, "tests": 16 },
     "shift-store": { "src": 0, "tests": 25 },
     "shift-text": { "src": 0, "tests": 2 },
     "shift-wasm": { "src": 0, "tests": 2 },
-    "shift-wire": { "src": 0, "tests": 1 },
     "shift-workspace": { "src": 0, "tests": 29 }
   },
   "method-candidate": {
     "shift-backends": { "src": 32, "tests": 0 },
     "shift-bridge": { "src": 1, "tests": 0 },
     "shift-cli": { "src": 3, "tests": 0 },
-    "shift-font": { "src": 31, "tests": 0 },
+    "shift-font": { "src": 36, "tests": 0 },
     "shift-proof": { "src": 6, "tests": 0 },
     "shift-slug": { "src": 15, "tests": 0 },
     "shift-store": { "src": 3, "tests": 0 },
@@ -133,13 +130,12 @@
     "shift-bridge": { "src": 0, "tests": 2 },
     "shift-cli": { "src": 0, "tests": 14 },
     "shift-config": { "src": 0, "tests": 8 },
-    "shift-font": { "src": 0, "tests": 33 },
+    "shift-font": { "src": 0, "tests": 35 },
     "shift-layout": { "src": 0, "tests": 4 },
     "shift-scan": { "src": 0, "tests": 16 },
     "shift-specimen": { "src": 0, "tests": 2 },
     "shift-store": { "src": 0, "tests": 4 },
-    "shift-text": { "src": 0, "tests": 15 },
-    "shift-wire": { "src": 0, "tests": 2 },
+    "shift-text": { "src": 0, "tests": 17 },
     "shift-workspace": { "src": 0, "tests": 11 }
   },
   "owned-id-accessor": {
@@ -147,9 +143,9 @@
     "shift-font": { "src": 7, "tests": 0 }
   },
   "panicking-conversion": {
+    "shift-bridge": { "src": 1, "tests": 0 },
     "shift-font": { "src": 1, "tests": 0 },
-    "shift-slug": { "src": 3, "tests": 0 },
-    "shift-wire": { "src": 1, "tests": 0 }
+    "shift-slug": { "src": 3, "tests": 0 }
   },
   "parallel-first-error": {
     "shift-backends": { "src": 7, "tests": 0 },
@@ -174,8 +170,8 @@
     "shift-slug": { "src": 0, "tests": 5 },
     "shift-specimen": { "src": 0, "tests": 4 },
     "shift-store": { "src": 0, "tests": 22 },
-    "shift-text": { "src": 0, "tests": 9 },
-    "shift-wasm": { "src": 0, "tests": 15 },
+    "shift-text": { "src": 0, "tests": 17 },
+    "shift-wasm": { "src": 0, "tests": 16 },
     "shift-workspace": { "src": 0, "tests": 13 }
   },
   "stringly-error": {
@@ -199,17 +195,16 @@
     "shift-specimen": { "src": 0, "tests": 8 },
     "shift-store": { "src": 0, "tests": 26 },
     "shift-text": { "src": 0, "tests": 3 },
-    "shift-wasm": { "src": 0, "tests": 9 },
+    "shift-wasm": { "src": 0, "tests": 11 },
     "shift-workspace": { "src": 0, "tests": 1 }
   },
   "test-only-pub": {
     "shift-backends": { "src": 1, "tests": 0 },
     "shift-engine": { "src": 2, "tests": 0 },
-    "shift-font": { "src": 31, "tests": 0 },
+    "shift-font": { "src": 32, "tests": 0 },
     "shift-slug": { "src": 3, "tests": 0 },
     "shift-store": { "src": 13, "tests": 0 },
     "shift-text": { "src": 1, "tests": 0 },
-    "shift-wire": { "src": 1, "tests": 0 },
     "shift-workspace": { "src": 4, "tests": 0 }
   },
   "test-setup-copy": {
@@ -219,13 +214,14 @@
     "shift-font": { "src": 0, "tests": 59 },
     "shift-proof": { "src": 0, "tests": 5 },
     "shift-store": { "src": 0, "tests": 19 },
+    "shift-text": { "src": 0, "tests": 5 },
     "shift-wasm": { "src": 0, "tests": 5 },
     "shift-workspace": { "src": 0, "tests": 35 }
   },
   "trait-candidate": {
     "shift-backends": { "src": 1, "tests": 0 },
     "shift-cli": { "src": 1, "tests": 0 },
-    "shift-font": { "src": 37, "tests": 0 },
+    "shift-font": { "src": 38, "tests": 0 },
     "shift-scan": { "src": 1, "tests": 0 },
     "shift-slug": { "src": 2, "tests": 0 },
     "shift-text": { "src": 4, "tests": 0 }
@@ -244,11 +240,11 @@
   },
   "type-name-collision": {
     "shift-backends": { "src": 10, "tests": 0 },
-    "shift-bridge": { "src": 3, "tests": 0 },
+    "shift-bridge": { "src": 5, "tests": 0 },
     "shift-cli": { "src": 15, "tests": 0 },
     "shift-config": { "src": 2, "tests": 0 },
     "shift-engine": { "src": 2, "tests": 0 },
-    "shift-font": { "src": 40, "tests": 0 },
+    "shift-font": { "src": 66, "tests": 0 },
     "shift-layout": { "src": 5, "tests": 0 },
     "shift-proof": { "src": 10, "tests": 0 },
     "shift-scan": { "src": 2, "tests": 0 },
@@ -257,7 +253,6 @@
     "shift-store": { "src": 2, "tests": 0 },
     "shift-text": { "src": 14, "tests": 0 },
     "shift-wasm": { "src": 7, "tests": 0 },
-    "shift-wire": { "src": 28, "tests": 0 },
     "shift-workspace": { "src": 1, "tests": 0 }
   },
   "unguarded-recursion": {
