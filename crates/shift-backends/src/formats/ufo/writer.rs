@@ -9,6 +9,7 @@ use shift_font::{
 };
 use std::path::{Path, PathBuf};
 
+use super::glyph_order::{GLYPH_ORDER_KEY, glyph_order_value};
 use super::metrics_keys::insert_metrics_keys;
 
 pub struct UfoWriter;
@@ -424,6 +425,10 @@ impl UfoWriter {
         if !font.lib().is_empty() {
             norad_font.lib = Self::convert_lib(font.lib());
         }
+        norad_font.lib.insert(
+            GLYPH_ORDER_KEY.to_string(),
+            glyph_order_value(font.glyphs().map(Glyph::name)),
+        );
 
         let default_layer = norad_font.layers.default_layer_mut();
         if let Some(default_source) = font.default_source() {

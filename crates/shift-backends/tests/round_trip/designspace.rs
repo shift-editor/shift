@@ -565,3 +565,24 @@ fn each_master_ufo_keeps_its_own_kerning_through_a_round_trip() {
         Some(-40.0)
     );
 }
+
+#[test]
+fn a_default_master_that_is_not_first_keeps_its_place() {
+    let mut font = shift_font::test_support::sample_variable_font();
+    let mut order: Vec<_> = font.sources().iter().map(shift_font::Source::id).collect();
+    order.rotate_left(1);
+    font.set_source_order(&order).unwrap();
+    let out_dir = tempfile::tempdir().unwrap();
+    let out_path = out_dir.path().join("Ordered.designspace");
+
+    save_font(&font, &out_path);
+    let reloaded = load_font(&out_path);
+
+    let names: Vec<_> = reloaded
+        .sources()
+        .iter()
+        .map(shift_font::Source::name)
+        .collect();
+    assert_eq!(names, ["Medium", "Bold", "Regular"]);
+    assert_eq!(reloaded.default_source().unwrap().name(), "Regular");
+}

@@ -31,6 +31,7 @@ write-fonts = "0.52"
 
 [dev-dependencies]
 harfrust = "0.13.3"
+proptest = "1"
 shift-text = { workspace = true, features = ["layout"] }
 shift-font = { workspace = true, features = ["test-support"] }
 shift-store = { workspace = true }

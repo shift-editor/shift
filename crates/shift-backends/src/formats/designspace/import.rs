@@ -1,7 +1,7 @@
 use crate::SourceIds;
 use crate::distinct_named_instances;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
     sync::Arc,
@@ -9,13 +9,15 @@ use std::{
 
 use norad::designspace::DesignSpaceDocument;
 use rayon::prelude::*;
-use shift_font::{Axis, DesignLocation, Font, GlyphId, MetricDefinition, Source, SourceId};
+use shift_font::{
+    Axis, DesignLocation, Font, GlyphId, LibData, MetricDefinition, Source, SourceId,
+};
 
 use crate::{
     ImportReport,
     errors::{FormatBackendError, FormatBackendResult},
     font_source::VariationAxisKind,
-    formats::ufo::{UfoKerning, load_header, read_glyph_paths},
+    formats::ufo::{UfoKerning, load_header, read_glyph_paths, take_glyph_order},
     import::{GlifDirectory, GlifGlyphStream},
     kerning_import::KerningImport,
 };
@@ -192,8 +194,14 @@ fn stream_designspace(
         },
         &ids,
     );
+    // Sources are registered default first; the font lists them as the
+    // document does.
+    let document_order: Vec<_> = (0..document.sources.len())
+        .map(|index| ids.source_id(&index.to_string()))
+        .collect();
+    header.set_source_order(&document_order)?;
 
-    let stream = GlifGlyphStream::from_sources(&ids, &directories);
+    let stream = GlifGlyphStream::from_sources(&ids, &directories, header.lib_mut());
     let mut report = import_kerning(
         &mut header,
         &default_kerning,
@@ -305,7 +313,7 @@ fn stream_axisless_designspace(
         &ids,
     );
 
-    let stream = GlifGlyphStream::from_sources(&ids, &directories);
+    let stream = GlifGlyphStream::from_sources(&ids, &directories, header.lib_mut());
     let report = import_kerning(
         &mut header,
         &default_kerning,
@@ -415,12 +423,17 @@ fn add_axes(
 }
 
 impl GlifGlyphStream {
-    /// The glyphs of every source directory, in name order.
-    fn from_sources(source_ids: &SourceIds, directories: &[SourceDirectory]) -> Self {
+    /// The glyphs of every source directory, in the default UFO's glyph
+    /// order (see [`take_glyph_order`]).
+    fn from_sources(
+        source_ids: &SourceIds,
+        directories: &[SourceDirectory],
+        lib: &mut LibData,
+    ) -> Self {
         let names = directories
             .iter()
-            .flat_map(|directory| directory.glyphs.keys().cloned())
-            .collect::<BTreeSet<_>>();
+            .flat_map(|directory| directory.glyphs.keys().cloned());
+        let names = take_glyph_order(lib, names);
         let directories = directories
             .iter()
             .map(|directory| GlifDirectory {
@@ -428,6 +441,6 @@ impl GlifGlyphStream {
                 glyphs: &directory.glyphs,
             })
             .collect::<Vec<_>>();
-        Self::from_directories(source_ids, names.into_iter().collect(), &directories)
+        Self::from_directories(source_ids, names, &directories)
     }
 }

@@ -55,8 +55,12 @@ pub enum DesignspaceError {
         source: Box<FormatBackendError>,
     },
 
-    #[error("failed to save UFO '{path}': {details}")]
-    SaveUfo { path: PathBuf, details: String },
+    #[error("failed to save UFO '{path}': {source}")]
+    SaveUfo {
+        path: PathBuf,
+        #[source]
+        source: Box<FormatBackendError>,
+    },
 
     #[error("axisless compatibility loader skipped: {reason}")]
     AxislessNotApplicable { reason: String },

@@ -264,6 +264,7 @@ These are allowed to jump around when energy is high, but they should not silent
 - [x] Canonical SQLite `.shift` identity with app-owned sparse recovery bindings and explicit Save/Discard
 - [x] FontLoader with adaptor pattern for extensibility
 - [x] Font compilation to binary (via fontc)
+- [x] Designspace and single-master UFO export from any font, glyph and master order kept, round-trip and property tested
 
 **Serialization**
 

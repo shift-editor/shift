@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["crates/*"]
+members = ["crates/*", "fuzz"]
+# The fuzz targets build only when named (`-p shift-fuzz`, `--workspace`, or
+# `cargo fuzz` in `fuzz/`).
+default-members = ["crates/*"]
 
 
 # Lints for every crate (each opts in with `[lints] workspace = true`). CI runs
