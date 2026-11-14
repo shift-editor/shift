@@ -175,7 +175,7 @@
     "shift-workspace": { "src": 0, "tests": 13 }
   },
   "stringly-error": {
-    "shift-backends": { "src": 51, "tests": 0 },
+    "shift-backends": { "src": 50, "tests": 0 },
     "shift-bridge": { "src": 10, "tests": 0 },
     "shift-font": { "src": 14, "tests": 0 },
     "shift-scan": { "src": 6, "tests": 0 },
@@ -201,7 +201,7 @@
   "test-only-pub": {
     "shift-backends": { "src": 1, "tests": 0 },
     "shift-engine": { "src": 2, "tests": 0 },
-    "shift-font": { "src": 32, "tests": 0 },
+    "shift-font": { "src": 31, "tests": 0 },
     "shift-slug": { "src": 3, "tests": 0 },
     "shift-store": { "src": 13, "tests": 0 },
     "shift-text": { "src": 1, "tests": 0 },
