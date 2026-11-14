@@ -1,9 +1,3 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "document builders fail loudly on bad input"
-)]
-
 mod support;
 
 use std::path::Path;
@@ -13,30 +7,36 @@ use shift_font::{Font, test_support::sample_variable_font};
 use shift_store::ShiftStore;
 use support::{load_font, shift, shift_with_stdin};
 
-fn variable_document(dir: &Path) -> String {
+/// A fixture step that fails with a reason instead of panicking.
+type Fixture<T> = Result<T, Box<dyn std::error::Error>>;
+
+fn utf8(path: &Path) -> Fixture<String> {
+    Ok(path.to_str().ok_or("temp paths are UTF-8")?.to_string())
+}
+
+fn variable_document(dir: &Path) -> Fixture<String> {
     let path = dir.join("Dogfood.shift");
-    drop(ShiftStore::create_document(&path, &sample_variable_font()).unwrap());
-    path.to_str().unwrap().to_string()
+    drop(ShiftStore::create_document(&path, &sample_variable_font())?);
+    utf8(&path)
 }
 
 /// A one-master document made through the CLI, with one glyph `A`.
-fn single_master_document(dir: &Path) -> String {
-    let path = dir.join("Lab.shift");
-    let path = path.to_str().unwrap().to_string();
-    assert!(shift(&["font", "create", &path]).status.success());
+fn single_master_document(dir: &Path) -> Fixture<String> {
+    let path = utf8(&dir.join("Lab.shift"))?;
+    let created = shift(&["font", "create", &path]);
+    if !created.status.success() {
+        return Err(format!("font create failed: {}", stderr(&created)).into());
+    }
     let glyphs = r#"{"glyphs":[{"name":"A","unicodes":["U+0041"],"layer":{"advance":600,"svgPath":"M0 0 L300 700 L600 0 Z"}}]}"#;
-    assert!(
-        shift_with_stdin(&["glyph", "set", &path, "--input", "-"], glyphs)
-            .status
-            .success()
-    );
-    path
+    let set = shift_with_stdin(&["glyph", "set", &path, "--input", "-"], glyphs);
+    if !set.status.success() {
+        return Err(format!("glyph set failed: {}", stderr(&set)).into());
+    }
+    Ok(path)
 }
 
-fn read(path: &Path) -> Font {
-    FontLoader::new()
-        .read_font(path.to_str().unwrap())
-        .unwrap_or_else(|error| panic!("reading {}: {error}", path.display()))
+fn read(path: &Path) -> Fixture<Font> {
+    Ok(FontLoader::new().read_font(&utf8(path)?)?)
 }
 
 fn stderr(output: &std::process::Output) -> String {
@@ -46,7 +46,7 @@ fn stderr(output: &std::process::Output) -> String {
 #[test]
 fn exports_a_designspace_with_one_ufo_per_master() {
     let temp = tempfile::tempdir().unwrap();
-    let document = variable_document(temp.path());
+    let document = variable_document(temp.path()).unwrap();
     let out = temp.path().join("out");
     let designspace = out.join("Dogfood.designspace");
 
@@ -60,7 +60,7 @@ fn exports_a_designspace_with_one_ufo_per_master() {
     for ufo in ["Dogfood.ufo", "Dogfood-Medium.ufo", "Dogfood-Bold.ufo"] {
         assert!(out.join(ufo).is_dir(), "{ufo} should be written");
     }
-    let exported = read(&designspace);
+    let exported = read(&designspace).unwrap();
     let names: Vec<_> = exported
         .sources()
         .iter()
@@ -73,13 +73,13 @@ fn exports_a_designspace_with_one_ufo_per_master() {
 #[test]
 fn exports_a_single_master_font_as_a_ufo() {
     let temp = tempfile::tempdir().unwrap();
-    let document = single_master_document(temp.path());
+    let document = single_master_document(temp.path()).unwrap();
     let ufo = temp.path().join("Lab.ufo");
 
     let output = shift(&["export", &document, "--output", ufo.to_str().unwrap()]);
 
     assert!(output.status.success(), "{}", stderr(&output));
-    let exported = read(&ufo);
+    let exported = read(&ufo).unwrap();
     let authored = load_font(&document);
     assert_eq!(
         exported.glyph_by_name("A").unwrap().unicodes(),
@@ -112,9 +112,9 @@ fn refused_exports_say_why_and_write_nothing() {
     for refusal in refusals {
         let temp = tempfile::tempdir().unwrap();
         let document = if refusal.variable {
-            variable_document(temp.path())
+            variable_document(temp.path()).unwrap()
         } else {
-            single_master_document(temp.path())
+            single_master_document(temp.path()).unwrap()
         };
         let output_path = temp.path().join(refusal.output);
 
@@ -137,7 +137,7 @@ fn refused_exports_say_why_and_write_nothing() {
 #[test]
 fn export_leaves_the_document_unchanged() {
     let temp = tempfile::tempdir().unwrap();
-    let document = variable_document(temp.path());
+    let document = variable_document(temp.path()).unwrap();
     let before = std::fs::read(&document).unwrap();
     let designspace = temp.path().join("Dogfood.designspace");
 
