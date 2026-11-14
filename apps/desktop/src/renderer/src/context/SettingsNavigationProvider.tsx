@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useLocation } from "react-router";
+import { glyphColorOf, isGlyphColorCommandId } from "@shared/commands";
+import type { MarkColor } from "@shift/types";
 import { SettingsDialog } from "@/components/chrome/settings/SettingsDialog";
 import { ComponentPickerDialog } from "@/components/editor/ComponentPickerDialog";
 import { getShiftHost } from "@/host/shiftHost";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
+import { tagTargets } from "@/lib/glyph-grid/tagTargets";
 import type { SettingsTarget } from "@/types/settings";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { useWindowTabs } from "@/hooks/useWindowTabs";
@@ -13,6 +17,10 @@ import { SettingsNavigationContext, type SettingsNavigation } from "./SettingsNa
 export const SettingsNavigationProvider = ({ children }: { children: ReactNode }) => {
   const session = useFontSession();
   const { closeShown } = useWindowTabs();
+  // Read when a command arrives, not when the listener was set up.
+  const { pathname } = useLocation();
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
   const [target, setTarget] = useState<SettingsTarget | null>(null);
   const [componentPickerOpen, setComponentPickerOpen] = useState(false);
   const { setOpen: setExportOpen, setPopoverOpen: setExportPopoverOpen } = useExport();
@@ -39,6 +47,12 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
         if (id === "tab.close") {
           // Only the pinned Glyphs tab is left: Close Tab closes the window, prompting as usual.
           if (!closeShown()) await getShiftHost().commands.run("window.close");
+          return;
+        }
+        if (isGlyphColorCommandId(id)) {
+          const named = glyphColorOf(id);
+          const color: MarkColor | null = named === null ? null : { kind: "named", named };
+          session.editor.setMarkColor(tagTargets(session, pathnameRef.current), color);
           return;
         }
         if (id === "glyph.addComponent") {

@@ -9,11 +9,12 @@ export function commandShortcutLabel(shortcut: CommandShortcut, isMac: boolean):
   if (isMac) {
     const alt = shortcut.altKey ? "⌥" : "";
     const shift = shortcut.shiftKey ? "⇧" : "";
-    return `${shortcut.primaryModifier ? "⌘" : ""}${alt}${shift}${key}`;
+    const control = shortcut.controlKey ? "⌃" : "";
+    return `${control}${shortcut.primaryModifier ? "⌘" : ""}${alt}${shift}${key}`;
   }
 
   const parts = [
-    shortcut.primaryModifier && "Ctrl",
+    (shortcut.primaryModifier || shortcut.controlKey) && "Ctrl",
     shortcut.altKey && "Alt",
     shortcut.shiftKey && "Shift",
     key,

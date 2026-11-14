@@ -191,6 +191,33 @@ test.describe("SVG glyph catalog fallback", () => {
     await expect(dialog).toBeHidden();
   });
 
+  test("tags the selected glyphs with ⌃3 and from the sidebar's swatches", async ({ page }) => {
+    const svg = glyphCatalogSvg(page);
+    await expect(svg).toHaveAttribute("data-grid-readiness", "Complete");
+    const tiles = svg.getByRole("button", { name: /^Open / });
+    const sidebar = page.getByRole("complementary", { name: "Glyph properties" });
+    await tiles.nth(0).click();
+    await tiles.nth(1).click({ modifiers: ["Shift"] });
+
+    await page.keyboard.press("Control+3");
+    await expect(svg.locator('[data-mark-color="yellow"]')).toHaveCount(2);
+    await expect(sidebar.getByRole("img", { name: "Tagged yellow" })).toBeVisible();
+    await expect(sidebar.getByRole("button", { name: "Tag yellow" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    // Tagging one of the two differently leaves the selection mixed.
+    await tiles.nth(0).click();
+    await sidebar.getByRole("button", { name: "Tag red" }).click();
+    await tiles.nth(1).click({ modifiers: ["Shift"] });
+    await expect(sidebar.getByRole("img", { name: "Tagged red, yellow" })).toBeVisible();
+    await expect(sidebar.getByText("Mixed")).toBeVisible();
+
+    await sidebar.getByRole("button", { name: "Clear colour" }).click();
+    await expect(svg.locator("[data-mark-color]:not([data-mark-color=none])")).toHaveCount(0);
+  });
+
   test("shows the system character for an empty encoded glyph", async ({ editor, page }) => {
     const [name] = await editor.createGlyphsForUnicodes([0x3042]);
     if (!name) throw new Error("Expected an empty Hiragana glyph");

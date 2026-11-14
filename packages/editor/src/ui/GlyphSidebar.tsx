@@ -14,6 +14,10 @@ import { useGlyphMetrics } from "./useGlyphMetrics";
 export interface GlyphSidebarHost {
   /** Controls at the end of the header, after the glyph's name; replaces the default zoom control. */
   headerActions?: ReactNode;
+  /** Rendered beside the Glyph heading, such as the glyph's tag colour. */
+  glyphHeading?: ReactNode;
+  /** Rendered below the glyph's name and code point, inside the Glyph section. */
+  glyphDetails?: ReactNode;
   /** Rendered below the glyph metrics, for panels about the current selection. */
   selection?: ReactNode;
 }
@@ -141,7 +145,10 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-3 py-3">
           <section className="flex flex-col gap-2">
-            <h3 className="text-ui font-medium text-primary">Glyph</h3>
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-ui font-medium text-primary">Glyph</h3>
+              {host.glyphHeading}
+            </div>
             <main className="flex flex-col items-center">
               <div className="flex items-center justify-center gap-2">
                 <EditableSidebarInput
@@ -207,6 +214,7 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                   editable={session.mode === "workspace"}
                 />
               </div>
+              {host.glyphDetails ? <div className="mt-3 w-full">{host.glyphDetails}</div> : null}
             </main>
           </section>
         </div>

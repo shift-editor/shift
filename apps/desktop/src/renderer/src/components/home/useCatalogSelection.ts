@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { glyphColorCommands, type CommandId } from "@shared/commands";
 import type { Point2D, Rect2D } from "@shift/geo";
 import type { GlyphId } from "@shift/types";
 import type { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { useGlyphSelection, type GlyphSelectionHandlers } from "../glyph-grid/useGlyphSelection";
+import { getShiftHost } from "@/host/shiftHost";
 import type { GlyphSelection } from "@/lib/glyph-grid/GlyphSelection";
 import type { GlyphCatalogItem } from "@/types/glyphCatalog";
 
@@ -86,6 +88,14 @@ export function useCatalogSelection({
 
   const primary = glyphs.find((glyph) => glyph.id === selection.primary) ?? null;
   const onKeyDown = (event: React.KeyboardEvent): void => {
+    // Control and a digit tags the selection; the editor's keyboard router is not mounted here.
+    const plainControl = event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey;
+    const tag = plainControl ? glyphColorCommands.find(({ digit }) => digit === event.key) : null;
+    if (tag) {
+      event.preventDefault();
+      void runCommand(tag.id);
+      return;
+    }
     if (event.key !== "Enter" || !primary) {
       handlers.onKeyDown(event);
       return;
@@ -95,6 +105,14 @@ export function useCatalogSelection({
   };
 
   return { handlers: { ...handlers, onKeyDown }, box, glyphAt };
+}
+
+async function runCommand(id: CommandId): Promise<void> {
+  try {
+    await getShiftHost().commands.run(id);
+  } catch (error) {
+    console.error("glyph grid command failed", id, error);
+  }
 }
 
 async function open(

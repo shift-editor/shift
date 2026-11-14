@@ -7,7 +7,7 @@ import {
   SHIFT_WEBSITE_URL,
   SHIFT_X_URL,
 } from "../../shared/links";
-import { helpCommandLabels } from "../../shared/commands";
+import { glyphColorCommands, helpCommandLabels } from "../../shared/commands";
 
 const appCommands: Command[] = [
   {
@@ -339,6 +339,14 @@ const glyphCommands: Command[] = [
   },
 ];
 
+const glyphColorCommandList: Command[] = glyphColorCommands.map(({ id, label }) => ({
+  id,
+  effect: "font",
+  label,
+  enabled: (ctx) => ctx.document.hasWorkspace(),
+  run: (ctx) => ctx.renderer.run(id),
+}));
+
 /**
  * Snapshot of commands available to the app shell.
  *
@@ -353,6 +361,7 @@ export const commands: Command[] = [
   ...fileCommands,
   ...editCommands,
   ...glyphCommands,
+  ...glyphColorCommandList,
 ];
 
 /**

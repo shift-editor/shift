@@ -8,6 +8,7 @@ import { BooleanOps } from "./BooleanOps";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
 import { FeaturesSection } from "./sidebar-right/FeaturesSection";
 import { GlyphKerningSection } from "./sidebar-right/GlyphKerningSection";
+import { GlyphTagDots, GlyphTagRow } from "./sidebar-right/GlyphTag";
 import { HandleSection } from "./sidebar-right/HandleSection";
 import { KerningPairSection } from "./sidebar-right/KerningPairSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
@@ -55,6 +56,8 @@ export const RightSidebar = () => {
             <ZoomMenu />
           </div>
         ),
+        glyphHeading: <GlyphTagDots />,
+        glyphDetails: <GlyphTagRow />,
         selection: kerningActive ? (
           <KerningPairSection />
         ) : (

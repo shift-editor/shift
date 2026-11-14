@@ -1,5 +1,5 @@
 import { app, Menu, type BrowserWindow, type MenuItemConstructorOptions } from "electron";
-import type { CommandId } from "../../shared/commands";
+import { glyphColorCommands, type CommandId } from "../../shared/commands";
 import type { MenuBar } from "../../shared/menu/types";
 import { menuBarFromTemplate, withMenuItemIds } from "./menuBar";
 import {
@@ -251,6 +251,15 @@ export class ApplicationMenu {
       this.#commandItem("glyph.decomposeComponents"),
       { type: "separator" },
       this.#commandItem("glyph.reverseSelectedContour"),
+      { type: "separator" },
+      {
+        label: "Colour",
+        submenu: glyphColorCommands.flatMap((command): MenuItemConstructorOptions[] => {
+          const item = this.#commandItem(command.id);
+          // None clears the colour, so it sits apart from the colours.
+          return command.color === null ? [{ type: "separator" }, item] : [item];
+        }),
+      },
     ];
   }
 
