@@ -24,8 +24,8 @@
   },
   "duplicate-type": {
     "pack": { "src": 1, "tests": 0 },
-    "shift-backends": { "src": 20, "tests": 0 },
-    "shift-bridge": { "src": 51, "tests": 0 },
+    "shift-backends": { "src": 19, "tests": 0 },
+    "shift-bridge": { "src": 50, "tests": 0 },
     "shift-cli": { "src": 35, "tests": 0 },
     "shift-config": { "src": 6, "tests": 0 },
     "shift-engine": { "src": 8, "tests": 0 },

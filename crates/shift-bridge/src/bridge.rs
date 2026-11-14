@@ -75,16 +75,16 @@ pub(crate) enum ExportMode {
 }
 
 impl TryFrom<Option<&str>> for ExportMode {
-  type Error = Error;
+  type Error = BridgeError;
 
-  fn try_from(mode: Option<&str>) -> Result<Self> {
+  fn try_from(mode: Option<&str>) -> BridgeResult<Self> {
     match mode {
       None | Some("write") => Ok(Self::Write),
       Some("plan") => Ok(Self::Plan),
-      Some(other) => Err(Error::new(
-        Status::InvalidArg,
-        format!("unknown export mode: {other}"),
-      )),
+      Some(other) => Err(BridgeError::InvalidInput {
+        kind: "export mode",
+        value: other.to_string(),
+      }),
     }
   }
 }

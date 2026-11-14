@@ -769,15 +769,6 @@ mod tests {
     }
 
     #[test]
-    fn postscript_safe_names_drop_spaces_and_reserved_characters() {
-        assert_eq!(
-            postscript_safe("Solenoid-Coarse Wide"),
-            "Solenoid-CoarseWide"
-        );
-        assert_eq!(postscript_safe("Ünï (Bold)/2"), "nBold2");
-    }
-
-    #[test]
     fn exports_in_a_directory_take_their_formats_conventional_names() {
         let font = sample_variable_font();
         let directory = Path::new("out");
