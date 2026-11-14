@@ -2,20 +2,23 @@
 //! skills report the app release they ship with, not the crate version.
 
 use std::env;
+use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
 
-fn main() {
-    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("set by Cargo"));
+fn main() -> Result<(), Box<dyn Error>> {
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
     let package = manifest_dir.join("../../package.json");
     println!("cargo:rerun-if-changed={}", package.display());
 
     let text = fs::read_to_string(&package)
-        .unwrap_or_else(|error| panic!("read {}: {error}", package.display()));
+        .map_err(|error| format!("read {}: {error}", package.display()))?;
     let manifest: serde_json::Value = serde_json::from_str(&text)
-        .unwrap_or_else(|error| panic!("parse {}: {error}", package.display()));
-    let version = manifest["version"]
-        .as_str()
-        .unwrap_or_else(|| panic!("{} has no string version", package.display()));
+        .map_err(|error| format!("parse {}: {error}", package.display()))?;
+    let version = manifest
+        .get("version")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| format!("{} has no string version", package.display()))?;
     println!("cargo:rustc-env=SHIFT_PRODUCT_VERSION={version}");
+    Ok(())
 }

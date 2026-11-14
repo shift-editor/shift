@@ -597,8 +597,9 @@ fn interface_for(item: &ItemTrait) -> syn::Result<proc_macro2::TokenStream> {
             ReturnType::Type(_, output) => output.as_ref(),
             ReturnType::Default => &unit,
         };
-        let index = u32::try_from(index)
-            .map_err(|_| Error::new_spanned(signature, "an interface has too many methods"))?;
+        let index = u32::try_from(index).map_err(|_overflow| {
+            Error::new_spanned(signature, "an interface has too many methods")
+        })?;
         arms.push(quote! {
             #index => {
                 let mut read = ::pack::Reader::new(input, &mut blobs, &*names);
