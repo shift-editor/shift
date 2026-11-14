@@ -451,9 +451,9 @@ These are allowed to jump around when energy is high, but they should not silent
 
 **Grid System**
 
-- [ ] Configurable grid (spacing, subdivisions)
-- [ ] Snap to grid toggle (`G` key)
-- [ ] Visual grid overlay (optional)
+- [x] Configurable grid (spacing, subdivisions)
+- [x] Snap to grid toggle (`G` key)
+- [x] Visual grid overlay (optional)
 
 **Metric Snapping**
 

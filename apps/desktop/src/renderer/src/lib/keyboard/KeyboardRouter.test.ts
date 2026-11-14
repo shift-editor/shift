@@ -250,6 +250,33 @@ describe("KeyboardRouter", () => {
     });
   });
 
+  describe("grid shortcut", () => {
+    it("toggles snapping to the grid with G on the canvas", async () => {
+      expect(await router.handleKeyDown(createKeyboardEvent({ key: "g", code: "KeyG" }))).toBe(
+        true,
+      );
+      expect(editor.gridSettings()).toMatchObject({ snap: true });
+
+      await router.handleKeyDown(createKeyboardEvent({ key: "g", code: "KeyG" }));
+      expect(editor.gridSettings()).toMatchObject({ snap: false });
+    });
+
+    it("leaves Cmd+G alone", async () => {
+      await router.handleKeyDown(createKeyboardEvent({ key: "g", code: "KeyG", metaKey: true }));
+
+      expect(editor.gridSettings()).toMatchObject({ snap: false });
+    });
+
+    it("types G instead of toggling snapping in Text mode", async () => {
+      editor.selectTool("text");
+
+      const handled = await router.handleKeyDown(createKeyboardEvent({ key: "g", code: "KeyG" }));
+
+      expect(handled).toBe(false);
+      expect(editor.gridSettings()).toMatchObject({ snap: false });
+    });
+  });
+
   describe("right sidebar shortcuts", () => {
     it.each([
       {

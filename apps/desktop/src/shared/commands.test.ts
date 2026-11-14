@@ -19,6 +19,15 @@ describe("command shortcuts", () => {
     expect(toElectronAccelerator(commandShortcuts["window.close"])).toBe("CmdOrCtrl+Shift+W");
   });
 
+  it("toggles snapping to the grid with G alone, a canvas key", () => {
+    expect(commandShortcuts["view.toggleSnapToGrid"]).toEqual({
+      key: "g",
+      primaryModifier: false,
+      shiftKey: false,
+      altKey: false,
+    });
+  });
+
   it("converts symbolic and alternate modifiers to Electron syntax", () => {
     expect(toElectronAccelerator(commandShortcuts["view.zoomIn"])).toBe("CmdOrCtrl+Plus");
     expect(toElectronAccelerator(commandShortcuts["ui.increaseSize"])).toBe("CmdOrCtrl+Alt+Plus");

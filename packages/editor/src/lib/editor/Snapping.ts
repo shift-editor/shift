@@ -3,14 +3,17 @@ import { Point } from "@shift/glyph-state";
 import type { PointId } from "@shift/types";
 import type { Font } from "../model/Font";
 import type { GlyphLayer } from "../model/Glyph";
-import { MetricSnap, PointAlignmentSnap, SnapSet } from "../model/positions";
+import { GridSnap, MetricSnap, PointAlignmentSnap, SnapSet } from "../model/positions";
+import type { Grid } from "./Grid";
 import type { LocalBounds } from "../../types/coordinates";
 import type { ShiftNode } from "../../types/node";
-import type { PositionCondition } from "../../types/positionEdit";
+import type { PositionCondition, PositionSnapProvider } from "../../types/positionEdit";
 
 /** Editor state snapping reads when it builds a snap set. */
 export interface SnappingContext {
   readonly font: Pick<Font, "metricsForSource">;
+  /** The canvas grid; its intersections are snap targets while its snapping is on. */
+  readonly grid: Pick<Grid, "settings">;
   /** Snap distance at the current zoom in the units of `node`. */
   hitRadiusIn(node: ShiftNode): number;
   /** Snap distance in scene units at the current zoom, for a layer placed in no node. */
@@ -36,7 +39,8 @@ export interface LayerSnapOptions {
  * @remarks
  * Tools ask for a snap set per gesture or preview frame rather than composing providers
  * themselves, so every tool snaps to the same targets: the layer's source metrics and the
- * on-curve points on screen, within the pointer hit radius.
+ * on-curve points on screen, within the pointer hit radius, and the grid's intersections
+ * while snapping to the grid is on.
  */
 export class Snapping {
   readonly #context: SnappingContext;
@@ -64,13 +68,28 @@ export class Snapping {
     const targets = onScreenOnCurve.filter((point) => !excluding?.has(point.id));
     const marked = onScreenOnCurve.filter((point) => marking?.has(point.id));
 
-    return SnapSet.nearest(
-      [
-        acrossAdvance(MetricSnap.standard(font.metricsForSource(layer.sourceId), hitRadius), layer),
-        PointAlignmentSnap.to(targets, hitRadius).marking(marked),
-      ],
-      options.condition,
-    );
+    const providers: PositionSnapProvider[] = [
+      acrossAdvance(MetricSnap.standard(font.metricsForSource(layer.sourceId), hitRadius), layer),
+      PointAlignmentSnap.to(targets, hitRadius).marking(marked),
+    ];
+    const grid = this.toGrid();
+    if (grid) providers.push(grid);
+
+    return SnapSet.nearest(providers, options.condition);
+  }
+
+  /**
+   * Builds the grid snap for moves that have no layer targets, such as a component's placement.
+   *
+   * @remarks
+   * Frozen when built, like {@link forLayer}.
+   *
+   * @param condition - Per-frame switch, such as a held modifier suspending it.
+   * @returns null while snapping to the grid is off.
+   */
+  toGrid(condition?: PositionCondition): GridSnap | null {
+    const settings = this.#context.grid.settings;
+    return settings.snap ? GridSnap.of(settings, condition) : null;
   }
 
   /**

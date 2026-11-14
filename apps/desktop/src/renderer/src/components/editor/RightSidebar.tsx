@@ -8,6 +8,7 @@ import { BooleanOps } from "./BooleanOps";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
 import { FeaturesSection } from "./sidebar-right/FeaturesSection";
 import { GlyphKerningSection } from "./sidebar-right/GlyphKerningSection";
+import { GridMenu } from "./sidebar-right/GridMenu";
 import { HandleSection } from "./sidebar-right/HandleSection";
 import { KerningPairSection } from "./sidebar-right/KerningPairSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
@@ -52,6 +53,7 @@ export const RightSidebar = () => {
                 <LockIcon aria-hidden className="h-3.5 w-3.5" />
               </Button>
             ) : null}
+            <GridMenu />
             <ZoomMenu />
           </div>
         ),
