@@ -1,0 +1,136 @@
+{
+  "allow_attributes": {
+    "fontsrc": { "src": 0, "tests": 1 },
+    "shift-backends": { "src": 7, "tests": 2 },
+    "shift-bridge": { "src": 5, "tests": 0 },
+    "shift-cli": { "src": 4, "tests": 2 },
+    "shift-font": { "src": 3, "tests": 0 },
+    "shift-specimen": { "src": 1, "tests": 0 },
+    "shift-text": { "src": 3, "tests": 0 }
+  },
+  "allow_attributes_without_reason": {
+    "shift-backends": { "src": 1, "tests": 0 },
+    "shift-cli": { "src": 0, "tests": 3 },
+    "shift-font": { "src": 1, "tests": 0 }
+  },
+  "assertions_on_result_states": {
+    "shift-bridge": { "src": 0, "tests": 10 },
+    "shift-cli": { "src": 0, "tests": 5 },
+    "shift-engine": { "src": 0, "tests": 1 },
+    "shift-font": { "src": 0, "tests": 7 },
+    "shift-store": { "src": 0, "tests": 4 },
+    "shift-workspace": { "src": 0, "tests": 3 }
+  },
+  "assigning_clones": {
+    "shift-backends": { "src": 23, "tests": 0 },
+    "shift-font": { "src": 5, "tests": 0 }
+  },
+  "expect_used": {
+    "fontsrc": { "src": 0, "tests": 2 },
+    "shift-backends": { "src": 24, "tests": 19 },
+    "shift-bridge": { "src": 2, "tests": 0 },
+    "shift-cli": { "src": 5, "tests": 5 },
+    "shift-font": { "src": 21, "tests": 0 },
+    "shift-slug": { "src": 5, "tests": 1 },
+    "shift-store": { "src": 8, "tests": 23 },
+    "shift-text": { "src": 1, "tests": 0 },
+    "shift-workspace": { "src": 0, "tests": 2 }
+  },
+  "format_collect": {
+    "shift-scan": { "src": 0, "tests": 1 },
+    "shift-store": { "src": 1, "tests": 0 }
+  },
+  "indexing_slicing": {
+    "shift-backends": { "src": 103, "tests": 10 },
+    "shift-cli": { "src": 5, "tests": 1 },
+    "shift-engine": { "src": 0, "tests": 1 },
+    "shift-font": { "src": 135, "tests": 6 },
+    "shift-layout": { "src": 5, "tests": 0 },
+    "shift-proof": { "src": 20, "tests": 0 },
+    "shift-scan": { "src": 20, "tests": 0 },
+    "shift-slug": { "src": 35, "tests": 7 },
+    "shift-store": { "src": 3, "tests": 1 },
+    "shift-text": { "src": 20, "tests": 0 },
+    "shift-wasm": { "src": 1, "tests": 0 },
+    "shift-workspace": { "src": 0, "tests": 4 }
+  },
+  "iter_with_drain": {
+    "shift-store": { "src": 1, "tests": 0 }
+  },
+  "let_underscore_must_use": {
+    "shift-backends": { "src": 0, "tests": 6 },
+    "shift-bridge": { "src": 1, "tests": 1 },
+    "shift-font": { "src": 0, "tests": 1 },
+    "shift-proof": { "src": 7, "tests": 0 },
+    "shift-specimen": { "src": 1, "tests": 0 },
+    "shift-workspace": { "src": 3, "tests": 1 }
+  },
+  "map_err_ignore": {
+    "shift-backends": { "src": 5, "tests": 0 },
+    "shift-font": { "src": 8, "tests": 0 },
+    "shift-proof": { "src": 4, "tests": 0 },
+    "shift-slug": { "src": 2, "tests": 1 },
+    "shift-store": { "src": 4, "tests": 0 },
+    "shift-text": { "src": 7, "tests": 0 }
+  },
+  "missing_panics_doc": {
+    "shift-font": { "src": 9, "tests": 0 },
+    "shift-store": { "src": 1, "tests": 0 }
+  },
+  "mod_module_files": {
+    "shift-backends": { "src": 7, "tests": 0 },
+    "shift-engine": { "src": 1, "tests": 0 },
+    "shift-font": { "src": 3, "tests": 0 },
+    "shift-slug": { "src": 1, "tests": 0 },
+    "shift-store": { "src": 2, "tests": 0 },
+    "shift-text": { "src": 3, "tests": 0 }
+  },
+  "panic": {
+    "shift-backends": { "src": 0, "tests": 13 },
+    "shift-font": { "src": 1, "tests": 0 },
+    "shift-store": { "src": 1, "tests": 0 }
+  },
+  "panic_in_result_fn": {
+    "shift-font": { "src": 0, "tests": 3 }
+  },
+  "partial_pub_fields": {
+    "shift-font": { "src": 1, "tests": 0 },
+    "shift-text": { "src": 2, "tests": 0 },
+    "shift-workspace": { "src": 1, "tests": 0 }
+  },
+  "set_contains_or_insert": {
+    "shift-store": { "src": 1, "tests": 0 }
+  },
+  "string_slice": {
+    "shift-backends": { "src": 5, "tests": 7 },
+    "shift-engine": { "src": 0, "tests": 5 },
+    "shift-font": { "src": 9, "tests": 0 },
+    "shift-proof": { "src": 1, "tests": 0 },
+    "shift-scan": { "src": 1, "tests": 0 },
+    "shift-specimen": { "src": 2, "tests": 1 },
+    "shift-text": { "src": 1, "tests": 0 }
+  },
+  "unreachable": {
+    "shift-backends": { "src": 0, "tests": 1 },
+    "shift-cli": { "src": 0, "tests": 1 },
+    "shift-font": { "src": 3, "tests": 0 }
+  },
+  "unwrap_in_result": {
+    "fontsrc": { "src": 0, "tests": 1 },
+    "shift-backends": { "src": 3, "tests": 0 },
+    "shift-cli": { "src": 1, "tests": 0 },
+    "shift-font": { "src": 0, "tests": 2 },
+    "shift-specimen": { "src": 0, "tests": 1 },
+    "shift-store": { "src": 0, "tests": 1 }
+  },
+  "unwrap_used": {
+    "fontsrc": { "src": 0, "tests": 9 },
+    "shift-backends": { "src": 0, "tests": 73 },
+    "shift-cli": { "src": 0, "tests": 34 },
+    "shift-engine": { "src": 0, "tests": 4 },
+    "shift-font": { "src": 0, "tests": 13 },
+    "shift-slug": { "src": 0, "tests": 7 },
+    "shift-store": { "src": 0, "tests": 23 },
+    "shift-workspace": { "src": 0, "tests": 58 }
+  }
+}

@@ -167,6 +167,7 @@ fn run() -> Result<ExitCode, String> {
     findings.sort();
     match options.mode {
         Mode::Report => {
+            #[expect(clippy::print_stdout, reason = "the findings are the report")]
             for finding in &findings {
                 println!("{finding}");
             }

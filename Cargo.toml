@@ -5,15 +5,18 @@ members = ["crates/*"]
 
 # Lints for every crate (each opts in with `[lints] workspace = true`). CI runs
 # clippy with `-D warnings`, so "warn" blocks merges. Add a lint here once the
-# workspace is clean for it; the planned ones are in the rust skill.
+# workspace is clean for it. A lint that still has hits is ratcheted instead:
+# `clippy-ratchet.json` holds its count per crate, which may only go down
+# (`pnpm lint:rust-ratchet`).
 [workspace.lints.rust]
 unsafe_code = "deny"
 unused_qualifications = "warn"
 unreachable_pub = "warn"
 
 [workspace.lints.clippy]
-# `unwrap_used` and `print_stdout` are set in each library's lib.rs, so they
-# cover library code but not integration tests or examples.
+# clippy.toml lets tests print; tools and examples that print say so in an
+# `expect` with a reason.
+print_stdout = "warn"
 dbg_macro = "warn"
 todo = "warn"
 unimplemented = "warn"
@@ -70,6 +73,12 @@ needless_raw_string_hashes = "warn"
 clone_on_ref_ptr = "warn"
 # The rustdoc skill requires `# Errors` on every public fallible function.
 missing_errors_doc = "warn"
+# No hits today: robustness and efficiency lints that keep it so.
+ignore_without_reason = "warn"
+unnecessary_box_returns = "warn"
+format_push_string = "warn"
+rc_buffer = "warn"
+large_stack_arrays = "warn"
 
 [workspace.package]
 license = "MIT OR Apache-2.0"

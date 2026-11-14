@@ -23,7 +23,7 @@ static CLEARED: Once = Once::new();
 pub(crate) fn write(key: &str, fragment: &Value) {
     let Some(folder) = folder() else { return };
     CLEARED.call_once(|| {
-        let _ = fs::remove_dir_all(&folder);
+        drop(fs::remove_dir_all(&folder));
     });
     if fs::create_dir_all(&folder).is_err() {
         return;
@@ -31,7 +31,7 @@ pub(crate) fn write(key: &str, fragment: &Value) {
     let Ok(text) = serde_json::to_string_pretty(fragment) else {
         return;
     };
-    let _ = fs::write(folder.join(format!("{key}.json")), text);
+    drop(fs::write(folder.join(format!("{key}.json")), text));
 }
 
 /// `$PACK_TS_DIR/<package being compiled>`.

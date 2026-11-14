@@ -30,9 +30,6 @@
 //! the shapes it and the editor's WebAssembly carry are [`wire`]'s. UI
 //! interaction belongs to the TypeScript editor.
 //!
-// Library code returns errors instead of panicking: a panic kills the
-// WebAssembly engine. Tests may unwrap (clippy.toml).
-#![warn(clippy::unwrap_used, clippy::print_stdout)]
 
 pub mod anchor_attachment;
 pub mod anchor_name;

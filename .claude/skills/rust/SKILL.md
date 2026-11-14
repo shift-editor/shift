@@ -108,6 +108,7 @@ let recompiles = self.units_per_em.recompiles(&next.units_per_em)
     || self.feature_source.recompiles(&next.feature_source)
     || self.axes.recompiles(&next.axes);
 ```
+
 - **A method, not a free function**, when the first argument is the owner: `font.master_layers(glyph)`, not `master_layers(font, glyph)`. Extension traits are fine across crates.
 - **Entity kinds are an enum.** `EntityKind::Glyph` with `Display`, never `kind: "glyph"` or a `kind: &str` parameter, so kinds can't drift and callers can match them.
 - **Convert elements with `From` impls and collect directly into the field's type** (`Box<[T]>`, `Vec`, a map); destructure the source once instead of repeating `self.x.` per field. Reported by `pnpm scan:rust --kind field-copy-conversion`.
@@ -151,6 +152,11 @@ When the editor needs a shift-font rule synchronously, write it as a plain-data 
 ## The scan ratchet
 
 `pnpm scan:rust --check` (CI) holds every `shift-scan` kind's count per crate to `crates/shift-scan/baseline.json`: a branch may not add a hit, and a branch that fixes some runs `pnpm scan:rust --update` and commits the lower number. The kinds are listed in `crates/shift-scan/docs/DOCS.md`.
+
+## The lint ratchet
+
+Clippy lints that still have hits are listed in `clippy-ratchet.json` with their hits per crate (`src` for library and binary code, `tests` for the rest), and `pnpm lint:rust-ratchet`, CI's clippy step, fails when a count differs from the file.
+To lower one, fix hits and run `pnpm lint:rust-ratchet --update`; a lint at 0 everywhere moves to `[workspace.lints.clippy]` in `Cargo.toml`.
 
 ## Review checklist
 
