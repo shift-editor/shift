@@ -56,6 +56,13 @@ pub(crate) enum Command {
     /// Compile a SQLite .shift document to a TrueType font.
     Compile(CompileArgs),
 
+    /// Export a SQLite .shift document as editable sources.
+    ///
+    /// The output's extension picks the format: `.designspace` writes the
+    /// designspace with one UFO per master beside it, and `.ufo` writes one
+    /// UFO for a font with a single master. Use `compile` for binaries.
+    Export(ExportArgs),
+
     /// Render text or a glyph grid set in a font to a PNG or SVG proof image.
     Proof(ProofArgs),
 
@@ -403,6 +410,17 @@ pub(crate) struct CompileArgs {
 
     /// Path for the compiled .ttf output.
     #[arg(short, long, value_hint = ValueHint::FilePath)]
+    pub output: PathBuf,
+}
+
+#[derive(Debug, Parser)]
+pub(crate) struct ExportArgs {
+    /// Path to the canonical SQLite .shift document.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+
+    /// Path for the exported .designspace or .ufo; its extension picks the format.
+    #[arg(short, long, value_hint = ValueHint::AnyPath)]
     pub output: PathBuf,
 }
 

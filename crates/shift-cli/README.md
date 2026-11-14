@@ -2,7 +2,7 @@
 
 Command-line inspection, authoring, and compilation for canonical SQLite `.shift` documents.
 
-The crate builds the `shift-cli` binary. `inspect` opens a document, summarizes the font model, and can emit stable JSON for scripts and CI. Resource commands apply semantic Shift intents through a temporary recovery overlay and save only after the complete change validates. `compile` sends the canonical Shift model directly through fontir/fontc to produce a TrueType font.
+The crate builds the `shift-cli` binary. `inspect` opens a document, summarizes the font model, and can emit stable JSON for scripts and CI. Resource commands apply semantic Shift intents through a temporary recovery overlay and save only after the complete change validates. `compile` sends the canonical Shift model directly through fontir/fontc to produce a TrueType font, and `export` writes it as editable sources: a `.designspace` with one UFO per master, or a `.ufo` for a font with one master, picked by the output's extension.
 
 ## Install
 
@@ -46,6 +46,7 @@ cargo run -p shift-cli -- glyph inspect path/to/Family.glyphs Aacute
 cargo run -p shift-cli -- glyph inspect path/to/Family.designspace Aacute \
   --location wght=700 --view variation --json
 cargo run -p shift-cli -- compile path/to/Family.shift --output path/to/Family.ttf
+cargo run -p shift-cli -- export path/to/Family.shift --output path/to/out/Family.designspace
 
 cargo run -p shift-cli -- font create path/to/Lab.shift
 cargo run -p shift-cli -- font create path/to/Lab.shift --from path/to/Family.glyphspackage
@@ -195,7 +196,10 @@ A payload's `components` name their base glyph and may give a transform, either 
 `tCenterY`), which `glyph export` writes:
 
 ```json
-{ "advance": 600, "components": [{ "base": "A" }, { "base": "acute", "transform": [1, 0, 0, 1, 99, 20] }] }
+{
+  "advance": 600,
+  "components": [{ "base": "A" }, { "base": "acute", "transform": [1, 0, 0, 1, 99, 20] }]
+}
 ```
 
 Both `layer add` and `layer set` accept `svgPath` instead of `contours`:
@@ -257,6 +261,7 @@ shift glyph export Inter.glyphspackage --glyphs aacute | shift glyph set Lab.shi
 `--source NAME` exports one master and `--source all` every master, each layer named after its
 source (the target document needs sources with those names); the default exports the default
 source for the target's default source. `--output PATH` writes a file instead of stdout.
+
 - Omitted `layer` authors identity only; it does not create or clear a layer.
 - Omitted `source` selects the default source. Explicit selectors accept source names or full IDs.
 - A name may repeat for distinct sources. Repeated glyph/source pairs and conflicting
@@ -303,7 +308,6 @@ blank. Supplied attribution and license text, including newlines, are stored ver
 the CLI does not generate a license or verify licensing compliance. UPM and glyph geometry
 are never rescaled by `font set`.
 
-
 ### Pack a font for the SDK
 
 ```sh
@@ -316,6 +320,7 @@ writes it as the SDK's memory sessions open it: shift-font's `Font` with every l
 named MessagePack (`MemoryFontSource.font`). Each `--glyph` keeps that glyph and the glyphs
 its components use; with any, the packed font has no kerning or feature code, which could
 name glyphs it leaves out. With none, the whole font is packed as it is.
+
 ### Axis edits
 
 ```sh
@@ -431,6 +436,7 @@ After pulling or merging `main`, rerun the same `cargo install` command to updat
 cargo test -p shift-cli
 cargo run -p shift-cli -- inspect --help
 cargo run -p shift-cli -- compile --help
+cargo run -p shift-cli -- export --help
 cargo run -p shift-cli -- proof --help
 cargo run -p shift-cli -- axis add --help
 cargo run -p shift-cli -- source add --help

@@ -72,10 +72,14 @@ shift-cli proof Lab.shift --output grid.png --grid
 - **Look before you claim a glyph is right.** `proof` compiles the source in memory and draws real shaped text; read the PNG. `--masters`, `--instances`, and repeated `--at TAG=VALUE` stack the same text at several locations, which is how interpolation problems show. `/name` in `--text` sets a glyph by name (`--text "H/a.ss01H"`).
 - Missing characters are drawn red and listed in `missingCharacters` in `--json`, so an agent can check coverage without reading pixels.
 
-## Compile
+## Compile and export
 
 ```sh
 shift-cli compile Family.shift --output Family.ttf
+shift-cli export Family.shift --output out/Family.designspace   # designspace plus one UFO per master
+shift-cli export Family.shift --output Family.ufo               # a font with one master
 ```
+
+`export` writes editable sources for other tools and build pipelines; the output's extension picks the format. Masters made in Shift are written as `<name>-<master>.ufo` beside the designspace. A UFO holds one master, so a font with several exports as a designspace. Neither command changes the document.
 
 Compile after authoring to confirm the font builds. A compile error usually names the glyph and source; incompatible masters are the most common cause in variable fonts (see [variable-fonts.md](variable-fonts.md)).
