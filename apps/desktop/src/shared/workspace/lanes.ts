@@ -97,6 +97,9 @@ export type WorkspaceDocumentIdentity = {
  */
 export type WorkspaceExportFormat = "ttf" | "static-ttf" | "designspace" | "ufo";
 
+/** A file encoding of an exported binary: plain TrueType, or WOFF2 for the web. */
+export type WorkspaceBinaryEncoding = "ttf" | "woff2";
+
 /** Whether an export writes its files or only lists the files it would write. */
 export type WorkspaceExportMode = "write" | "plan";
 
@@ -105,6 +108,8 @@ export type WorkspaceExportRequest = {
   directory: string;
   format: WorkspaceExportFormat;
   mode: WorkspaceExportMode;
+  /** The encodings each binary is written in; never empty. Source formats ignore it. */
+  encodings: readonly WorkspaceBinaryEncoding[];
 };
 
 /** What a workspace export wrote, or would write when planned. */

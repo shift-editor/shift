@@ -888,7 +888,10 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     const { completion } = await this.#serialize(() => ({
       // exportWorkspace captures its immutable native snapshot synchronously.
       // Wrapping the completion releases the workspace queue while fontc runs.
-      completion: this.#bridge.napi.exportWorkspace(request),
+      completion: this.#bridge.napi.exportWorkspace({
+        ...request,
+        encodings: [...request.encodings],
+      }),
     }));
     const result = await completion;
     return { path: result.path, format: request.format, files: result.files };

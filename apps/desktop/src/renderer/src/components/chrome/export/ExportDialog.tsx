@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   Button,
+  Checkbox,
   Dialog,
   DialogBackdrop,
   DialogClose,
@@ -17,9 +18,16 @@ import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 import { getShiftHost } from "@/host/shiftHost";
 import { useAxes } from "@/hooks/useAxes";
 import { errorReason, useExportPlan } from "@/hooks/useExportPlan";
+import { useMemberSet } from "@/hooks/useMemberSet";
 import { useNamedInstances } from "@/hooks/useNamedInstances";
 import { ExportFolders } from "@/lib/export/ExportFolders";
-import { exportFormatFor, type ExportTarget } from "@/types/export";
+import type { WorkspaceBinaryEncoding } from "@shared/workspace/lanes";
+import {
+  BINARY_ENCODINGS,
+  exportFormatFor,
+  writesBinaries,
+  type ExportTarget,
+} from "@/types/export";
 import type { Workspace } from "@/workspace/Workspace";
 import { useFont, useFontSession } from "@/workspace/WorkspaceContext";
 import { ExportFilesCard, ExportRow, ExportSection } from "./ExportCards";
@@ -73,7 +81,12 @@ const ExportDialogBody = ({ workspace }: { workspace: Workspace }) => {
   const [run, setRun] = useState<ExportRun>({ status: "idle" });
   const folder = chosen[target] ?? (document === null ? null : folders.folder(document, target));
   const format = exportFormatFor[target];
-  const plan = useExportPlan(workspace, format, folder);
+  const chosenEncodings = useMemberSet<WorkspaceBinaryEncoding>(["ttf"]);
+  const encodings = useMemo(
+    () => BINARY_ENCODINGS.filter((encoding) => chosenEncodings.values.has(encoding)),
+    [chosenEncodings.values],
+  );
+  const plan = useExportPlan(workspace, format, encodings, folder);
   const needsInstances = useNeedsInstances(target);
   const canExport =
     folder !== null && plan.status === "ready" && !needsInstances && run.status !== "exporting";
@@ -99,7 +112,12 @@ const ExportDialogBody = ({ workspace }: { workspace: Workspace }) => {
     if (folder === null) return;
     setRun({ status: "exporting" });
     try {
-      await workspace.editCoordinator.export({ directory: folder, format, mode: "write" });
+      await workspace.editCoordinator.export({
+        directory: folder,
+        format,
+        mode: "write",
+        encodings,
+      });
       if (document !== null) folders.remember(document, target, folder);
       setRun({ status: "done" });
     } catch (error) {
@@ -125,7 +143,24 @@ const ExportDialogBody = ({ workspace }: { workspace: Workspace }) => {
         </Tooltip>
         <div className="scrollbar-hidden flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 pb-6 pt-4">
           <h2 className="text-sm font-medium text-primary">{exportTargetName(target)}</h2>
-          {needsInstances ? <NoInstances /> : <ExportFilesCard plan={plan} />}
+          {needsInstances ? (
+            <NoInstances />
+          ) : (
+            <ExportFilesCard
+              plan={plan}
+              choices={
+                writesBinaries(target) && (
+                  <EncodingChoices
+                    chosen={encodings}
+                    onChange={(encoding, chosen) => {
+                      chosenEncodings.set(encoding, chosen);
+                      setRun({ status: "idle" });
+                    }}
+                  />
+                )
+              }
+            />
+          )}
           {target === "ufo" && <UfoFormat />}
         </div>
         <ExportFooter
@@ -164,6 +199,35 @@ const NoInstances = () => {
     </ExportSection>
   );
 };
+
+/**
+ * The encodings each binary is written in. The last one chosen cannot be
+ * cleared, since an export must write something.
+ */
+const EncodingChoices = ({
+  chosen,
+  onChange,
+}: {
+  chosen: readonly WorkspaceBinaryEncoding[];
+  onChange: (encoding: WorkspaceBinaryEncoding, chosen: boolean) => void;
+}) => (
+  <ExportRow>
+    {BINARY_ENCODINGS.map((encoding) => {
+      const checked = chosen.includes(encoding);
+      const onlyChoice = checked && chosen.length === 1;
+      return (
+        <label key={encoding} className="mr-3 flex items-center gap-1.5 font-mono text-ui">
+          <Checkbox
+            checked={checked}
+            disabled={onlyChoice}
+            onCheckedChange={(next) => onChange(encoding, next)}
+          />
+          .{encoding}
+        </label>
+      );
+    })}
+  </ExportRow>
+);
 
 const UfoFormat = () => (
   <ExportSection title={message("export.section.format")}>

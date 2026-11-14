@@ -47,6 +47,7 @@ cargo run -p shift-cli -- glyph inspect path/to/Family.designspace Aacute \
   --location wght=700 --view variation --json
 cargo run -p shift-cli -- compile path/to/Family.shift --output path/to/Family.ttf
 cargo run -p shift-cli -- compile path/to/Family.shift --static --output path/to/fonts
+cargo run -p shift-cli -- compile path/to/Family.shift --woff2 --output path/to/Family.ttf
 cargo run -p shift-cli -- export path/to/Family.shift --output path/to/out/Family.designspace
 
 cargo run -p shift-cli -- font create path/to/Lab.shift

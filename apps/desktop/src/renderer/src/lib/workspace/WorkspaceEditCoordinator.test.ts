@@ -111,6 +111,7 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
       directory: outputRoot,
       format: "ttf",
       mode: "write",
+      encodings: ["ttf"],
     });
     queueOutlinedGlyph(stack, "B", 66);
     const { path } = await exporting;
@@ -130,6 +131,7 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
       directory: outputRoot,
       format: "designspace",
       mode: "plan",
+      encodings: ["ttf"],
     });
 
     expect(planned.files.map((file) => basename(file))).toEqual([
@@ -139,10 +141,29 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
     expect(readdirSync(outputRoot)).toEqual([]);
   });
 
+  it("plans a WOFF2 beside the TrueType binary when both encodings are chosen", async () => {
+    const outputRoot = mkdtempSync(join(tmpdir(), "shift-export-"));
+    queueOutlinedGlyph(stack, "A", 65);
+
+    const planned = await stack.editCoordinator.export({
+      directory: outputRoot,
+      format: "ttf",
+      mode: "plan",
+      encodings: ["ttf", "woff2"],
+    });
+
+    expect(planned.files).toEqual([planned.path, planned.path.replace(/\.ttf$/, ".woff2")]);
+  });
+
   it("exports sources as the files its plan lists, leaving the document unsaved", async () => {
     const outputRoot = mkdtempSync(join(tmpdir(), "shift-export-"));
     queueOutlinedGlyph(stack, "A", 65);
-    const request = { directory: outputRoot, format: "designspace", mode: "plan" } as const;
+    const request = {
+      directory: outputRoot,
+      format: "designspace",
+      mode: "plan",
+      encodings: ["ttf"],
+    } as const;
     const planned = await stack.editCoordinator.export(request);
 
     const written = await stack.editCoordinator.export({ ...request, mode: "write" });

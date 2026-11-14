@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSignalState } from "@shift/editor/signals";
-import type { WorkspaceExportFormat } from "@shared/workspace/lanes";
+import type { WorkspaceBinaryEncoding, WorkspaceExportFormat } from "@shared/workspace/lanes";
 import { useAxes } from "@/hooks/useAxes";
 import type { Workspace } from "@/workspace/Workspace";
 import { useFont } from "@/workspace/WorkspaceContext";
@@ -12,7 +12,8 @@ export type ExportPlan =
   | { status: "failed"; reason: string };
 
 /**
- * Asks the workspace which files exporting as `format` into `folder` writes,
+ * Asks the workspace which files exporting as `format` in `encodings` into
+ * `folder` writes,
  * again whenever anything those names come from changes: the family and
  * style names, the masters, the named instances, or the axes.
  *
@@ -21,6 +22,7 @@ export type ExportPlan =
 export function useExportPlan(
   workspace: Workspace,
   format: WorkspaceExportFormat,
+  encodings: readonly WorkspaceBinaryEncoding[],
   folder: string | null,
 ): ExportPlan {
   const font = useFont();
@@ -33,7 +35,7 @@ export function useExportPlan(
   useEffect(() => {
     let current = true;
     setPlan({ status: "planning" });
-    const request = { directory: folder ?? "", format, mode: "plan" } as const;
+    const request = { directory: folder ?? "", format, mode: "plan", encodings } as const;
     const answer = async () => {
       try {
         const { files } = await workspace.editCoordinator.export(request);
@@ -46,7 +48,7 @@ export function useExportPlan(
     return () => {
       current = false;
     };
-  }, [workspace, format, folder, metadata, sources, instances, axes]);
+  }, [workspace, format, encodings, folder, metadata, sources, instances, axes]);
 
   return plan;
 }

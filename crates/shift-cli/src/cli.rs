@@ -417,6 +417,10 @@ pub(crate) struct CompileArgs {
     /// directory, each named after its instance's PostScript name.
     #[arg(long = "static")]
     pub static_instances: bool,
+
+    /// Also write each compiled font as WOFF2, beside its .ttf.
+    #[arg(long)]
+    pub woff2: bool,
 }
 
 #[derive(Debug, Parser)]

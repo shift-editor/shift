@@ -10,11 +10,11 @@ use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::{
-  AxisIndex as SourceAxisIndex, DirectoryGlyph, DirectoryInstance, DirectorySource, ExportFormat,
-  FontDirectory, FontExportRequest, FontExportResult, FontExporter, FontSource, FontView,
-  GlyphIndex, GlyphPointKind as SourceGlyphPointKind, GlyphProjection as SourceGlyphProjection,
-  GlyphShape as SourceGlyphShape, OpenedFont, SourceAtlasDescriptor, SourceIds, VariationAxisKind,
-  font_loader::FontLoader,
+  AxisIndex as SourceAxisIndex, BinaryEncoding, BinaryEncodings, DirectoryGlyph, DirectoryInstance,
+  DirectorySource, ExportError, ExportFormat, FontDirectory, FontExportRequest, FontExportResult,
+  FontExporter, FontSource, FontView, GlyphIndex, GlyphPointKind as SourceGlyphPointKind,
+  GlyphProjection as SourceGlyphProjection, GlyphShape as SourceGlyphShape, OpenedFont,
+  SourceAtlasDescriptor, SourceIds, VariationAxisKind, font_loader::FontLoader,
 };
 use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::wire::{
@@ -57,6 +57,9 @@ pub struct NapiFontExportRequest {
   /// `"plan"` lists the files the export would write without writing them;
   /// `"write"`, the default, exports.
   pub mode: Option<String>,
+  /// The encodings each binary is written in (`"ttf"`, `"woff2"`); TrueType
+  /// only when absent. Source formats ignore it.
+  pub encodings: Option<Vec<String>>,
 }
 
 #[napi(object)]
@@ -65,6 +68,20 @@ pub struct NapiFontExportResult {
   pub format: String,
   /// Every file or UFO directory the export wrote, or would write when planned.
   pub files: Vec<String>,
+}
+
+/// The encodings an export request names, TrueType only when it names none.
+fn binary_encodings(tokens: Option<&[String]>) -> Result<BinaryEncodings> {
+  let Some(tokens) = tokens else {
+    return Ok(BinaryEncodings::ttf());
+  };
+  let invalid = |error: ExportError| Error::new(Status::InvalidArg, error.to_string());
+  let encodings = tokens
+    .iter()
+    .map(|token| BinaryEncoding::try_from(token.as_str()))
+    .collect::<std::result::Result<Vec<_>, _>>()
+    .map_err(invalid)?;
+  BinaryEncodings::new(encodings).map_err(invalid)
 }
 
 /// Whether an export request writes its files or only lists them.
@@ -668,6 +685,7 @@ impl FontView for FontSaveSnapshot {
 pub struct ExportFontTask {
   font: Font,
   request: FontExportRequest,
+  encodings: BinaryEncodings,
   mode: ExportMode,
 }
 
@@ -678,9 +696,9 @@ impl Task for ExportFontTask {
   fn compute(&mut self) -> Result<Self::Output> {
     let exporter = FontExporter::new();
     match self.mode {
-      ExportMode::Write => exporter.export(&self.font, self.request.clone()),
+      ExportMode::Write => exporter.export_with(&self.font, self.request.clone(), &self.encodings),
       ExportMode::Plan => exporter
-        .plan(&self.font, &self.request)
+        .plan_with(&self.font, &self.request, &self.encodings)
         .map(|files| FontExportResult {
           path: self.request.path.clone(),
           format: self.request.format,
@@ -1099,11 +1117,13 @@ impl Bridge {
     let mode = ExportMode::try_from(request.mode.as_deref())?;
     let format = ExportFormat::try_from(request.format.as_str())
       .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))?;
+    let encodings = binary_encodings(request.encodings.as_deref())?;
     let font = self.font_with_all_layers().map_err(generic_failure)?;
     let request = FontExporter::request_in(&font, format, Path::new(&request.directory));
     Ok(AsyncTask::new(ExportFontTask {
       font,
       request,
+      encodings,
       mode,
     }))
   }
