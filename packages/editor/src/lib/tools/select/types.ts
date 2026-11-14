@@ -5,6 +5,7 @@ import type { CornerHandle } from "./BoundingBox";
 import type { Behavior } from "../core/Behavior";
 import type { Select } from "./Select";
 import type { PositionGuide } from "../../../types/positionEdit";
+import type { GridSnap } from "../../model/positions/GridSnap";
 import type { LocalBounds } from "../../../types/coordinates";
 
 export interface DragTarget {
@@ -30,6 +31,13 @@ export interface TranslateDrag {
   totalDelta: Point2D;
   /** Glyph-local feedback from the latest preview; empty when snapping is inactive. */
   guides: readonly PositionGuide[];
+}
+
+/** Grid snapping for a moved transform target, frozen when the move starts. */
+export interface TransformGridSnap {
+  /** The target's grid origin at the start of the move, in the selection node's units. */
+  readonly origin: Point2D;
+  readonly snap: GridSnap;
 }
 
 /** Live state of a bounding-box resize operation, capturing the original geometry for proportional scaling. */

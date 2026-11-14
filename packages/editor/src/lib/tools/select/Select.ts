@@ -182,11 +182,12 @@ export class Select extends BaseTool<SelectState, Select> {
     if (guides.length === 0) return;
 
     const ids = this.editor.selection.ids;
-    const selection = this.editor.positionSelection(ids);
     const node = this.editor.selectionNode(ids);
-    if (!selection || !node) return;
+    if (!node) return;
 
-    const crossings = this.#crossings(ids, selection.layer);
+    // A moved component snaps to the grid without a position selection, so it crosses nothing.
+    const selection = this.editor.positionSelection(ids);
+    const crossings = selection ? this.#crossings(ids, selection.layer) : [];
     canvas.withTransform(this.editor.sceneTransform(node), () => {
       this.#snapLines.draw(canvas, guides, crossings);
     });

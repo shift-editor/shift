@@ -18,7 +18,7 @@
  * `Editor`.
  */
 import type { ControlOperation } from "@/agent/AgentControl";
-import type { DeleteMode, Editor } from "@shift/editor";
+import type { DeleteMode, Editor, GridSettings, GridSettingsChange } from "@shift/editor";
 import type {
   GlyphOutlineTarget,
   NewGlyph,
@@ -329,6 +329,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   resizeCanvas(width: number, height: number): void;
   /** Sets the zoom level around the viewport centre, as the zoom controls do. */
   setZoom(zoom: number): void;
+  /** Changes the canvas grid's spacing, subdivisions, visibility or snapping, as the grid panel does. */
+  setGrid(change: GridSettingsChange): void;
   /** Pans the canvas by a distance in screen pixels, as dragging with the hand does. */
   panBy(by: ScreenVector): void;
   /** Frames all content, as View › Zoom to Fit does. */
@@ -649,6 +651,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   pixelSize(): number;
   /** The zoom level. Test-only: not agent data. */
   zoomLevel(): number;
+  /** The canvas grid's settings, as the grid panel shows them. Test-only: session state, not agent data. */
+  gridSettings(): GridSettings;
   /** How far the canvas is panned, in screen pixels. Test-only: not agent data. */
   canvasOffset(): ScreenVector;
   /** Where a glyph-local position shows in the viewport, in screen pixels. Test-only: not agent data. */

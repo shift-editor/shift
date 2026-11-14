@@ -434,10 +434,35 @@ export interface EditorView {
   tool: EditorTool | null;
   /** Where the canvas looks and how close. */
   viewport: EditorViewport;
+  /** The canvas grid: whether it shows, whether moves snap to it, and its cells. */
+  grid: EditorGrid;
   dragging: boolean;
   editing: boolean;
   applyStatus: "idle" | "queued" | "applying" | null;
 }
+/**
+ * The canvas grid of one window, as the zoom menu's grid items and Grid settings show it.
+ *
+ * @remarks
+ * Session view state: it is not saved with the font. Lines are counted from
+ * the open glyph's origin in font units, and each fades out as the view zooms
+ * out; snapping follows the finest lines still on screen and stops once the
+ * grid has faded away.
+ */
+export interface EditorGrid {
+  /** Whether the grid is drawn. */
+  visible: boolean;
+  /** Whether moved points, placed points and moved components snap to it. */
+  snap: boolean;
+  /** Distance between vertical grid lines, in font units. */
+  spacingX: number;
+  /** Distance between horizontal grid lines, in font units. */
+  spacingY: number;
+  /** Divisions of each cell along each axis; 1 has none. */
+  subdivisions: number;
+}
+/** Grid settings to change; the ones left out keep their value. */
+export type EditorGridChange = Partial<EditorGrid>;
 /** Where an open document came from: a `.shift` package, a font file opened for editing, or a new font. */
 export type DocumentSourceKind = "document" | "imported" | "untitled";
 /** One window's document and whether it has edits Save has not written. */
@@ -513,15 +538,18 @@ export type EditorOpenGlyphInput = ShiftTarget & {
   glyph: GlyphSelector;
 };
 /**
- * Moves the canvas camera. Give `zoom`, `center` or both.
+ * Moves the canvas camera or changes its grid. Give at least one of `zoom`, `center` and `grid`.
  *
  * @remarks
  * `zoom` is clamped to the editor's range, 0.01 to 32. `center` is in the
- * units {@link EditorViewport.center} reports.
+ * units {@link EditorViewport.center} reports. `grid` changes only the
+ * settings it names; spacing must be positive, and `subdivisions` a whole
+ * number, clamped to 16.
  */
 export interface EditorSetViewInput extends ShiftTarget {
   zoom?: number;
   center?: Point2D;
+  grid?: EditorGridChange;
 }
 /** Replaces the selection with these objects, in this order; an empty list clears it. */
 export interface EditorSelectInput extends ShiftTarget {

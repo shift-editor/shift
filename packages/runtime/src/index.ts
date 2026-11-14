@@ -37,6 +37,8 @@ export type {
   EditorShowPageInput,
   EditorTool,
   EditorView,
+  EditorGrid,
+  EditorGridChange,
   EditorViewport,
   FontOverview,
   FontRevision,

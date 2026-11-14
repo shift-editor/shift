@@ -537,6 +537,8 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--color-canvas-cyan": palette.base0C,
     "--editor-cursor-color": palette.base0D,
     "--editor-guides-color": withAlpha(palette.base0D, 0.5),
+    "--editor-grid-color": withAlpha(palette.base05, dark ? 0.08 : 0.07),
+    "--editor-grid-subdivision-color": withAlpha(palette.base05, dark ? 0.04 : 0.035),
     "--editor-metric-marker-fill": withAlpha(palette.base05, dark ? 0.22 : 0.1),
     "--editor-selection-fill": withAlpha(palette.base0D, 0.12),
     "--editor-selection-stroke": withAlpha(palette.base0D, 0.55),
