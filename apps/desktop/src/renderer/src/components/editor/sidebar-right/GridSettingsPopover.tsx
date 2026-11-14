@@ -1,58 +1,46 @@
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import {
-  Button,
   Popover,
   PopoverClose,
   PopoverPopup,
   PopoverPortal,
   PopoverPositioner,
   PopoverTitle,
-  PopoverTrigger,
-  Switch,
   Tooltip,
   X,
 } from "@shift/ui";
 import { useSignalState } from "@shift/editor/signals";
-import { commandShortcuts } from "@shared/commands";
-import GridIcon from "@/assets/general/grid.svg";
-import { getShiftHost } from "@/host/shiftHost";
-import { commandShortcutLabel } from "@/lib/keyboard/commandShortcutLabel";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { SidebarNumberField } from "./SidebarNumberField";
 
+interface GridSettingsPopoverProps {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  /** The zoom menu's trigger; the panel opens beside the sidebar it sits in. */
+  readonly trigger: RefObject<HTMLElement | null>;
+}
+
 /**
- * The canvas grid's settings, opened from the sidebar header beside the zoom menu.
+ * The canvas grid's spacing and subdivisions, opened from the zoom menu's Grid settings item.
  *
  * @remarks
+ * Showing the grid and snapping to it are toggled in the zoom menu itself.
  * Spacing is in font units from the glyph origin. The settings last for the
  * session; they are not saved with the font.
  */
-export const GridMenu = () => {
+export const GridSettingsPopover = ({ open, onOpenChange, trigger }: GridSettingsPopoverProps) => {
   const editor = useEditor();
   const grid = useSignalState(editor.grid.settingsCell);
-  const isMac = getShiftHost().platform === "darwin";
-  const snapShortcut = commandShortcutLabel(commandShortcuts["view.toggleSnapToGrid"], isMac);
-  const active = grid.visible || grid.snap;
 
   return (
-    <Popover modal={false}>
-      <Tooltip content="Grid">
-        <PopoverTrigger
-          render={
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Grid"
-              isActive={active}
-              className="h-5 w-5 p-0 text-sidebar-icon data-[popup-open]:bg-hover/50"
-            />
-          }
-        >
-          <GridIcon aria-hidden className="h-3.5 w-3.5" />
-        </PopoverTrigger>
-      </Tooltip>
+    <Popover modal={false} open={open} onOpenChange={onOpenChange}>
       <PopoverPortal>
-        <PopoverPositioner side="bottom" align="end" sideOffset={6}>
+        <PopoverPositioner
+          anchor={() => trigger.current?.closest("aside") ?? null}
+          side="left"
+          align="start"
+          sideOffset={-1}
+        >
           <PopoverPopup className="flex w-56 flex-col p-0">
             <div className="flex h-8 items-center justify-between gap-1 border-b border-line-subtle pl-2 pr-1">
               <PopoverTitle>Grid</PopoverTitle>
@@ -63,21 +51,6 @@ export const GridMenu = () => {
               </Tooltip>
             </div>
             <div className="flex flex-col gap-2 p-2">
-              <GridRow label="Show grid">
-                <Switch
-                  aria-label="Show grid"
-                  checked={grid.visible}
-                  onCheckedChange={(visible) => editor.grid.update({ visible })}
-                />
-              </GridRow>
-              <GridRow label="Snap to grid">
-                <kbd className="font-sans text-sm text-muted">{snapShortcut}</kbd>
-                <Switch
-                  aria-label="Snap to grid"
-                  checked={grid.snap}
-                  onCheckedChange={(snap) => editor.grid.update({ snap })}
-                />
-              </GridRow>
               <GridRow label="Spacing">
                 <div className="flex w-32 gap-1">
                   <SidebarNumberField
