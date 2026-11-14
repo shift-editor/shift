@@ -342,6 +342,7 @@ function inspection(windowId: number): ShiftObservation<EditorInspection> {
     selectionIds: [asPointId("point-a")],
     tool: { id: "select", state: "idle" },
     viewport: { zoom: 1, center: { x: 250, y: 350 } },
+    grid: { visible: false, snap: false, spacingX: 100, spacingY: 100, subdivisions: 1 },
     dragging: false,
     editing: true,
     applyStatus: "idle",
@@ -726,9 +727,21 @@ describe("Shift sandbox executes bounded code over live capabilities", () => {
   it("rejects window control inputs of the wrong shape before they reach the host", async () => {
     await expect(
       executeShiftCode(capabilities, "async () => shift.editor.setView({ windowId: 7 })"),
-    ).rejects.toThrow("editor.setView takes zoom, center or both");
+    ).rejects.toThrow("editor.setView takes zoom, center, grid or any of them");
     await expect(
       executeShiftCode(capabilities, "async () => shift.editor.setView({ windowId: 7, zoom: 0 })"),
+    ).rejects.toThrow();
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.editor.setView({ windowId: 7, grid: { spacingX: 0 } })",
+      ),
+    ).rejects.toThrow();
+    await expect(
+      executeShiftCode(
+        capabilities,
+        "async () => shift.editor.setView({ windowId: 7, grid: { subdivisions: 2.5 } })",
+      ),
     ).rejects.toThrow();
     await expect(
       executeShiftCode(
