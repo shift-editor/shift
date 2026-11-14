@@ -320,3 +320,19 @@ fn export_format_follows_the_path_extension() {
     assert_eq!(format("Solenoid.glyphs"), None);
     assert_eq!(format("Solenoid"), None);
 }
+
+#[test]
+fn exporting_into_a_folder_that_does_not_exist_yet_creates_it() {
+    let font = dot_matrix_font().unwrap();
+
+    for format in [ExportFormat::Ttf, ExportFormat::Designspace] {
+        let temp = tempfile::tempdir().unwrap();
+        let folder = temp.path().join("new").join("exports");
+        let request = FontExporter::request_in(&font, format, &folder);
+        let path = request.path.clone();
+
+        FontExporter::new().export(&font, request).unwrap();
+
+        assert!(path.exists(), "{format:?} export wrote {}", path.display());
+    }
+}

@@ -87,10 +87,7 @@ impl FontExporter {
         directory: &Path,
     ) -> Result<Vec<FontExportResult>, ExportError> {
         let files = Self::static_instance_files(font)?;
-        std::fs::create_dir_all(directory).map_err(|source| ExportError::CreateDirectory {
-            path: directory.to_path_buf(),
-            source,
-        })?;
+        crate::export::create_directory(directory)?;
 
         if !font.is_variable() {
             let file = files.first().ok_or(ExportError::NoNamedInstances)?;

@@ -226,12 +226,14 @@ impl FontExporter {
     /// the in-flight build. A designspace export writes one UFO per master file
     /// beside the designspace; a UFO export writes the single master; a static
     /// export writes one binary per named instance into the request's
-    /// directory. The result lists every file written, as [`Self::plan`] does.
+    /// directory. A folder the output goes into that does not exist yet is
+    /// created. The result lists every file written, as [`Self::plan`] does.
     ///
     /// # Errors
     ///
     /// Returns [`ExportError::OutputExtensionMismatch`] for a path without the
-    /// format's extension, [`ExportError::UfoNeedsOneMaster`] for a UFO export
+    /// format's extension, [`ExportError::CreateDirectory`] when the output's
+    /// folder cannot be created, [`ExportError::UfoNeedsOneMaster`] for a UFO export
     /// of a font with several masters, [`ExportError::WriteSources`] when a
     /// source format cannot represent the font or its files cannot be written,
     /// the errors of [`Self::export_static_instances`], and the compile and
@@ -242,6 +244,11 @@ impl FontExporter {
         request: FontExportRequest,
     ) -> Result<FontExportResult, ExportError> {
         let files = self.plan(font, &request)?;
+        if let Some(directory) = request.path.parent()
+            && request.format != ExportFormat::StaticTtf
+        {
+            create_directory(directory)?;
+        }
         match request.format {
             ExportFormat::Ttf => self.export_ttf(font, &request.path)?,
             ExportFormat::Designspace => Self::export_designspace(font, &request.path)?,
@@ -487,6 +494,15 @@ fn ensure_one_master(font: &impl FontView) -> Result<(), ExportError> {
 fn utf8_path(path: &Path) -> Result<&str, ExportError> {
     path.to_str().ok_or_else(|| ExportError::InvalidPathUtf8 {
         path: path.to_path_buf(),
+    })
+}
+
+/// Creates `directory` and any missing parents, as an export into a folder
+/// that does not exist yet needs.
+pub(crate) fn create_directory(directory: &Path) -> Result<(), ExportError> {
+    std::fs::create_dir_all(directory).map_err(|source| ExportError::CreateDirectory {
+        path: directory.to_path_buf(),
+        source,
     })
 }
 
