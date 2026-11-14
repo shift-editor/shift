@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.3.0](https://github.com/shift-editor/shift/compare/v0.2.0...v0.3.0) (2026-11-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **sdk:** run memory sessions and compiled previews on the engine ([#902](https://github.com/shift-editor/shift/issues/902))
+
+### Features
+
+* **cli:** export documents as designspace or UFO sources ([#933](https://github.com/shift-editor/shift/issues/933)) ([c639f3f](https://github.com/shift-editor/shift/commit/c639f3fb949b97d42da03af9a684cc1c527bf12a))
+* **editor:** add a configurable grid with snap-to-grid ([#930](https://github.com/shift-editor/shift/issues/930)) ([03f0ec5](https://github.com/shift-editor/shift/commit/03f0ec50bb4a8cae4b7a86033fb7e8f84bd3ca27))
+* **export:** compile each named instance as a static font ([#934](https://github.com/shift-editor/shift/issues/934)) ([db5edde](https://github.com/shift-editor/shift/commit/db5edde445101ee0dbabf5aac4b0b2329d79599e))
+* **export:** export fonts as designspace and UFO sources ([#932](https://github.com/shift-editor/shift/issues/932)) ([8a5a4a5](https://github.com/shift-editor/shift/commit/8a5a4a57d38808e097ec789e725ddd1a54301050))
+* **glyph-catalog:** group languages for type design ([#924](https://github.com/shift-editor/shift/issues/924)) ([a56e4f0](https://github.com/shift-editor/shift/commit/a56e4f07335a7f30fcced0d75f70835fe7c5448d))
+* link sidebearings and widths with metrics keys ([#919](https://github.com/shift-editor/shift/issues/919)) ([d74187c](https://github.com/shift-editor/shift/commit/d74187c52d3919e6237698465144a38a0a896822))
+* list language glyphs by name with positional forms and ligatures ([#917](https://github.com/shift-editor/shift/issues/917)) ([f33b343](https://github.com/shift-editor/shift/commit/f33b343d52d2bb922ea00eb706ed9fb7220b031e))
+* **scan:** report duplicated function bodies across crates ([#903](https://github.com/shift-editor/shift/issues/903)) ([4ead21b](https://github.com/shift-editor/shift/commit/4ead21bb26f3b2c6edbbb72cbbc1092b09acbcc0))
+* **sdk:** run memory sessions and compiled previews on the engine ([#902](https://github.com/shift-editor/shift/issues/902)) ([9a826b9](https://github.com/shift-editor/shift/commit/9a826b9d0b7e3ad52384585205e10404a337b7f6))
+* **text:** shape TrueType and OpenType previews with the binary itself ([#925](https://github.com/shift-editor/shift/issues/925)) ([e7b4879](https://github.com/shift-editor/shift/commit/e7b4879d8673af493328e968719e4526e34fc01a))
+
+
+### Bug Fixes
+
+* **desktop:** show the update strip above the glyph canvas ([#928](https://github.com/shift-editor/shift/issues/928)) ([d355d90](https://github.com/shift-editor/shift/commit/d355d9071fa11fefa2ed322838a0c66d85875e10))
+* **wasm:** load the engine module asynchronously ([#926](https://github.com/shift-editor/shift/issues/926)) ([9478d84](https://github.com/shift-editor/shift/commit/9478d84371d3ec099167c42180f49dde0b6a1d2f))
+
 ## [0.2.0](https://github.com/shift-editor/shift/compare/v0.1.1...v0.2.0) (2026-11-10)
 
 
