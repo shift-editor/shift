@@ -20,7 +20,7 @@ use write_fonts::read::{FontRef, TableProvider};
 use write_fonts::tables::name::Name;
 use write_fonts::types::NameId;
 
-use crate::atomic::write_file_atomic;
+use crate::binary_encoding::BinaryEncodings;
 use crate::errors::FormatBackendError;
 use crate::formats::designspace::DesignspaceWriter;
 use crate::formats::ufo::UfoWriter;
@@ -187,6 +187,19 @@ pub enum ExportError {
     #[error("this variable font has no named instances to export as static fonts")]
     NoNamedInstances,
 
+    #[error("unsupported binary encoding: {encoding}")]
+    UnsupportedEncoding { encoding: String },
+
+    #[error("an export must write at least one encoding")]
+    NoEncodings,
+
+    #[error("failed to encode {path} as WOFF2: {source}")]
+    EncodeWoff2 {
+        path: PathBuf,
+        #[source]
+        source: ttf2woff2::Error,
+    },
+
     #[error("cannot evaluate instance {instance:?}: {source}")]
     StaticInstance {
         instance: String,
@@ -241,13 +254,32 @@ impl FontExporter {
         font: &Font,
         request: FontExportRequest,
     ) -> Result<FontExportResult, ExportError> {
-        let files = self.plan(font, &request)?;
+        self.export_with(font, request, &BinaryEncodings::ttf())
+    }
+
+    /// [`Self::export`], writing each TrueType binary in every one of
+    /// `encodings` beside its `.ttf` name, from one compile. Source formats
+    /// ignore `encodings`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the errors of [`Self::export`], and
+    /// [`ExportError::EncodeWoff2`] when a binary cannot be WOFF2 encoded.
+    pub fn export_with(
+        &self,
+        font: &Font,
+        request: FontExportRequest,
+        encodings: &BinaryEncodings,
+    ) -> Result<FontExportResult, ExportError> {
+        let files = self.plan_with(font, &request, encodings)?;
         match request.format {
-            ExportFormat::Ttf => self.export_ttf(font, &request.path)?,
+            ExportFormat::Ttf => {
+                self.export_binary(font, &request.path, encodings)?;
+            }
             ExportFormat::Designspace => Self::export_designspace(font, &request.path)?,
             ExportFormat::Ufo => Self::export_ufo(font, &request.path)?,
             ExportFormat::StaticTtf => {
-                self.export_static_instances(font, &request.path)?;
+                self.export_static_instances_with(font, &request.path, encodings)?;
             }
         }
 
@@ -298,19 +330,34 @@ impl FontExporter {
     /// Returns the request errors [`Self::export`] returns before it writes:
     /// a mismatched extension, a UFO export of several masters, or a static
     /// export of a variable font without named instances.
-    #[expect(
-        clippy::unused_self,
-        reason = "an exporter method; the exporter is the export entry point callers hold"
-    )]
     pub fn plan(
         &self,
         font: &Font,
         request: &FontExportRequest,
     ) -> Result<Vec<PathBuf>, ExportError> {
+        self.plan_with(font, request, &BinaryEncodings::ttf())
+    }
+
+    /// [`Self::plan`] for [`Self::export_with`]: each binary in every one of
+    /// `encodings`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the errors of [`Self::plan`].
+    #[expect(
+        clippy::unused_self,
+        reason = "an exporter method; the exporter is the export entry point callers hold"
+    )]
+    pub fn plan_with(
+        &self,
+        font: &Font,
+        request: &FontExportRequest,
+        encodings: &BinaryEncodings,
+    ) -> Result<Vec<PathBuf>, ExportError> {
         let path = &request.path;
         request.format.ensure_output_path(path)?;
         match request.format {
-            ExportFormat::Ttf => Ok(vec![path.clone()]),
+            ExportFormat::Ttf => Ok(encodings.paths(path)),
             ExportFormat::Ufo => {
                 ensure_one_master(font)?;
                 Ok(vec![path.clone()])
@@ -326,7 +373,7 @@ impl FontExporter {
             }
             ExportFormat::StaticTtf => Ok(Self::static_instance_files(font)?
                 .into_iter()
-                .map(|file| path.join(file.file_name))
+                .flat_map(|file| encodings.paths(&path.join(file.file_name)))
                 .collect()),
         }
     }
@@ -349,16 +396,16 @@ impl FontExporter {
         strip_compiler_version(&bytes)
     }
 
-    pub(crate) fn export_ttf(
+    /// Compiles `font` once and writes it in each of `encodings` beside
+    /// `ttf_path`, returning the files written.
+    pub(crate) fn export_binary(
         &self,
         font: &impl FontView,
-        output_path: &Path,
-    ) -> Result<(), ExportError> {
+        ttf_path: &Path,
+        encodings: &BinaryEncodings,
+    ) -> Result<Vec<PathBuf>, ExportError> {
         let bytes = self.compile_ttf(font)?;
-        write_file_atomic(output_path, &bytes).map_err(|source| ExportError::WriteOutput {
-            path: output_path.to_path_buf(),
-            source,
-        })
+        encodings.write(&bytes, ttf_path)
     }
 
     fn export_designspace(font: &impl FontView, path: &Path) -> Result<(), ExportError> {

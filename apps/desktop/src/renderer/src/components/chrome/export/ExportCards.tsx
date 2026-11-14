@@ -24,8 +24,9 @@ export const ExportRow = ({ children }: { children: ReactNode }) => (
  * The files an export writes, one per row: binaries and designspaces as
  * files, UFOs as folders, since a UFO is a folder.
  */
-export const ExportFilesCard = ({ plan }: { plan: ExportPlan }) => (
+export const ExportFilesCard = ({ plan, choices }: { plan: ExportPlan; choices?: ReactNode }) => (
   <ExportSection title={message("export.section.files")}>
+    {choices}
     <ExportFileRows plan={plan} />
   </ExportSection>
 );
