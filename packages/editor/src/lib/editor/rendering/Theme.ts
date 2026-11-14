@@ -126,7 +126,7 @@ const INTERPOLATED_GREY = "#8A8A8A";
 const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
   cursor: { color: "#0C92F4", widthPx: 1.25 },
   guides: { color: "rgba(37, 99, 235, 0.50)", widthPx: 0.5 },
-  grid: { color: "rgba(0, 0, 0, 0.07)", subdivisionColor: "rgba(0, 0, 0, 0.035)", widthPx: 1 },
+  grid: { color: "rgba(0, 0, 0, 0.07)", subdivisionColor: "rgba(0, 0, 0, 0.035)", widthPx: 0.5 },
   selection: {
     fill: "rgba(59, 130, 246, 0.1)",
     stroke: "rgba(59, 130, 246, 0.5)",
