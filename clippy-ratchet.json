@@ -125,7 +125,7 @@
   },
   "unwrap_used": {
     "fontsrc": { "src": 0, "tests": 9 },
-    "shift-backends": { "src": 0, "tests": 73 },
+    "shift-backends": { "src": 0, "tests": 72 },
     "shift-cli": { "src": 0, "tests": 34 },
     "shift-engine": { "src": 0, "tests": 4 },
     "shift-font": { "src": 0, "tests": 13 },

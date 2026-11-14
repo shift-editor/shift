@@ -8,6 +8,6 @@ use shift_font::test_support::fixtures;
 pub(crate) fn mutatorsans() -> Font {
     let path = fixtures::mutatorsans_designspace();
     FontLoader::new()
-        .read_font(path.to_str().expect("fixture paths are UTF-8"))
+        .read_font(&path.to_string_lossy())
         .expect("MutatorSans should load")
 }
