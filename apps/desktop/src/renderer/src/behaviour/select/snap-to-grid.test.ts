@@ -120,7 +120,7 @@ describe("moving a component snaps its placement to the grid", () => {
   });
 });
 
-describe("G toggles snapping to the grid", () => {
+describe("the View menu toggles the grid and snapping to it", () => {
   it("turns snapping on and off from the View menu's command", async () => {
     expect(editor.gridSettings()).toMatchObject({ snap: false });
 

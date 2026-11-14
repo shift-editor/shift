@@ -19,11 +19,17 @@ describe("command shortcuts", () => {
     expect(toElectronAccelerator(commandShortcuts["window.close"])).toBe("CmdOrCtrl+Shift+W");
   });
 
-  it("toggles snapping to the grid with G alone, a canvas key", () => {
-    expect(commandShortcuts["view.toggleSnapToGrid"]).toEqual({
+  it("shows the grid with G and toggles snapping to it with Shift+G, both canvas keys", () => {
+    expect(commandShortcuts["view.toggleGrid"]).toEqual({
       key: "g",
       primaryModifier: false,
       shiftKey: false,
+      altKey: false,
+    });
+    expect(commandShortcuts["view.toggleSnapToGrid"]).toEqual({
+      key: "g",
+      primaryModifier: false,
+      shiftKey: true,
       altKey: false,
     });
   });

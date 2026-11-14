@@ -236,6 +236,21 @@ export function createCanvasKeyDownBindings(handlers: KeymapHandlers): KeyBindin
       },
     },
     {
+      id: "canvas.toggleGrid",
+      preventDefault: true,
+      when: (ctx) => !isTyping(ctx),
+      match: (event) =>
+        matchChord(event, {
+          ...commandShortcuts["view.toggleGrid"],
+          metaKey: false,
+          ctrlKey: false,
+        }),
+      run: (ctx) => {
+        ctx.editor.grid.toggleVisible();
+        return true;
+      },
+    },
+    {
       id: "canvas.toggleSnapToGrid",
       preventDefault: true,
       when: (ctx) => !isTyping(ctx),

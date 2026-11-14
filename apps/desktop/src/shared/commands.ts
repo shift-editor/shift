@@ -106,7 +106,8 @@ export const commandShortcuts = {
   "edit.paste": shortcut("v"),
   "edit.selectAll": shortcut("a"),
   "glyph.addComponent": shortcut("c", true),
-  "view.toggleSnapToGrid": canvasKey("g"),
+  "view.toggleGrid": canvasKey("g"),
+  "view.toggleSnapToGrid": canvasKey("g", true),
 } satisfies Partial<Record<CommandId, CommandShortcut>>;
 
 const shortcutsById: Partial<Record<CommandId, CommandShortcut>> = commandShortcuts;
@@ -133,9 +134,9 @@ function shortcut(key: string, shiftKey = false, altKey = false): CommandShortcu
   return { key, primaryModifier: true, shiftKey, altKey };
 }
 
-/** A single unmodified key that acts on the canvas. */
-function canvasKey(key: string): CommandShortcut {
-  return { key, primaryModifier: false, shiftKey: false, altKey: false };
+/** A single key, with Shift at most, that acts on the canvas. */
+function canvasKey(key: string, shiftKey = false): CommandShortcut {
+  return { key, primaryModifier: false, shiftKey, altKey: false };
 }
 
 /**
