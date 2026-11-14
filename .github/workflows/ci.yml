@@ -664,7 +664,11 @@ jobs:
 
       # Clippy with `-D warnings`, plus the ratcheted lints, whose hits per
       # crate may not rise above clippy-ratchet.json. One clippy run does both.
+      # The script fails on any warning outside the ratchet itself; the job's
+      # `-D warnings` would turn the ratcheted warnings into errors too.
       - name: Run clippy and the lint ratchet
+        env:
+          RUSTFLAGS: ""
         run: node scripts/clippy-ratchet.mjs
 
       - name: Check WebAssembly font core
