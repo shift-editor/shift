@@ -67,7 +67,6 @@
   },
   "map_err_ignore": {
     "shift-backends": { "src": 5, "tests": 0 },
-    "shift-config": { "src": 1, "tests": 0 },
     "shift-font": { "src": 8, "tests": 0 },
     "shift-proof": { "src": 4, "tests": 0 },
     "shift-slug": { "src": 2, "tests": 1 },
@@ -104,7 +103,6 @@
   },
   "string_slice": {
     "shift-backends": { "src": 5, "tests": 7 },
-    "shift-config": { "src": 1, "tests": 0 },
     "shift-engine": { "src": 0, "tests": 5 },
     "shift-font": { "src": 9, "tests": 0 },
     "shift-proof": { "src": 1, "tests": 0 },

@@ -263,7 +263,7 @@ pub fn set_theme(source: Option<&str>, theme: &ThemeSetting) -> Result<String, C
     if read_config(source).values.is_none() {
         return Err(ConfigEditError::InvalidFile);
     }
-    let mut document: DocumentMut = source.parse().map_err(|_| ConfigEditError::InvalidFile)?;
+    let mut document: DocumentMut = source.parse().map_err(|_unparsable| ConfigEditError::InvalidFile)?;
 
     if let (ThemeSetting::Slots(slots), Some(item)) = (theme, document.get_mut("theme"))
         && item.is_table_like()
@@ -378,7 +378,7 @@ pub(crate) fn location(source: &str, offset: usize) -> Location {
     let line_start = before.rfind('\n').map_or(0, |index| index + 1);
     Location {
         line: before.matches('\n').count() + 1,
-        column: before[line_start..].chars().count() + 1,
+        column: before.get(line_start..).unwrap_or_default().chars().count() + 1,
     }
 }
 
