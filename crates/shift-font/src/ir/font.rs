@@ -14,6 +14,7 @@ use crate::guideline::Guideline;
 use crate::interpolation::GlyphInterpolationValues;
 use crate::kerning::Kerning;
 use crate::lib_data::{LibData, LibValue};
+use crate::mark_color::MarkColor;
 use crate::metrics::{
     FontMetrics, MetricDefinition, MetricDefinitionList, MetricKind, MetricValue, StandardMetrics,
 };
@@ -1384,6 +1385,31 @@ impl Font {
         let glyph = Arc::make_mut(state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?);
         glyph.set_category(category);
         glyph.set_sub_category(sub_category);
+        self.state = Arc::new(state);
+        Ok(())
+    }
+
+    /// Tags every glyph in `glyph_ids` with `color`, or clears their tags.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::MarkColorOutOfRange`] for a custom colour with a
+    /// channel outside 0 to 1, and [`CoreError::GlyphNotFound`] when a glyph
+    /// is missing. The font is unchanged on failure.
+    pub fn set_mark_color(
+        &mut self,
+        glyph_ids: &[GlyphId],
+        color: Option<MarkColor>,
+    ) -> CoreResult<()> {
+        if let Some(color) = color.filter(|color| !color.is_valid()) {
+            return Err(CoreError::MarkColorOutOfRange(color.rgba()));
+        }
+
+        let mut state = (*self.state).clone();
+        for glyph_id in glyph_ids {
+            let glyph = state.data.glyphs.get_mut(glyph_id).require(glyph_id)?;
+            Arc::make_mut(glyph).set_mark_color(color);
+        }
         self.state = Arc::new(state);
         Ok(())
     }

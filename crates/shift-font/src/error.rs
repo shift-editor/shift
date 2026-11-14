@@ -69,6 +69,9 @@ pub enum CoreError {
     #[error("glyph {0} not found")]
     GlyphNotFound(GlyphId),
 
+    #[error("mark colour {0} has a channel outside 0 to 1")]
+    MarkColorOutOfRange(crate::Rgba),
+
     #[error(
         "component {component_id} references glyph {base_glyph_id}, which has no resolvable master layer"
     )]

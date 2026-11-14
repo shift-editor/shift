@@ -15,9 +15,9 @@ use crate::interpolation::GlyphInterpolationValues;
 use crate::ir::{
     Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Component, ComponentAlignment,
     ComponentId, Contour, ContourId, DecomposedTransform, DesignLocation, Font, FontMetadata,
-    Glyph, GlyphId, GlyphLayer, GlyphName, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition,
-    MetricId, MetricValue, NamedInstance, NamedInstanceId, PointId, PointType, Source, SourceId,
-    Transform,
+    Glyph, GlyphId, GlyphLayer, GlyphName, LANGUAGES_LIB_KEY, LayerId, LibValue, MarkColor,
+    MetricDefinition, MetricId, MetricValue, NamedInstance, NamedInstanceId, PointId, PointType,
+    Source, SourceId, Transform,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::linked_metrics::ChangedGlyphs;
@@ -185,6 +185,7 @@ font_intents! {
         SetGlyphMetricsKey,
         LinkMetricsSide,
         UnlinkMetricsSide,
+        SetMarkColor,
     }
 }
 
@@ -277,9 +278,9 @@ trait FontLevelIntent {
         false
     }
 
-    /// Applies it, returning the layers it touched and the glyph it created
+    /// Applies it, returning the layers it touched and the glyphs it created
     /// or changed.
-    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Option<GlyphId>)>;
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)>;
 }
 
 enum IntentKind<'a> {
@@ -604,11 +605,11 @@ impl Font {
                     scopes.touch_layer(*intent.layer_id(), intent.structural());
                 }
                 IntentKind::Font(intent) => {
-                    let (layer_ids, glyph_id) = intent.apply(&mut after)?;
+                    let (layer_ids, glyph_ids) = intent.apply(&mut after)?;
                     for layer_id in layer_ids {
                         scopes.touch_layer(layer_id, true);
                     }
-                    if let Some(glyph_id) = glyph_id {
+                    for glyph_id in glyph_ids {
                         scopes.touch_glyph(glyph_id);
                     }
                 }
@@ -1173,6 +1174,9 @@ mod replacement_tests;
 
 #[cfg(test)]
 mod kerning_tests;
+
+#[cfg(test)]
+mod mark_color_tests;
 
 #[cfg(test)]
 mod consistency_tests;

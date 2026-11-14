@@ -371,6 +371,7 @@ struct GlyphRow {
     category: Option<String>,
     sub_category: Option<String>,
     metrics_keys: font::MetricsKeys,
+    mark_color: Option<String>,
 }
 
 impl GlyphRow {
@@ -382,6 +383,7 @@ impl GlyphRow {
             category: row.get("category")?,
             sub_category: row.get("sub_category")?,
             metrics_keys,
+            mark_color: row.get("mark_color")?,
         })
     }
 }
@@ -393,7 +395,7 @@ fn load_glyphs(
     let glyph_rows = {
         let mut stmt = conn.prepare(
             "SELECT id, name, category, sub_category,
-                    left_metrics_key, right_metrics_key, width_metrics_key
+                    left_metrics_key, right_metrics_key, width_metrics_key, mark_color
              FROM glyphs ORDER BY order_index, id",
         )?;
         stmt.query_map([], GlyphRow::read)?
@@ -479,12 +481,15 @@ fn load_glyphs(
             category,
             sub_category,
             metrics_keys,
+            mark_color,
         } = row;
         let mut glyph = font::Glyph::with_id(glyph_id, name);
         // A name a later Shift wrote but this one does not know reads as unset.
         glyph.set_category(category.and_then(|category| category.parse().ok()));
         glyph.set_sub_category(sub_category.and_then(|sub_category| sub_category.parse().ok()));
         *glyph.metrics_keys_mut() = metrics_keys;
+        // As with a category: text this Shift cannot read is no colour.
+        glyph.set_mark_color(mark_color.and_then(|color| color.parse().ok()));
         let mut glyph_unicodes = unicodes.remove(&glyph_id).unwrap_or_default();
         glyph_unicodes.sort_by_key(|(order_index, _)| *order_index);
         glyph.set_unicodes(

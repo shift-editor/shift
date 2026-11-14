@@ -14,6 +14,7 @@ pub mod glyph_name;
 pub mod guideline;
 pub mod kerning;
 pub mod lib_data;
+pub mod mark_color;
 pub mod metrics;
 pub mod metrics_keys;
 pub mod named_instance;
@@ -51,6 +52,7 @@ pub use kerning::{
     SourceKerning,
 };
 pub use lib_data::{LibData, LibValue};
+pub use mark_color::{InvalidMarkColor, MarkColor, NamedMarkColor, Rgba};
 pub use metrics::{
     FontMetrics, MetricDefinition, MetricDefinitionList, MetricKind, MetricValue, StandardMetrics,
 };

@@ -10,6 +10,7 @@ use shift_font::{
 use std::path::{Path, PathBuf};
 
 use super::glyph_order::{GLYPH_ORDER_KEY, glyph_order_value};
+use super::mark_color::MarkColorWrite;
 use super::metrics_keys::insert_metrics_keys;
 
 pub struct UfoWriter;
@@ -260,7 +261,11 @@ impl UfoWriter {
         dict
     }
 
-    fn convert_glyph(glyph: &Glyph, layer: &GlyphLayer) -> FormatBackendResult<NoradGlyph> {
+    fn convert_glyph(
+        glyph: &Glyph,
+        layer: &GlyphLayer,
+        mark_color: MarkColorWrite,
+    ) -> FormatBackendResult<NoradGlyph> {
         // NoradGlyph::new panics on invalid names, so validate first.
         let name = ufo_name("glyph", glyph.name())?;
         let mut norad_glyph = NoradGlyph::new(name.as_str());
@@ -305,6 +310,7 @@ impl UfoWriter {
             glyph.metrics_keys(),
             layer.metrics_keys(),
         );
+        mark_color.write(&mut norad_glyph.lib);
 
         Ok(norad_glyph)
     }
@@ -434,7 +440,8 @@ impl UfoWriter {
         if let Some(default_source) = font.default_source() {
             for glyph in font.glyphs() {
                 if let Some(layer_data) = glyph.layer_for_source(default_source.id()) {
-                    default_layer.insert_glyph(Self::convert_glyph(glyph, layer_data)?);
+                    let mark_color = MarkColorWrite::of(glyph, default_source_id, font.sources());
+                    default_layer.insert_glyph(Self::convert_glyph(glyph, layer_data, mark_color)?);
                 }
             }
             Self::apply_layer_metadata(default_source, default_layer)?;
@@ -456,7 +463,8 @@ impl UfoWriter {
 
             for glyph in font.glyphs() {
                 if let Some(layer_data) = glyph.layer_for_source(source.id()) {
-                    let norad_glyph = Self::convert_glyph(glyph, layer_data)?;
+                    let mark_color = MarkColorWrite::of(glyph, default_source_id, font.sources());
+                    let norad_glyph = Self::convert_glyph(glyph, layer_data, mark_color)?;
                     norad_layer.insert_glyph(norad_glyph);
                 }
             }
