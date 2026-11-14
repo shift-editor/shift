@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use shift_font::{CoreError, Font, NamedInstance};
 
+use crate::binary_encoding::BinaryEncodings;
 use crate::export::{ExportError, ExportFormat, FontExportResult, FontExporter, postscript_safe};
 
 /// One binary a static export writes.
@@ -86,6 +87,22 @@ impl FontExporter {
         font: &Font,
         directory: &Path,
     ) -> Result<Vec<FontExportResult>, ExportError> {
+        self.export_static_instances_with(font, directory, &BinaryEncodings::ttf())
+    }
+
+    /// [`Self::export_static_instances`], writing each instance's binary in
+    /// every one of `encodings` from one compile.
+    ///
+    /// # Errors
+    ///
+    /// Returns the errors of [`Self::export_static_instances`], and
+    /// [`ExportError::EncodeWoff2`] when a binary cannot be WOFF2 encoded.
+    pub fn export_static_instances_with(
+        &self,
+        font: &Font,
+        directory: &Path,
+        encodings: &BinaryEncodings,
+    ) -> Result<Vec<FontExportResult>, ExportError> {
         let files = Self::static_instance_files(font)?;
         std::fs::create_dir_all(directory).map_err(|source| ExportError::CreateDirectory {
             path: directory.to_path_buf(),
@@ -94,7 +111,7 @@ impl FontExporter {
 
         if !font.is_variable() {
             let file = files.first().ok_or(ExportError::NoNamedInstances)?;
-            return Ok(vec![self.write_static(font, directory, file)?]);
+            return Ok(vec![self.write_static(font, directory, file, encodings)?]);
         }
 
         font.named_instances()
@@ -102,7 +119,7 @@ impl FontExporter {
             .zip(&files)
             .map(|(instance, file)| {
                 let static_font = static_font(font, instance)?;
-                self.write_static(&static_font, directory, file)
+                self.write_static(&static_font, directory, file, encodings)
             })
             .collect()
     }
@@ -112,11 +129,12 @@ impl FontExporter {
         font: &Font,
         directory: &Path,
         file: &StaticInstanceFile,
+        encodings: &BinaryEncodings,
     ) -> Result<FontExportResult, ExportError> {
         let path: PathBuf = directory.join(&file.file_name);
-        self.export_ttf(font, &path)?;
+        let files = self.export_binary(font, &path, encodings)?;
         Ok(FontExportResult {
-            files: vec![path.clone()],
+            files,
             path,
             format: ExportFormat::Ttf,
         })

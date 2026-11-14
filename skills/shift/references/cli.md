@@ -77,6 +77,7 @@ shift-cli proof Lab.shift --output grid.png --grid
 ```sh
 shift-cli compile Family.shift --output Family.ttf
 shift-cli compile Family.shift --static --output fonts/           # one static .ttf per named instance
+shift-cli compile Family.shift --woff2 --output Family.ttf        # also Family.woff2, for the web
 shift-cli export Family.shift --output out/Family.designspace   # designspace plus one UFO per master
 shift-cli export Family.shift --output Family.ufo               # a font with one master
 ```

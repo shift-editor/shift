@@ -4,6 +4,7 @@
 )]
 
 mod atomic;
+mod binary_encoding;
 pub mod errors;
 pub mod export;
 mod export_static;
@@ -22,6 +23,7 @@ mod shift2fontir;
 mod source_ids;
 mod traits;
 
+pub use binary_encoding::{BinaryEncoding, BinaryEncodings};
 pub use errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
 pub use export::{ExportError, ExportFormat, FontExportRequest, FontExportResult, FontExporter};
 pub use export_static::StaticInstanceFile;
