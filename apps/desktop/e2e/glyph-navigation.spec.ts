@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import type { GlyphId } from "@shift/types";
 import { expect, workspaceTest as test } from "./fixtures/electronApp";
-import { openCatalogGlyph } from "./fixtures/appLocators";
+import { editorSidebar, openCatalogGlyph, waitForEditorReady } from "./fixtures/appLocators";
 import { square } from "@/testing/fixtures";
 import type { EditorDriver } from "./fixtures/EditorDriver";
 
@@ -129,4 +129,29 @@ test("clears transient editor state when navigating between glyphs", async ({ pa
       glyphId: glyphs.firstId,
       contourCount: 1,
     });
+});
+
+test("finds a glyph in the canvas's Glyphs tab and opens it from there", async ({
+  editor,
+  page,
+}) => {
+  const { firstId, secondId } = await navigationGlyphs(editor);
+  await openCatalogGlyph(page, "navigationA", firstId);
+  const sidebar = editorSidebar(page);
+  await sidebar.getByRole("tab", { name: "Glyphs list" }).click();
+  const total = (await editor.glyphNames()).length;
+  const count = sidebar.getByTestId("glyph-count");
+  await expect(count).toHaveText(`${total} glyphs`);
+
+  const search = sidebar.getByRole("textbox", { name: "Search glyphs" });
+  await search.fill("NAVIGATION");
+  await expect(count).toHaveText(`2 of ${total}`);
+  await sidebar.getByRole("button", { name: "Match case" }).click();
+  await expect(count).toHaveText(`0 of ${total}`);
+  await sidebar.getByRole("button", { name: "Regular expression" }).click();
+  await search.fill("^navigation[B-Z]$");
+  await expect(count).toHaveText(`1 of ${total}`);
+
+  await sidebar.getByRole("button", { name: "navigationB", exact: true }).click();
+  await waitForEditorReady(page, secondId);
 });

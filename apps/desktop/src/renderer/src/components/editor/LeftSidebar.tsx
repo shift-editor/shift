@@ -12,6 +12,7 @@ import { SidebarBrand } from "@/components/chrome/SidebarBrand";
 import { ExportSection } from "@/components/export/ExportSection";
 import { PagesSection } from "@/components/pages/PagesSection";
 import { useExport } from "@/context/ExportContext";
+import { GlyphsPanel } from "./GlyphsPanel";
 import { ObjectSectionRow } from "./object-tree/ObjectSectionRow";
 import { ObjectsPanel } from "./ObjectsPanel";
 import { VariationPanel } from "./VariationPanel";
@@ -20,8 +21,8 @@ const TAB_CLASS =
   "h-5 flex-1 rounded-sm px-2 text-ui data-[active]:bg-surface data-[active]:font-medium data-[active]:shadow-sm";
 
 /**
- * The document's lists: its pages and what the canvas holds, or its sources,
- * instances and exports. Opening the Export popover, such as with ⇧⌘E,
+ * The document's lists: its pages and what the canvas holds, its sources,
+ * instances and exports, or its glyphs. Opening the Export popover, such as with ⇧⌘E,
  * shows the Designspace tab, since the popover opens beside its Export section.
  */
 export const LeftSidebar = () => {
@@ -33,7 +34,7 @@ export const LeftSidebar = () => {
 
   return (
     <aside
-      aria-label="Layers and designspace"
+      aria-label="Layers, designspace and glyphs"
       className="flex h-full w-full min-w-0 flex-col overflow-hidden border-r border-line-subtle bg-surface"
     >
       <SidebarBrand />
@@ -48,6 +49,10 @@ export const LeftSidebar = () => {
           </TabsTab>
           <TabsTab value="designspace" className={TAB_CLASS}>
             Designspace
+          </TabsTab>
+          {/* Named apart from the window's own Glyphs tab, which shows the font overview. */}
+          <TabsTab value="glyphs" aria-label="Glyphs list" className={TAB_CLASS}>
+            Glyphs
           </TabsTab>
           <TabsIndicator className="hidden" />
         </TabsList>
@@ -73,6 +78,9 @@ export const LeftSidebar = () => {
               <ExportSection />
             </div>
           </ScrollArea>
+        </TabsPanel>
+        <TabsPanel value="glyphs" className="min-h-0 flex-1 overflow-hidden">
+          <GlyphsPanel />
         </TabsPanel>
       </Tabs>
     </aside>

@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button, cn } from "@shift/ui";
+import { GlyphPreviewSvg } from "../glyph-grid/GlyphPreviewSvg";
 import { GlyphContextMenu } from "./GlyphContextMenu";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { GlyphNameInput } from "./GlyphNameInput";
-import { GlyphPreviewLayout } from "./GlyphPreviewLayout";
 import { useCatalogSelection } from "./useCatalogSelection";
 import { useGlyphPreviewFrame } from "./useGlyphPreviewFrame";
 import { useRevealSelectedGlyph } from "./useRevealSelectedGlyph";
@@ -143,25 +143,16 @@ export function SvgGlyphCatalogGrid({
         <div className="relative" style={{ height: layout.totalHeight, width: "100%" }}>
           {targetFrame.cells.map((cell) => {
             const preview = previews.get(cell.glyph.id);
-            const previewLayout = preview
-              ? new GlyphPreviewLayout(metrics, preview.xAdvance, cell.previewRect.height)
-              : null;
             const top = cell.cellRect.top + targetFrame.scrollTop;
             let previewContent: ReactNode = null;
-            if (preview?.svgPath && previewLayout) {
+            if (preview?.svgPath) {
               previewContent = (
-                <svg
-                  aria-hidden="true"
+                <GlyphPreviewSvg
+                  preview={preview}
+                  metrics={metrics}
                   width={cell.previewContentRect.width}
                   height={cell.previewContentRect.height}
-                  viewBox={previewLayout.viewBox}
-                  preserveAspectRatio="xMidYMid meet"
-                  className="overflow-hidden"
-                >
-                  <g transform="scale(1, -1)">
-                    <path d={preview.svgPath} fill="currentColor" fillRule="nonzero" />
-                  </g>
-                </svg>
+                />
               );
             } else if (
               readiness === "Complete" &&

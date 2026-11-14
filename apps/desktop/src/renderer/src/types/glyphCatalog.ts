@@ -45,12 +45,27 @@ export interface GlyphCategoryFilter {
   readonly subCategoryKey: string | null;
 }
 
+/** What narrows a list of the font's glyphs: a search, categories, and a language. */
+export interface GlyphFilter {
+  /** Text a glyph's name or character must match; empty matches every glyph. */
+  readonly query: string;
+  /** The categories shown; empty shows every category. */
+  readonly categoryFilters: readonly GlyphCategoryFilter[];
+  /** The language or script group whose glyphs are shown; null shows every glyph. */
+  readonly languageId: string | null;
+}
+
 /** Dense external-axis coordinates ordered like `GlyphCatalogSource.axesCell`. */
 export type CatalogLocation = readonly number[];
 
 export interface GlyphCatalogSource {
   availableGlyphs: GlyphCatalogItem[];
   filteredGlyphs: GlyphCatalogItem[];
+  /**
+   * The font's glyphs a filter shows, in font order: the one filter every
+   * glyph list in the window uses, each with its own choices.
+   */
+  filterGlyphs: (filter: GlyphFilter) => GlyphCatalogItem[];
   categories: GlyphCategorySummary[];
   /** Tracked languages grouped by script, each with its script groups, as shown in the sidebar. */
   languageScripts: LanguageScript[];

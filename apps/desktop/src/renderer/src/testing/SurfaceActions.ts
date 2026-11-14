@@ -27,6 +27,7 @@ import type {
   Unicode,
 } from "@shift/types";
 import { GridActions } from "@/lib/glyph-grid/gridActions";
+import { insertGlyphIntoText } from "@/lib/glyph-grid/insertGlyph";
 import { drawFixture } from "./drawFixture";
 import type { DrawOptions, GlyphFixture, PointNames } from "./fixtures";
 import type { AxisFixture, AxisLocation } from "./fonts";
@@ -160,6 +161,14 @@ export class SurfaceActions {
     const glyphIds = this.#glyphsNamed(names);
     await this.#editor.font.loadGlyphs(glyphIds);
     return new GridActions(this.#editor).openAsText(glyphIds)?.id ?? null;
+  }
+
+  /** Adds the glyph named `name` to the shown page's text, as ⌘-clicking it in the canvas's Glyphs tab does. */
+  async insertGlyphIntoText(name: string): Promise<boolean> {
+    const [glyphId] = this.#glyphsNamed([name]);
+    if (!glyphId) return false;
+    await this.#editor.font.loadGlyphs([glyphId]);
+    return insertGlyphIntoText(this.#editor, glyphId);
   }
 
   #glyphsNamed(names: readonly string[]): GlyphId[] {
