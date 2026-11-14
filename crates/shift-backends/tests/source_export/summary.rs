@@ -192,7 +192,7 @@ impl FontSummary {
                     let members = group
                         .members
                         .iter()
-                        .map(|id| glyph_name(font, *id))
+                        .map(|id| glyph_label(font, *id))
                         .collect();
                     (key, members)
                 })
@@ -315,14 +315,15 @@ impl LayerSummary {
     }
 }
 
-fn glyph_name(font: &Font, id: shift_font::GlyphId) -> String {
+/// A glyph's name, or its id when the font has no such glyph.
+fn glyph_label(font: &Font, id: shift_font::GlyphId) -> String {
     font.glyph(id)
         .map_or_else(|| format!("{id:?}"), |glyph| glyph.name().to_string())
 }
 
 fn side_name(font: &Font, side: &KerningSide) -> String {
     match side {
-        KerningSide::Glyph(id) => glyph_name(font, *id),
+        KerningSide::Glyph(id) => glyph_label(font, *id),
         KerningSide::Group(id) => font
             .kerning()
             .group(*id)

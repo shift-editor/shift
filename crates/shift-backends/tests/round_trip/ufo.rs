@@ -594,12 +594,6 @@ fn ttf_import_saves_spec_valid_ufo_curves() {
     );
 }
 
-fn glyph_names(font: &Font) -> Vec<String> {
-    font.glyphs()
-        .map(|glyph| glyph.name().to_string())
-        .collect()
-}
-
 #[test]
 fn glyph_order_survives_save_and_reopen() {
     let mut font = Font::new();
@@ -612,27 +606,42 @@ fn glyph_order_survives_save_and_reopen() {
 
     let reloaded = round_trip(&font);
 
-    assert_eq!(glyph_names(&reloaded), ["space", "b", "a"]);
+    let names: Vec<_> = reloaded.glyphs().map(Glyph::name).collect();
+    assert_eq!(names, ["space", "b", "a"]);
     assert!(reloaded.lib().get("public.glyphOrder").is_none());
 }
 
 #[test]
-fn opening_a_ufo_follows_its_glyph_order_then_names() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let path = temp_dir.path().join("Ordered.ufo");
-    let mut ufo = norad::Font::new();
-    for name in ["a", "b", "c", "space"] {
-        ufo.layers
-            .default_layer_mut()
-            .insert_glyph(norad::Glyph::new(name));
+fn opening_a_ufo_follows_its_glyph_order_list_then_names() {
+    let cases: [(plist::Value, [&str; 4], bool); 2] = [
+        (
+            plist::Value::Array(vec!["space".into(), "c".into(), "missing".into()]),
+            ["space", "c", "a", "b"],
+            false,
+        ),
+        (
+            plist::Value::String("c b".into()),
+            ["a", "b", "c", "space"],
+            true,
+        ),
+    ];
+
+    for (glyph_order, expected, key_kept) in cases {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("Ordered.ufo");
+        let mut ufo = norad::Font::new();
+        for name in ["a", "b", "c", "space"] {
+            ufo.layers
+                .default_layer_mut()
+                .insert_glyph(norad::Glyph::new(name));
+        }
+        ufo.lib.insert("public.glyphOrder".to_string(), glyph_order);
+        ufo.save(&path).unwrap();
+
+        let font = load_font(&path);
+
+        let names: Vec<_> = font.glyphs().map(Glyph::name).collect();
+        assert_eq!(names, expected);
+        assert_eq!(font.lib().get("public.glyphOrder").is_some(), key_kept);
     }
-    ufo.lib.insert(
-        "public.glyphOrder".to_string(),
-        plist::Value::Array(vec!["space".into(), "c".into(), "missing".into()]),
-    );
-    ufo.save(&path).unwrap();
-
-    let font = load_font(&path);
-
-    assert_eq!(glyph_names(&font), ["space", "c", "a", "b"]);
 }
