@@ -1,3 +1,9 @@
+#![expect(
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "document builders fail loudly on bad input"
+)]
+
 mod support;
 
 use std::path::Path;
@@ -82,38 +88,50 @@ fn exports_a_single_master_font_as_a_ufo() {
     assert_eq!(exported.glyph_by_name("A").unwrap().unicodes(), [0x41]);
 }
 
-#[test]
-fn refuses_a_ufo_for_a_font_with_several_masters() {
-    let temp = tempfile::tempdir().unwrap();
-    let document = variable_document(temp.path());
-    let ufo = temp.path().join("Dogfood.ufo");
-
-    let output = shift(&["export", &document, "-o", ufo.to_str().unwrap()]);
-
-    assert!(!output.status.success());
-    assert!(
-        stderr(&output).contains("export a designspace instead"),
-        "{}",
-        stderr(&output)
-    );
-    assert!(!ufo.exists());
+/// A refused export names the problem and writes nothing.
+struct Refusal {
+    variable: bool,
+    output: &'static str,
+    reason: &'static str,
 }
 
 #[test]
-fn names_the_formats_when_the_extension_picks_none() {
-    let temp = tempfile::tempdir().unwrap();
-    let document = single_master_document(temp.path());
-    let otf = temp.path().join("Lab.otf");
+fn refused_exports_say_why_and_write_nothing() {
+    let refusals = [
+        Refusal {
+            variable: true,
+            output: "Dogfood.ufo",
+            reason: "export a designspace instead",
+        },
+        Refusal {
+            variable: false,
+            output: "Lab.otf",
+            reason: ".designspace, .ufo or .ttf",
+        },
+    ];
+    for refusal in refusals {
+        let temp = tempfile::tempdir().unwrap();
+        let document = if refusal.variable {
+            variable_document(temp.path())
+        } else {
+            single_master_document(temp.path())
+        };
+        let output_path = temp.path().join(refusal.output);
 
-    let output = shift(&["export", &document, "-o", otf.to_str().unwrap()]);
+        let output = shift(&["export", &document, "-o", output_path.to_str().unwrap()]);
 
-    assert!(!output.status.success());
-    assert!(
-        stderr(&output).contains(".designspace, .ufo or .ttf"),
-        "{}",
-        stderr(&output)
-    );
-    assert!(!otf.exists());
+        assert!(
+            !output.status.success(),
+            "{} should be refused",
+            refusal.output
+        );
+        assert!(
+            stderr(&output).contains(refusal.reason),
+            "{}",
+            stderr(&output)
+        );
+        assert!(!output_path.exists());
+    }
 }
 
 #[test]
