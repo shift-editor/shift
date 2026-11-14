@@ -75,7 +75,6 @@ clone_on_ref_ptr = "warn"
 missing_errors_doc = "warn"
 # No hits today: robustness and efficiency lints that keep it so.
 ignore_without_reason = "warn"
-inefficient_to_string = "warn"
 unnecessary_box_returns = "warn"
 format_push_string = "warn"
 rc_buffer = "warn"

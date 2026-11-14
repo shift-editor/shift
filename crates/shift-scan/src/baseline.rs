@@ -4,6 +4,11 @@
 //! any count differs: a rise lists every hit in that crate and scope, a fall
 //! asks for `--update`. `--update` rewrites the file from the tree.
 
+#![expect(
+    clippy::print_stdout,
+    reason = "the ratchet reports its result on stdout"
+)]
+
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::Path;
