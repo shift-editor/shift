@@ -408,9 +408,15 @@ pub(crate) struct CompileArgs {
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
 
-    /// Path for the compiled .ttf output.
-    #[arg(short, long, value_hint = ValueHint::FilePath)]
+    /// Path for the compiled .ttf output; with --static, the directory for
+    /// the static fonts.
+    #[arg(short, long, value_hint = ValueHint::AnyPath)]
     pub output: PathBuf,
+
+    /// Compile one static .ttf per named instance into the --output
+    /// directory, each named after its instance's PostScript name.
+    #[arg(long = "static")]
+    pub static_instances: bool,
 }
 
 #[derive(Debug, Parser)]

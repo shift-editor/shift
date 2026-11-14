@@ -45,8 +45,10 @@ fn main() -> miette::Result<()> {
             Ok(())
         }
         Command::Compile(args) => {
-            let result = compile(args)?;
-            write_stdout(&result.path.display().to_string())
+            for result in compile(args)? {
+                write_stdout(&result.path.display().to_string())?;
+            }
+            Ok(())
         }
         Command::Export(args) => {
             let result = export(args)?;
@@ -230,8 +232,20 @@ fn write_authoring_result(
     }
 }
 
-fn compile(args: CompileArgs) -> miette::Result<FontExportResult> {
-    export_document(&args.path, args.output, ExportFormat::Ttf)
+/// Compiles the document to one variable or static binary, or with
+/// `--static` to one static binary per named instance.
+fn compile(args: CompileArgs) -> miette::Result<Vec<FontExportResult>> {
+    if !args.static_instances {
+        return Ok(vec![export_document(
+            &args.path,
+            args.output,
+            ExportFormat::Ttf,
+        )?]);
+    }
+    let font = load_document(&args.path)?;
+    FontExporter::new()
+        .export_static_instances(&font, &args.output)
+        .into_diagnostic()
 }
 
 fn export(args: ExportArgs) -> miette::Result<FontExportResult> {
@@ -246,9 +260,7 @@ fn export_document(
     output: PathBuf,
     format: ExportFormat,
 ) -> miette::Result<FontExportResult> {
-    let font = ShiftStore::open_document(path)
-        .and_then(|store| store.load_font_state())
-        .into_diagnostic()?;
+    let font = load_document(path)?;
     FontExporter::new()
         .export(
             &font,
@@ -309,6 +321,12 @@ fn render_mode() -> RenderMode {
     }
 }
 
+fn load_document(path: &Path) -> miette::Result<shift_font::Font> {
+    ShiftStore::open_document(path)
+        .and_then(|store| store.load_font_state())
+        .into_diagnostic()
+}
+
 fn write_stdout(output: &str) -> miette::Result<()> {
     let mut stdout = io::stdout().lock();
     match writeln!(stdout, "{output}") {
@@ -331,20 +349,21 @@ mod tests {
         let output_path = temp.path().join("Dogfood.ttf");
         drop(ShiftStore::create_document(&source_path, &sample_variable_font()).unwrap());
 
-        let result = compile(CompileArgs {
+        let results = compile(CompileArgs {
             path: source_path,
             output: output_path.clone(),
+            static_instances: false,
         })
         .unwrap();
 
         assert_eq!(
-            result,
-            FontExportResult {
-                path: output_path,
+            results,
+            [FontExportResult {
+                path: output_path.clone(),
                 format: ExportFormat::Ttf,
-            }
+            }]
         );
-        let bytes = std::fs::read(result.path).unwrap();
+        let bytes = std::fs::read(output_path).unwrap();
         assert_eq!(&bytes[..4], &[0x00, 0x01, 0x00, 0x00]);
     }
 }

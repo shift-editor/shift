@@ -76,10 +76,11 @@ shift-cli proof Lab.shift --output grid.png --grid
 
 ```sh
 shift-cli compile Family.shift --output Family.ttf
+shift-cli compile Family.shift --static --output fonts/           # one static .ttf per named instance
 shift-cli export Family.shift --output out/Family.designspace   # designspace plus one UFO per master
 shift-cli export Family.shift --output Family.ufo               # a font with one master
 ```
 
-`export` writes editable sources for other tools and build pipelines; the output's extension picks the format. Masters made in Shift are written as `<name>-<master>.ufo` beside the designspace. A UFO holds one master, so a font with several exports as a designspace. Neither command changes the document.
+`compile --static` writes each named instance as its own static font, named after its PostScript name; it needs named instances (add them with `instance add`). `export` writes editable sources for other tools and build pipelines; the output's extension picks the format. Masters made in Shift are written as `<name>-<master>.ufo` beside the designspace. A UFO holds one master, so a font with several exports as a designspace. Neither command changes the document.
 
 Compile after authoring to confirm the font builds. A compile error usually names the glyph and source; incompatible masters are the most common cause in variable fonts (see [variable-fonts.md](variable-fonts.md)).

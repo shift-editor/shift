@@ -146,3 +146,28 @@ fn export_leaves_the_document_unchanged() {
     assert!(output.status.success(), "{}", stderr(&output));
     assert_eq!(std::fs::read(&document).unwrap(), before);
 }
+
+#[test]
+fn compile_static_writes_one_static_font_per_named_instance() {
+    let temp = tempfile::tempdir().unwrap();
+    let document = variable_document(temp.path()).unwrap();
+    let fonts = temp.path().join("fonts");
+
+    let output = shift(&[
+        "compile",
+        &document,
+        "--static",
+        "-o",
+        fonts.to_str().unwrap(),
+    ]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    let bold = fonts.join("UntitledFont-Bold.ttf");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        bold.display().to_string()
+    );
+    let bytes = std::fs::read(&bold).unwrap();
+    let font = skrifa::FontRef::new(&bytes).unwrap();
+    assert!(font.table_data(skrifa::Tag::new(b"fvar")).is_none());
+}

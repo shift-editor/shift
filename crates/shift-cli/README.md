@@ -2,7 +2,7 @@
 
 Command-line inspection, authoring, and compilation for canonical SQLite `.shift` documents.
 
-The crate builds the `shift-cli` binary. `inspect` opens a document, summarizes the font model, and can emit stable JSON for scripts and CI. Resource commands apply semantic Shift intents through a temporary recovery overlay and save only after the complete change validates. `compile` sends the canonical Shift model directly through fontir/fontc to produce a TrueType font, and `export` writes it as editable sources: a `.designspace` with one UFO per master, or a `.ufo` for a font with one master, picked by the output's extension.
+The crate builds the `shift-cli` binary. `inspect` opens a document, summarizes the font model, and can emit stable JSON for scripts and CI. Resource commands apply semantic Shift intents through a temporary recovery overlay and save only after the complete change validates. `compile` sends the canonical Shift model directly through fontir/fontc to produce a TrueType font (with `--static`, one static font per named instance), and `export` writes it as editable sources: a `.designspace` with one UFO per master, or a `.ufo` for a font with one master, picked by the output's extension.
 
 ## Install
 
@@ -46,6 +46,7 @@ cargo run -p shift-cli -- glyph inspect path/to/Family.glyphs Aacute
 cargo run -p shift-cli -- glyph inspect path/to/Family.designspace Aacute \
   --location wght=700 --view variation --json
 cargo run -p shift-cli -- compile path/to/Family.shift --output path/to/Family.ttf
+cargo run -p shift-cli -- compile path/to/Family.shift --static --output path/to/fonts
 cargo run -p shift-cli -- export path/to/Family.shift --output path/to/out/Family.designspace
 
 cargo run -p shift-cli -- font create path/to/Lab.shift
