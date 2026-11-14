@@ -36,6 +36,7 @@ import type {
   NamedInstanceDefinition,
   NamedInstanceId,
   SourceMetrics,
+  Grid,
   MarkColor,
 } from "@shift/types";
 import {
@@ -282,6 +283,7 @@ export class Font {
 
   readonly #namedInstancesCell: Signal<readonly NamedInstance[]>;
   readonly #languageIdsCell: Signal<readonly string[] | null>;
+  readonly #gridCell: Signal<Grid | null>;
 
   readonly #unicodesCell: Signal<Unicode[]>;
   readonly #glyphEntriesCell: Signal<readonly GlyphEntry[]>;
@@ -358,6 +360,7 @@ export class Font {
     });
     this.#namedInstancesCell = computed(() => fontCell.value?.namedInstances ?? []);
     this.#languageIdsCell = computed(() => fontCell.value?.languageIds ?? null);
+    this.#gridCell = computed(() => fontCell.value?.grid ?? null);
     this.#directoryCell = computed(
       () => new GlyphDirectory(this.#store.recordIndexCell.value, this.#glyphInfo),
     );
@@ -487,6 +490,16 @@ export class Font {
    */
   get languageIdsCell(): Signal<readonly string[] | null> {
     return this.#languageIdsCell;
+  }
+
+  /** The grid the font is drawn on; null when it stores none. */
+  get gridCell(): Signal<Grid | null> {
+    return this.#gridCell;
+  }
+
+  /** Moves on every change to {@link gridCell}, an undo back to an earlier grid included. */
+  get gridRevisionCell(): Signal<number> {
+    return this.#store.gridRevisionCell;
   }
 
   /** Reactive committed variation sources for sidebar controls. */
@@ -1734,6 +1747,20 @@ export class Font {
       kind: "setLanguages",
       setLanguages: { languageIds: [...languageIds] },
     });
+  }
+
+  /**
+   * Queues replacement of the font's grid on the workspace edit lane.
+   *
+   * @remarks
+   * {@link gridCell} changes only after the workspace echo is folded. Rust
+   * refuses spacing that is not positive and subdivisions outside 1 to 16.
+   * Call inside an edit-coordinator transaction to control the undo step label.
+   *
+   * @param grid - The grid to store; null removes it.
+   */
+  setGrid(grid: Grid | null): void {
+    this.editCoordinator.push({ kind: "setGrid", setGrid: { grid } });
   }
 
   /**

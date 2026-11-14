@@ -71,6 +71,7 @@ export class FontStore {
   readonly #engine: FontEngine;
   readonly #kerning: Signal<Kerning>;
   readonly #committedRevision: WritableSignal<number>;
+  readonly #gridRevision: WritableSignal<number>;
   readonly #invalidGlyphs: WritableSignal<GlyphInvalidation>;
 
   /**
@@ -111,6 +112,7 @@ export class FontStore {
     });
     this.#workspace = signal(workspace, { name: "fontStore.workspace" });
     this.#committedRevision = signal(0, { name: "fontStore.committedRevision" });
+    this.#gridRevision = signal(0, { name: "fontStore.gridRevision" });
     this.#invalidGlyphs = signal<GlyphInvalidation>(
       { glyphIds: null },
       { name: "fontStore.invalidGlyphs" },
@@ -165,6 +167,15 @@ export class FontStore {
     return this.#committedRevision;
   }
 
+  /**
+   * Counts changes to the font's grid: each echo that carries it, and each
+   * replaced font. It moves even when the grid returns to an earlier value,
+   * as an undo does.
+   */
+  get gridRevisionCell(): Signal<number> {
+    return this.#gridRevision;
+  }
+
   /** Glyph roots whose resident atlas entries no longer match the committed font. */
   get invalidGlyphsCell(): Signal<GlyphInvalidation> {
     return this.#invalidGlyphs;
@@ -213,6 +224,7 @@ export class FontStore {
       this.#indexCell.set(workspaceRecordIndex(snapshot));
       this.#font.set(snapshot ? fontSnapshotFromWorkspace(snapshot) : null);
       this.#workspace.set(snapshot);
+      this.#gridRevision.update((revision) => revision + 1);
       this.#clearLayerStates();
       this.#clearProjections();
       this.#interpolationBases.clear();
@@ -227,6 +239,7 @@ export class FontStore {
       this.#indexCell.set(fontRecordIndex(snapshot));
       this.#font.set(snapshot);
       this.#workspace.set(null);
+      this.#gridRevision.update((revision) => revision + 1);
       this.#clearLayerStates();
       this.#clearProjections();
       this.#interpolationBases.clear();
@@ -406,6 +419,7 @@ export class FontStore {
     if (!current) return;
     const interpolation = next.sourceMetricsInterpolation;
     const languages = next.languages;
+    const grid = next.grid;
     const glyphChanges = next.glyphChanges;
     const nextWorkspace: WorkspaceSnapshot = {
       ...current,
@@ -420,12 +434,14 @@ export class FontStore {
         : current.sourceMetricsInterpolation,
       namedInstances: next.namedInstances ?? current.namedInstances,
       languageIds: languages ? (languages.languageIds ?? null) : current.languageIds,
+      grid: grid ? (grid.grid ?? null) : current.grid,
       sources: next.sources ?? current.sources,
       kerning: next.kerning ?? current.kerning,
     };
     this.#indexCell.set(workspaceRecordIndex(nextWorkspace));
     this.#font.set(fontSnapshotFromWorkspace(nextWorkspace));
     this.#workspace.set(nextWorkspace);
+    if (grid) this.#gridRevision.update((revision) => revision + 1);
 
     const index = this.#indexCell.peek();
     for (const [glyphId, cell] of this.#glyphCells) {
@@ -910,6 +926,7 @@ function fontSnapshotFromWorkspace(workspace: WorkspaceSnapshot): FontSnapshot {
     namedInstances: workspace.namedInstances,
     // oxlint-disable-next-line shift/no-conditional-spread -- FontSnapshot is a stored snapshot; a font without language ids has no key
     ...(workspace.languageIds ? { languageIds: workspace.languageIds } : {}),
+    grid: workspace.grid,
     kerning: workspace.kerning,
   };
 }

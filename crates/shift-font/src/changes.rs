@@ -12,9 +12,9 @@ use crate::collection::Identified;
 use crate::error::{CoreError, CoreResult, EntityKind};
 
 use crate::{
-    Axis, AxisMapping, Component, FontMetadata, Glyph, GlyphId, GlyphLayer, KerningGroup,
-    KerningGroupId, KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue, MetricDefinition,
-    NamedInstance, Source, SourceId, TouchedLayer,
+    Axis, AxisMapping, Component, FontMetadata, GRID_LIB_KEY, Glyph, GlyphId, GlyphLayer,
+    KerningGroup, KerningGroupId, KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue,
+    MetricDefinition, NamedInstance, Source, SourceId, TouchedLayer,
 };
 
 /// One domain projection a font change can invalidate, by name: each is one
@@ -42,11 +42,13 @@ pub enum FontChangeFlag {
     /// The canvas the font is shown on: its pages, text runs and placed
     /// glyphs. A font change never sets it; a scene edit does.
     Scene,
+    /// The grid the font is drawn on.
+    Grid,
 }
 
 impl FontChangeFlag {
     /// Every flag, in bit order.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         Self::Metadata,
         Self::Languages,
         Self::Glyphs,
@@ -60,6 +62,7 @@ impl FontChangeFlag {
         Self::Kerning,
         Self::Layers,
         Self::Scene,
+        Self::Grid,
     ];
 
     /// The flag's bit in a [`FontChangeImpact`].
@@ -97,6 +100,8 @@ bitflags! {
         const LAYERS = FontChangeFlag::Layers.bit();
         /// The canvas the font is shown on, which only scene edits change.
         const SCENE = FontChangeFlag::Scene.bit();
+        /// The grid the font is drawn on.
+        const GRID = FontChangeFlag::Grid.bit();
     }
 }
 
@@ -376,6 +381,7 @@ impl FontChange {
         match self {
             Self::Metadata(_) => FontChangeImpact::METADATA,
             Self::LibValue { key, .. } if key == LANGUAGES_LIB_KEY => FontChangeImpact::LANGUAGES,
+            Self::LibValue { key, .. } if key == GRID_LIB_KEY => FontChangeImpact::GRID,
             Self::Axes(_) => {
                 FontChangeImpact::AXES
                     | FontChangeImpact::SOURCES

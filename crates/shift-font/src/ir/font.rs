@@ -10,6 +10,7 @@ use crate::error::{CoreError, CoreResult, EntityKind};
 use crate::features::FeatureData;
 use crate::glyph::{Glyph, GlyphLayer};
 use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
+use crate::grid::{GRID_LIB_KEY, Grid};
 use crate::guideline::Guideline;
 use crate::interpolation::GlyphInterpolationValues;
 use crate::kerning::Kerning;
@@ -1719,6 +1720,13 @@ impl Font {
             ),
             _ => None,
         }
+    }
+
+    /// The grid the font is drawn on, stored under [`GRID_LIB_KEY`]; `None`
+    /// when the font stores none, or stores a value [`Grid::from_lib`] cannot
+    /// read, so the editor uses its default grid.
+    pub fn grid(&self) -> Option<Grid> {
+        Grid::from_lib(self.lib().get(GRID_LIB_KEY)?)
     }
 
     /// Source-format font-info fields that Shift does not model, preserved

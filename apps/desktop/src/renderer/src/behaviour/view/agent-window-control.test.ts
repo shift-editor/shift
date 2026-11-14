@@ -122,6 +122,18 @@ describe("agents change what the window shows without touching the font", () => 
     expect(editor.gridSettings()).toEqual(value.grid);
   });
 
+  it("saves grid cells it changes with the font, as one undoable step", async () => {
+    const before = await fontRevision();
+
+    await editor.agentControl("editor.setView", { grid: { spacingX: 30 } });
+    await editor.settle();
+
+    expect(await fontRevision()).not.toBe(before);
+    expect(editor.gridSettings()).toMatchObject({ spacingX: 30 });
+    await editor.undo();
+    expect(editor.gridSettings()).toMatchObject({ spacingX: 100 });
+  });
+
   it("refuses to centre a canvas that has no size yet, and leaves the zoom", async () => {
     const zoom = editor.zoomLevel();
 
