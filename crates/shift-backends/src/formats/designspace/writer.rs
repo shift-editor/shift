@@ -35,15 +35,15 @@ struct UfoFileGroup {
 /// A [`FontView`] scoped to one UFO file of a multi-UFO designspace: only
 /// the sources assigned to that file are visible, and the file's own
 /// default-layer source stands in as the view's default source.
-struct UfoFileView<'a> {
-    font: &'a Font,
+struct UfoFileView<'a, F: FontView> {
+    font: &'a F,
     metadata: FontMetadata,
     sources: &'a [Source],
     default_source_id: Option<SourceId>,
 }
 
-impl<'a> UfoFileView<'a> {
-    fn new(font: &'a Font, group: &'a UfoFileGroup) -> Self {
+impl<'a, F: FontView> UfoFileView<'a, F> {
+    fn new(font: &'a F, group: &'a UfoFileGroup) -> Self {
         let mut metadata = font.metadata().clone();
 
         // Companion UFOs conventionally carry their own master's style name.
@@ -65,7 +65,7 @@ impl<'a> UfoFileView<'a> {
     }
 }
 
-impl FontView for UfoFileView<'_> {
+impl<F: FontView> FontView for UfoFileView<'_, F> {
     fn metadata(&self) -> &FontMetadata {
         &self.metadata
     }
@@ -103,7 +103,7 @@ impl FontView for UfoFileView<'_> {
     }
 
     fn glyph(&self, name: &str) -> Option<&Glyph> {
-        self.font.glyph_by_name(name)
+        self.font.glyph(name)
     }
 
     fn kerning(&self) -> &Kerning {
@@ -155,7 +155,7 @@ impl DesignspaceWriter {
     /// without a filename (created inside Shift) get a deterministic,
     /// collision-safe filename derived from the designspace stem and their
     /// style name.
-    fn group_sources(font: &Font, stem: &str) -> Vec<UfoFileGroup> {
+    fn group_sources(font: &impl FontView, stem: &str) -> Vec<UfoFileGroup> {
         let font_default = font.default_source_id();
         let default_filename = font
             .default_source()
@@ -243,7 +243,7 @@ impl DesignspaceWriter {
     /// The font's masters in source order, each with the UFO file group it is
     /// written into.
     fn masters_in_order<'a>(
-        font: &'a Font,
+        font: &'a impl FontView,
         groups: &'a [UfoFileGroup],
     ) -> impl Iterator<Item = (&'a Source, &'a UfoFileGroup)> {
         font.sources()
@@ -372,7 +372,7 @@ impl DesignspaceWriter {
 
     fn source(
         source: &Source,
-        font: &Font,
+        font: &impl FontView,
         filename: &str,
         layer: Option<&str>,
         axes: &[Axis],
@@ -387,7 +387,7 @@ impl DesignspaceWriter {
         }
     }
 
-    fn instance(instance: &NamedInstance, font: &Font, axes: &[Axis]) -> DsInstance {
+    fn instance(instance: &NamedInstance, font: &impl FontView, axes: &[Axis]) -> DsInstance {
         DsInstance {
             familyname: font.metadata().family_name.clone(),
             stylename: Some(instance.name().to_string()),
@@ -400,7 +400,7 @@ impl DesignspaceWriter {
 
     fn write_axisless_source(
         writer: &mut Writer<Vec<u8>>,
-        font: &Font,
+        font: &impl FontView,
         filename: &str,
         stylename: &str,
         layer: Option<&str>,
@@ -427,7 +427,7 @@ impl DesignspaceWriter {
     }
 
     fn save_axisless_designspace(
-        font: &Font,
+        font: &impl FontView,
         path: &Path,
         groups: &[UfoFileGroup],
     ) -> DesignspaceResult<()> {
@@ -519,7 +519,7 @@ impl DesignspaceWriter {
             })
     }
 
-    fn save_designspace(font: &Font, path: &Path) -> DesignspaceResult<()> {
+    fn save_designspace(font: &impl FontView, path: &Path) -> DesignspaceResult<()> {
         let parent = path
             .parent()
             .ok_or_else(|| DesignspaceError::MissingParent {
@@ -547,7 +547,7 @@ impl DesignspaceWriter {
                 .save_view(&view, Self::path_to_str(&ufo_path)?)
                 .map_err(|source| DesignspaceError::SaveUfo {
                     path: ufo_path.clone(),
-                    details: source.to_string(),
+                    source: Box::new(source),
                 })?;
         }
 
@@ -608,8 +608,30 @@ impl Default for DesignspaceWriter {
     }
 }
 
+impl DesignspaceWriter {
+    /// Writes any font view as a designspace at `path` with one UFO per
+    /// master file beside it.
+    ///
+    /// Every UFO is written, each atomically, before the designspace XML that
+    /// names them, so a failed save never leaves the XML pointing at
+    /// half-written data. Masters without a filename (created in Shift) are
+    /// written as `<stem>-<source name>.ufo`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`FormatBackendError`] when the view cannot be represented as
+    /// a designspace or the files cannot be written.
+    #[expect(
+        clippy::unused_self,
+        reason = "a writer method beside the FontWriter trait methods"
+    )]
+    pub fn save_view(&self, font: &impl FontView, path: &str) -> FormatBackendResult<()> {
+        Self::save_designspace(font, Path::new(path)).map_err(FormatBackendError::from)
+    }
+}
+
 impl FontWriter for DesignspaceWriter {
     fn save(&self, font: &Font, path: &str) -> FormatBackendResult<()> {
-        Self::save_designspace(font, Path::new(path)).map_err(FormatBackendError::from)
+        self.save_view(font, path)
     }
 }

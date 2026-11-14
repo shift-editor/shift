@@ -2433,6 +2433,7 @@ dependencies = [
  "norad 0.18.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "ordered-float",
  "plist",
+ "proptest",
  "quick-xml 0.42.0",
  "rayon",
  "serde",

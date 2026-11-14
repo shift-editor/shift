@@ -1,8 +1,15 @@
-//! Compiles Shift font views into distributable font binaries.
+//! Exports Shift font views as distributable binaries or editable sources.
 //!
-//! Compilation consumes an owned snapshot of the supplied [`FontView`]. The
-//! completed binary is staged beside its destination and replaces that path
-//! only after compilation succeeds, so a partial font is never exposed.
+//! Every export consumes a [`FontView`] and never changes the document it
+//! came from. TrueType compilation consumes an owned snapshot of the view;
+//! the completed binary is staged beside its destination and replaces that
+//! path only after compilation succeeds, so a partial font is never exposed.
+//! Source exports write each UFO atomically, and a designspace's UFOs before
+//! the XML that names them.
+//!
+//! Formats still to come: WOFF2 and WOFF (a TTF re-encoded, which needs an
+//! encoder crate that passes `cargo deny`), static instances (one binary per
+//! named instance), and a Glyphs writer (`glyphs-reader` only reads).
 
 use std::path::{Path, PathBuf};
 
@@ -13,20 +20,81 @@ use write_fonts::tables::name::Name;
 use write_fonts::types::NameId;
 
 use crate::atomic::write_file_atomic;
+use crate::errors::FormatBackendError;
+use crate::formats::designspace::DesignspaceWriter;
+use crate::formats::ufo::UfoWriter;
 use crate::shift2fontir::{PropagatedGlyphAnchors, ShiftIrSource, ShiftIrSourceError};
 use crate::traits::FontView;
 
-/// Identifies a binary font format supported by [`FontExporter`].
+/// Identifies a format [`FontExporter`] can write.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ExportFormat {
+    /// A variable (or static, without axes) TrueType binary.
     Ttf,
+    /// A designspace document with one UFO per master file beside it.
+    Designspace,
+    /// One UFO; only for fonts with a single master.
+    Ufo,
 }
 
 impl ExportFormat {
-    /// Returns the lowercase format token used by file extensions and commands.
+    /// Every format, in the order commands list them.
+    pub const ALL: [Self; 3] = [Self::Ttf, Self::Designspace, Self::Ufo];
+
+    /// Returns the lowercase format token used by commands and the bridge.
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Ttf => "ttf",
+            Self::Designspace => "designspace",
+            Self::Ufo => "ufo",
+        }
+    }
+
+    /// Returns the file extension, without the dot, that an output path of
+    /// this format must end in.
+    pub fn extension(self) -> &'static str {
+        self.as_str()
+    }
+
+    /// Returns the format's name as people say it, for messages.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Ttf => "TrueType",
+            Self::Designspace => "designspace",
+            Self::Ufo => "UFO",
+        }
+    }
+
+    /// Returns the format a path's extension names, ignoring case.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExportError::UnsupportedFormat`] when the path has no
+    /// extension or one no format uses.
+    pub fn from_path(path: &Path) -> Result<Self, ExportError> {
+        let extension = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .unwrap_or_default();
+        Self::try_from(extension)
+    }
+
+    /// The error for a source writer that could not write this format to `path`.
+    fn write_error(self, path: &Path, source: FormatBackendError) -> ExportError {
+        ExportError::WriteSources {
+            format: self,
+            path: path.to_path_buf(),
+            source,
+        }
+    }
+
+    fn ensure_output_path(self, path: &Path) -> Result<(), ExportError> {
+        match path.extension().and_then(|ext| ext.to_str()) {
+            Some(ext) if ext.eq_ignore_ascii_case(self.extension()) => Ok(()),
+            _ => Err(ExportError::OutputExtensionMismatch {
+                path: path.to_path_buf(),
+                format: self,
+            }),
         }
     }
 }
@@ -35,19 +103,19 @@ impl TryFrom<&str> for ExportFormat {
     type Error = ExportError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value.to_ascii_lowercase().as_str() {
-            "ttf" => Ok(Self::Ttf),
-            format => Err(ExportError::UnsupportedFormat {
-                format: format.to_string(),
-            }),
-        }
+        let token = value.to_ascii_lowercase();
+        Self::ALL
+            .into_iter()
+            .find(|format| format.as_str() == token)
+            .ok_or(ExportError::UnsupportedFormat { format: token })
     }
 }
 
 /// Describes one on-disk font export.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FontExportRequest {
-    /// Destination replaced after compilation succeeds.
+    /// Destination replaced after the export succeeds. Its extension must
+    /// match the format.
     pub path: PathBuf,
     pub format: ExportFormat,
 }
@@ -65,8 +133,16 @@ pub enum ExportError {
     #[error("unsupported export format: {format}")]
     UnsupportedFormat { format: String },
 
-    #[error("export path must end in .ttf for TrueType export: {path}")]
-    OutputExtensionMismatch { path: PathBuf },
+    #[error("export path must end in .{} for {} export: {path}", format.extension(), format.name())]
+    OutputExtensionMismatch { path: PathBuf, format: ExportFormat },
+
+    #[error("export path is not valid UTF-8: {path}")]
+    InvalidPathUtf8 { path: PathBuf },
+
+    #[error(
+        "a UFO holds one master, but this font has {master_count}; export a designspace instead"
+    )]
+    UfoNeedsOneMaster { master_count: usize },
 
     #[error("cross-axis mappings are not supported by TTF export yet ({mapping_count} mappings)")]
     UnsupportedCrossAxisMappings { mapping_count: usize },
@@ -83,9 +159,17 @@ pub enum ExportError {
         #[source]
         source: std::io::Error,
     },
+
+    #[error("failed to write {} sources to {path}: {source}", format.name())]
+    WriteSources {
+        format: ExportFormat,
+        path: PathBuf,
+        #[source]
+        source: FormatBackendError,
+    },
 }
 
-/// Compiles [`FontView`] snapshots without an intermediate authoring format.
+/// Exports [`FontView`] snapshots as binaries or editable sources.
 pub struct FontExporter;
 
 impl FontExporter {
@@ -93,25 +177,32 @@ impl FontExporter {
         Self
     }
 
-    /// Compiles the current font view and atomically replaces the destination.
+    /// Writes the font view in the requested format, replacing the
+    /// destination atomically.
     ///
-    /// The font is cloned into an owned compiler snapshot before fontc work
-    /// begins. Later changes to the originating font therefore cannot alter
-    /// the in-flight build. The requested path must have an extension that
-    /// matches the format.
+    /// For TrueType, the font is cloned into an owned compiler snapshot before
+    /// fontc work begins, so later changes to the originating font cannot alter
+    /// the in-flight build. A designspace export writes one UFO per master file
+    /// beside the designspace; a UFO export writes the single master. The
+    /// requested path must have the format's extension.
     ///
     /// # Errors
     ///
-    /// Returns [`ExportError`] when the source cannot be represented in the
-    /// supported compiler model, compilation fails, or the completed binary
-    /// cannot be staged and made durable at the destination.
+    /// Returns [`ExportError::OutputExtensionMismatch`] for a path without the
+    /// format's extension, [`ExportError::UfoNeedsOneMaster`] for a UFO export
+    /// of a font with several masters, [`ExportError::WriteSources`] when a
+    /// source format cannot represent the font or its files cannot be written,
+    /// and the compile and write errors of TrueType export.
     pub fn export(
         &self,
         font: &impl FontView,
         request: FontExportRequest,
     ) -> Result<FontExportResult, ExportError> {
+        request.format.ensure_output_path(&request.path)?;
         match request.format {
             ExportFormat::Ttf => self.export_ttf(font, &request.path)?,
+            ExportFormat::Designspace => Self::export_designspace(font, &request.path)?,
+            ExportFormat::Ufo => Self::export_ufo(font, &request.path)?,
         }
 
         Ok(FontExportResult {
@@ -139,13 +230,32 @@ impl FontExporter {
     }
 
     fn export_ttf(&self, font: &impl FontView, output_path: &Path) -> Result<(), ExportError> {
-        ensure_ttf_output_path(output_path)?;
-
         let bytes = self.compile_ttf(font)?;
         write_file_atomic(output_path, &bytes).map_err(|source| ExportError::WriteOutput {
             path: output_path.to_path_buf(),
             source,
         })
+    }
+
+    fn export_designspace(font: &impl FontView, path: &Path) -> Result<(), ExportError> {
+        DesignspaceWriter::new()
+            .save_view(font, utf8_path(path)?)
+            .map_err(|source| ExportFormat::Designspace.write_error(path, source))
+    }
+
+    fn export_ufo(font: &impl FontView, path: &Path) -> Result<(), ExportError> {
+        let master_count = font
+            .sources()
+            .iter()
+            .filter(|source| source.is_master())
+            .count();
+        if master_count > 1 {
+            return Err(ExportError::UfoNeedsOneMaster { master_count });
+        }
+
+        UfoWriter::new()
+            .save_view(font, utf8_path(path)?)
+            .map_err(|source| ExportFormat::Ufo.write_error(path, source))
     }
 
     /// Returns every glyph's anchors as export compiles them, with component
@@ -237,13 +347,10 @@ impl From<ShiftIrSourceError> for ExportError {
     }
 }
 
-fn ensure_ttf_output_path(path: &Path) -> Result<(), ExportError> {
-    match path.extension().and_then(|ext| ext.to_str()) {
-        Some(ext) if ext.eq_ignore_ascii_case("ttf") => Ok(()),
-        _ => Err(ExportError::OutputExtensionMismatch {
-            path: path.to_path_buf(),
-        }),
-    }
+fn utf8_path(path: &Path) -> Result<&str, ExportError> {
+    path.to_str().ok_or_else(|| ExportError::InvalidPathUtf8 {
+        path: path.to_path_buf(),
+    })
 }
 
 #[cfg(test)]
@@ -541,7 +648,7 @@ mod tests {
 
         assert!(matches!(
             error,
-            ExportError::OutputExtensionMismatch { path } if path == output_path
+            ExportError::OutputExtensionMismatch { path, format: ExportFormat::Ttf } if path == output_path
         ));
     }
 

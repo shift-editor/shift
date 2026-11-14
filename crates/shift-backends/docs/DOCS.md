@@ -77,7 +77,7 @@ src/
     designspace/      -- retained Designspace source, mappings, reader, and writer
     glyphs/           -- retained Glyphs source, conversion stream, fidelity report, and reader
   shift2fontir/       -- owned Shift FontView -> fontir/fontc adapter
-  export.rs           -- direct fontc TTF compilation and atomic output write
+  export.rs           -- export entry point: direct fontc TTF compilation, designspace and UFO source export
 ```
 
 ## Key Types
@@ -107,7 +107,7 @@ src/
 - `UfoBackend` -- unit struct implementing `FontBackend` by delegating to `UfoReader`/`UfoWriter`
 - `GlyphsReader` -- eagerly drains the canonical `.glyphs` / `.glyphspackage` stream for compatibility callers; read-only (no writer)
 - `GlyphsGlyphStream` -- owns one upstream-parsed Glyphs model and converts bounded, layer-aware Shift glyph batches in directory order
-- `FontExporter` -- compiles a `FontView` directly to TTF via `ShiftIrSource` and fontc
+- `FontExporter` -- writes a `FontView` as an `ExportFormat`: TTF compiled directly via `ShiftIrSource` and fontc, or a designspace or UFO through the source writers
 - `GlyphCategories::classes` -- shift-font's `GlyphClasses` for loaded glyphs, with glyph data's categories: the `GDEF` classes export compiles with (`gdef_classes`) and a `ShaperFontSource` reads (`Font::shaper_font_source`); every layer must be loaded
 
 ## How it works
@@ -130,7 +130,9 @@ src/
 
 **Designspace conformance references:** The [Designspace XML source definition](https://fonttools.readthedocs.io/en/latest/designspaceLib/xml.html#source-element) defines source locations in design-space coordinates. The reference [`SourceDescriptor.getFullDesignLocation`](https://fonttools.readthedocs.io/en/stable/designspaceLib/python.html#fontTools.designspaceLib.SourceDescriptor.getFullDesignLocation) completes omitted dimensions with mapped axis defaults, and [`DesignSpaceDocument.findDefault`](https://fonttools.readthedocs.io/en/stable/designspaceLib/python.html#fontTools.designspaceLib.DesignSpaceDocument.findDefault) selects the source at that complete mapped default. Instance import follows the corresponding complete-location precedence and the reference continuous/discrete axis mapping behavior. Keep importer behavior and fixtures aligned with those APIs when extending Designspace support.
 
-**Saving authoring sources:** `UfoWriter` builds a `norad::Font`, projects the default source's standard metrics, populates metadata/guidelines/lib, writes all kerning groups plus the pairs of the file's default source, and converts each glyph per layer. Designspace saves give each master UFO its own source's pairs. It writes the complete UFO to a sibling staging directory, syncs the tree, and atomically swaps it into place. `FontLoader` reads canonical SQLite `.shift` documents but deliberately rejects generic writes; document Save and Save As go through `shift-store` and recovery-aware workspace APIs.
+**Saving authoring sources:** `UfoWriter` builds a `norad::Font`, projects the default source's standard metrics, populates metadata/guidelines/lib, writes all kerning groups plus the pairs of the file's default source, writes the font's glyph order as `public.glyphOrder`, and converts each glyph per layer. Designspace saves give each master UFO its own source's pairs and list `<source>` elements in the font's source order, so a default master that is not first stays where it was. Readers order glyphs by the default UFO's `public.glyphOrder` (glyphs it leaves out follow by name) and drop the key from the font lib, because Shift models glyph order as the order of the font's glyphs; the designspace reader lists sources in document order. It writes the complete UFO to a sibling staging directory, syncs the tree, and atomically swaps it into place. `FontLoader` reads canonical SQLite `.shift` documents but deliberately rejects generic writes; document Save and Save As go through `shift-store` and recovery-aware workspace APIs.
+
+**Exporting sources:** `FontExporter::export` with `ExportFormat::Designspace` or `ExportFormat::Ufo` writes editable sources without touching the document. Every format checks the path's extension first (`ExportFormat::from_path` picks the format from it). A designspace export writes one UFO per master file beside the `.designspace`; masters created in Shift have no filename and are written as `<stem>-<source name>.ufo`, with `/` replaced. A UFO export holds one master and returns `ExportError::UfoNeedsOneMaster` for more. A glyph with no layer in any master has no file in any UFO and does not survive. `tests/source_export` builds fonts in code (custom uppercase axes, mapped axes, masters without filenames, components in every master, instances, per-master kerning and metrics), exports them, reads them back and compares everything the sources carry; its property tests generate small fonts the same way. Still to come: WOFF2 and WOFF (needs an encoder crate that passes `cargo deny`), static instance binaries, and a Glyphs writer.
 
 **Compiling TTF:** `FontExporter` snapshots the supplied `FontView` into owned Shift values, creates fontir work for metadata, metrics, glyphs, anchors, features, and kerning, and passes `ShiftIrSource` directly to `fontc::generate_font`. The returned bytes are atomically written to the requested `.ttf` path. Variable compilation converts Shift axes and independent mappings to fontdrasil coordinate converters, normalizes master source locations, and emits each authored glyph master. Missing non-default glyph layers are sparse masters; every glyph must have a default-source layer. Glyphs listed under `public.skipExportGlyphs` are built but not emitted (`emit_to_binary = false`), so fontc decomposes the components that use them, as its own Glyphs and UFO frontends do. Standard source metrics are emitted at every master location so fontc can build variable metric tables. Kerning is emitted at the default location and at every master with authored pairs; fontc fills a pair a master does not author with the UFO fallback lookup. Kerning groups drop members outside the compiled glyph set, and pairs naming a missing glyph or an unemitted group are skipped rather than failing the export, matching fontc's Glyphs and UFO frontends.
 
@@ -197,6 +199,7 @@ cargo test -p shift-backends loads_homenaje_glyphs_file
 cargo test -p shift-backends loads_glyphs_package
 cargo test -p shift-backends --test export
 cargo test -p shift-backends --test native_document_export
+cargo test -p shift-backends --test source_export
 
 # Manual release profile: open/directory, selected projection,
 # complete sequential/parallel projection, and peak RSS
