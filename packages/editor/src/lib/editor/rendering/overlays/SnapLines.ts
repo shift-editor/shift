@@ -11,7 +11,8 @@ export class SnapLines {
    * @remarks
    * Direction guides draw from pivot to target, and alignment guides from the
    * stationary point to the aligned position. Metric guides on the same line
-   * draw one span across every snapped position on it.
+   * draw one span across every snapped position on it. Grid guides draw only
+   * a cross on the snapped position.
    *
    * @param canvas - Canvas already transformed into the units the guides are measured in.
    * @param guides - Preview feedback for one frame.
@@ -97,6 +98,11 @@ export function snapFeedback(
     if (span.from.x !== span.to.x) addLine(span.from, span.to);
     for (const point of span.points) addMarker(point);
     addCrossings(span.from, span.to);
+  }
+
+  // The grid is drawn already; a grid snap only crosses the position that landed on it.
+  for (const guide of guides) {
+    if (guide.kind === "grid") addMarker(guide.point);
   }
 
   return { lines: [...lines.values()], markers: [...markers.values()] };

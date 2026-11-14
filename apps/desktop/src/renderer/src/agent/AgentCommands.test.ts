@@ -90,6 +90,8 @@ describe("agents run the view commands the window's menu runs, and nothing else"
       "tab.close",
       "view.zoomIn",
       "view.zoomOut",
+      "view.toggleGrid",
+      "view.toggleSnapToGrid",
       "ui.increaseSize",
       "ui.decreaseSize",
       "ui.resetSize",

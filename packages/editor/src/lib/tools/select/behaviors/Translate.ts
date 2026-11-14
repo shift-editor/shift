@@ -1,4 +1,4 @@
-import { Bounds, Mat, type Point2D } from "@shift/geo";
+import { Bounds, Mat, Vec2, type Point2D } from "@shift/geo";
 import { Point, type Contour, type Segment } from "@shift/glyph-state";
 import type { PointId, SelectableId } from "@shift/types";
 
@@ -6,13 +6,13 @@ import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "../../../editor/Editor";
 import type { GlyphLayer, GlyphLayerPositionTarget } from "../../../model/Glyph";
 import type { DragEvent, DragStartEvent, ToolEvent } from "../../core/GestureDetector";
-import { DirectionSnap, PositionReference } from "../../../model/positions";
+import { DirectionSnap, PositionReference, settleSnap } from "../../../model/positions";
 import { scenePoint, vectorBetween } from "../../../editor/spaces";
 import { objectIsKindOf, type ShiftObjectOf } from "../../../../types/object";
 import type { PointerTarget } from "../../../../types/target";
-import type { PositionCondition } from "../../../../types/positionEdit";
-import type { TransformEdit } from "../../../../types/transformTarget";
-import type { SelectBehavior, SelectState } from "../types";
+import type { PositionCondition, PositionFeedback } from "../../../../types/positionEdit";
+import type { TransformEdit, TransformTarget } from "../../../../types/transformTarget";
+import type { SelectBehavior, SelectState, TransformGridSnap } from "../types";
 import type { Select } from "../Select";
 import { TranslateInteraction } from "../TranslateInteraction";
 import { pointSlide } from "../PointSlide";
@@ -23,6 +23,7 @@ type TranslatingState = Extract<SelectState, { type: "translating" }>;
 export class Translate implements SelectBehavior {
   #drag: TranslateInteraction | null = null;
   #transformEdit: TransformEdit | null = null;
+  #transformGridSnap: TransformGridSnap | null = null;
   #done: (() => void) | null = null;
 
   onDragStart(
@@ -32,12 +33,17 @@ export class Translate implements SelectBehavior {
   ): boolean {
     if (state.type !== "idle" && state.type !== "ready") return false;
 
-    const transformEdit = this.#fromTransformDragStart(ctx.editor, ctx.tool, event);
+    const transform = this.#fromTransformDragStart(ctx.editor, ctx.tool, event);
+    const transformEdit = transform?.begin("move") ?? null;
     const drag = transformEdit ? null : this.#fromDragStart(ctx.editor, ctx.tool, event);
     if (!drag && !transformEdit) return false;
 
     this.#drag = drag;
     this.#transformEdit = transformEdit;
+    this.#transformGridSnap =
+      transform && transformEdit && !event.altKey
+        ? this.#configureTransformGridSnap(ctx.editor, ctx.tool, transform)
+        : null;
     this.#done = ctx.onCancel(() => {
       drag?.discard();
       transformEdit?.discard();
@@ -100,10 +106,11 @@ export class Translate implements SelectBehavior {
     );
     const delta = ctx.editor.toLocalVector(node, sceneDelta);
     if (this.#transformEdit) {
-      this.#transformEdit.preview(() => Mat.Translate(delta.x, delta.y));
+      const feedback = this.#transformFeedback(delta);
+      this.#transformEdit.preview(() => Mat.Translate(feedback.delta.x, feedback.delta.y));
       ctx.setState({
         ...next,
-        translate: { ...next.translate, totalDelta: delta, guides: [] },
+        translate: { ...next.translate, totalDelta: feedback.delta, guides: feedback.guides },
       });
       return;
     }
@@ -118,6 +125,35 @@ export class Translate implements SelectBehavior {
         guides: feedback.guides,
       },
     });
+  }
+
+  /** Snaps a moved component's placement to grid intersections while snapping to the grid is on. */
+  #configureTransformGridSnap(
+    editor: Editor,
+    select: Select,
+    transform: TransformTarget,
+  ): TransformGridSnap | null {
+    const origin = transform.gridOrigin;
+    if (!origin) return null;
+
+    const condition: PositionCondition = {
+      when: () => {
+        const state = select.getState();
+        return state.type === "translating" && !state.translate.accelKey;
+      },
+    };
+    const snap = editor.snapping.toGrid(editor.selectionNode(), condition);
+    return snap ? { origin, snap } : null;
+  }
+
+  /** The move a transform previews for a pointer delta, after grid snapping. */
+  #transformFeedback(delta: Point2D): PositionFeedback {
+    const gridSnap = this.#transformGridSnap;
+    const snap = gridSnap?.snap.snap(Vec2.add(gridSnap.origin, delta)) ?? null;
+    if (!snap) return { delta, guides: [] };
+
+    const settled = settleSnap(snap);
+    return { delta: Vec2.add(delta, settled.offset), guides: settled.guides };
   }
 
   #configureDirectionSnap(editor: Editor, select: Select, drag: TranslateInteraction): void {
@@ -253,6 +289,7 @@ export class Translate implements SelectBehavior {
   #cleanup(): void {
     this.#drag = null;
     this.#transformEdit = null;
+    this.#transformGridSnap = null;
     this.#done = null;
   }
 
@@ -261,7 +298,7 @@ export class Translate implements SelectBehavior {
     editor: Editor,
     select: Select,
     event: DragStartEvent,
-  ): TransformEdit | null {
+  ): TransformTarget | null {
     switch (event.target.kind) {
       case "component":
       case "text":
@@ -279,7 +316,7 @@ export class Translate implements SelectBehavior {
         return null;
     }
 
-    return editor.transformTarget()?.begin("move") ?? null;
+    return editor.transformTarget();
   }
 
   #fromDragStart(

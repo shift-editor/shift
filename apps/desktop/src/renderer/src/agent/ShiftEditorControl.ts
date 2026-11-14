@@ -123,15 +123,17 @@ export class ShiftEditorControl {
 
   /**
    * Zooms the canvas, then centres it on a point, as the zoom controls and the
-   * Hand tool do.
+   * Hand tool do, and changes the grid settings given, as the zoom menu's grid
+   * items do.
    *
    * @throws {CanvasHiddenError} when `center` is given while the canvas has no size.
    */
-  setView({ zoom, center }: ShiftReadInput<EditorSetViewInput>): void {
+  setView({ zoom, center, grid }: ShiftReadInput<EditorSetViewInput>): void {
     if (center && !this.#viewport.shown) throw new CanvasHiddenError();
 
     if (zoom !== undefined) this.#editor.setZoom(zoom);
     if (center) this.#viewport.centerOn(center);
+    if (grid) this.#editor.grid.update(grid);
   }
 
   /**

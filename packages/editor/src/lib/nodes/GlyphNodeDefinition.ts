@@ -1,5 +1,5 @@
 import type { NodeReference } from "../../types/records";
-import { Bounds, Curve, Mat, Rect } from "@shift/geo";
+import { Bounds, Curve, Mat, Rect, type Point2D } from "@shift/geo";
 import type {
   ComponentId,
   NodeId,
@@ -16,6 +16,7 @@ import {
   Anchors,
   ControlLines,
   DebugOverlays,
+  GridLines,
   Guides,
   Handles,
   Segments,
@@ -31,6 +32,7 @@ import { NodeDefinition } from "./NodeDefinition";
 import type { GlyphNode } from "../../types/node";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
+import { objectIsKindOf } from "../../types/object";
 import type { TransformAction, TransformTarget } from "../../types/transformTarget";
 import type { GlyphOutlineTarget, ResolvedGlyphOutlineTarget } from "../../types/glyphOutline";
 import { emptyExternalAxisLocation, externalAxisLocationFromLocation } from "../variation/location";
@@ -60,6 +62,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   readonly #segments = new Segments();
   readonly #handles = new Handles();
   readonly #guides = new Guides();
+  readonly #gridLines = new GridLines();
   readonly #outlineViews = keyedCache({
     name: "glyphNode.outlineViews",
     key: OutlineTargets.key,
@@ -271,6 +274,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
     return {
       bounds: selection.bounds,
+      gridOrigin: this.#componentOffset(ids),
       begin: (action) => {
         const edit = selection.layer.beginComponentTransformEdit(selection);
         return {
@@ -280,6 +284,17 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
         };
       },
     };
+  }
+
+  /** Where the first selected component is placed: the origin of its base glyph. */
+  #componentOffset(ids: readonly SelectableId[]): Point2D | null {
+    const component = this.editor
+      .objects(ids)
+      .find((object) => objectIsKindOf(object, "component"));
+    if (!component) return null;
+
+    const { e, f } = component.component.transform;
+    return { x: e, y: f };
   }
 
   #view(node: GlyphNode): GlyphRenderModel | null {
@@ -301,8 +316,19 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const advance = this.#displayAdvance(node, view);
     if (advance === null) return;
 
+    this.#drawGrid(ctx);
+
     const metrics = this.#trackedMetrics();
     this.#guides.draw(ctx.canvas, metrics, advance, this.editor.sessionMode === "preview");
+  }
+
+  /** The canvas grid, under the metric lines; the grid settings are subscribed for redraw. */
+  #drawGrid(ctx: RenderContext): void {
+    track(this.editor.grid.settingsCell);
+    const settings = this.editor.grid.settingsCell.peek();
+    if (!settings.visible) return;
+
+    this.#gridLines.draw(ctx.canvas, settings);
   }
 
   /** Advance the metric lines are drawn across, subscribed for redraw; null for an unknown glyph. */

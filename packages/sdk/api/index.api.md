@@ -299,6 +299,7 @@ export class Editor {
     // (undocumented)
     getToolState(scope: ToolStateScope, toolId: string, key: string): unknown;
     glyphForId(glyphId: GlyphId): Glyph | null;
+    readonly grid: Grid;
     handlesVisible(id: PointId | ContourId, contourId?: ContourId): boolean;
     hideHandles(id: PointId | ContourId): () => void;
     // (undocumented)
@@ -453,6 +454,18 @@ export interface EditorGlyph {
 }
 
 // @public
+export interface EditorGrid {
+    snap: boolean;
+    spacingX: number;
+    spacingY: number;
+    subdivisions: number;
+    visible: boolean;
+}
+
+// @public
+export type EditorGridChange = Partial<EditorGrid>;
+
+// @public
 export interface EditorInspection extends EditorView {
     // (undocumented)
     mode: ShiftSessionMode;
@@ -481,6 +494,8 @@ export interface EditorSetToolInput extends ShiftTarget {
 export interface EditorSetViewInput extends ShiftTarget {
     // (undocumented)
     center?: Point2D;
+    // (undocumented)
+    grid?: EditorGridChange;
     // (undocumented)
     zoom?: number;
 }
@@ -514,6 +529,7 @@ export interface EditorView {
     externalLocation: AxisCoordinate[];
     // (undocumented)
     glyph: EditorGlyph | null;
+    grid: EditorGrid;
     pages: EditorPage[];
     // (undocumented)
     route: string;

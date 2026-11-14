@@ -1,4 +1,4 @@
-import type { MatModel, Rect2D } from "@shift/geo";
+import type { MatModel, Point2D, Rect2D } from "@shift/geo";
 
 /** What the transform box is doing; targets pick their undo label and spacing rule from it. */
 export type TransformAction = "move" | "scale" | "rotate";
@@ -19,6 +19,12 @@ export interface TransformPart {
 export interface TransformTarget {
   /** Box enclosing the selection, in the selection node's units. */
   readonly bounds: Rect2D;
+
+  /**
+   * The point that lands on a grid intersection when the target moves, in the selection
+   * node's units, such as the first selected component's offset; null when moves never snap.
+   */
+  readonly gridOrigin: Point2D | null;
 
   /** Opens one preview cycle; finish it with `commit` or `discard`. */
   begin(action: TransformAction): TransformEdit;
