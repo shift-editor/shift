@@ -24,6 +24,7 @@ import {
 import { EditorDriver } from "./fixtures/EditorDriver";
 import { glyphClickTargets } from "./fixtures/editorInteractions";
 import { createAuthoredDocument } from "./fixtures/fontSource";
+import { exportedFiles, exportWithDialog } from "./fixtures/exportDialog";
 import { exportedGlyphNames, savedGlyphNames } from "./fixtures/savedDocument";
 import {
   clickFirstCatalogGlyph,
@@ -53,11 +54,6 @@ const cancelSaveTest = test.extend({
     await use("");
   },
 });
-const cancelExportTest = workspaceTest.extend({
-  exportTtfPath: async ({}, use) => {
-    await use("");
-  },
-});
 const failedOpenTest = test.extend({
   openFontPath: async ({ testRoot }, use) => {
     await use(path.join(testRoot, "missing.ufo"));
@@ -78,10 +74,10 @@ const existingSaveTest = test.extend({
   },
 });
 const failedExportTest = workspaceTest.extend({
-  exportTtfPath: async ({ testRoot }, use) => {
+  exportDirectory: async ({ testRoot }, use) => {
     const nonDirectory = path.join(testRoot, "not-a-directory");
     fs.writeFileSync(nonDirectory, "blocked");
-    await use(path.join(nonDirectory, "exported.ttf"));
+    await use(path.join(nonDirectory, "exported"));
   },
 });
 const convertiblePreviewTest = test.extend({
@@ -716,49 +712,56 @@ saveOnCloseTest(
   },
 );
 
-cancelExportTest("canceling Export preserves document state", async ({ electronApp, page }) => {
-  const workspace = new EditorDriver(page, electronApp);
-  const before = await workspace.documentState();
-  await expect.poll(() => windowTitle(page, electronApp)).toContain("font.shift -");
-  const titleBefore = await windowTitle(page, electronApp);
-
-  await runCommand(page, "file.exportTtf");
-
-  expect(await workspace.documentState()).toEqual(before);
-  expect(await windowTitle(page, electronApp)).toBe(titleBefore);
-});
-
-failedExportTest(
-  "failed Export preserves document state",
-  async ({ electronApp, page, exportTtfPath }) => {
+workspaceTest(
+  "closing Export without exporting preserves document state",
+  async ({ electronApp, page }) => {
     const workspace = new EditorDriver(page, electronApp);
     const before = await workspace.documentState();
     await expect.poll(() => windowTitle(page, electronApp)).toContain("font.shift -");
     const titleBefore = await windowTitle(page, electronApp);
 
-    await runCommand(page, "file.exportTtf");
+    await runCommand(page, "file.export");
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toBeHidden();
 
     expect(await workspace.documentState()).toEqual(before);
     expect(await windowTitle(page, electronApp)).toBe(titleBefore);
-    expect(fs.existsSync(exportTtfPath)).toBe(false);
+  },
+);
+
+failedExportTest(
+  "failed Export preserves document state",
+  async ({ electronApp, page, exportDirectory }) => {
+    const workspace = new EditorDriver(page, electronApp);
+    const before = await workspace.documentState();
+    await expect.poll(() => windowTitle(page, electronApp)).toContain("font.shift -");
+    const titleBefore = await windowTitle(page, electronApp);
+
+    expect(await exportWithDialog(page, "Variable")).toBe("failed");
+
+    expect(await workspace.documentState()).toEqual(before);
+    expect(await windowTitle(page, electronApp)).toBe(titleBefore);
+    expect(exportedFiles(exportDirectory, ".ttf")).toEqual([]);
   },
 );
 
 workspaceTest(
   "Export writes TTF without changing document state",
   { tag: "@os" },
-  async ({ electronApp, page, exportTtfPath }) => {
+  async ({ electronApp, page, exportDirectory }) => {
     const workspace = new EditorDriver(page, electronApp);
     const before = await workspace.documentState();
     await expect.poll(() => windowTitle(page, electronApp)).toContain("font.shift -");
     const titleBefore = await windowTitle(page, electronApp);
 
-    await runCommand(page, "file.exportTtf");
+    expect(await exportWithDialog(page, "Variable")).toBe("done");
 
-    await expect.poll(() => fs.existsSync(exportTtfPath)).toBe(true);
+    const [exported] = exportedFiles(exportDirectory, ".ttf");
+    expect(exported).toBeDefined();
     const workspaceGlyphs = await workspace.glyphNames();
     expect(workspaceGlyphs).toContain("A");
-    expect(exportedGlyphNames(exportTtfPath)).toEqual(expect.arrayContaining([...workspaceGlyphs]));
+    expect(exportedGlyphNames(exported!)).toEqual(expect.arrayContaining([...workspaceGlyphs]));
     await expect.poll(() => workspace.documentState()).toEqual(before);
     expect(await windowTitle(page, electronApp)).toBe(titleBefore);
   },

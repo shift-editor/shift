@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use shift_font::{CoreError, Font, NamedInstance};
 
-use crate::export::{ExportError, ExportFormat, FontExportResult, FontExporter};
+use crate::export::{ExportError, ExportFormat, FontExportResult, FontExporter, postscript_safe};
 
 /// One binary a static export writes.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -87,10 +87,7 @@ impl FontExporter {
         directory: &Path,
     ) -> Result<Vec<FontExportResult>, ExportError> {
         let files = Self::static_instance_files(font)?;
-        std::fs::create_dir_all(directory).map_err(|source| ExportError::CreateDirectory {
-            path: directory.to_path_buf(),
-            source,
-        })?;
+        crate::export::create_directory(directory)?;
 
         if !font.is_variable() {
             let file = files.first().ok_or(ExportError::NoNamedInstances)?;
@@ -116,6 +113,7 @@ impl FontExporter {
         let path: PathBuf = directory.join(&file.file_name);
         self.export_ttf(font, &path)?;
         Ok(FontExportResult {
+            files: vec![path.clone()],
             path,
             format: ExportFormat::Ttf,
         })
@@ -128,12 +126,4 @@ fn static_font(font: &Font, instance: &NamedInstance) -> Result<Font, ExportErro
             instance: instance.name().to_string(),
             source,
         })
-}
-
-/// `name` with only the printable ASCII PostScript names allow, without
-/// spaces or `[](){}<>/%`.
-fn postscript_safe(name: &str) -> String {
-    name.chars()
-        .filter(|character| character.is_ascii_graphic() && !"[](){}<>/%".contains(*character))
-        .collect()
 }

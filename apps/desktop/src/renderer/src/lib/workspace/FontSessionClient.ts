@@ -7,6 +7,7 @@ import type {
   FontStoreLocation,
   SlugAtlasOrigin,
   WorkspaceDocumentState,
+  WorkspaceExportRequest,
   WorkspaceExportResult,
   WorkspaceGlyphSnapshotRequest,
   WorkspaceSlugAtlas,
@@ -234,17 +235,19 @@ export class FontSessionClient {
   }
 
   /**
-   * Starts compilation after the export request enters the workspace FIFO.
+   * Starts an export, or its plan, after the request enters the workspace FIFO.
    *
-   * @param path - destination selected by the user; must end in `.ttf`.
+   * @param request - folder, format, and whether to write or only plan.
    * @returns a completion handle so the edit lane can resume after export starts.
-   * @throws {Error} when the workspace is disconnected or compilation fails.
+   * @throws {Error} when the workspace is disconnected or the export fails.
    */
-  async startExport(path: string): Promise<{ completion: Promise<WorkspaceExportResult> }> {
+  async startExport(
+    request: WorkspaceExportRequest,
+  ): Promise<{ completion: Promise<WorkspaceExportResult> }> {
     await this.connect();
 
     return {
-      completion: this.#workspace().export(path),
+      completion: this.#workspace().export(request),
     };
   }
 

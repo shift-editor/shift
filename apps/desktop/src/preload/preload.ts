@@ -72,6 +72,9 @@ const shiftHost: ShiftHost = {
     locate: invoke(ipcRenderer, "recents.locate"),
     onChanged: listen(ipcRenderer, "recents.changed"),
   },
+  exports: {
+    chooseFolder: invoke(ipcRenderer, "exports.chooseFolder"),
+  },
   clipboard: {
     writeText: invoke(ipcRenderer, "clipboard.writeText"),
     readText: invoke(ipcRenderer, "clipboard.readText"),

@@ -1,9 +1,5 @@
 import type { CommandId, RendererCommandId } from "../commands";
-import type {
-  FontSessionMode,
-  WorkspaceDocumentState,
-  WorkspaceExportResult,
-} from "../workspace/lanes";
+import type { FontSessionMode, WorkspaceDocumentState } from "../workspace/lanes";
 import type { UpdateNotice } from "../update/types";
 import type { RecentDocument } from "../recents";
 import type { AgentConnectionsState } from "../agent/connections";
@@ -17,10 +13,6 @@ export type DocumentCallMap = {
   "document.save": {
     request: { path: string | null };
     response: WorkspaceDocumentState;
-  };
-  "document.export": {
-    request: { path: string };
-    response: WorkspaceExportResult;
   };
   /** Closes the window's reader of the store, before the workspace deletes its files on close. */
   "document.releaseStore": { request: void; response: null };
@@ -59,6 +51,8 @@ export type RendererToMain = {
   /** Opens this build's config folder in the system file manager. */
   "config.reveal": () => void;
   "clipboard.readText": () => string;
+  /** Shows a native folder chooser for an export; resolves null when canceled. */
+  "exports.chooseFolder": (defaultPath: string | null) => string | null;
   "clipboard.writeText": (text: string) => void;
   /**
    * Asks main to transfer a document request lane to the renderer. The port

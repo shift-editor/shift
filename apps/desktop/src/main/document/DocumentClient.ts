@@ -1,5 +1,5 @@
 import type { MessagePortMain } from "electron";
-import type { WorkspaceDocumentState, WorkspaceExportResult } from "../../shared/workspace/lanes";
+import type { WorkspaceDocumentState } from "../../shared/workspace/lanes";
 import type { DocumentCallMap, DocumentEventMap } from "../../shared/ipc/contract";
 import { Channel, electronPortTransport } from "../../shared/workspace/channel";
 import { createShiftLogger, type ShiftLogger } from "../logging";
@@ -8,7 +8,6 @@ export interface Document {
   readonly connected: boolean;
   state(): Promise<WorkspaceDocumentState | null>;
   save(path: string | null): Promise<WorkspaceDocumentState>;
-  export(path: string): Promise<WorkspaceExportResult>;
 }
 
 /**
@@ -49,17 +48,6 @@ export class DocumentClient implements Document {
 
   save(path: string | null): Promise<WorkspaceDocumentState> {
     return this.#call("document.save", { path });
-  }
-
-  /**
-   * Exports the committed document snapshot selected by the renderer lane.
-   *
-   * @param path - destination selected by the native export dialog.
-   * @returns the compiled output identity after its atomic write completes.
-   * @throws {Error} when the renderer is disconnected or compilation fails.
-   */
-  export(path: string): Promise<WorkspaceExportResult> {
-    return this.#call("document.export", { path });
   }
 
   /**

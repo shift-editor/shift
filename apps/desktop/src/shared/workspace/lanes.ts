@@ -90,10 +90,30 @@ export type WorkspaceDocumentIdentity = {
   canonicalPath: string;
 };
 
-/** Identifies the compiled font written by a workspace export. */
+/**
+ * A format the workspace exports, as the bridge names it: a variable (or,
+ * without axes, static) TrueType binary, one static binary per named
+ * instance, a designspace with one UFO per master, or a single UFO.
+ */
+export type WorkspaceExportFormat = "ttf" | "static-ttf" | "designspace" | "ufo";
+
+/** Whether an export writes its files or only lists the files it would write. */
+export type WorkspaceExportMode = "write" | "plan";
+
+/** One export of the workspace into a folder, where Rust names the files. */
+export type WorkspaceExportRequest = {
+  directory: string;
+  format: WorkspaceExportFormat;
+  mode: WorkspaceExportMode;
+};
+
+/** What a workspace export wrote, or would write when planned. */
 export type WorkspaceExportResult = {
+  /** The export's main output: its binary, designspace or UFO, or for static binaries the folder. */
   path: string;
-  format: "ttf";
+  format: WorkspaceExportFormat;
+  /** Every file or UFO folder the export writes, the main output first. */
+  files: readonly string[];
 };
 
 /** What the workspace wrote for one persisted change set, and the document state it left. */
@@ -420,16 +440,17 @@ export interface WorkspaceSync {
   releaseRetiredStores(): Promise<null>;
 
   /**
-   * Captures the committed workspace and compiles it, without changing document state.
+   * Captures the committed workspace and exports it into a folder, or lists
+   * the files that export would write, without changing document state.
    *
    * @remarks
    * The capture waits behind earlier edits; compiling releases the queue.
    *
-   * @param path - Destination selected by the user; must end in `.ttf`.
-   * @returns The written font's path and format.
-   * @throws {Error} when compilation fails.
+   * @param request - Folder, format, and whether to write or only plan.
+   * @returns The files written, or that would be written.
+   * @throws {Error} when the export cannot be represented or its files cannot be written.
    */
-  export(path: string): Promise<WorkspaceExportResult>;
+  export(request: WorkspaceExportRequest): Promise<WorkspaceExportResult>;
 
   /**
    * Reads replace-grade glyph snapshots by stable glyph id.

@@ -211,6 +211,16 @@ export interface ShiftHost {
      */
     onChanged: (callback: (documents: RecentDocument[]) => void) => () => void;
   };
+  /** Native choices the Export dialog needs from the app shell. */
+  exports: {
+    /**
+     * Shows a folder chooser for an export's destination.
+     *
+     * @param defaultPath - folder the chooser opens at, or null for the system default.
+     * @returns the chosen folder, or null when canceled.
+     */
+    chooseFolder: (defaultPath: string | null) => Promise<string | null>;
+  };
   /** System clipboard access owned by the app shell. */
   clipboard: {
     writeText: (text: string) => Promise<void>;

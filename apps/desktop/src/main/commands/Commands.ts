@@ -224,11 +224,11 @@ const fileCommands: Command[] = [
     run: (ctx) => ctx.document.saveAs(),
   },
   {
-    id: "file.exportTtf",
+    id: "file.export",
     effect: "file",
-    label: "TrueType (.ttf)…",
-    enabled: (ctx) => ctx.document.hasWorkspace(),
-    run: (ctx) => ctx.document.exportTtf(),
+    label: "Export…",
+    enabled: (ctx) => ctx.document.hasWorkspace() && ctx.renderer.available(),
+    run: (ctx) => ctx.renderer.run("file.export"),
   },
 ];
 const editCommands: Command[] = [

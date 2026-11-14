@@ -61,10 +61,7 @@ export function fileMenuItems(
     commandMenuItem("file.save", runCommand, isCommandEnabled),
     commandMenuItem("file.saveAs", runCommand, isCommandEnabled),
     { type: "separator" },
-    {
-      label: "Export",
-      submenu: [commandMenuItem("file.exportTtf", runCommand, isCommandEnabled)],
-    },
+    commandMenuItem("file.export", runCommand, isCommandEnabled),
   ];
 }
 

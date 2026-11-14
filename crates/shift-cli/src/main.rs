@@ -361,6 +361,7 @@ mod tests {
             [FontExportResult {
                 path: output_path.clone(),
                 format: ExportFormat::Ttf,
+                files: vec![output_path.clone()],
             }]
         );
         let bytes = std::fs::read(output_path).unwrap();
