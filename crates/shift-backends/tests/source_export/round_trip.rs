@@ -14,11 +14,12 @@ use shift_font::{
     SourceId, StandardMetrics,
 };
 
+use super::Fixture;
 use super::summary::FontSummary;
 
 /// A dot-matrix family like Solenoid: a custom `RESO` and `BLED` axis beside a
 /// mapped width axis, three masters, glyphs built from a `dot` component.
-fn dot_matrix_font() -> Font {
+fn dot_matrix_font() -> Fixture<Font> {
     let mut font = Font::new();
     font.metadata_mut().family_name = Some("Solenoid".to_string());
 
@@ -26,9 +27,9 @@ fn dot_matrix_font() -> Font {
     let width = Axis::new("wdth".to_string(), "Width".to_string(), 75.0, 100.0, 125.0);
     let bleed = Axis::new("BLED".to_string(), "Bleed".to_string(), 0.0, 0.0, 100.0);
     let (reso, wdth, bled) = (resolution.id(), width.id(), bleed.id());
-    font.add_axis(resolution).unwrap();
-    font.add_axis(width).unwrap();
-    font.add_axis(bleed).unwrap();
+    font.add_axis(resolution)?;
+    font.add_axis(width)?;
+    font.add_axis(bleed)?;
     let width_point = |user: f64, design: f64| AxisMappingPoint {
         description: None,
         input: Location::from([(wdth, user)]),
@@ -43,12 +44,13 @@ fn dot_matrix_font() -> Font {
             width_point(100.0, 100.0),
             width_point(125.0, 150.0),
         ],
-    )])
-    .unwrap();
+    )])?;
 
-    let regular = font.default_source_id().unwrap();
+    let regular = font
+        .default_source_id()
+        .ok_or("a new font has a default source")?;
     font.source_mut(regular)
-        .unwrap()
+        .ok_or("the default source is in the font")?
         .set_location(DesignLocation::from([
             (reso, 8.0),
             (wdth, 100.0),
@@ -63,7 +65,7 @@ fn dot_matrix_font() -> Font {
         DesignLocation::from([(reso, 8.0), (wdth, 150.0), (bled, 100.0)]),
     ));
     let masters = [(regular, 1.0), (coarse, 2.0), (wide_bled, 1.5)];
-    add_glyphs_and_kerning(&mut font, &masters);
+    add_glyphs_and_kerning(&mut font, &masters)?;
 
     font.set_named_instances(vec![
         NamedInstance::new(
@@ -76,18 +78,17 @@ fn dot_matrix_font() -> Font {
             ExternalLocation::from([(reso, 4.0), (wdth, 75.0), (bled, 0.0)]),
             None,
         ),
-    ])
-    .unwrap();
+    ])?;
 
-    font
+    Ok(font)
 }
 
 /// Gives every master in `masters` (each with a scale for its outlines)
 /// standard metrics, the `dot`, `acutecomb`, `A` and `space` glyphs, and
 /// group and glyph kerning.
-fn add_glyphs_and_kerning(font: &mut Font, masters: &[(SourceId, f64)]) {
+fn add_glyphs_and_kerning(font: &mut Font, masters: &[(SourceId, f64)]) -> Fixture<()> {
     for (index, (source, _)) in masters.iter().enumerate() {
-        let lift = f64::from(u8::try_from(index).unwrap()) * 10.0;
+        let lift = f64::from(u8::try_from(index)?) * 10.0;
         font.set_standard_metrics(
             *source,
             StandardMetrics {
@@ -97,8 +98,7 @@ fn add_glyphs_and_kerning(font: &mut Font, masters: &[(SourceId, f64)]) {
                 x_height: Some(500.0 + lift),
                 baseline: Some(0.0),
             },
-        )
-        .unwrap();
+        )?;
     }
 
     let mut dot = Glyph::new("dot");
@@ -110,8 +110,8 @@ fn add_glyphs_and_kerning(font: &mut Font, masters: &[(SourceId, f64)]) {
         layer.add_anchor(Anchor::new(Some("top".to_string()), 50.0, 700.0));
         acute.set_layer(layer);
     }
-    let dot_id = font.insert_glyph(dot).unwrap();
-    let acute_id = font.insert_glyph(acute).unwrap();
+    let dot_id = font.insert_glyph(dot)?;
+    let acute_id = font.insert_glyph(acute)?;
 
     let mut letter = Glyph::with_unicode("A", 0x41);
     let mut space = Glyph::with_unicode("space", 0x20);
@@ -136,18 +136,16 @@ fn add_glyphs_and_kerning(font: &mut Font, masters: &[(SourceId, f64)]) {
             250.0 * scale,
         ));
     }
-    let letter_id = font.insert_glyph(letter).unwrap();
-    font.insert_glyph(space).unwrap();
+    let letter_id = font.insert_glyph(letter)?;
+    font.insert_glyph(space)?;
 
     let first = KerningGroupId::from_raw("first_A");
-    font.kerning_mut()
-        .set_group(
-            first,
-            KerningGroup::new(KerningPosition::First, "A", vec![letter_id]),
-        )
-        .unwrap();
+    font.kerning_mut().set_group(
+        first,
+        KerningGroup::new(KerningPosition::First, "A", vec![letter_id]),
+    )?;
     for (index, &(source, _)) in masters.iter().enumerate() {
-        let value = -20.0 - f64::from(u8::try_from(index).unwrap()) * 10.0;
+        let value = -20.0 - f64::from(u8::try_from(index)?) * 10.0;
         let kerning = font.kerning_mut();
         kerning.set_value(
             source,
@@ -160,6 +158,7 @@ fn add_glyphs_and_kerning(font: &mut Font, masters: &[(SourceId, f64)]) {
             value / 2.0,
         );
     }
+    Ok(())
 }
 
 /// A square dot with one curved corner, so curve points and smooth flags travel too.
@@ -190,23 +189,29 @@ fn export(font: &Font, path: &Path, format: ExportFormat) -> Result<(), ExportEr
         .map(|_| ())
 }
 
-fn read_designspace(path: &Path) -> Font {
-    DesignspaceReader::new()
-        .load(path.to_str().unwrap())
-        .unwrap_or_else(|error| panic!("re-reading {}: {error}", path.display()))
+fn read_designspace(path: &Path) -> Fixture<Font> {
+    let path = path.to_str().ok_or("temp paths are UTF-8")?;
+    Ok(DesignspaceReader::new().load(path)?)
+}
+
+/// Fails naming every field that did not survive, when any did not.
+fn assert_same(read: &Font, exported: &Font) -> Fixture<()> {
+    let differences = FontSummary::of(read).differences(&FontSummary::of(exported));
+    if differences.is_empty() {
+        return Ok(());
+    }
+    Err(differences.join("\n").into())
 }
 
 #[test]
-fn designspace_export_of_a_font_made_in_shift_reads_back_unchanged() {
-    let temp = tempfile::tempdir().unwrap();
+fn designspace_export_of_a_font_made_in_shift_reads_back_unchanged() -> Fixture<()> {
+    let temp = tempfile::tempdir()?;
     let path = temp.path().join("Solenoid.designspace");
-    let font = dot_matrix_font();
+    let font = dot_matrix_font()?;
 
-    export(&font, &path, ExportFormat::Designspace).unwrap();
+    export(&font, &path, ExportFormat::Designspace)?;
 
-    let differences =
-        FontSummary::of(&read_designspace(&path)).differences(&FontSummary::of(&font));
-    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    assert_same(&read_designspace(&path)?, &font)
 }
 
 #[test]
@@ -214,12 +219,17 @@ fn designspace_export_writes_one_ufo_per_master_named_after_it() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("Solenoid.designspace");
 
-    export(&dot_matrix_font(), &path, ExportFormat::Designspace).unwrap();
+    export(
+        &dot_matrix_font().unwrap(),
+        &path,
+        ExportFormat::Designspace,
+    )
+    .unwrap();
 
-    let mut written: Vec<_> = std::fs::read_dir(temp.path())
-        .unwrap()
-        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
-        .collect();
+    let mut written = Vec::new();
+    for entry in std::fs::read_dir(temp.path()).unwrap() {
+        written.push(entry.unwrap().file_name().to_string_lossy().into_owned());
+    }
     written.sort();
     assert_eq!(
         written,
@@ -233,34 +243,33 @@ fn designspace_export_writes_one_ufo_per_master_named_after_it() {
 }
 
 #[test]
-fn designspace_export_twice_reads_back_the_same_font() {
-    let temp = tempfile::tempdir().unwrap();
+fn designspace_export_twice_reads_back_the_same_font() -> Fixture<()> {
+    let temp = tempfile::tempdir()?;
     let path = temp.path().join("Solenoid.designspace");
-    let font = dot_matrix_font();
+    let font = dot_matrix_font()?;
 
-    export(&font, &path, ExportFormat::Designspace).unwrap();
-    let first = read_designspace(&path);
-    export(&first, &path, ExportFormat::Designspace).unwrap();
+    export(&font, &path, ExportFormat::Designspace)?;
+    let first = read_designspace(&path)?;
+    export(&first, &path, ExportFormat::Designspace)?;
 
-    let differences =
-        FontSummary::of(&read_designspace(&path)).differences(&FontSummary::of(&font));
-    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    assert_same(&read_designspace(&path)?, &font)
 }
 
 #[test]
-fn ufo_export_of_a_single_master_font_reads_back_unchanged() {
-    let temp = tempfile::tempdir().unwrap();
+fn ufo_export_of_a_single_master_font_reads_back_unchanged() -> Fixture<()> {
+    let temp = tempfile::tempdir()?;
     let path = temp.path().join("Solenoid.ufo");
     let mut font = Font::new();
     font.metadata_mut().family_name = Some("Solenoid".to_string());
-    let regular = font.default_source_id().unwrap();
-    add_glyphs_and_kerning(&mut font, &[(regular, 1.0)]);
+    let regular = font
+        .default_source_id()
+        .ok_or("a new font has a default source")?;
+    add_glyphs_and_kerning(&mut font, &[(regular, 1.0)])?;
 
-    export(&font, &path, ExportFormat::Ufo).unwrap();
+    export(&font, &path, ExportFormat::Ufo)?;
 
-    let read = UfoReader::new().load(path.to_str().unwrap()).unwrap();
-    let differences = FontSummary::of(&read).differences(&FontSummary::of(&font));
-    assert!(differences.is_empty(), "{}", differences.join("\n"));
+    let read = UfoReader::new().load(path.to_str().ok_or("temp paths are UTF-8")?)?;
+    assert_same(&read, &font)
 }
 
 #[test]
@@ -268,11 +277,11 @@ fn ufo_export_refuses_a_font_with_several_masters() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("Solenoid.ufo");
 
-    let error = export(&dot_matrix_font(), &path, ExportFormat::Ufo).unwrap_err();
+    let result = export(&dot_matrix_font().unwrap(), &path, ExportFormat::Ufo);
 
     assert!(matches!(
-        error,
-        ExportError::UfoNeedsOneMaster { master_count: 3 }
+        result,
+        Err(ExportError::UfoNeedsOneMaster { master_count: 3 })
     ));
     assert!(!path.exists());
 }
@@ -282,14 +291,18 @@ fn source_export_rejects_a_path_with_another_format_extension() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("Solenoid.ufo");
 
-    let error = export(&dot_matrix_font(), &path, ExportFormat::Designspace).unwrap_err();
+    let result = export(
+        &dot_matrix_font().unwrap(),
+        &path,
+        ExportFormat::Designspace,
+    );
 
     assert!(matches!(
-        error,
-        ExportError::OutputExtensionMismatch {
+        result,
+        Err(ExportError::OutputExtensionMismatch {
             format: ExportFormat::Designspace,
             ..
-        }
+        })
     ));
     assert!(!path.exists());
 }

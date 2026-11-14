@@ -1,11 +1,8 @@
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    clippy::indexing_slicing,
-    reason = "font builders and export helpers fail loudly on bad input"
-)]
-
 mod source_export {
+    /// A fixture step that fails with a reason instead of panicking, so a test
+    /// decides how its failure reads.
+    type Fixture<T> = Result<T, Box<dyn std::error::Error>>;
+
     mod properties;
     mod round_trip;
     mod summary;

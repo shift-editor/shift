@@ -3,7 +3,6 @@
 //! part the sources carry unchanged.
 
 use std::collections::BTreeSet;
-use std::path::Path;
 
 use proptest::prelude::*;
 use shift_backends::formats::designspace::DesignspaceReader;
@@ -15,6 +14,7 @@ use shift_font::{
     NamedInstance, PointType, Source, SourceId, Transform,
 };
 
+use super::Fixture;
 use super::summary::FontSummary;
 
 const AXES: [(&str, &str); 6] = [
@@ -405,7 +405,7 @@ fn layer_from(spec: &LayerSpec, source: SourceId, bases: &[(GlyphId, &str)]) -> 
 
 /// Builds the font `spec` describes, with its masters in generated order and
 /// the default master at `default_index` among them.
-fn font_from(spec: &FontSpec) -> Font {
+fn font_from(spec: &FontSpec) -> Fixture<Font> {
     let mut font = Font::new();
     font.metadata_mut().family_name = Some("Generated".to_string());
     if let Some(features) = spec.features {
@@ -413,23 +413,19 @@ fn font_from(spec: &FontSpec) -> Font {
             .set_fea_source(Some(features.to_string()));
     }
 
-    let axis_ids: Vec<_> = spec
-        .axes
-        .iter()
-        .map(|axis| {
-            let mut shift_axis = Axis::new(
-                axis.tag.to_string(),
-                axis.name.to_string(),
-                f64::from(axis.minimum),
-                f64::from(axis.default),
-                f64::from(axis.maximum),
-            );
-            shift_axis.set_hidden(axis.hidden);
-            let id = shift_axis.id();
-            font.add_axis(shift_axis).unwrap();
-            id
-        })
-        .collect();
+    let mut axis_ids = Vec::new();
+    for axis in &spec.axes {
+        let mut shift_axis = Axis::new(
+            axis.tag.to_string(),
+            axis.name.to_string(),
+            f64::from(axis.minimum),
+            f64::from(axis.default),
+            f64::from(axis.maximum),
+        );
+        shift_axis.set_hidden(axis.hidden);
+        axis_ids.push(shift_axis.id());
+        font.add_axis(shift_axis)?;
+    }
     let mappings = spec
         .axes
         .iter()
@@ -448,7 +444,7 @@ fn font_from(spec: &FontSpec) -> Font {
             AxisMapping::new(axis.name.to_string(), vec![*id], vec![*id], points)
         })
         .collect();
-    font.set_axis_mappings(mappings).unwrap();
+    font.set_axis_mappings(mappings)?;
 
     let design_at = |steps: &[i32]| -> DesignLocation {
         spec.axes
@@ -481,11 +477,14 @@ fn font_from(spec: &FontSpec) -> Font {
         sources.push(source);
     }
 
-    let default_id = font.default_source_id().unwrap();
-    font.source_mut(default_id)
-        .unwrap()
-        .set_location(default_location);
-    let default_source = font.source(default_id).unwrap().clone();
+    let default_id = font
+        .default_source_id()
+        .ok_or("a new font has a default source")?;
+    let mut default_source = font
+        .source(default_id)
+        .ok_or("the default source is in the font")?
+        .clone();
+    default_source.set_location(default_location);
     let master_slots: Vec<SourceId> = std::iter::once(default_id)
         .chain(sources.iter().map(Source::id))
         .collect();
@@ -505,11 +504,13 @@ fn font_from(spec: &FontSpec) -> Font {
         };
         // A glyph has a layer in at least one master; a glyph with none has
         // no file in any UFO.
-        let has_layer = glyph_spec.layers[..master_slots.len()]
+        let has_layer = glyph_spec
+            .layers
             .iter()
+            .take(master_slots.len())
             .any(Option::is_some);
         for (slot, source) in master_slots.iter().enumerate() {
-            let layer = match &glyph_spec.layers[slot] {
+            let layer = match glyph_spec.layers.get(slot).and_then(Option::as_ref) {
                 Some(layer) => layer_from(layer, *source, &glyphs),
                 None if slot == 0 && !has_layer => {
                     GlyphLayer::with_width(LayerId::new(), *source, 500.0)
@@ -518,7 +519,7 @@ fn font_from(spec: &FontSpec) -> Font {
             };
             glyph.set_layer(layer);
         }
-        let id = font.insert_glyph(glyph).unwrap();
+        let id = font.insert_glyph(glyph)?;
         glyphs.push((id, glyph_spec.name));
     }
 
@@ -557,21 +558,33 @@ fn font_from(spec: &FontSpec) -> Font {
             postscript,
         ));
     }
-    font.set_named_instances(instances).unwrap();
+    font.set_named_instances(instances)?;
 
-    font
+    Ok(font)
 }
 
-fn export(font: &Font, path: &Path, format: ExportFormat) {
-    FontExporter::new()
-        .export(
-            font,
-            FontExportRequest {
-                path: path.to_path_buf(),
-                format,
-            },
-        )
-        .unwrap_or_else(|error| panic!("exporting {}: {error}", path.display()));
+/// Exports `font` as `format` to a file named `file` and reads it back.
+fn round_trip(font: &Font, file: &str, format: ExportFormat) -> Fixture<Font> {
+    let temp = tempfile::tempdir()?;
+    let path = temp.path().join(file);
+    FontExporter::new().export(
+        font,
+        FontExportRequest {
+            path: path.clone(),
+            format,
+        },
+    )?;
+    let path = path.to_str().ok_or("temp paths are UTF-8")?;
+    let read = match format {
+        ExportFormat::Ufo => UfoReader::new().load(path)?,
+        _ => DesignspaceReader::new().load(path)?,
+    };
+    Ok(read)
+}
+
+/// A fixture failure as a failed proptest case.
+fn fail(error: &dyn std::error::Error) -> TestCaseError {
+    TestCaseError::fail(error.to_string())
 }
 
 proptest! {
@@ -579,12 +592,10 @@ proptest! {
 
     #[test]
     fn designspace_export_reads_back_unchanged(spec in font_spec()) {
-        let font = font_from(&spec);
-        let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("Generated.designspace");
+        let font = font_from(&spec).map_err(|error| fail(&*error))?;
 
-        export(&font, &path, ExportFormat::Designspace);
-        let read = DesignspaceReader::new().load(path.to_str().unwrap()).unwrap();
+        let read = round_trip(&font, "Generated.designspace", ExportFormat::Designspace)
+            .map_err(|error| fail(&*error))?;
 
         let differences = FontSummary::of(&read).differences(&FontSummary::of(&font));
         prop_assert!(differences.is_empty(), "{}", differences.join("\n"));
@@ -598,12 +609,9 @@ proptest! {
             instances: Vec::new(),
             ..spec
         };
-        let font = font_from(&spec);
-        let temp = tempfile::tempdir().unwrap();
-        let path = temp.path().join("Generated.ufo");
+        let font = font_from(&spec).map_err(|error| fail(&*error))?;
 
-        export(&font, &path, ExportFormat::Ufo);
-        let read = UfoReader::new().load(path.to_str().unwrap()).unwrap();
+        let read = round_trip(&font, "Generated.ufo", ExportFormat::Ufo).map_err(|error| fail(&*error))?;
 
         let differences = FontSummary::of(&read).differences(&FontSummary::of(&font));
         prop_assert!(differences.is_empty(), "{}", differences.join("\n"));

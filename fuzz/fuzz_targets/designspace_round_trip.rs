@@ -2,18 +2,11 @@
 //! document whose sources may name `Light.ufo` and `Bold.ufo`.
 
 #![no_main]
-#![expect(clippy::expect_used, reason = "a fuzz target fails by panicking")]
 
 use libfuzzer_sys::fuzz_target;
-use shift_backends::ExportFormat;
-use shift_fuzz::{assert_export_is_a_fixed_point, write_master_ufo};
+use shift_fuzz::designspace_fixed_point;
 
-fuzz_target!(|document: &[u8]| {
-    let directory = tempfile::tempdir().expect("temporary directory");
-    write_master_ufo(&directory.path().join("Light.ufo"), "Light");
-    write_master_ufo(&directory.path().join("Bold.ufo"), "Bold");
-    let path = directory.path().join("Fuzz.designspace");
-    std::fs::write(&path, document).expect("fuzz input writes");
-
-    assert_export_is_a_fixed_point(&path, ExportFormat::Designspace);
+fuzz_target!(|input: &[u8]| {
+    let outcome = designspace_fixed_point(input);
+    assert!(!outcome.is_broken(), "{outcome:?}");
 });
