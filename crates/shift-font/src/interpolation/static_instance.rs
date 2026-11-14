@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 
 use crate::{
     Axis, CoreError, CoreResult, DesignLocation, Font, Glyph, GlyphId, GlyphLayer, Kerning,
-    KerningPair, KerningSide, LayerId, NamedInstance, Source, SourceId,
+    KerningPair, LayerId, NamedInstance, Source, SourceId,
 };
 
 impl Font {
@@ -147,8 +147,8 @@ impl Font {
         // A glyph pair an exception covers can compile to a value its pairs
         // here do not reproduce, when masters disagree about which pair
         // applies to it; give such glyph pairs their own value.
-        for pair in pairs.iter().filter(|pair| has_glyph_side(pair)) {
-            for (first, second) in covered_glyph_pairs(source, pair) {
+        for pair in pairs.iter().filter(|pair| pair.has_glyph_side()) {
+            for (first, second) in source.covered_glyph_pairs(pair) {
                 let compiled = blend.value(source, first, second);
                 let resolved = kerning
                     .resolve(default_id, first, second)
@@ -162,34 +162,13 @@ impl Font {
     }
 }
 
-fn has_glyph_side(pair: &KerningPair) -> bool {
-    matches!(pair.first, KerningSide::Glyph(_)) || matches!(pair.second, KerningSide::Glyph(_))
-}
-
-/// Every glyph pair `pair` names: its glyphs, or its groups' members.
-fn covered_glyph_pairs(kerning: &Kerning, pair: &KerningPair) -> Vec<(GlyphId, GlyphId)> {
-    let members = |side: &KerningSide| -> Vec<GlyphId> {
-        match side {
-            KerningSide::Glyph(glyph_id) => vec![*glyph_id],
-            KerningSide::Group(group_id) => kerning
-                .group(*group_id)
-                .map(|group| group.members.clone())
-                .unwrap_or_default(),
-        }
-    };
-    let seconds = members(&pair.second);
-    members(&pair.first)
-        .into_iter()
-        .flat_map(|first| seconds.iter().map(move |second| (first, *second)))
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_support::{default_kerning_between, sample_variable_font};
     use crate::{
-        AxisId, ExternalLocation, KerningGroup, KerningGroupId, KerningPosition, PointType,
+        AxisId, ExternalLocation, KerningGroup, KerningGroupId, KerningPosition, KerningSide,
+        PointType,
     };
 
     fn outline(font: &Font, glyph: &str) -> Vec<(f64, f64)> {

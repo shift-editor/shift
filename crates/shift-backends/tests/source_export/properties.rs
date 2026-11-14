@@ -138,24 +138,24 @@ struct FontSpec {
     features: Option<&'static str>,
 }
 
-fn point() -> impl Strategy<Value = (i16, i16)> {
+fn coordinates() -> impl Strategy<Value = (i16, i16)> {
     (-200i16..1200, -300i16..1000)
 }
 
 fn segment() -> impl Strategy<Value = (Segment, bool)> {
     let segment = prop_oneof![
-        point().prop_map(|(x, y)| Segment::Line(x, y)),
-        [point(), point(), point()].prop_map(Segment::Cubic),
+        coordinates().prop_map(|(x, y)| Segment::Line(x, y)),
+        [coordinates(), coordinates(), coordinates()].prop_map(Segment::Cubic),
     ];
     (segment, any::<bool>())
 }
 
-fn contour() -> impl Strategy<Value = ContourSpec> {
+fn contour_spec() -> impl Strategy<Value = ContourSpec> {
     (
-        point(),
+        coordinates(),
         prop::collection::vec(segment(), 1..5),
         any::<bool>(),
-        prop::option::of([point(), point()]),
+        prop::option::of([coordinates(), coordinates()]),
     )
         .prop_map(|(start, segments, closed, closing_curve)| ContourSpec {
             start,
@@ -165,7 +165,7 @@ fn contour() -> impl Strategy<Value = ContourSpec> {
         })
 }
 
-fn component() -> impl Strategy<Value = ComponentSpec> {
+fn component_spec() -> impl Strategy<Value = ComponentSpec> {
     let scale = prop::sample::select(vec![
         (1.0, 1.0),
         (0.5, 2.0),
@@ -173,27 +173,26 @@ fn component() -> impl Strategy<Value = ComponentSpec> {
         (1.0, -1.0),
         (-1.0, -1.0),
     ]);
-    (any::<prop::sample::Index>(), scale, point()).prop_map(|(base, scale, offset)| ComponentSpec {
-        base,
-        scale,
-        offset,
+    (any::<prop::sample::Index>(), scale, coordinates()).prop_map(|(base, scale, offset)| {
+        ComponentSpec {
+            base,
+            scale,
+            offset,
+        }
     })
 }
 
-fn anchor() -> impl Strategy<Value = AnchorSpec> {
-    (prop::sample::select(ANCHOR_NAMES.to_vec()), point()).prop_map(|(name, (x, y))| AnchorSpec {
-        name,
-        x,
-        y,
-    })
+fn anchor_spec() -> impl Strategy<Value = AnchorSpec> {
+    (prop::sample::select(ANCHOR_NAMES.to_vec()), coordinates())
+        .prop_map(|(name, (x, y))| AnchorSpec { name, x, y })
 }
 
-fn layer() -> impl Strategy<Value = LayerSpec> {
+fn layer_spec() -> impl Strategy<Value = LayerSpec> {
     (
         0u16..1200,
-        prop::collection::vec(contour(), 0..3),
-        prop::collection::vec(component(), 0..3),
-        prop::collection::vec(anchor(), 0..3),
+        prop::collection::vec(contour_spec(), 0..3),
+        prop::collection::vec(component_spec(), 0..3),
+        prop::collection::vec(anchor_spec(), 0..3),
     )
         .prop_map(|(width, contours, components, anchors)| LayerSpec {
             width,
@@ -208,7 +207,7 @@ fn glyphs() -> impl Strategy<Value = Vec<GlyphSpec>> {
         let count = names.len();
         let glyph = (
             prop::option::of(0x21u32..0x3000),
-            prop::collection::vec(prop::option::weighted(0.8, layer()), 4),
+            prop::collection::vec(prop::option::weighted(0.8, layer_spec()), 4),
         );
         (Just(names), prop::collection::vec(glyph, count)).prop_map(|(names, glyphs)| {
             names
@@ -224,7 +223,7 @@ fn glyphs() -> impl Strategy<Value = Vec<GlyphSpec>> {
     })
 }
 
-fn axes() -> impl Strategy<Value = Vec<AxisSpec>> {
+fn axis_specs() -> impl Strategy<Value = Vec<AxisSpec>> {
     prop::sample::subsequence(AXES.to_vec(), 0..=3).prop_flat_map(|picked| {
         let count = picked.len();
         let ranges = prop::collection::vec(
@@ -252,7 +251,7 @@ fn axes() -> impl Strategy<Value = Vec<AxisSpec>> {
 }
 
 /// Up to three masters besides the default; none without axes.
-fn masters(axis_count: usize) -> impl Strategy<Value = Vec<MasterSpec>> {
+fn master_specs(axis_count: usize) -> impl Strategy<Value = Vec<MasterSpec>> {
     let count = if axis_count == 0 { 0..1 } else { 0..4 };
     prop::sample::subsequence(MASTER_NAMES.to_vec(), count).prop_flat_map(move |names| {
         let count = names.len();
@@ -323,11 +322,11 @@ fn kerning() -> impl Strategy<Value = Vec<KerningSpec>> {
 }
 
 fn font_spec() -> impl Strategy<Value = FontSpec> {
-    axes().prop_flat_map(|axes| {
+    axis_specs().prop_flat_map(|axes| {
         let axis_count = axes.len();
         (
             Just(axes),
-            masters(axis_count),
+            master_specs(axis_count),
             any::<prop::sample::Index>(),
             glyphs(),
             kerning(),
@@ -564,7 +563,7 @@ fn font_from(spec: &FontSpec) -> Fixture<Font> {
 }
 
 /// Exports `font` as `format` to a file named `file` and reads it back.
-fn round_trip(font: &Font, file: &str, format: ExportFormat) -> Fixture<Font> {
+fn export_and_read_back(font: &Font, file: &str, format: ExportFormat) -> Fixture<Font> {
     let temp = tempfile::tempdir()?;
     let path = temp.path().join(file);
     FontExporter::new().export(
@@ -594,7 +593,7 @@ proptest! {
     fn designspace_export_reads_back_unchanged(spec in font_spec()) {
         let font = font_from(&spec).map_err(|error| fail(&*error))?;
 
-        let read = round_trip(&font, "Generated.designspace", ExportFormat::Designspace)
+        let read = export_and_read_back(&font, "Generated.designspace", ExportFormat::Designspace)
             .map_err(|error| fail(&*error))?;
 
         let differences = FontSummary::of(&read).differences(&FontSummary::of(&font));
@@ -611,7 +610,7 @@ proptest! {
         };
         let font = font_from(&spec).map_err(|error| fail(&*error))?;
 
-        let read = round_trip(&font, "Generated.ufo", ExportFormat::Ufo).map_err(|error| fail(&*error))?;
+        let read = export_and_read_back(&font, "Generated.ufo", ExportFormat::Ufo).map_err(|error| fail(&*error))?;
 
         let differences = FontSummary::of(&read).differences(&FontSummary::of(&font));
         prop_assert!(differences.is_empty(), "{}", differences.join("\n"));
