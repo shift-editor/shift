@@ -1,12 +1,12 @@
 use crate::SourceIds;
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::BTreeMap,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
 use norad::{DataRequest, Font as NoradFont};
-use shift_font::{Font, Source, SourceId};
+use shift_font::{Font, LibData, Source, SourceId};
 
 use crate::{
     ImportReport,
@@ -15,7 +15,7 @@ use crate::{
     kerning_import::KerningImport,
 };
 
-use super::{UfoKerning, UfoReader};
+use super::{UfoKerning, UfoReader, take_glyph_order};
 
 #[derive(Clone)]
 pub(crate) struct UfoLayerDirectory {
@@ -49,7 +49,7 @@ pub(crate) fn stream_retained(
     header.clear_sources();
     let default_source_id = header.add_source(default_source.identified_as(ids.source_id("0")));
     let layers = load_layer_directories(retained, &mut header, default_source_id, &ids)?;
-    let stream = GlifGlyphStream::from_layers(&ids, &layers);
+    let stream = GlifGlyphStream::from_layers(&ids, &layers, header.lib_mut());
 
     let mut report = ImportReport::default();
     let mut import = KerningImport::new(stream.glyph_ids(), &ids);
@@ -62,15 +62,11 @@ pub(crate) fn stream_retained(
 }
 
 impl GlifGlyphStream {
-    /// The glyphs of every layer directory, in the order the layers first name them.
-    fn from_layers(source_ids: &SourceIds, layers: &[LayerDirectory]) -> Self {
-        let mut seen = HashSet::new();
-        let names = layers
-            .iter()
-            .flat_map(|layer| layer.glyphs.keys())
-            .filter(|name| seen.insert(*name))
-            .cloned()
-            .collect();
+    /// The glyphs of every layer directory, in the font lib's glyph order
+    /// (see [`take_glyph_order`]).
+    fn from_layers(source_ids: &SourceIds, layers: &[LayerDirectory], lib: &mut LibData) -> Self {
+        let names = layers.iter().flat_map(|layer| layer.glyphs.keys().cloned());
+        let names = take_glyph_order(lib, names);
         let directories = layers
             .iter()
             .map(|layer| GlifDirectory {

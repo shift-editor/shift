@@ -6,7 +6,7 @@ use shift_font::test_support::fixtures;
 use std::path::{Path, PathBuf};
 
 use shift_backends::font_loader::FontLoader;
-use shift_font::{Anchor, Font, Glyph, GlyphLayer, LibValue, MetricKind};
+use shift_font::{Anchor, Font, Glyph, GlyphLayer, LayerId, LibValue, MetricKind};
 
 fn load_font(path: &Path) -> Font {
     assert!(path.exists(), "missing font fixture at {}", path.display());
@@ -592,4 +592,47 @@ fn ttf_import_saves_spec_valid_ufo_curves() {
         quadratic_points > 0,
         "TrueType quadratic segments should remain qcurves after UFO export"
     );
+}
+
+fn glyph_names(font: &Font) -> Vec<String> {
+    font.glyphs()
+        .map(|glyph| glyph.name().to_string())
+        .collect()
+}
+
+#[test]
+fn glyph_order_survives_save_and_reopen() {
+    let mut font = Font::new();
+    let source = font.default_source_id().unwrap();
+    for name in ["space", "b", "a"] {
+        let mut glyph = Glyph::new(name);
+        glyph.set_layer(GlyphLayer::with_width(LayerId::new(), source, 500.0));
+        font.insert_glyph(glyph).unwrap();
+    }
+
+    let reloaded = round_trip(&font);
+
+    assert_eq!(glyph_names(&reloaded), ["space", "b", "a"]);
+    assert!(reloaded.lib().get("public.glyphOrder").is_none());
+}
+
+#[test]
+fn opening_a_ufo_follows_its_glyph_order_then_names() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().join("Ordered.ufo");
+    let mut ufo = norad::Font::new();
+    for name in ["a", "b", "c", "space"] {
+        ufo.layers
+            .default_layer_mut()
+            .insert_glyph(norad::Glyph::new(name));
+    }
+    ufo.lib.insert(
+        "public.glyphOrder".to_string(),
+        plist::Value::Array(vec!["space".into(), "c".into(), "missing".into()]),
+    );
+    ufo.save(&path).unwrap();
+
+    let font = load_font(&path);
+
+    assert_eq!(glyph_names(&font), ["space", "c", "a", "b"]);
 }

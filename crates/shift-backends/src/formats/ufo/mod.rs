@@ -1,4 +1,5 @@
 pub(crate) mod glif;
+mod glyph_order;
 mod import;
 mod kerning;
 mod metrics_keys;
@@ -6,6 +7,7 @@ mod reader;
 mod source;
 mod writer;
 
+pub(crate) use glyph_order::take_glyph_order;
 pub(crate) use import::{
     UfoLayerDirectory, load_header, read_glyph_paths, read_ufo_layer_directories, stream_font,
     stream_retained,
