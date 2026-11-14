@@ -127,6 +127,14 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
       editor.zoomOut();
       return true;
 
+    case "view.toggleGrid":
+      editor.grid.toggleVisible();
+      return true;
+
+    case "view.toggleSnapToGrid":
+      editor.grid.toggleSnap();
+      return true;
+
     case "glyph.makeFirstPoint": {
       if (!canMakeFirstPoint(editor)) return false;
 
@@ -201,6 +209,8 @@ async function runFocusedTextEditCommand(id: EditorCommandId): Promise<boolean |
     case "edit.deselect":
     case "view.zoomIn":
     case "view.zoomOut":
+    case "view.toggleGrid":
+    case "view.toggleSnapToGrid":
     case "glyph.addAnchor":
     case "glyph.decomposeComponents":
     case "glyph.reverseSelectedContour":

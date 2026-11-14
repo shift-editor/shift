@@ -1,3 +1,4 @@
+export { GridLines } from "./GridLines";
 export { Guides } from "./Guides";
 export { Segments } from "./Segments";
 export { DebugOverlays } from "./DebugOverlays";

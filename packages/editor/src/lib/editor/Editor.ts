@@ -93,6 +93,7 @@ import {
 import { cursorToCSS } from "../styles/cursor";
 import { Hover } from "./Hover";
 import { Snapping } from "./Snapping";
+import { Grid } from "./Grid";
 import { Renderer } from "./rendering/Renderer";
 import { Scene } from "./Scene";
 import { SessionScene } from "./SessionScene";
@@ -199,6 +200,8 @@ export class Editor {
   readonly editing: Editing;
   readonly history: EditorHistory;
   readonly hover: Hover;
+  /** The canvas grid's spacing and whether it draws and snaps; session state, not font data. */
+  readonly grid: Grid;
   /** Builds the snap targets tools use while moving or placing glyph points. */
   readonly snapping: Snapping;
   readonly font: Font;
@@ -348,6 +351,7 @@ export class Editor {
     // A document's scene has its first page already.
     if (this.#sessionScene) this.history.withoutRecording(() => this.pages.ensure());
     this.hover = new Hover();
+    this.grid = new Grid();
     this.snapping = new Snapping(this);
     this.#selectedPoints = computed(
       () => this.#resolveSelectedPoints(this.selection.stateCell.value.ids),

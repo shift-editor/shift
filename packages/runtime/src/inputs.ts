@@ -87,10 +87,20 @@ export const shiftInputSchemas = {
       ifFontRevision,
       zoom: z.number().positive().finite().optional(),
       center: z.strictObject({ x: z.number().finite(), y: z.number().finite() }).optional(),
+      grid: z
+        .strictObject({
+          visible: z.boolean().optional(),
+          snap: z.boolean().optional(),
+          spacingX: z.number().positive().finite().optional(),
+          spacingY: z.number().positive().finite().optional(),
+          subdivisions: z.number().int().min(1).optional(),
+        })
+        .optional(),
     })
-    .refine(({ zoom, center }) => zoom !== undefined || center !== undefined, {
-      message: "editor.setView takes zoom, center or both",
-    }),
+    .refine(
+      ({ zoom, center, grid }) => zoom !== undefined || center !== undefined || grid !== undefined,
+      { message: "editor.setView takes zoom, center, grid or any of them" },
+    ),
   "editor.select": z.strictObject({
     windowId,
     ifFontRevision,

@@ -117,6 +117,7 @@ export class ShiftEditorReader {
       selectionIds: [...editor.selection.ids],
       tool: tool ? { id: tool.id, state: tool.state.type } : null,
       viewport: this.#viewport.read(),
+      grid: { ...editor.grid.settings },
       dragging: editor.isDragging,
       editing: editor.isEditing,
       applyStatus: this.#edits?.applyStatusCell.peek() ?? null,

@@ -52,6 +52,8 @@ export interface SpacingPalette {
 export interface EditorRenderTheme {
   cursor: { color: string; widthPx: number };
   guides: { color: string; widthPx: number };
+  /** Canvas grid lines, with subdivision lines drawn in a lighter colour between them. */
+  grid: { color: string; subdivisionColor: string; widthPx: number };
   selection: { fill: string; stroke: string; widthPx: number };
   glyph: { fill: string; editableFill: string; stroke: string; widthPx: number };
   component: {
@@ -124,6 +126,7 @@ const INTERPOLATED_GREY = "#8A8A8A";
 const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
   cursor: { color: "#0C92F4", widthPx: 1.25 },
   guides: { color: "rgba(37, 99, 235, 0.50)", widthPx: 0.5 },
+  grid: { color: "rgba(0, 0, 0, 0.07)", subdivisionColor: "rgba(0, 0, 0, 0.035)", widthPx: 0.5 },
   selection: {
     fill: "rgba(59, 130, 246, 0.1)",
     stroke: "rgba(59, 130, 246, 0.5)",
@@ -336,6 +339,11 @@ export function readEditorRenderTheme(
 
   theme.cursor.color = readColor("--editor-cursor-color", theme.cursor.color);
   theme.guides.color = readColor("--editor-guides-color", theme.guides.color);
+  theme.grid.color = readColor("--editor-grid-color", theme.grid.color);
+  theme.grid.subdivisionColor = readColor(
+    "--editor-grid-subdivision-color",
+    theme.grid.subdivisionColor,
+  );
   theme.selection.fill = readColor("--editor-selection-fill", theme.selection.fill);
   theme.selection.stroke = readColor("--editor-selection-stroke", theme.selection.stroke);
   theme.glyph.fill = readColor("--editor-glyph-fill", theme.glyph.fill);

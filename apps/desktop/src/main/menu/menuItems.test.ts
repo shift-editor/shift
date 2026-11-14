@@ -154,12 +154,17 @@ describe("application command menu items", () => {
     ]);
   });
 
-  it("separates canvas zoom from interface size in View", () => {
+  it("separates canvas zoom and the grid from interface size in View", () => {
     const items = viewMenuItems(run, enabled);
     const interfaceSize = items.find(({ label }) => label === "Interface Size");
     const sizeItems = (interfaceSize?.submenu ?? []) as MenuItemConstructorOptions[];
 
-    expect(ids(items)).toEqual(["view.zoomIn", "view.zoomOut"]);
+    expect(ids(items)).toEqual([
+      "view.zoomIn",
+      "view.zoomOut",
+      "view.toggleGrid",
+      "view.toggleSnapToGrid",
+    ]);
     expect(sizeItems.map(({ label }) => label)).toEqual(["Increase", "Decrease", "Reset"]);
   });
 });

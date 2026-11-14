@@ -102,6 +102,7 @@ function settleGuide(guide: PositionGuide, shift: Point2D): PositionGuide {
     case "metric":
       return { ...guide, x: guide.x + shift.x };
     case "alignment":
+    case "grid":
       return { ...guide, point: Vec2.add(guide.point, shift) };
     case "direction":
       return guide;

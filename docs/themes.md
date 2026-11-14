@@ -101,6 +101,7 @@ A name is the color's CSS variable without `--color-` or `--`. The ones you are 
 | `editor-handle-anchor-stroke`, `editor-control-line-color`              | Anchors and the lines to control points        |
 | `editor-selection-fill`, `editor-selection-stroke`                      | The selection marquee                          |
 | `editor-snap-color`, `editor-guides-color`, `editor-metric-marker-fill` | Snapping, guides, and metric markers           |
+| `editor-grid-color`, `editor-grid-subdivision-color`                    | Canvas grid lines and their subdivisions       |
 | `editor-spacing`, `editor-kerning`, `editor-kerning-positive`           | Sidebearings and kerning                       |
 | `editor-text-cursor-color`, `editor-text-selection-fill`                | Text runs                                      |
 

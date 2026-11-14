@@ -52,8 +52,18 @@ export interface AlignmentPositionGuide {
   readonly point: Point2D;
 }
 
+/** Grid intersection, in glyph-local units, that a moving position now sits on along one axis. */
+export interface GridPositionGuide {
+  readonly kind: "grid";
+  readonly point: Point2D;
+}
+
 /** Semantic visual guide emitted by a position edit preview. */
-export type PositionGuide = DirectionPositionGuide | MetricPositionGuide | AlignmentPositionGuide;
+export type PositionGuide =
+  | DirectionPositionGuide
+  | MetricPositionGuide
+  | AlignmentPositionGuide
+  | GridPositionGuide;
 
 /** Correction along one axis; its distance is the absolute offset. */
 export interface AxisSnap {
