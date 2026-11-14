@@ -54,14 +54,14 @@ pub(crate) enum Command {
     Inspect(InspectArgs),
 
     /// Compile a SQLite .shift document to a TrueType font.
-    Compile(DocumentOutputArgs),
+    Compile(CompileArgs),
 
     /// Export a SQLite .shift document as editable sources.
     ///
     /// The output's extension picks the format: `.designspace` writes the
     /// designspace with one UFO per master beside it, and `.ufo` writes one
     /// UFO for a font with a single master. Use `compile` for binaries.
-    Export(DocumentOutputArgs),
+    Export(ExportArgs),
 
     /// Render text or a glyph grid set in a font to a PNG or SVG proof image.
     Proof(ProofArgs),
@@ -402,15 +402,30 @@ pub(crate) struct MutationArgs {
     pub json: bool,
 }
 
-/// A `.shift` document and the file to write it to, for `compile` and `export`.
 #[derive(Debug, Parser)]
-pub(crate) struct DocumentOutputArgs {
+pub(crate) struct CompileArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
 
-    /// Path to write: a .ttf for `compile`; a .designspace or .ufo for
-    /// `export`, whose extension picks the format.
+    /// Path for the compiled .ttf output; with --static, the directory for
+    /// the static fonts.
+    #[arg(short, long, value_hint = ValueHint::AnyPath)]
+    pub output: PathBuf,
+
+    /// Compile one static .ttf per named instance into the --output
+    /// directory, each named after its instance's PostScript name.
+    #[arg(long = "static")]
+    pub static_instances: bool,
+}
+
+#[derive(Debug, Parser)]
+pub(crate) struct ExportArgs {
+    /// Path to the canonical SQLite .shift document.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+
+    /// Path for the exported .designspace or .ufo; its extension picks the format.
     #[arg(short, long, value_hint = ValueHint::AnyPath)]
     pub output: PathBuf,
 }

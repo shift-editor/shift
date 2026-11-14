@@ -6,6 +6,7 @@
 mod atomic;
 pub mod errors;
 pub mod export;
+mod export_static;
 mod feature_includes;
 pub mod font_loader;
 pub mod font_source;
@@ -23,6 +24,7 @@ mod traits;
 
 pub use errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
 pub use export::{ExportError, ExportFormat, FontExportRequest, FontExportResult, FontExporter};
+pub use export_static::StaticInstanceFile;
 pub use font_source::{
     AuthoredReadError, AuthoredSource, AxisIndex, ContourError, DesignspaceFont, DirectoryGlyph,
     DirectoryInstance, DirectoryMapping, DirectoryMappingPoint, DirectorySource, FontDirectory,
