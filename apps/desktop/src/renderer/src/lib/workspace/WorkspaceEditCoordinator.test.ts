@@ -1,6 +1,6 @@
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createBridge } from "@shift/bridge";
 import {
@@ -105,18 +105,51 @@ describe("WorkspaceEditCoordinator issues save on the committed-op lane", () => 
 
   it("exports queued edits from one immutable snapshot while later edits continue", async () => {
     const outputRoot = mkdtempSync(join(tmpdir(), "shift-export-"));
-    const outputPath = join(outputRoot, "Queued.ttf");
     queueOutlinedGlyph(stack, "A", 65);
 
-    const exporting = stack.editCoordinator.export(outputPath);
+    const exporting = stack.editCoordinator.export({
+      directory: outputRoot,
+      format: "ttf",
+      mode: "write",
+    });
     queueOutlinedGlyph(stack, "B", 66);
-    await exporting;
+    const { path } = await exporting;
     await stack.editCoordinator.settled();
 
     const compiled = createBridge();
-    compiled.workspace.openWorkspace(outputPath, join(outputRoot, "compiled.sqlite3"));
+    compiled.workspace.openWorkspace(path, join(outputRoot, "compiled.sqlite3"));
     const unicodes = compiled.workspace.getGlyphs().flatMap((glyph) => glyph.unicodes);
     expect(unicodes).toEqual([65]);
+  });
+
+  it("plans an export's files without writing them", async () => {
+    const outputRoot = mkdtempSync(join(tmpdir(), "shift-export-"));
+    queueOutlinedGlyph(stack, "A", 65);
+
+    const planned = await stack.editCoordinator.export({
+      directory: outputRoot,
+      format: "designspace",
+      mode: "plan",
+    });
+
+    expect(planned.files.map((file) => basename(file))).toEqual([
+      basename(planned.path),
+      expect.stringMatching(/\.ufo$/),
+    ]);
+    expect(readdirSync(outputRoot)).toEqual([]);
+  });
+
+  it("exports sources as the files its plan lists, leaving the document unsaved", async () => {
+    const outputRoot = mkdtempSync(join(tmpdir(), "shift-export-"));
+    queueOutlinedGlyph(stack, "A", 65);
+    const request = { directory: outputRoot, format: "designspace", mode: "plan" } as const;
+    const planned = await stack.editCoordinator.export(request);
+
+    const written = await stack.editCoordinator.export({ ...request, mode: "write" });
+
+    expect(written.files).toEqual(planned.files);
+    expect(written.files.every((file) => existsSync(file))).toBe(true);
+    expect(await stack.editCoordinator.state()).toMatchObject({ dirty: true });
   });
 
   it("a current-target save serializes behind a later edit", async () => {

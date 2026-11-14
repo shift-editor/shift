@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use shift_font::{CoreError, Font, NamedInstance};
 
-use crate::export::{ExportError, ExportFormat, FontExportResult, FontExporter};
+use crate::export::{ExportError, ExportFormat, FontExportResult, FontExporter, postscript_safe};
 
 /// One binary a static export writes.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -116,6 +116,7 @@ impl FontExporter {
         let path: PathBuf = directory.join(&file.file_name);
         self.export_ttf(font, &path)?;
         Ok(FontExportResult {
+            files: vec![path.clone()],
             path,
             format: ExportFormat::Ttf,
         })
@@ -128,26 +129,4 @@ fn static_font(font: &Font, instance: &NamedInstance) -> Result<Font, ExportErro
             instance: instance.name().to_string(),
             source,
         })
-}
-
-/// `name` with only the printable ASCII PostScript names allow, without
-/// spaces or `[](){}<>/%`.
-fn postscript_safe(name: &str) -> String {
-    name.chars()
-        .filter(|character| character.is_ascii_graphic() && !"[](){}<>/%".contains(*character))
-        .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn postscript_safe_names_drop_spaces_and_reserved_characters() {
-        assert_eq!(
-            postscript_safe("Solenoid-Coarse Wide"),
-            "Solenoid-CoarseWide"
-        );
-        assert_eq!(postscript_safe("Ünï (Bold)/2"), "nBold2");
-    }
 }

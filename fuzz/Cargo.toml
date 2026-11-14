@@ -13,6 +13,7 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 norad = "0.18.4"
 shift-backends = { workspace = true }
+shift-font = { workspace = true }
 tempfile = "3"
 
 [lints]

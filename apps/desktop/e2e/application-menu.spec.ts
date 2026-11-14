@@ -512,7 +512,7 @@ launcherTest(
       .poll(() => applicationMenuItemEnabled(page, electronApp, "file.saveAs"))
       .toBe(false);
     await expect
-      .poll(() => applicationMenuItemEnabled(page, electronApp, "file.exportTtf"))
+      .poll(() => applicationMenuItemEnabled(page, electronApp, "file.export"))
       .toBe(false);
     await expect.poll(() => applicationMenuItemEnabled(page, electronApp, "edit.copy")).toBe(false);
   },
@@ -533,7 +533,7 @@ binaryPreviewTest(
       .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "file.saveAs"))
       .toBe(false);
     await expect
-      .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "file.exportTtf"))
+      .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "file.export"))
       .toBe(false);
     await expect
       .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "edit.copy"))
@@ -553,7 +553,7 @@ convertiblePreviewTest(
       .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "file.saveAs"))
       .toBe(true);
     await expect
-      .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "file.exportTtf"))
+      .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "file.export"))
       .toBe(false);
     await expect
       .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "edit.copy"))
@@ -566,7 +566,7 @@ convertiblePreviewTest(
     await expect.poll(() => sessionMode(workspacePage, electronApp)).toBe("workspace");
     expect(fs.existsSync(saveShiftPath)).toBe(true);
     await expect
-      .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "file.exportTtf"))
+      .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "file.export"))
       .toBe(true);
     await expect
       .poll(() => applicationMenuItemEnabled(workspacePage, electronApp, "edit.copy"))
@@ -580,7 +580,7 @@ authoredTest(
   async ({ electronApp, page, editor }) => {
     await expect.poll(() => applicationMenuItemEnabled(page, electronApp, "file.save")).toBe(true);
     await expect
-      .poll(() => applicationMenuItemEnabled(page, electronApp, "file.exportTtf"))
+      .poll(() => applicationMenuItemEnabled(page, electronApp, "file.export"))
       .toBe(true);
     await expect.poll(() => applicationMenuItemEnabled(page, electronApp, "edit.copy")).toBe(true);
 

@@ -2561,6 +2561,7 @@ dependencies = [
  "libfuzzer-sys",
  "norad 0.18.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "shift-backends",
+ "shift-font",
  "tempfile",
 ]
 

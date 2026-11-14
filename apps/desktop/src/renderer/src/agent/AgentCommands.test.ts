@@ -31,7 +31,6 @@ function windowContext(editor: EditorTestSurface, state: { hasWorkspace: boolean
         await editor.save();
       },
       saveAs: unavailable,
-      exportTtf: unavailable,
     },
     windows: {
       active: () => null,
@@ -43,7 +42,12 @@ function windowContext(editor: EditorTestSurface, state: { hasWorkspace: boolean
       available: () => true,
       // Main sends a renderer command and moves on, as `Window.runRendererCommand` does.
       run: (id: RendererCommandId) => {
-        if (id === "app.showSettings" || id === "tab.close" || id === "glyph.addComponent") {
+        if (
+          id === "app.showSettings" ||
+          id === "file.export" ||
+          id === "tab.close" ||
+          id === "glyph.addComponent"
+        ) {
           unavailable();
           return;
         }
@@ -159,7 +163,7 @@ describe("agents run the view commands the window's menu runs, and nothing else"
     });
     const outline = await editor.outline();
 
-    for (const command of ["file.save", "file.exportTtf", "edit.undo"]) {
+    for (const command of ["file.save", "file.export", "edit.undo"]) {
       await expect(
         agentCommands.run({ windowId: WINDOW_ID, command }),
         command,

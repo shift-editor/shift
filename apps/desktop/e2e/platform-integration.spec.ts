@@ -17,6 +17,7 @@ import {
   runCommand,
 } from "./fixtures/documentLifecycle";
 import { EditorDriver } from "./fixtures/EditorDriver";
+import { exportedFiles, exportWithDialog } from "./fixtures/exportDialog";
 import type { RelaunchApp } from "./fixtures/types";
 import type { GlyphId } from "@shift/types";
 import { square } from "@/testing/fixtures";
@@ -27,10 +28,10 @@ const platformTest = test.extend({
     fs.mkdirSync(directory, { recursive: true });
     await use(path.join(directory, "試験 font.shift"));
   },
-  exportTtfPath: async ({ testRoot }, use) => {
-    const directory = path.join(testRoot, "Exported fonts – ünicode");
+  exportDirectory: async ({ testRoot }, use) => {
+    const directory = path.join(testRoot, "Exported fonts – ünicode 書体");
     fs.mkdirSync(directory, { recursive: true });
-    await use(path.join(directory, "書体 evidence.ttf"));
+    await use(directory);
   },
 });
 
@@ -52,10 +53,10 @@ platformTest(
 platformTest(
   "saves, exports, and reopens through Unicode paths with inspectable evidence",
   { tag: "@os" },
-  async ({ electronApp, page, saveShiftPath, exportTtfPath, relaunch }, testInfo) => {
+  async ({ electronApp, page, saveShiftPath, exportDirectory, relaunch }, testInfo) => {
     await attachScreenshot(testInfo, "launcher", page);
     const { workspacePage, glyphId } = await createEvidenceDocument(electronApp, page, testInfo);
-    await persistEvidence(electronApp, workspacePage, saveShiftPath, exportTtfPath, testInfo);
+    await persistEvidence(electronApp, workspacePage, saveShiftPath, exportDirectory, testInfo);
     await reopenAndVerify(electronApp, relaunch, glyphId, testInfo);
   },
 );
@@ -83,13 +84,14 @@ async function persistEvidence(
   electronApp: ElectronApplication,
   page: Page,
   saveShiftPath: string,
-  exportTtfPath: string,
+  exportDirectory: string,
   testInfo: TestInfo,
 ): Promise<void> {
   await runCommand(page, "file.save");
   await expect.poll(() => fs.existsSync(saveShiftPath)).toBe(true);
-  await runCommand(page, "file.exportTtf");
-  await expect.poll(() => fs.existsSync(exportTtfPath)).toBe(true);
+  expect(await exportWithDialog(page, "Variable")).toBe("done");
+  const [exportTtfPath] = exportedFiles(exportDirectory, ".ttf");
+  if (exportTtfPath === undefined) throw new Error(`Export wrote no .ttf into ${exportDirectory}`);
 
   await testInfo.attach("saved-document", {
     path: saveShiftPath,

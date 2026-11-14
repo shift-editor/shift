@@ -21,7 +21,7 @@ export type CommandId =
   | "file.openFolder"
   | "file.save"
   | "file.saveAs"
-  | "file.exportTtf"
+  | "file.export"
   | "edit.undo"
   | "edit.redo"
   | "edit.cut"
@@ -90,6 +90,7 @@ export const commandShortcuts = {
   "file.openFolder": shortcut("o", true),
   "file.save": shortcut("s"),
   "file.saveAs": shortcut("s", true),
+  "file.export": shortcut("e", true),
   "edit.undo": shortcut("z"),
   "edit.redo": shortcut("z", true),
   "edit.cut": shortcut("x"),
@@ -132,6 +133,7 @@ function shortcut(key: string, shiftKey = false, altKey = false): CommandShortcu
 export type RendererCommandId =
   | EditorCommandId
   | "app.showSettings"
+  | "file.export"
   | "glyph.addComponent"
   | "tab.close";
 

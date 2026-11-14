@@ -131,8 +131,6 @@ export type CommandContext = {
     save: () => Promise<void>;
     /** Runs main's native Save As workflow. */
     saveAs: () => Promise<void>;
-    /** Runs main's native TrueType export workflow. */
-    exportTtf: () => Promise<void>;
   };
   windows: {
     /**

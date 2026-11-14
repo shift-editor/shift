@@ -591,6 +591,10 @@ export class App {
     ipc.handle(ipcMain, "commands.run", async (event, id) => {
       await this.#runWindowCommand(this.#requireWindowForWebContents(event.sender), id);
     });
+    ipc.handle(ipcMain, "exports.chooseFolder", async (event, defaultPath) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      return this.#nativeDialogs.chooseExportFolder(window, defaultPath);
+    });
     ipc.handle(ipcMain, "clipboard.readText", () => {
       return clipboard.readText();
     });
@@ -834,9 +838,6 @@ export class App {
           } else if (window && session?.mode === "preview") {
             await this.#savePreviewAsDocument(window, session);
           }
-        },
-        exportTtf: async () => {
-          await document?.exportTtf();
         },
       },
       windows: {

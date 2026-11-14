@@ -68,7 +68,10 @@ export const SidebarBrand = () => {
                 <span className="flex-1">Save As…</span>
                 <kbd className="font-sans text-muted">{shortcut("file.saveAs")}</kbd>
               </MenuItem>
-              <MenuItem onClick={() => run("file.exportTtf")}>Export TrueType…</MenuItem>
+              <MenuItem onClick={() => run("file.export")}>
+                <span className="flex-1">Export…</span>
+                <kbd className="font-sans text-muted">{shortcut("file.export")}</kbd>
+              </MenuItem>
               <MenuSeparator />
               <MenuItem onClick={() => run("app.showSettings")}>
                 <span className="flex-1">Settings…</span>

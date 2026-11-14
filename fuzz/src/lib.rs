@@ -5,9 +5,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use shift_backends::font_loader::FontLoader;
-use shift_backends::{
-    BackendError, ExportError, ExportFormat, FontExportRequest, FontExporter, FontView,
-};
+use shift_backends::{BackendError, ExportError, ExportFormat, FontExportRequest, FontExporter};
+use shift_font::Font;
 
 /// What one fuzz input showed about reading and exporting.
 #[derive(Debug)]
@@ -118,7 +117,7 @@ fn output_path(directory: &Path, format: ExportFormat) -> PathBuf {
     directory.join(format!("Fuzz.{}", format.extension()))
 }
 
-fn export(font: &impl FontView, path: &Path, format: ExportFormat) -> Result<(), ExportError> {
+fn export(font: &Font, path: &Path, format: ExportFormat) -> Result<(), ExportError> {
     FontExporter::new()
         .export(
             font,

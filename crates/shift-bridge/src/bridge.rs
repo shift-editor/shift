@@ -51,14 +51,42 @@ use workspace::native_workspace_request;
 #[napi(object)]
 #[derive(Clone, Debug)]
 pub struct NapiFontExportRequest {
-  pub path: String,
+  /// The directory to export into; Rust names the files in it.
+  pub directory: String,
   pub format: String,
+  /// `"plan"` lists the files the export would write without writing them;
+  /// `"write"`, the default, exports.
+  pub mode: Option<String>,
 }
 
 #[napi(object)]
 pub struct NapiFontExportResult {
   pub path: String,
   pub format: String,
+  /// Every file or UFO directory the export wrote, or would write when planned.
+  pub files: Vec<String>,
+}
+
+/// Whether an export request writes its files or only lists them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ExportMode {
+  Write,
+  Plan,
+}
+
+impl TryFrom<Option<&str>> for ExportMode {
+  type Error = Error;
+
+  fn try_from(mode: Option<&str>) -> Result<Self> {
+    match mode {
+      None | Some("write") => Ok(Self::Write),
+      Some("plan") => Ok(Self::Plan),
+      Some(other) => Err(Error::new(
+        Status::InvalidArg,
+        format!("unknown export mode: {other}"),
+      )),
+    }
+  }
 }
 
 struct SlugAtlasGeneration {
@@ -66,25 +94,17 @@ struct SlugAtlasGeneration {
   alignment: usize,
   atlas: VariableAtlas,
 }
-impl TryFrom<NapiFontExportRequest> for FontExportRequest {
-  type Error = Error;
-
-  fn try_from(request: NapiFontExportRequest) -> Result<Self> {
-    let format = ExportFormat::try_from(request.format.as_str())
-      .map_err(|e| Error::new(Status::InvalidArg, e.to_string()))?;
-
-    Ok(Self {
-      path: request.path.into(),
-      format,
-    })
-  }
-}
 
 impl From<FontExportResult> for NapiFontExportResult {
   fn from(result: FontExportResult) -> Self {
     Self {
       path: result.path.to_string_lossy().into_owned(),
       format: result.format.as_str().to_string(),
+      files: result
+        .files
+        .iter()
+        .map(|file| file.to_string_lossy().into_owned())
+        .collect(),
     }
   }
 }
@@ -643,9 +663,12 @@ impl FontView for FontSaveSnapshot {
   }
 }
 
+/// Exports, or plans an export of, an owned copy of the workspace font with
+/// every layer loaded, off the JavaScript thread.
 pub struct ExportFontTask {
-  snapshot: FontSaveSnapshot,
+  font: Font,
   request: FontExportRequest,
+  mode: ExportMode,
 }
 
 impl Task for ExportFontTask {
@@ -653,9 +676,18 @@ impl Task for ExportFontTask {
   type JsValue = NapiFontExportResult;
 
   fn compute(&mut self) -> Result<Self::Output> {
-    FontExporter::new()
-      .export(&self.snapshot, self.request.clone())
-      .map_err(generic_failure)
+    let exporter = FontExporter::new();
+    match self.mode {
+      ExportMode::Write => exporter.export(&self.font, self.request.clone()),
+      ExportMode::Plan => exporter
+        .plan(&self.font, &self.request)
+        .map(|files| FontExportResult {
+          path: self.request.path.clone(),
+          format: self.request.format,
+          files,
+        }),
+    }
+    .map_err(generic_failure)
   }
 
   fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
@@ -1064,9 +1096,15 @@ impl Bridge {
     &mut self,
     request: NapiFontExportRequest,
   ) -> Result<AsyncTask<ExportFontTask>> {
+    let mode = ExportMode::try_from(request.mode.as_deref())?;
+    let format = ExportFormat::try_from(request.format.as_str())
+      .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))?;
+    let font = self.font_with_all_layers().map_err(generic_failure)?;
+    let request = FontExporter::request_in(&font, format, Path::new(&request.directory));
     Ok(AsyncTask::new(ExportFontTask {
-      snapshot: self.save_snapshot().map_err(generic_failure)?,
-      request: request.try_into()?,
+      font,
+      request,
+      mode,
     }))
   }
 
@@ -1338,9 +1376,10 @@ impl Bridge {
     Ok(FontSaveSnapshot::new(self.font()?.clone(), None))
   }
 
-  fn save_snapshot(&mut self) -> BridgeResult<FontSaveSnapshot> {
+  /// An owned copy of the font with every layer loaded.
+  fn font_with_all_layers(&mut self) -> BridgeResult<Font> {
     self.workspace_mut()?.acquire_all_layers()?;
-    Ok(FontSaveSnapshot::new(self.font()?.clone(), None))
+    Ok(self.font()?.clone())
   }
 
   fn workspace(&self) -> BridgeResult<&FontWorkspace> {
@@ -3022,7 +3061,7 @@ mod tests {
   }
 
   #[test]
-  fn save_snapshot_includes_applied_glyph_edits() {
+  fn exported_font_includes_applied_glyph_edits() {
     let mut bridge = bridge_with_workspace();
     let (layer_id, contour_id) = pen_setup(&mut bridge);
     let point_id = PointId::new().to_string();
@@ -3038,12 +3077,12 @@ mod tests {
       )
       .unwrap();
 
-    let snapshot = bridge.save_snapshot().unwrap();
-    let glyph = snapshot
-      .glyph("A")
-      .expect("snapshot should include edited A");
+    let font = bridge.font_with_all_layers().unwrap();
+    let glyph = font
+      .glyph_by_name("A")
+      .expect("the exported font should include edited A");
     let layer = glyph
-      .layer_for_source(snapshot.default_source_id().unwrap())
+      .layer_for_source(font.default_source_id().unwrap())
       .expect("edited glyph should include default layer");
 
     assert_eq!(bridge.get_glyphs().unwrap().len(), 1);
