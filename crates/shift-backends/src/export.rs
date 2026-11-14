@@ -65,6 +65,21 @@ impl ExportFormat {
         }
     }
 
+    /// Returns the format a path's extension names, ignoring case.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExportError::UnknownExtension`] when the path has no
+    /// extension or one no format uses.
+    pub fn from_path(path: &Path) -> Result<Self, ExportError> {
+        path.extension()
+            .and_then(|extension| extension.to_str())
+            .and_then(|extension| Self::try_from(extension).ok())
+            .ok_or_else(|| ExportError::UnknownExtension {
+                path: path.to_path_buf(),
+            })
+    }
+
     /// The error for a source writer that could not write this format to `path`.
     fn write_error(self, path: &Path, source: FormatBackendError) -> ExportError {
         ExportError::WriteSources {
@@ -118,6 +133,9 @@ pub struct FontExportResult {
 pub enum ExportError {
     #[error("unsupported export format: {format}")]
     UnsupportedFormat { format: String },
+
+    #[error("cannot tell the export format from {path}: end it in .designspace, .ufo or .ttf")]
+    UnknownExtension { path: PathBuf },
 
     #[error("export path must end in .{} for {} export: {path}", format.extension(), format.name())]
     OutputExtensionMismatch { path: PathBuf, format: ExportFormat },

@@ -306,3 +306,17 @@ fn export_refuses_a_ufo_of_several_masters_or_a_path_for_another_format() {
         assert!(!path.exists());
     }
 }
+
+#[test]
+fn export_format_follows_the_path_extension() {
+    let format = |path: &str| ExportFormat::from_path(Path::new(path)).ok();
+
+    assert_eq!(
+        format("a/Solenoid.designspace"),
+        Some(ExportFormat::Designspace)
+    );
+    assert_eq!(format("Solenoid.UFO"), Some(ExportFormat::Ufo));
+    assert_eq!(format("Solenoid.ttf"), Some(ExportFormat::Ttf));
+    assert_eq!(format("Solenoid.glyphs"), None);
+    assert_eq!(format("Solenoid"), None);
+}

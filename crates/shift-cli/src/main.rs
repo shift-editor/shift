@@ -11,6 +11,7 @@ mod selector;
 mod skill;
 
 use std::io::{self, IsTerminal, Write};
+use std::path::{Path, PathBuf};
 
 use authoring::{
     AuthoringReport, ExportSources, add_axis, add_glyph, add_instance, add_layer, add_source,
@@ -20,7 +21,7 @@ use authoring::{
 };
 use clap::Parser;
 use cli::{
-    AxisCommand, Cli, Command, CompileArgs, FontCommand, GlyphCommand, InstanceCommand,
+    AxisCommand, Cli, Command, DocumentOutputArgs, FontCommand, GlyphCommand, InstanceCommand,
     KerningCommand, KerningGroupCommand, LayerCommand, SkillCommand, SourceCommand,
 };
 use glyph_inspect::GlyphInspection;
@@ -45,6 +46,10 @@ fn main() -> miette::Result<()> {
         }
         Command::Compile(args) => {
             let result = compile(args)?;
+            write_stdout(&result.path.display().to_string())
+        }
+        Command::Export(args) => {
+            let result = export(args)?;
             write_stdout(&result.path.display().to_string())
         }
         Command::Proof(args) => {
@@ -225,16 +230,31 @@ fn write_authoring_result(
     }
 }
 
-fn compile(args: CompileArgs) -> miette::Result<FontExportResult> {
-    let font = ShiftStore::open_document(&args.path)
+fn compile(args: DocumentOutputArgs) -> miette::Result<FontExportResult> {
+    export_document(&args.path, args.output, ExportFormat::Ttf)
+}
+
+fn export(args: DocumentOutputArgs) -> miette::Result<FontExportResult> {
+    let format = ExportFormat::from_path(&args.output).into_diagnostic()?;
+    export_document(&args.path, args.output, format)
+}
+
+/// Writes the `.shift` document at `path` to `output` as `format`, leaving the
+/// document unchanged.
+fn export_document(
+    path: &Path,
+    output: PathBuf,
+    format: ExportFormat,
+) -> miette::Result<FontExportResult> {
+    let font = ShiftStore::open_document(path)
         .and_then(|store| store.load_font_state())
         .into_diagnostic()?;
     FontExporter::new()
         .export(
             &font,
             FontExportRequest {
-                path: args.output,
-                format: ExportFormat::Ttf,
+                path: output,
+                format,
             },
         )
         .into_diagnostic()
@@ -311,7 +331,7 @@ mod tests {
         let output_path = temp.path().join("Dogfood.ttf");
         drop(ShiftStore::create_document(&source_path, &sample_variable_font()).unwrap());
 
-        let result = compile(CompileArgs {
+        let result = compile(DocumentOutputArgs {
             path: source_path,
             output: output_path.clone(),
         })

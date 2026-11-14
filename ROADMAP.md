@@ -281,6 +281,7 @@ These are allowed to jump around when energy is high, but they should not silent
 - [x] Edit axis naming/ranges without implicit dependent relocation
 - [x] Add, edit, and remove named instances with idempotent standard-weight presets
 - [x] Restore coupled variation authoring atomically through exact workspace undo/redo
+- [x] Export a document as a designspace or UFO with `shift-cli export`
 
 #### Node.js Native Bindings (shift-node)
 
