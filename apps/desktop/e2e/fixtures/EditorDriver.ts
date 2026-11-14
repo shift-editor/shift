@@ -16,6 +16,7 @@ import type {
   GlyphName,
   KerningPosition,
   PointId,
+  MarkColor,
   Axis,
   NamedInstance,
   Source,
@@ -204,6 +205,11 @@ export class EditorDriver implements EditorReads, EditorActions {
   /** Deletes the source named `name`, as the Sources panel does. */
   async deleteSource(name: string): Promise<void> {
     await this.#hooks.actions.deleteSource(name);
+  }
+
+  /** Tags the glyphs named `names` with `color`, or clears their colour with null, as vitest's `tagGlyphs` does. */
+  async tagGlyphs(names: readonly string[], color: MarkColor | null): Promise<void> {
+    await this.#hooks.actions.tagGlyphs(names, color);
   }
 
   /** Renames the source `source` to `name`, as Settings › Sources does. */

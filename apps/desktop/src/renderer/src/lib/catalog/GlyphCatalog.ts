@@ -1,5 +1,12 @@
 import type { GlyphInfo } from "@shift/glyph-info";
-import type { CatalogMetrics, GlyphId, GlyphName, GlyphPreview, SourceId } from "@shift/types";
+import type {
+  CatalogMetrics,
+  GlyphEntry,
+  GlyphId,
+  GlyphPreview,
+  MarkColor,
+  SourceId,
+} from "@shift/types";
 import { computed, track, type ComputedSignal, type Signal } from "@shift/editor/signals";
 import type { Editor } from "@shift/editor";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
@@ -28,10 +35,14 @@ export class GlyphCatalog {
     const font = editor.font;
 
     this.glyphsCell = computed(
-      () =>
-        font.glyphEntriesCell.value.map((entry) =>
-          glyphCatalogItem(entry.id, entry.name, entry.unicodes, glyphInfo),
-        ),
+      () => {
+        const markColors = new Map(
+          font.glyphRecordsCell.value.map((record) => [record.id, record.markColor ?? null]),
+        );
+        return font.glyphEntriesCell.value.map((entry) =>
+          glyphCatalogItem(entry, markColors.get(entry.id) ?? null, glyphInfo),
+        );
+      },
       { name: "catalog.glyphs" },
     );
     this.axesCell = font.axesCell;
@@ -120,9 +131,8 @@ export class GlyphCatalog {
 }
 
 function glyphCatalogItem(
-  id: GlyphId,
-  name: GlyphName,
-  unicodes: readonly number[],
+  { id, name, unicodes }: GlyphEntry,
+  markColor: MarkColor | null,
   glyphInfo: GlyphInfo,
 ): GlyphCatalogItem {
   const unicode = unicodes[0] ?? null;
@@ -132,5 +142,6 @@ function glyphCatalogItem(
     name,
     displayName: glyphInfo.resolveGlyphName(name, unicode),
     unicode,
+    markColor,
   };
 }

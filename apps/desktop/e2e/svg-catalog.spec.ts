@@ -80,6 +80,46 @@ test.describe("SVG glyph catalog fallback", () => {
     await waitForEditorReady(page, glyphId);
   });
 
+  test("fills tagged glyphs' tiles and filters the grid to a colour from the footer", async ({
+    editor,
+    page,
+  }) => {
+    const svg = glyphCatalogSvg(page);
+    await expect(svg).toHaveAttribute("data-grid-readiness", "Complete");
+    const tagged = await editor.createGlyphsForUnicodes([0x3042, 0x3044]);
+    const tiles = svg.getByRole("button", { name: /^Open / });
+    const count = page.getByTestId("glyph-count");
+    const total = (await editor.glyphNames()).length;
+    await expect(count).toHaveText(`${total} glyphs`);
+    await expect(page.getByRole("button", { name: "Show yellow glyphs" })).toHaveCount(0);
+
+    await editor.tagGlyphs(tagged, { kind: "named", named: "yellow" });
+    await page.getByRole("button", { name: "Show yellow glyphs" }).click();
+    await expect(count).toHaveText(`2 yellow of ${total}`);
+    await expect(tiles).toHaveCount(2);
+    await expect(svg.locator('[data-mark-color="yellow"]')).toHaveCount(2);
+
+    await page.getByRole("button", { name: "Show untagged glyphs" }).click();
+    await expect(count).toHaveText(`${total - 2} untagged of ${total}`);
+    await expect(svg.locator('[data-mark-color="yellow"]')).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Show untagged glyphs" }).click();
+    await expect(count).toHaveText(`${total} glyphs`);
+  });
+
+  test("makes tiles as large as the footer's size slider allows", async ({ page }) => {
+    const svg = glyphCatalogSvg(page);
+    await expect(svg).toHaveAttribute("data-grid-readiness", "Complete");
+    const firstTile = svg.getByRole("button", { name: /^Open / }).first();
+    const width = async () => (await firstTile.boundingBox())?.width ?? 0;
+    expect(await width()).toBeLessThan(220);
+
+    await page.getByRole("slider", { name: "Tile size" }).focus();
+    await page.keyboard.press("End");
+
+    await expect.poll(width).toBeGreaterThanOrEqual(220);
+  });
+
   test("shows the system character for an empty encoded glyph", async ({ editor, page }) => {
     const [name] = await editor.createGlyphsForUnicodes([0x3042]);
     if (!name) throw new Error("Expected an empty Hiragana glyph");

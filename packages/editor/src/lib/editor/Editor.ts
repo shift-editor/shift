@@ -29,6 +29,7 @@ import {
   type SelectableId,
   type ShiftId,
   type MetricsKeySide,
+  type MarkColor,
 } from "@shift/types";
 import { isSegmentId, type GlyphGeometry } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "../../types/variation";
@@ -1624,6 +1625,23 @@ export class Editor {
   public setLanguageIds(ids: readonly string[]): void {
     this.font.editCoordinator.transaction("Set languages", () => {
       this.font.setLanguageIds(ids);
+    });
+  }
+
+  /**
+   * Tags glyphs with a mark colour, or clears their tags, as one undoable step.
+   *
+   * @remarks
+   * The edit is queued on the workspace lane; each glyph's record carries the
+   * colour once the workspace echo arrives. Does nothing for no glyphs.
+   *
+   * @param color - null clears the glyphs' colour.
+   */
+  public setMarkColor(glyphIds: readonly GlyphId[], color: MarkColor | null): void {
+    if (glyphIds.length === 0) return;
+
+    this.font.editCoordinator.transaction("Set Colour", () => {
+      this.font.setMarkColor(glyphIds, color);
     });
   }
 

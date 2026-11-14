@@ -502,7 +502,7 @@ These are allowed to jump around when energy is high, but they should not silent
 
 - [x] Glyph thumbnails (render actual outlines)
 - [x] Visual indicator: empty vs. has content
-- [ ] Grid zoom (cell size slider)
+- [x] Grid zoom (cell size slider)
 - [ ] List view alternative
 - [x] Search by glyph name, unicode, or character
 - [ ] Filter: show only empty / filled / charset subset

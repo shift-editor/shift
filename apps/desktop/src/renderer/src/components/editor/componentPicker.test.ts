@@ -249,6 +249,7 @@ function glyph(id: GlyphId, name: string, unicode: number | null): GlyphCatalogI
     name: name as GlyphName,
     displayName: name,
     unicode,
+    markColor: null,
   };
 }
 

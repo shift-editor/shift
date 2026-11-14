@@ -38,6 +38,7 @@ import type {
   GlyphRecord,
   KerningPosition,
   MetricsKeySide,
+  MarkColor,
   PointId,
   SelectableId,
   Axis,
@@ -466,6 +467,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   /** Sets a source's metric named `metric` to `position`, as the source settings panel's metric field does. */
   /** Deletes the axis tagged `tag`, as Settings › Axes does. */
   deleteAxis(tag: string): Promise<void>;
+  /** Tags the glyphs named `names` with `color`, or clears their colour with null, as the grid's Colour menu does. */
+  tagGlyphs(names: readonly string[], color: MarkColor | null): Promise<void>;
   /** Renames the source `source` to `name`, as Settings › Sources does. */
   renameSource(source: string, name: string): Promise<void>;
   /** Moves the source `source` along the axis tagged `tag` to `value`, as Settings › Sources does. */

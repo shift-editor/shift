@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Button } from "@shift/ui";
+import { Button, cn } from "@shift/ui";
 import { GlyphContextMenu } from "./GlyphContextMenu";
 import { GlyphCatalogLayout } from "./glyphCatalogLayout";
 import { GlyphNameInput } from "./GlyphNameInput";
@@ -8,6 +8,7 @@ import { useCatalogSelection } from "./useCatalogSelection";
 import { useGlyphPreviewFrame } from "./useGlyphPreviewFrame";
 import { useRevealSelectedGlyph } from "./useRevealSelectedGlyph";
 import type { GlyphId } from "@shift/types";
+import { markColorCss, markColorKey } from "@/lib/glyph-grid/markColor";
 import type { SvgGlyphCatalogGridProps } from "@/types/glyphCatalog";
 
 const PLAIN_CLICK = { range: false, toggle: false };
@@ -24,6 +25,7 @@ export function SvgGlyphCatalogGrid({
   openGlyph,
   selection,
   selectGlyphs,
+  tileSize,
   onPendingGlyphName,
   onFirstFrame,
   onUnavailable,
@@ -37,8 +39,8 @@ export function SvgGlyphCatalogGrid({
   const [scrollTop, setScrollTop] = useState(0);
   const [editingGlyphId, setEditingGlyphId] = useState<GlyphId | null>(null);
   const layout = useMemo(
-    () => new GlyphCatalogLayout(viewportWidth, viewportHeight, glyphs.length),
-    [glyphs.length, viewportHeight, viewportWidth],
+    () => new GlyphCatalogLayout(viewportWidth, viewportHeight, glyphs.length, tileSize),
+    [glyphs.length, tileSize, viewportHeight, viewportWidth],
   );
   const targetFrame = useMemo(() => layout.frame(glyphs, scrollTop), [glyphs, layout, scrollTop]);
   const selecting = useCatalogSelection({
@@ -173,7 +175,7 @@ export function SvgGlyphCatalogGrid({
             }
 
             let nameCell = (
-              <div className="flex h-7 w-full items-center justify-center truncate bg-input px-2 text-xs text-muted">
+              <div className="flex h-7 w-full items-center justify-center truncate px-2 text-xs text-muted">
                 {cell.glyph.displayName}
               </div>
             );
@@ -182,7 +184,7 @@ export function SvgGlyphCatalogGrid({
                 <Button
                   aria-label={`Rename ${cell.glyph.displayName}`}
                   variant="ghost"
-                  className="h-7 w-full truncate bg-input px-2 text-center font-ui text-xs font-normal text-muted hover:bg-hover"
+                  className="h-7 w-full truncate px-2 text-center font-ui text-xs font-normal text-muted"
                   onClick={() => setEditingGlyphId(cell.glyph.id)}
                 >
                   {cell.glyph.displayName}
@@ -206,8 +208,14 @@ export function SvgGlyphCatalogGrid({
               <div
                 key={cell.glyph.id}
                 data-glyph-id={cell.glyph.id}
-                className="absolute flex flex-col"
+                data-mark-color={markColorKey(cell.glyph.markColor)}
+                className={cn(
+                  "absolute flex flex-col overflow-hidden rounded-xs border border-tile-ink bg-tile tile-shadow",
+                  selection.has(cell.glyph.id) && "outline-2 outline-offset-2 outline-accent",
+                )}
                 style={{
+                  // A tag's colour is data, so it is set here; an untagged tile keeps bg-tile.
+                  background: cell.glyph.markColor ? markColorCss(cell.glyph.markColor) : undefined,
                   height: cell.cellRect.height,
                   left: cell.cellRect.left,
                   top,
@@ -219,8 +227,9 @@ export function SvgGlyphCatalogGrid({
                   variant="ghost"
                   aria-pressed={selection.has(cell.glyph.id)}
                   isActive={selection.has(cell.glyph.id)}
-                  className="flex w-full items-center justify-center overflow-hidden p-0 hover:bg-hover"
-                  style={{ height: cell.previewRect.height }}
+                  className="flex w-full items-center justify-center overflow-hidden p-0"
+                  // The tile's border and the rule above the name take three pixels of its height.
+                  style={{ height: cell.cellRect.height - targetFrame.layout.nameHeight - 3 }}
                   // The pointer selects on press; this is the keyboard's Enter and Space.
                   onClick={(event) => {
                     if (event.detail === 0)
@@ -229,15 +238,8 @@ export function SvgGlyphCatalogGrid({
                 >
                   {previewContent}
                 </Button>
-                {selection.has(cell.glyph.id) ? (
-                  <div
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-x-0 top-0 rounded outline-2 outline-offset-2 outline-accent"
-                    style={{ height: cell.previewRect.height }}
-                  />
-                ) : null}
-                <div style={{ height: targetFrame.layout.nameGap }} />
-                {nameCell}
+                {/* The name stays grey whatever the tile's colour. */}
+                <div className="border-t border-tile-ink bg-input">{nameCell}</div>
               </div>
             );
           })}

@@ -4,6 +4,7 @@ import type { GlyphNode, PageNode } from "@shift/editor/types";
 import type { EditLocation } from "@shift/wasm/protocol";
 import type { GlyphId, NodeId } from "@shift/types";
 import { CANVAS_PATH, glyphIdFromPath } from "@/lib/editorRoute";
+import { GlyphGridView } from "@/lib/glyph-grid/GlyphGridView";
 import { GlyphSelection } from "@/lib/glyph-grid/GlyphSelection";
 import type { StoredTab } from "@/lib/workspace/documentViews";
 
@@ -84,6 +85,8 @@ export class WindowTabs {
   readonly #gridSelectionCell: WritableSignal<GlyphSelection>;
   readonly #selectedGlyphCell: Signal<GlyphId | null>;
   readonly #selectionPageIdCell: WritableSignal<NodeId | null>;
+  /** How this window looks at the overview's grid: its tile size and colour filter. */
+  readonly gridView = new GlyphGridView();
   // non-reactive: the glyph pages this window has fitted the view to, read only when a glyph opens
   readonly #framed = new Set<NodeId>();
   #nextId = 1;
