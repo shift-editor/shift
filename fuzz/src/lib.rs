@@ -1,6 +1,12 @@
 //! The oracle the fuzz targets share: whatever Shift reads, it exports, and
 //! exporting what it read back from that export writes the same files.
 
+#![expect(
+    clippy::expect_used,
+    clippy::panic,
+    reason = "a fuzz oracle reports a failure by panicking"
+)]
+
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 

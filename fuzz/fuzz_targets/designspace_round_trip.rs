@@ -2,6 +2,7 @@
 //! document whose sources may name `Light.ufo` and `Bold.ufo`.
 
 #![no_main]
+#![expect(clippy::expect_used, reason = "a fuzz target fails by panicking")]
 
 use libfuzzer_sys::fuzz_target;
 use shift_backends::ExportFormat;
