@@ -1,24 +1,19 @@
 //! Kerning edits reach the compiled font: each master's value, a glyph
 //! exception at one master, and a renamed group, measured by shaping.
 
-use shift_font::test_support::fixtures;
+mod support;
+
 use shift_font::{RenameKerningGroup, SetKerningGroupMember, SetKerningValues};
 use std::str::FromStr;
 
 use harfrust::{Feature, ShapeOptions, ShaperData, ShaperInstance, Tag, UnicodeBuffer, Variation};
-use shift_backends::font_loader::FontLoader;
 use shift_backends::{ExportFormat, FontExportRequest, FontExporter};
+use support::mutatorsans;
+
 use shift_font::{
     Font, FontIntent, FontIntentSet, KerningPair, KerningPosition, KerningSide, KerningValueEdit,
     SourceId,
 };
-
-fn mutatorsans() -> Font {
-    let path = fixtures::mutatorsans_designspace();
-    FontLoader::new()
-        .read_font(path.to_str().unwrap())
-        .expect("MutatorSans should load")
-}
 
 /// A master by its UFO, not one of the sparse support layers inside it.
 fn master(font: &Font, filename: &str) -> SourceId {

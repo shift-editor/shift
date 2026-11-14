@@ -78,6 +78,11 @@ impl KerningPair {
     pub fn groups(first: KerningGroupId, second: KerningGroupId) -> Self {
         Self::new(KerningSide::Group(first), KerningSide::Group(second))
     }
+
+    /// Whether either side of the pair is a glyph rather than a group.
+    pub(crate) fn has_glyph_side(&self) -> bool {
+        matches!(self.first, KerningSide::Glyph(_)) || matches!(self.second, KerningSide::Glyph(_))
+    }
 }
 
 /// The kerning that applies between two glyphs at one source.
@@ -266,6 +271,24 @@ impl Kerning {
 
     pub fn group(&self, group_id: KerningGroupId) -> Option<&KerningGroup> {
         self.groups.get(group_id)
+    }
+
+    /// Every glyph pair `pair` names: its glyphs, or its groups' members.
+    pub(crate) fn covered_glyph_pairs(&self, pair: &KerningPair) -> Vec<(GlyphId, GlyphId)> {
+        let members = |side: &KerningSide| -> Vec<GlyphId> {
+            match side {
+                KerningSide::Glyph(glyph_id) => vec![*glyph_id],
+                KerningSide::Group(group_id) => self
+                    .group(*group_id)
+                    .map(|group| group.members.clone())
+                    .unwrap_or_default(),
+            }
+        };
+        let seconds = members(&pair.second);
+        members(&pair.first)
+            .into_iter()
+            .flat_map(|first| seconds.iter().map(move |second| (first, *second)))
+            .collect()
     }
 
     /// Returns the id of the group named `name` at `position`.

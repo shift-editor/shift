@@ -2,18 +2,20 @@
 //! instance: the same outlines, advances and kerning, measured in the
 //! compiled binaries.
 
+mod support;
+
 use std::path::Path;
 use std::str::FromStr;
 
 use harfrust::{Feature, ShapeOptions, ShaperData, ShaperInstance, Tag, UnicodeBuffer, Variation};
 use kurbo::{BezPath, ParamCurve, ParamCurveNearest, PathSeg};
-use shift_backends::font_loader::FontLoader;
 use shift_backends::{ExportError, FontExporter, StaticInstanceFile};
-use shift_font::test_support::{fixtures, sample_variable_font};
+use shift_font::test_support::sample_variable_font;
 use shift_font::{Font, NamedInstance};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::prelude::{LocationRef, Size};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
+use support::mutatorsans;
 
 /// A fixture step that fails with a reason instead of panicking.
 type Fixture<T> = Result<T, Box<dyn std::error::Error>>;
@@ -100,7 +102,11 @@ fn fvar_location(variable: &[u8], name: &str) -> Fixture<Vec<(String, f32)>> {
 
 /// A glyph's outline points and advance, at `location` in a variable
 /// binary or at the default of a static one.
-fn glyph(bytes: &[u8], location: &[(String, f32)], character: char) -> Fixture<(BezPath, f32)> {
+fn outline_and_advance(
+    bytes: &[u8],
+    location: &[(String, f32)],
+    character: char,
+) -> Fixture<(BezPath, f32)> {
     let font = FontRef::new(bytes)?;
     let coords = font
         .axes()
@@ -178,8 +184,9 @@ fn differences(
     let characters = mapped_characters(font, 24);
     let mut differences = Vec::new();
     for character in &characters {
-        let (variable_outline, variable_advance) = glyph(variable, &location, *character)?;
-        let (static_outline, static_advance) = glyph(static_bytes, &[], *character)?;
+        let (variable_outline, variable_advance) =
+            outline_and_advance(variable, &location, *character)?;
+        let (static_outline, static_advance) = outline_and_advance(static_bytes, &[], *character)?;
         let distance = outline_distance(&variable_outline, &static_outline);
         if distance > OUTLINE_TOLERANCE {
             differences.push(format!(
@@ -224,11 +231,6 @@ fn compare_every_instance(font: &Font, directory: &Path) -> Fixture<usize> {
     Ok(written.len())
 }
 
-fn mutatorsans() -> Fixture<Font> {
-    let path = fixtures::mutatorsans_designspace();
-    Ok(FontLoader::new().read_font(path.to_str().ok_or("fixture paths are UTF-8")?)?)
-}
-
 #[test]
 fn every_static_instance_matches_the_variable_font_there() {
     let temp = tempfile::tempdir().unwrap();
@@ -240,7 +242,7 @@ fn every_static_instance_matches_the_variable_font_there() {
 
 #[test]
 fn every_mutatorsans_instance_matches_the_variable_font_there() {
-    let font = mutatorsans().unwrap();
+    let font = mutatorsans();
     let temp = tempfile::tempdir().unwrap();
 
     let compared = compare_every_instance(&font, temp.path()).unwrap();
@@ -251,7 +253,7 @@ fn every_mutatorsans_instance_matches_the_variable_font_there() {
 
 #[test]
 fn static_files_are_named_after_their_instances() {
-    let font = mutatorsans().unwrap();
+    let font = mutatorsans();
 
     let files = FontExporter::static_instance_files(&font).unwrap();
 
@@ -286,4 +288,17 @@ fn a_variable_font_without_instances_has_nothing_to_export() {
     let result = FontExporter::new().export_static_instances(&font, temp.path());
 
     assert!(matches!(result, Err(ExportError::NoNamedInstances)));
+}
+
+#[test]
+fn an_instance_without_a_postscript_name_drops_what_postscript_names_leave_out() {
+    let mut font = sample_variable_font();
+    font.metadata_mut().family_name = Some("Solenoid".to_string());
+    let location = font.named_instances()[0].location().clone();
+    let instance = NamedInstance::new("Coarse Wide (Ünï)/2".to_string(), location, None);
+    font.set_named_instances(vec![instance]).unwrap();
+
+    let files = FontExporter::static_instance_files(&font).unwrap();
+
+    assert_eq!(files[0].file_name, "Solenoid-CoarseWiden2.ttf");
 }

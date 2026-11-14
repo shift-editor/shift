@@ -137,17 +137,3 @@ fn postscript_safe(name: &str) -> String {
         .filter(|character| character.is_ascii_graphic() && !"[](){}<>/%".contains(*character))
         .collect()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn postscript_safe_names_drop_spaces_and_reserved_characters() {
-        assert_eq!(
-            postscript_safe("Solenoid-Coarse Wide"),
-            "Solenoid-CoarseWide"
-        );
-        assert_eq!(postscript_safe("Ünï (Bold)/2"), "nBold2");
-    }
-}
