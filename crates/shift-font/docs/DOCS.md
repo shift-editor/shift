@@ -41,6 +41,7 @@ crates/shift-font/src/
   curve_fit.rs     -- one cubic or quadratic fitted to a connected run of segments, for deletion
   point_arrange.rs -- transform, align and distribute selected points; shift a sidebearing
   svg_path.rs      -- contours from SVG path data, for authoring payloads and pasted SVG
+  wire/            -- the shapes the bridge and the editor's WebAssembly carry to TypeScript: snapshots, layer values, `FontReplacement`, id parsing
   naming.rs        -- names for new glyphs and anchors: the name, or the name numbered `.1`, `.2`, ...
   interpolation.rs -- source compatibility, reusable bases, source values
   projection.rs    -- location-independent glyph payloads and resolved views; compiled anchors at a location
@@ -132,9 +133,9 @@ Coordinates, advance width, smooth flags, anchor positions, and component transf
 
 ## Boundaries
 
-`shift-font` should not expose TypeScript-facing wire contracts. Those belong in `shift-wire`.
+TypeScript-facing wire contracts live apart from the domain model, in `wire` (`shift_font::wire`); the napi twins of those that still cross as napi objects live in `shift-bridge` (`wire_napi.rs`).
 
-`shift-wire` may translate native bases, source values, and projections into transport DTOs, but it must not rebuild source samples, define value ordering or topology compatibility, or evaluate variation models.
+`wire` may translate native bases, source values, and projections into transport DTOs, but it must not rebuild source samples, define value ordering or topology compatibility, or evaluate variation models.
 
 `shift-font` should not perform SQLite persistence or define a durable binary encoding. Canonical document and recovery reads, writes, MessagePack encoding, compression, and compatibility policy belong in `shift-store`.
 
@@ -165,7 +166,7 @@ Transport and workspace layers should pass stable identity to find the model obj
 2. Implement the staged mutation branch in `Font::apply_intents`, delegating the actual edit to the owning model object (`GlyphLayer`, `Font`, or `Source`). Existing metadata, collection, glyph, and layer scopes are compared and coalesced automatically.
 3. If the intent introduces a new authored scope, add one coarse reversible `FontChange` variant, include it in `Font::apply_change_set`, and teach `shift-store` to persist that replacement. Do not add workspace-specific inverse state or replay logic.
 4. If the renderer needs identity synchronously, accept caller-minted IDs through a seed struct such as `PointSeed` rather than returning Rust-minted IDs after the fact.
-5. Derive `Pack` on the payload behind the `pack` feature (`#[cfg_attr(feature = "pack", derive(pack::Pack))]`), and on any value it carries; the window's engine and the native workspace both receive it as is, and its TypeScript type is generated from it. A value whose TypeScript name would clash with one of `shift-wire`'s records takes a `#[pack(rename)]`, as `Axis` (`FontAxis`) does.
+5. Derive `Pack` on the payload behind the `pack` feature (`#[cfg_attr(feature = "pack", derive(pack::Pack))]`), and on any value it carries; the window's engine and the native workspace both receive it as is, and its TypeScript type is generated from it. A value whose TypeScript name would clash with one of `wire`'s records takes a `#[pack(rename)]`, as `Axis` (`FontAxis`) does.
 6. Verify apply/invert round trips and stale-origin atomicity in `shift-font`, persistence in `shift-store`, and undo/redo in `shift-workspace`.
 
 ### Adding a glyph-layer geometry mutation
@@ -206,4 +207,4 @@ cargo test -p shift-font
 - `shift-store` -- canonical SQLite `.shift` documents and recovery persistence.
 - `shift-workspace` -- mutation, ledger, and source/store coordination.
 - `shift-backends` -- import and compiler adapters.
-- `shift-wire` -- transport DTO projection.
+- `wire` -- transport DTO projection (`src/wire/`).

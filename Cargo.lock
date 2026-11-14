@@ -2462,7 +2462,6 @@ dependencies = [
  "shift-slug",
  "shift-specimen",
  "shift-store",
- "shift-wire",
  "shift-workspace",
  "thiserror",
  "tokio",
@@ -2650,22 +2649,8 @@ dependencies = [
  "shift-font",
  "shift-layout",
  "shift-text",
- "shift-wire",
  "thiserror",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "shift-wire"
-version = "0.0.0"
-dependencies = [
- "napi",
- "napi-derive",
- "pack",
- "serde",
- "serde_json",
- "shift-font",
- "thiserror",
 ]
 
 [[package]]

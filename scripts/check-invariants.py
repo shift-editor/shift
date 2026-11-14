@@ -26,11 +26,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # Rules
 # ---------------------------------------------------------------------------
 
-# napi-boundary: the NAPI runtime may only be linked by the bridge crate and
-# the wire DTO crate. Everything else talks to Rust through those boundaries,
-# which is what keeps the FFI surface auditable and the domain crates portable.
+# napi-boundary: the NAPI runtime may only be linked by the bridge crate.
+# Everything else talks to Rust through it, which is what keeps the FFI
+# surface auditable and the domain crates portable.
 NAPI_CRATES = {"napi", "napi-derive", "napi-build"}
-NAPI_ALLOWED_DEPENDENTS = {"shift-bridge", "shift-wire"}
+NAPI_ALLOWED_DEPENDENTS = {"shift-bridge"}
 
 # geo-dependency-free: @shift/geo is a leaf library — zero runtime
 # dependencies, and non-test sources import only sibling files. This is what

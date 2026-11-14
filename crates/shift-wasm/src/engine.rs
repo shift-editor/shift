@@ -21,12 +21,12 @@ use shift_engine::{
     ApplyError, EditHistory, EditLocation, EngineSession, LayerSource, RecordCache, RecordSource,
     Recording, Replayed, StoreReadError, StoreReaderClient,
 };
+use shift_font::wire::replacement::FontReplacement;
+use shift_font::wire::{AnchorData, ComponentData, ContourData, values};
 use shift_font::{
     AppliedIntents, CompiledHeader, Contour, Font, FontChangeImpact, FontIntent, FontIntentSet,
     GlyphDataCategory, GlyphId, GlyphLayer, LayerId, NamedGlyph, TouchedLayer,
 };
-use shift_wire::replacement::FontReplacement;
-use shift_wire::{AnchorData, ComponentData, ContourData, values};
 use wasm_bindgen::prelude::*;
 
 use crate::engine_reads::{CompiledVariations, FontVariation, InternedIds};
@@ -1008,7 +1008,7 @@ fn engine_layer(before: &Font, touched: &TouchedLayer) -> Result<JsValue, JsErro
         JsValue::NULL
     };
     set(&layer, "structure", &structure)?;
-    let values = shift_wire::values_from_layer(source);
+    let values = shift_font::wire::values_from_layer(source);
     set(&layer, "values", &Float64Array::from(&values[..]))?;
     set(
         &layer,

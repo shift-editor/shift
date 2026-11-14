@@ -2,8 +2,8 @@
 
 use std::str::FromStr;
 
-use crate::{AnchorData, ComponentData, ContourData, GlyphStructure, GlyphValue};
-use shift_font::{
+use crate::wire::{AnchorData, ComponentData, ContourData, GlyphStructure, GlyphValue};
+use crate::{
     Anchor as IrAnchor, AnchorId, Component as IrComponent, ComponentId, Contour as IrContour,
     ContourId, CoreError, CoreResult, DecomposedTransform as IrTransform, GlyphId,
     GlyphInterpolationValues, GlyphLayer, LayerId, PointId, PointType as IrPointType, SourceId,
@@ -109,8 +109,8 @@ fn restore_components(layer: &mut GlyphLayer, components: &[ComponentData]) -> C
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{PointType, values_from_layer};
-    use shift_font::{Anchor, Component, DecomposedTransform, GlyphId, LayerId, SourceId};
+    use crate::wire::{PointType, values_from_layer};
+    use crate::{Anchor, Component, DecomposedTransform, GlyphId, LayerId, SourceId};
 
     fn sample_layer() -> GlyphLayer {
         let mut layer = GlyphLayer::with_width(LayerId::new(), SourceId::new(), 500.0);
@@ -192,7 +192,7 @@ mod tests {
 
         let anchor = restored.anchor(&AnchorId::from_raw(30)).unwrap();
         assert_eq!(anchor.name(), Some("top"));
-        assert_eq!(anchor.position(), shift_font::kurbo::Point::new(5.0, 6.0));
+        assert_eq!(anchor.position(), kurbo::Point::new(5.0, 6.0));
 
         let component = restored.component(&ComponentId::from_raw(40)).unwrap();
         assert_eq!(component.base_glyph_id(), GlyphId::from_raw("base"));
@@ -241,7 +241,7 @@ mod tests {
                 .unwrap()
                 .points()
                 .iter()
-                .map(shift_font::Point::point_type)
+                .map(crate::Point::point_type)
                 .collect::<Vec<_>>(),
             vec![
                 IrPointType::OnCurve,

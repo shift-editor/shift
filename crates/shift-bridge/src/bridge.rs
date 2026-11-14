@@ -1,6 +1,11 @@
 use crate::errors::{self, BridgeError, BridgeResult, generic_failure};
 use crate::input::parse_id_list;
 use crate::reply::{PackedReply, answer};
+use crate::wire_napi::IntoEach;
+use crate::wire_napi::{
+  self, NapiGlyphPreview, NapiGlyphProjection, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
+  NapiLayerRead,
+};
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
@@ -12,6 +17,13 @@ use shift_backends::{
   font_loader::FontLoader,
 };
 use shift_font::composite::resolved_contours_to_svg_path;
+use shift_font::wire::{
+  AnchorData, ComponentData, ComponentGlyph, ComponentTransformKind, ContourData, FontMetadata,
+  FontMetrics, FontSnapshot, GlyphComponents, GlyphEntry, GlyphLayerShape, GlyphLayerSnapshot,
+  GlyphProjection, GlyphSnapshot, GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape,
+  GlyphState, GlyphStructure, GlyphVariation, InterpolationSupport, Location as WireLocation,
+  MetricDefinition, NamedInstance, PointData, PointType, VariationBasis, VariationDelta,
+};
 use shift_font::{
   AnchorId, Axis as FontAxis, AxisId, AxisMapping as FontAxisMapping, AxisMappingId,
   AxisMappingPoint as FontAxisMappingPoint, CompiledHeader, ComponentId, ContourId, Font, Glyph,
@@ -19,19 +31,6 @@ use shift_font::{
   PointId, SourceId,
 };
 use shift_slug::{AuthoredAtlasProfile, VariableAtlas};
-use shift_wire::bridges::napi::IntoEach;
-use shift_wire::values;
-use shift_wire::{
-  AnchorData, ComponentData, ComponentGlyph, ComponentTransformKind, ContourData, FontMetadata,
-  FontMetrics, FontSnapshot, GlyphComponents, GlyphEntry, GlyphLayerShape, GlyphLayerSnapshot,
-  GlyphProjection, GlyphSnapshot, GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape,
-  GlyphState, GlyphStructure, GlyphVariation, InterpolationSupport, Location as WireLocation,
-  MetricDefinition, NamedInstance, PointData, PointType, VariationBasis, VariationDelta,
-  bridges::napi::{
-    NapiGlyphPreview, NapiGlyphProjection, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
-    NapiLayerRead,
-  },
-};
 use shift_workspace::{AcquireScope, FontWorkspace, WorkspaceError};
 use std::{
   collections::{BTreeMap, HashMap, HashSet, VecDeque},
@@ -1215,7 +1214,7 @@ impl Bridge {
   pub fn get_glyph_previews(
     &mut self,
     glyph_ids: Vec<String>,
-    location: values::Location,
+    location: wire_napi::Location,
   ) -> errors::Result<Vec<NapiGlyphPreview>> {
     let glyph_ids = parse_id_list::<GlyphId>(&glyph_ids)?;
     let location =
@@ -1326,11 +1325,11 @@ impl Bridge {
   }
 
   #[napi]
-  pub fn map_location(&self, location: values::Location) -> errors::Result<values::Location> {
+  pub fn map_location(&self, location: wire_napi::Location) -> errors::Result<wire_napi::Location> {
     let external =
       shift_font::ExternalLocation::from_untyped(shift_font::Location::try_from(location)?);
     let mapped = self.font()?.mapped_location(&external)?;
-    Ok(shift_wire::Location::from(mapped.as_untyped()).into())
+    Ok(shift_font::wire::Location::from(mapped.as_untyped()).into())
   }
 
   /// Snapshots the font with only the glyphs its thumbnail specimen compiles loaded.
@@ -1413,9 +1412,9 @@ mod tests {
     NativeWorkspace, NativeWorkspaceClient, NativeWorkspaceError, SaveState, SourceKind,
   };
   use super::*;
+  use crate::wire_napi::{NapiGlyphSnapshotRequest, NapiGlyphState};
   use pack::{Bytes, CarryingNames, Packed};
   use shift_font::{AnchorSeed, FontIntent, FontIntentSet, PointSeed};
-  use shift_wire::bridges::napi::{NapiGlyphSnapshotRequest, NapiGlyphState};
   use std::cell::RefCell;
   use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -3233,7 +3232,7 @@ mod tests {
     let previews = bridge
       .get_glyph_previews(
         vec![glyph.id.to_string(), missing_glyph_id],
-        values::Location {
+        wire_napi::Location {
           values: HashMap::new(),
         },
       )

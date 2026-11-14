@@ -5,10 +5,10 @@
 //! the store's component references and glyph categories, so a session with a
 //! store adds them as [`FontReplacement::glyph_changes`].
 
+use crate::{CoreResult, Font, FontChangeImpact, GlyphRecordChanges};
 use serde::Serialize;
-use shift_font::{CoreResult, Font, FontChangeImpact, GlyphRecordChanges};
 
-use crate::{
+use crate::wire::{
     AxisMapping, AxisMappingBasis, FontMetadata, KerningSnapshot, MetricDefinition, NamedInstance,
     SourceMetricsInterpolationSnapshot,
 };
@@ -20,14 +20,14 @@ use crate::{
 #[serde(rename_all = "camelCase")]
 pub struct FontReplacement {
     pub metadata: Option<FontMetadata>,
-    pub axes: Option<Vec<shift_font::Axis>>,
+    pub axes: Option<Vec<crate::Axis>>,
     pub axis_mappings: Option<Vec<AxisMapping>>,
     pub axis_mapping_bases: Option<Vec<AxisMappingBasis>>,
     pub metric_definitions: Option<Vec<MetricDefinition>>,
     pub source_metrics_interpolation: Option<SourceMetricsInterpolationReplacement>,
     pub named_instances: Option<Vec<NamedInstance>>,
     pub languages: Option<LanguagesReplacement>,
-    pub sources: Option<Vec<shift_font::Source>>,
+    pub sources: Option<Vec<crate::Source>>,
     pub kerning: Option<KerningSnapshot>,
     /// The glyph records the edit changed, which a session with a store adds;
     /// `None` from [`Self::changed_by`] and when it changed none. Only the
