@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { MarkColor } from "@shift/types";
-import { colorsInUse, filterByColor, glyphCountLabel } from "./colorFilter";
+import { colorsInUse, filterByColor } from "./colorFilter";
 import { GlyphGridView, TILE_SIZE } from "./GlyphGridView";
 
 const yellow: MarkColor = { kind: "named", named: "yellow" };
@@ -59,16 +59,6 @@ describe("filtering the glyph grid by tag colour", () => {
       color: green,
       count: 0,
     });
-  });
-
-  it("says what the grid shows", () => {
-    expect(glyphCountLabel(3018, 3018, filtered())).toBe("3,018 glyphs");
-    expect(glyphCountLabel(1, 1, filtered())).toBe("1 glyph");
-    expect(glyphCountLabel(214, 3018, filtered())).toBe("214 of 3,018");
-    expect(glyphCountLabel(3, 3018, filtered([yellow, false]))).toBe("3 yellow of 3,018");
-    expect(glyphCountLabel(40, 3018, filtered([green, false]))).toBe("40 green of 3,018");
-    expect(glyphCountLabel(9, 3018, filtered([null, false]))).toBe("9 untagged of 3,018");
-    expect(glyphCountLabel(5, 3018, filtered([yellow, false], [teal, true]))).toBe("5 of 3,018");
   });
 });
 

@@ -5,14 +5,13 @@ import { GlyphCatalogBackendGate } from "./GlyphCatalogBackendGate";
 import { GlyphGridFooter } from "./GlyphGridFooter";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { getShiftHost } from "@/host/shiftHost";
-import { colorsInUse, filterByColor, glyphCountLabel } from "@/lib/glyph-grid/colorFilter";
+import { colorsInUse, filterByColor } from "@/lib/glyph-grid/colorFilter";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 
 /** Coordinates shared catalog data and session-fixed backend selection. */
 export const GlyphGrid = memo(function GlyphGrid() {
   const catalogActive = useLocation().pathname === "/home";
   const {
-    availableGlyphs,
     filteredGlyphs,
     location,
     metrics,
@@ -105,7 +104,6 @@ export const GlyphGrid = memo(function GlyphGrid() {
         ) : null}
       </section>
       <GlyphGridFooter
-        countLabel={glyphCountLabel(shownGlyphs.length, availableGlyphs.length, colorFilter)}
         colors={colors}
         colorFilter={colorFilter}
         filterColor={(color, add) => gridView.filterColor(color, add)}

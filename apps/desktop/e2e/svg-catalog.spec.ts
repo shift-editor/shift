@@ -88,23 +88,23 @@ test.describe("SVG glyph catalog fallback", () => {
     await expect(svg).toHaveAttribute("data-grid-readiness", "Complete");
     const tagged = await editor.createGlyphsForUnicodes([0x3042, 0x3044]);
     const tiles = svg.getByRole("button", { name: /^Open / });
-    const count = page.getByTestId("glyph-count");
+    const surface = glyphCatalogSurface(page);
     const total = (await editor.glyphNames()).length;
-    await expect(count).toHaveText(`${total} glyphs`);
+    await expect(surface).toHaveAttribute("data-filtered-glyph-count", `${total}`);
     await expect(page.getByRole("button", { name: "Show yellow glyphs" })).toHaveCount(0);
 
     await editor.tagGlyphs(tagged, { kind: "named", named: "yellow" });
     await page.getByRole("button", { name: "Show yellow glyphs" }).click();
-    await expect(count).toHaveText(`2 yellow of ${total}`);
+    await expect(surface).toHaveAttribute("data-filtered-glyph-count", "2");
     await expect(tiles).toHaveCount(2);
     await expect(svg.locator('[data-mark-color="yellow"]')).toHaveCount(2);
 
     await page.getByRole("button", { name: "Show untagged glyphs" }).click();
-    await expect(count).toHaveText(`${total - 2} untagged of ${total}`);
+    await expect(surface).toHaveAttribute("data-filtered-glyph-count", `${total - 2}`);
     await expect(svg.locator('[data-mark-color="yellow"]')).toHaveCount(0);
 
     await page.getByRole("button", { name: "Show untagged glyphs" }).click();
-    await expect(count).toHaveText(`${total} glyphs`);
+    await expect(surface).toHaveAttribute("data-filtered-glyph-count", `${total}`);
   });
 
   test("makes tiles as large as the footer's size slider allows", async ({ page }) => {

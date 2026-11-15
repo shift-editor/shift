@@ -1,6 +1,6 @@
 import type { MarkColor } from "@shift/types";
 import type { MarkColorFilter } from "./GlyphGridView";
-import { markColorKey, markColorLabel, UNTAGGED, type MarkColorKey } from "./markColor";
+import { markColorKey, UNTAGGED, type MarkColorKey } from "./markColor";
 
 /** A glyph as the colour filter reads it. */
 export interface TaggedGlyph {
@@ -52,20 +52,4 @@ export function colorsInUse(
     .toArray();
   if (tagged.length === 0) return [];
   return untagged ? [...tagged, untagged] : tagged;
-}
-
-const count = new Intl.NumberFormat("en-US");
-
-/**
- * What the grid's footer says it shows: `3 yellow of 3,018` when filtered to
- * one colour, `214 of 3,018` under any other filter, `3,018 glyphs` unfiltered.
- */
-export function glyphCountLabel(shown: number, total: number, filter: MarkColorFilter): string {
-  const [only] = filter.size === 1 ? filter.values() : [];
-  if (filter.size === 1) {
-    const label = only ? markColorLabel(only) : "untagged";
-    return `${count.format(shown)} ${label} of ${count.format(total)}`;
-  }
-  if (shown !== total) return `${count.format(shown)} of ${count.format(total)}`;
-  return `${count.format(total)} ${total === 1 ? "glyph" : "glyphs"}`;
 }
