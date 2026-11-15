@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Button,
   Popover,
@@ -90,7 +90,11 @@ const OptionsPanel = ({ row, title }: { row: ExportRow; title: string }) => {
 const OptionsBody = ({ row, workspace }: { row: ExportRow; workspace: Workspace }) => {
   const exports = useExport();
   const folder = exports.folder(row.target);
-  const { format, encodings } = exportRequestFor(row);
+  // One request per target and output: the plan re-runs whenever its encodings array changes.
+  const { format, encodings } = useMemo(
+    () => exportRequestFor({ target: row.target, output: row.output }),
+    [row.target, row.output],
+  );
   const plan = useExportPlan(workspace, format, encodings, folder);
   const needsInstances = useNeedsInstances(row);
 
@@ -110,7 +114,11 @@ const OptionsBody = ({ row, workspace }: { row: ExportRow; workspace: Workspace 
                 : folderBreadcrumb(folder).join(" › ")}
             </span>
           </div>
-          <Button variant="outline" size="compact" onClick={() => void exports.chooseFolder(row.target)}>
+          <Button
+            variant="outline"
+            size="compact"
+            onClick={() => void exports.chooseFolder(row.target)}
+          >
             {message("export.folder.choose")}
           </Button>
         </div>
@@ -132,7 +140,11 @@ const NoInstances = () => {
   return (
     <div className="flex flex-col items-start gap-2 text-ui text-secondary">
       {message("export.static.noInstances")}
-      <Button variant="outline" size="compact" onClick={() => settings.open({ category: "instances" })}>
+      <Button
+        variant="outline"
+        size="compact"
+        onClick={() => settings.open({ category: "instances" })}
+      >
         {message("export.static.addInstances")}
       </Button>
     </div>
@@ -141,32 +153,42 @@ const NoInstances = () => {
 
 /** The files the row writes, as Rust names them; a UFO is a folder. */
 const PlannedFiles = ({ plan }: { plan: ExportPlan }) => (
-  <div className="flex flex-col gap-1.5">
-    <span className="text-ui text-secondary">{message("export.files")}</span>
-    <ul className="scrollbar-hidden flex max-h-48 flex-col overflow-y-auto">
-      <PlannedFileRows plan={plan} />
-    </ul>
+  <div className="flex flex-col gap-1">
+    <div className="flex items-center justify-between text-ui text-secondary">
+      <span>{message("export.files")}</span>
+      {plan.status === "ready" ? <span>{fileCount(plan.files.length)}</span> : null}
+    </div>
+    <PlannedFileRows plan={plan} />
   </div>
 );
 
+function fileCount(count: number): string {
+  return count === 1 ? message("export.files.one") : message("export.files.many", { count });
+}
+
 const PlannedFileRows = ({ plan }: { plan: ExportPlan }) => {
   switch (plan.status) {
+    // Names come back within a moment; the list fills in rather than showing a placeholder.
     case "planning":
-      return <li className="h-6 text-ui text-secondary">{message("export.files.planning")}</li>;
+      return null;
     case "failed":
-      return <li className="text-ui text-secondary">{plan.reason}</li>;
+      return <p className="text-ui text-secondary">{plan.reason}</p>;
     case "ready":
-      return plan.files.map((file) => {
-        const name = pathName(file);
-        const Icon = name.toLowerCase().endsWith(".ufo") ? FolderIcon : FileIcon;
-        return (
-          <li key={file} className="flex h-6 min-w-0 items-center gap-1.5 text-ui text-primary">
-            <Icon aria-hidden className="h-3.5 w-3.5 shrink-0 text-secondary" />
-            <span className="truncate" title={file}>
-              {name}
-            </span>
-          </li>
-        );
-      });
+      return (
+        <ul className="scrollbar-hidden flex max-h-48 flex-col overflow-y-auto">
+          {plan.files.map((file) => {
+            const name = pathName(file);
+            const Icon = name.toLowerCase().endsWith(".ufo") ? FolderIcon : FileIcon;
+            return (
+              <li key={file} className="flex h-6 min-w-0 items-center gap-1.5 text-ui text-primary">
+                <Icon aria-hidden className="h-3.5 w-3.5 shrink-0 text-secondary" />
+                <span className="truncate" title={file}>
+                  {name}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      );
   }
 };
