@@ -155,10 +155,19 @@ const PlannedFiles = ({ plan }: { plan: ExportPlan }) => {
       return null;
     case "failed":
       return <p className="text-ui text-secondary">{plan.reason}</p>;
-    case "ready":
+    case "ready": {
+      const [only] = plan.files;
+      // One file reads as a sentence; several list every name under their count.
+      if (plan.files.length === 1 && only !== undefined) {
+        return (
+          <p className="truncate text-ui text-secondary" title={only}>
+            {message("export.files.writes")} <span className="text-primary">{pathName(only)}</span>
+          </p>
+        );
+      }
       return (
         <div className="flex flex-col gap-1">
-          <span className="text-ui text-primary">{fileCount(plan.files.length)}</span>
+          <span className="text-ui text-primary">{message("export.files.many", { count: plan.files.length })}</span>
           <ul className="scrollbar-hidden flex max-h-40 flex-col overflow-y-auto text-ui text-secondary">
             {plan.files.map((file) => (
               <li key={file} className="truncate leading-5" title={file}>
@@ -168,9 +177,6 @@ const PlannedFiles = ({ plan }: { plan: ExportPlan }) => {
           </ul>
         </div>
       );
+    }
   }
 };
-
-function fileCount(count: number): string {
-  return count === 1 ? message("export.files.one") : message("export.files.many", { count });
-}

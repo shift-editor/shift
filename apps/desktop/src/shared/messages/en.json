@@ -93,7 +93,7 @@
   "export.output.ufo": "UFO",
   "export.options": "Export options",
   "export.options.close": "Close",
-  "export.files.one": "1 file",
+  "export.files.writes": "Writes",
   "export.files.many": "{count} files",
   "export.static.noInstances": "Static fonts are made from named instances, and this font has none.",
   "export.static.addInstances": "Add Instances…",
