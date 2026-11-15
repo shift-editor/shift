@@ -1,8 +1,8 @@
-version: 0.186.1
+version: 0.187.1
 files:
-  - url: https://releases.shift.graphics/nightly/db5edde445101ee0dbabf5aac4b0b2329d79599e/Shift-Nightly-0.186.1-Windows-arm64-Setup.exe
-    sha512: crhmiXs70fhQ+5Dx9657ROTF0BJiYiBjHWIUbqsvcIzivHrlWGDSshb+TIK8Sphjz/VGJ/9BIdNi1BuB0w43tw==
-    size: 121978656
-path: https://releases.shift.graphics/nightly/db5edde445101ee0dbabf5aac4b0b2329d79599e/Shift-Nightly-0.186.1-Windows-arm64-Setup.exe
-sha512: crhmiXs70fhQ+5Dx9657ROTF0BJiYiBjHWIUbqsvcIzivHrlWGDSshb+TIK8Sphjz/VGJ/9BIdNi1BuB0w43tw==
-releaseDate: '2026-11-15T13:03:56.037Z'
+  - url: https://releases.shift.graphics/nightly/1ce5612806004f8e8835ce092531e18eabd378d6/Shift-Nightly-0.187.1-Windows-arm64-Setup.exe
+    sha512: 99Bj0fQqWFT9Wyw6NsW7GeGEJLh4DwljFdQEK04u32QL86F9juSLYQmhTP/G+LSeiKKyJq3cdlWCg14tyMkBaw==
+    size: 122662581
+path: https://releases.shift.graphics/nightly/1ce5612806004f8e8835ce092531e18eabd378d6/Shift-Nightly-0.187.1-Windows-arm64-Setup.exe
+sha512: 99Bj0fQqWFT9Wyw6NsW7GeGEJLh4DwljFdQEK04u32QL86F9juSLYQmhTP/G+LSeiKKyJq3cdlWCg14tyMkBaw==
+releaseDate: '2026-11-15T21:13:57.555Z'
