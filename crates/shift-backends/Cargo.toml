@@ -28,6 +28,7 @@ serde = "1"
 tempfile = "3"
 thiserror = "2.0.18"
 write-fonts = "0.52"
+ttf2woff2 = { version = "0.14", default-features = false }
 
 [dev-dependencies]
 harfrust = "0.13.3"
@@ -35,6 +36,7 @@ proptest = "1"
 shift-text = { workspace = true, features = ["layout"] }
 shift-font = { workspace = true, features = ["test-support"] }
 shift-store = { workspace = true }
+wuff = "0.2"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 shift-store = { workspace = true }

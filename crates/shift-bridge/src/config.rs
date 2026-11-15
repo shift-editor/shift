@@ -3,10 +3,11 @@
 //! These functions hold no state and touch no files: main owns the file and
 //! passes its text in, so reads and writes stay atomic on the JavaScript side.
 
+use crate::errors::invalid_arg;
 use crate::wire_napi::IntoEach;
 use std::collections::HashMap;
 
-use napi::{Error, Result, Status};
+use napi::Result;
 use napi_derive::napi;
 use shift_config::theme::Appearance;
 use shift_config::{ConfigProblem, Severity, ThemeMode, ThemeSetting, ThemeSlots};
@@ -148,8 +149,7 @@ pub fn config_set_theme_slots(source: Option<String>, slots: NapiThemeSlots) -> 
 }
 
 fn set_theme(source: Option<String>, theme: ThemeSetting) -> Result<String> {
-  shift_config::set_theme(source.as_deref(), &theme)
-    .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))
+  shift_config::set_theme(source.as_deref(), &theme).map_err(invalid_arg)
 }
 
 /// Whether a theme's background is light or dark.

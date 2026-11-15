@@ -171,3 +171,24 @@ fn compile_static_writes_one_static_font_per_named_instance() {
     let font = skrifa::FontRef::new(&bytes).unwrap();
     assert!(font.table_data(skrifa::Tag::new(b"fvar")).is_none());
 }
+
+#[test]
+fn compile_woff2_writes_a_woff2_beside_the_ttf() {
+    let temp = tempfile::tempdir().unwrap();
+    let document = variable_document(temp.path()).unwrap();
+    let ttf = temp.path().join("Dogfood.ttf");
+
+    let output = shift(&["compile", &document, "--woff2", "-o", ttf.to_str().unwrap()]);
+
+    assert!(output.status.success(), "{}", stderr(&output));
+    let woff2 = temp.path().join("Dogfood.woff2");
+    let printed: Vec<_> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect();
+    assert_eq!(
+        printed,
+        [ttf.display().to_string(), woff2.display().to_string()]
+    );
+    assert!(std::fs::read(&woff2).unwrap().starts_with(b"wOF2"));
+}

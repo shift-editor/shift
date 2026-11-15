@@ -211,6 +211,18 @@ export interface ShiftHost {
      */
     onChanged: (callback: (documents: RecentDocument[]) => void) => () => void;
   };
+  /** Native choices the Export section needs from the app shell. */
+  exports: {
+    /**
+     * Shows a folder chooser for an export's destination.
+     *
+     * @param defaultPath - folder the chooser opens at, or null for the system default.
+     * @returns the chosen folder, or null when canceled.
+     */
+    chooseFolder: (defaultPath: string | null) => Promise<string | null>;
+    /** Shows an exported file or folder in Finder or the platform file manager. */
+    reveal: (path: string) => Promise<void>;
+  };
   /** System clipboard access owned by the app shell. */
   clipboard: {
     writeText: (text: string) => Promise<void>;

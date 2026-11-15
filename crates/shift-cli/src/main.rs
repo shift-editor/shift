@@ -30,7 +30,10 @@ use inspect::{InspectReport, RenderMode};
 use kerning::{get_kerning, kerning_groups, list_kerning};
 use miette::IntoDiagnostic;
 use serde::Serialize;
-use shift_backends::{ExportFormat, FontExportRequest, FontExportResult, FontExporter};
+use shift_backends::{
+    BinaryEncoding, BinaryEncodings, ExportFormat, FontExportRequest, FontExportResult,
+    FontExporter,
+};
 use shift_store::ShiftStore;
 use skill::{install_skill, show_skill, skill_status};
 
@@ -46,8 +49,8 @@ fn main() -> miette::Result<()> {
             Ok(())
         }
         Command::Compile(args) => {
-            for result in compile(args)? {
-                write_stdout(&result.path.display().to_string())?;
+            for file in compile(args)?.iter().flat_map(|result| &result.files) {
+                write_stdout(&file.display().to_string())?;
             }
             Ok(())
         }
@@ -235,19 +238,30 @@ fn write_authoring_result(
 }
 
 /// Compiles the document to one variable or static binary, or with
-/// `--static` to one static binary per named instance.
+/// `--static` to one static binary per named instance; with `--woff2`, each
+/// binary is also written as WOFF2.
 fn compile(args: CompileArgs) -> miette::Result<Vec<FontExportResult>> {
-    if !args.static_instances {
-        return Ok(vec![export_document(
-            &args.path,
-            args.output,
-            ExportFormat::Ttf,
-        )?]);
-    }
+    let encodings = if args.woff2 {
+        BinaryEncodings::new([BinaryEncoding::Ttf, BinaryEncoding::Woff2]).into_diagnostic()?
+    } else {
+        BinaryEncodings::ttf()
+    };
     let font = load_document(&args.path)?;
-    FontExporter::new()
-        .export_static_instances(&font, &args.output)
-        .into_diagnostic()
+    let exporter = FontExporter::new();
+    if args.static_instances {
+        return exporter
+            .export_static_instances_with(&font, &args.output, &encodings)
+            .into_diagnostic();
+    }
+    let request = FontExportRequest {
+        path: args.output,
+        format: ExportFormat::Ttf,
+    };
+    Ok(vec![
+        exporter
+            .export_with(&font, request, &encodings)
+            .into_diagnostic()?,
+    ])
 }
 
 fn export(args: ExportArgs) -> miette::Result<FontExportResult> {
@@ -355,6 +369,7 @@ mod tests {
             path: source_path,
             output: output_path.clone(),
             static_instances: false,
+            woff2: false,
         })
         .unwrap();
 
@@ -363,6 +378,7 @@ mod tests {
             [FontExportResult {
                 path: output_path.clone(),
                 format: ExportFormat::Ttf,
+                files: vec![output_path.clone()],
             }]
         );
         let bytes = std::fs::read(output_path).unwrap();

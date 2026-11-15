@@ -14,6 +14,7 @@ import { PreviewNoticeProvider } from "@/context/PreviewNoticeProvider";
 import { useDocumentViewMemory } from "@/hooks/useDocumentViewMemory";
 import { AboutScreen } from "@/views/AboutScreen";
 import { FeedbackScreen } from "@/views/FeedbackScreen";
+import { ExportProvider } from "@/context/ExportProvider";
 import { DocumentErrorBoundary } from "./DocumentErrorBoundary";
 
 declare const __PLAYWRIGHT__: boolean;
@@ -65,21 +66,23 @@ const FontSessionScreens = () => {
   return (
     <GlyphCatalogProvider>
       <PreviewNoticeProvider>
-        <SettingsNavigationProvider>
-          <ShiftSessionSetup />
-          <div
-            aria-hidden={!catalogActive}
-            className={catalogActive ? undefined : "pointer-events-none fixed inset-0 z-0"}
-            inert={!catalogActive}
-          >
-            <HeldGlyphCatalog held={!catalogActive}>
-              <Home />
-            </HeldGlyphCatalog>
-          </div>
-          <div className={catalogActive ? undefined : "relative z-10"}>
-            <Outlet />
-          </div>
-        </SettingsNavigationProvider>
+        <ExportProvider>
+          <SettingsNavigationProvider>
+            <ShiftSessionSetup />
+            <div
+              aria-hidden={!catalogActive}
+              className={catalogActive ? undefined : "pointer-events-none fixed inset-0 z-0"}
+              inert={!catalogActive}
+            >
+              <HeldGlyphCatalog held={!catalogActive}>
+                <Home />
+              </HeldGlyphCatalog>
+            </div>
+            <div className={catalogActive ? undefined : "relative z-10"}>
+              <Outlet />
+            </div>
+          </SettingsNavigationProvider>
+        </ExportProvider>
       </PreviewNoticeProvider>
     </GlyphCatalogProvider>
   );

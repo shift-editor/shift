@@ -8,7 +8,7 @@
 //! the XML that names them.
 //!
 //! Static instances, one binary per named instance, are exported by
-//! `FontExporter::export_static_instances`. Still to come: WOFF2 and WOFF (a
+//! `FontExporter::export_static_instances_with`. Still to come: WOFF2 and WOFF (a
 //! TTF re-encoded, which needs an encoder crate that passes `cargo deny`) and
 //! a Glyphs writer (`glyphs-reader` only reads).
 
@@ -20,12 +20,13 @@ use write_fonts::read::{FontRef, TableProvider};
 use write_fonts::tables::name::Name;
 use write_fonts::types::NameId;
 
-use crate::atomic::write_file_atomic;
+use crate::binary_encoding::BinaryEncodings;
 use crate::errors::FormatBackendError;
 use crate::formats::designspace::DesignspaceWriter;
 use crate::formats::ufo::UfoWriter;
 use crate::shift2fontir::{PropagatedGlyphAnchors, ShiftIrSource, ShiftIrSourceError};
 use crate::traits::FontView;
+use shift_font::{Axis, AxisRole, Font};
 
 /// Identifies a format [`FontExporter`] can write.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -36,11 +37,14 @@ pub enum ExportFormat {
     Designspace,
     /// One UFO; only for fonts with a single master.
     Ufo,
+    /// One static TrueType binary per named instance, written into a
+    /// directory; see [`FontExporter::export_static_instances_with`].
+    StaticTtf,
 }
 
 impl ExportFormat {
     /// Every format, in the order commands list them.
-    pub const ALL: [Self; 3] = [Self::Ttf, Self::Designspace, Self::Ufo];
+    pub const ALL: [Self; 4] = [Self::Ttf, Self::Designspace, Self::Ufo, Self::StaticTtf];
 
     /// Returns the lowercase format token used by commands and the bridge.
     pub fn as_str(self) -> &'static str {
@@ -48,13 +52,19 @@ impl ExportFormat {
             Self::Ttf => "ttf",
             Self::Designspace => "designspace",
             Self::Ufo => "ufo",
+            Self::StaticTtf => "static-ttf",
         }
     }
 
-    /// Returns the file extension, without the dot, that an output path of
-    /// this format must end in.
+    /// Returns the file extension, without the dot, of the files this format
+    /// writes: the output path's own for every format but [`Self::StaticTtf`],
+    /// whose output path is a directory.
     pub fn extension(self) -> &'static str {
-        self.as_str()
+        match self {
+            Self::Ttf | Self::StaticTtf => "ttf",
+            Self::Designspace => "designspace",
+            Self::Ufo => "ufo",
+        }
     }
 
     /// Returns the format's name as people say it, for messages.
@@ -63,6 +73,7 @@ impl ExportFormat {
             Self::Ttf => "TrueType",
             Self::Designspace => "designspace",
             Self::Ufo => "UFO",
+            Self::StaticTtf => "static TrueType",
         }
     }
 
@@ -76,6 +87,7 @@ impl ExportFormat {
         path.extension()
             .and_then(|extension| extension.to_str())
             .and_then(|extension| Self::try_from(extension).ok())
+            .filter(|format| *format != Self::StaticTtf)
             .ok_or_else(|| ExportError::UnknownExtension {
                 path: path.to_path_buf(),
             })
@@ -91,6 +103,9 @@ impl ExportFormat {
     }
 
     fn ensure_output_path(self, path: &Path) -> Result<(), ExportError> {
+        if self == Self::StaticTtf {
+            return Ok(());
+        }
         match path.extension().and_then(|ext| ext.to_str()) {
             Some(ext) if ext.eq_ignore_ascii_case(self.extension()) => Ok(()),
             _ => Err(ExportError::OutputExtensionMismatch {
@@ -117,16 +132,20 @@ impl TryFrom<&str> for ExportFormat {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FontExportRequest {
     /// Destination replaced after the export succeeds. Its extension must
-    /// match the format.
+    /// match the format; for [`ExportFormat::StaticTtf`] it is the directory
+    /// the binaries are written into.
     pub path: PathBuf,
     pub format: ExportFormat,
 }
 
-/// Confirms the destination and format of a completed export.
+/// Confirms the destination, format and files of a completed export.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FontExportResult {
     pub path: PathBuf,
     pub format: ExportFormat,
+    /// Every file or UFO directory the export wrote, as
+    /// [`FontExporter::plan`] lists them.
+    pub files: Vec<PathBuf>,
 }
 
 /// Describes a failure to represent, compile, or write an exported font.
@@ -168,6 +187,19 @@ pub enum ExportError {
     #[error("this variable font has no named instances to export as static fonts")]
     NoNamedInstances,
 
+    #[error("unsupported binary encoding: {encoding}")]
+    UnsupportedEncoding { encoding: String },
+
+    #[error("an export must write at least one encoding")]
+    NoEncodings,
+
+    #[error("failed to encode {path} as WOFF2: {source}")]
+    EncodeWoff2 {
+        path: PathBuf,
+        #[source]
+        source: ttf2woff2::Error,
+    },
+
     #[error("cannot evaluate instance {instance:?}: {source}")]
     StaticInstance {
         instance: String,
@@ -199,38 +231,158 @@ impl FontExporter {
         Self
     }
 
-    /// Writes the font view in the requested format, replacing the
-    /// destination atomically.
+    /// Writes `font` in the requested format, replacing each destination
+    /// atomically, and leaves `font` and its document unchanged.
     ///
     /// For TrueType, the font is cloned into an owned compiler snapshot before
     /// fontc work begins, so later changes to the originating font cannot alter
     /// the in-flight build. A designspace export writes one UFO per master file
-    /// beside the designspace; a UFO export writes the single master. The
-    /// requested path must have the format's extension.
+    /// beside the designspace; a UFO export writes the single master; a static
+    /// export writes one binary per named instance into the request's
+    /// directory. A folder the output goes into that does not exist yet is
+    /// created. The result lists every file written, as [`Self::plan`] does.
     ///
     /// # Errors
     ///
     /// Returns [`ExportError::OutputExtensionMismatch`] for a path without the
-    /// format's extension, [`ExportError::UfoNeedsOneMaster`] for a UFO export
+    /// format's extension, [`ExportError::CreateDirectory`] when the output's
+    /// folder cannot be created, [`ExportError::UfoNeedsOneMaster`] for a UFO export
     /// of a font with several masters, [`ExportError::WriteSources`] when a
     /// source format cannot represent the font or its files cannot be written,
-    /// and the compile and write errors of TrueType export.
+    /// the errors of [`Self::export_static_instances_with`], and the compile and
+    /// write errors of TrueType export.
     pub fn export(
         &self,
-        font: &impl FontView,
+        font: &Font,
         request: FontExportRequest,
     ) -> Result<FontExportResult, ExportError> {
-        request.format.ensure_output_path(&request.path)?;
+        self.export_with(font, request, &BinaryEncodings::ttf())
+    }
+
+    /// [`Self::export`], writing each TrueType binary in every one of
+    /// `encodings` beside its `.ttf` name, from one compile. Source formats
+    /// ignore `encodings`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the errors of [`Self::export`], and
+    /// [`ExportError::EncodeWoff2`] when a binary cannot be WOFF2 encoded.
+    pub fn export_with(
+        &self,
+        font: &Font,
+        request: FontExportRequest,
+        encodings: &BinaryEncodings,
+    ) -> Result<FontExportResult, ExportError> {
+        let files = self.plan_with(font, &request, encodings)?;
+        if let Some(directory) = request.path.parent()
+            && request.format != ExportFormat::StaticTtf
+        {
+            create_directory(directory)?;
+        }
         match request.format {
-            ExportFormat::Ttf => self.export_ttf(font, &request.path)?,
+            ExportFormat::Ttf => {
+                self.export_binary(font, &request.path, encodings)?;
+            }
             ExportFormat::Designspace => Self::export_designspace(font, &request.path)?,
             ExportFormat::Ufo => Self::export_ufo(font, &request.path)?,
+            ExportFormat::StaticTtf => {
+                self.export_static_instances_with(font, &request.path, encodings)?;
+            }
         }
 
         Ok(FontExportResult {
             path: request.path,
             format: request.format,
+            files,
         })
+    }
+
+    /// The request that exports `font` as `format` into `directory`, under
+    /// the name the format conventionally gets: `Family[wght,wdth].ttf` for a
+    /// variable binary (its external axis tags), `Family-Style.ttf` for a
+    /// font without axes, `Family.designspace`, `Family-Style.ufo`, and the
+    /// directory itself for static binaries, which
+    /// [`Self::static_instance_files`] names. Family and style keep only the
+    /// characters PostScript names allow.
+    pub fn request_in(font: &Font, format: ExportFormat, directory: &Path) -> FontExportRequest {
+        let family = postscript_safe(font.metadata().family_name.as_deref().unwrap_or("Untitled"));
+        let style = postscript_safe(font.metadata().style_name.as_deref().unwrap_or("Regular"));
+        let file_name = match format {
+            ExportFormat::Ttf if font.is_variable() => {
+                let tags: Vec<&str> = font
+                    .axes()
+                    .iter()
+                    .filter(|axis| axis.role() == AxisRole::External)
+                    .map(Axis::tag)
+                    .collect();
+                Some(format!("{family}[{}].ttf", tags.join(",")))
+            }
+            ExportFormat::Ttf => Some(format!("{family}-{style}.ttf")),
+            ExportFormat::Designspace => Some(format!("{family}.designspace")),
+            ExportFormat::Ufo => Some(format!("{family}-{style}.ufo")),
+            ExportFormat::StaticTtf => None,
+        };
+        FontExportRequest {
+            path: file_name.map_or_else(|| directory.to_path_buf(), |name| directory.join(name)),
+            format,
+        }
+    }
+
+    /// Lists the files [`Self::export`] would write for `request`, without
+    /// writing anything: the output path itself, plus a designspace's UFOs
+    /// beside it, or a static export's binaries inside its directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns the request errors [`Self::export`] returns before it writes:
+    /// a mismatched extension, a UFO export of several masters, or a static
+    /// export of a variable font without named instances.
+    pub fn plan(
+        &self,
+        font: &Font,
+        request: &FontExportRequest,
+    ) -> Result<Vec<PathBuf>, ExportError> {
+        self.plan_with(font, request, &BinaryEncodings::ttf())
+    }
+
+    /// [`Self::plan`] for [`Self::export_with`]: each binary in every one of
+    /// `encodings`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the errors of [`Self::plan`].
+    #[expect(
+        clippy::unused_self,
+        reason = "an exporter method; the exporter is the export entry point callers hold"
+    )]
+    pub fn plan_with(
+        &self,
+        font: &Font,
+        request: &FontExportRequest,
+        encodings: &BinaryEncodings,
+    ) -> Result<Vec<PathBuf>, ExportError> {
+        let path = &request.path;
+        request.format.ensure_output_path(path)?;
+        match request.format {
+            ExportFormat::Ttf => Ok(encodings.paths(path)),
+            ExportFormat::Ufo => {
+                ensure_one_master(font)?;
+                Ok(vec![path.clone()])
+            }
+            ExportFormat::Designspace => {
+                let ufos = DesignspaceWriter::new()
+                    .ufo_filenames(font, path)
+                    .map_err(|source| ExportFormat::Designspace.write_error(path, source))?;
+                let directory = path.parent().unwrap_or_else(|| Path::new(""));
+                Ok(std::iter::once(path.clone())
+                    .chain(ufos.iter().map(|ufo| directory.join(ufo)))
+                    .collect())
+            }
+            ExportFormat::StaticTtf => Ok(Self::static_instance_files(font)?
+                .into_iter()
+                .flat_map(|file| encodings.paths(&path.join(file.file_name)))
+                .collect()),
+        }
     }
 
     /// Compiles a TrueType binary from the supplied font in memory without
@@ -251,16 +403,16 @@ impl FontExporter {
         strip_compiler_version(&bytes)
     }
 
-    pub(crate) fn export_ttf(
+    /// Compiles `font` once and writes it in each of `encodings` beside
+    /// `ttf_path`, returning the files written.
+    pub(crate) fn export_binary(
         &self,
         font: &impl FontView,
-        output_path: &Path,
-    ) -> Result<(), ExportError> {
+        ttf_path: &Path,
+        encodings: &BinaryEncodings,
+    ) -> Result<Vec<PathBuf>, ExportError> {
         let bytes = self.compile_ttf(font)?;
-        write_file_atomic(output_path, &bytes).map_err(|source| ExportError::WriteOutput {
-            path: output_path.to_path_buf(),
-            source,
-        })
+        encodings.write(&bytes, ttf_path)
     }
 
     fn export_designspace(font: &impl FontView, path: &Path) -> Result<(), ExportError> {
@@ -270,15 +422,7 @@ impl FontExporter {
     }
 
     fn export_ufo(font: &impl FontView, path: &Path) -> Result<(), ExportError> {
-        let master_count = font
-            .sources()
-            .iter()
-            .filter(|source| source.is_master())
-            .count();
-        if master_count > 1 {
-            return Err(ExportError::UfoNeedsOneMaster { master_count });
-        }
-
+        ensure_one_master(font)?;
         UfoWriter::new()
             .save_view(font, utf8_path(path)?)
             .map_err(|source| ExportFormat::Ufo.write_error(path, source))
@@ -373,9 +517,39 @@ impl From<ShiftIrSourceError> for ExportError {
     }
 }
 
+/// `name` with only the printable ASCII PostScript names allow, without
+/// spaces or `[](){}<>/%`.
+pub(crate) fn postscript_safe(name: &str) -> String {
+    name.chars()
+        .filter(|character| character.is_ascii_graphic() && !"[](){}<>/%".contains(*character))
+        .collect()
+}
+
+/// Refuses a font a single UFO cannot hold.
+fn ensure_one_master(font: &impl FontView) -> Result<(), ExportError> {
+    let master_count = font
+        .sources()
+        .iter()
+        .filter(|source| source.is_master())
+        .count();
+    if master_count > 1 {
+        return Err(ExportError::UfoNeedsOneMaster { master_count });
+    }
+    Ok(())
+}
+
 fn utf8_path(path: &Path) -> Result<&str, ExportError> {
     path.to_str().ok_or_else(|| ExportError::InvalidPathUtf8 {
         path: path.to_path_buf(),
+    })
+}
+
+/// Creates `directory` and any missing parents, as an export into a folder
+/// that does not exist yet needs.
+pub(crate) fn create_directory(directory: &Path) -> Result<(), ExportError> {
+    std::fs::create_dir_all(directory).map_err(|source| ExportError::CreateDirectory {
+        path: directory.to_path_buf(),
+        source,
     })
 }
 
@@ -407,6 +581,7 @@ mod tests {
             FontExportResult {
                 path: output_path.clone(),
                 format: ExportFormat::Ttf,
+                files: vec![output_path.clone()],
             }
         );
 
@@ -654,6 +829,31 @@ mod tests {
             .map(|string| string.to_string())
             .collect::<Vec<_>>();
         assert_eq!(versions, vec!["Version 2.125".to_string()]);
+    }
+
+    #[test]
+    fn exports_in_a_directory_take_their_formats_conventional_names() {
+        let font = sample_variable_font();
+        let directory = Path::new("out");
+        let path = |format| FontExporter::request_in(&font, format, directory).path;
+
+        assert_eq!(
+            path(ExportFormat::Ttf),
+            directory.join("UntitledFont[wght].ttf")
+        );
+        assert_eq!(
+            path(ExportFormat::Designspace),
+            directory.join("UntitledFont.designspace")
+        );
+        assert_eq!(
+            path(ExportFormat::Ufo),
+            directory.join("UntitledFont-Regular.ufo")
+        );
+        assert_eq!(path(ExportFormat::StaticTtf), directory);
+        assert_eq!(
+            FontExporter::request_in(&Font::new(), ExportFormat::Ttf, directory).path,
+            directory.join("UntitledFont-Regular.ttf")
+        );
     }
 
     #[test]

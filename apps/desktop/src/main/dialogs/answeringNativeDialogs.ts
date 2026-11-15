@@ -24,7 +24,7 @@ export function answeringNativeDialogs(
     async saveShiftDocument() {
       return null;
     },
-    async exportTrueTypeFont() {
+    async chooseExportFolder() {
       return null;
     },
     confirmDirtyDocument,
@@ -32,6 +32,5 @@ export function answeringNativeDialogs(
       return "close";
     },
     async showSaveFailure() {},
-    async showExportFailure() {},
   };
 }

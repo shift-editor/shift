@@ -609,6 +609,28 @@ impl Default for DesignspaceWriter {
 }
 
 impl DesignspaceWriter {
+    /// Names the UFO files [`Self::save_view`] writes beside a designspace at
+    /// `path`, in the order it writes them.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`FormatBackendError`] when `path` has no file stem.
+    #[expect(
+        clippy::unused_self,
+        reason = "a writer method beside the FontWriter trait methods"
+    )]
+    pub fn ufo_filenames(
+        &self,
+        font: &impl FontView,
+        path: &Path,
+    ) -> FormatBackendResult<Vec<String>> {
+        let stem = Self::designspace_stem(path)?;
+        Ok(Self::group_sources(font, stem)
+            .into_iter()
+            .map(|group| group.filename)
+            .collect())
+    }
+
     /// Writes any font view as a designspace at `path` with one UFO per
     /// master file beside it.
     ///

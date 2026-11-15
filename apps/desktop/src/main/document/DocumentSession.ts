@@ -239,39 +239,6 @@ export class DocumentSession {
   }
 
   /**
-   * Shows a native destination dialog and exports the latest committed document as TTF.
-   *
-   * @remarks
-   * The request travels through the renderer document lane so pending edits settle before
-   * the utility process captures an immutable native export snapshot. Export never changes
-   * the document's save target or dirty state.
-   *
-   * @throws {Error} when document state cannot be read.
-   */
-  async exportTtf(): Promise<void> {
-    this.#log.info("TTF export requested");
-    const state = await this.#requestState();
-    if (!state) {
-      this.#log.info("TTF export skipped: no document state");
-      return;
-    }
-
-    const outputPath = await this.#nativeDialogs.exportTrueTypeFont(this.#dialogWindow(), state);
-    if (!outputPath) {
-      this.#log.info("TTF export canceled");
-      return;
-    }
-
-    try {
-      await this.#document.export(outputPath);
-      this.#log.info("TTF export completed", { path: outputPath });
-    } catch (error) {
-      this.#log.warn("TTF export failed", error);
-      await this.#nativeDialogs.showExportFailure(this.#dialogWindow(), this.#applicationName());
-    }
-  }
-
-  /**
    * Applies a utility-owned document state snapshot to main-owned UI.
    *
    * @param state - latest utility state, or null when no document is open.
