@@ -12,7 +12,7 @@ import {
   X,
 } from "@shift/ui";
 import { message } from "@shared/messages";
-import OptionsIcon from "@assets/settings/axes.svg";
+import OptionsIcon from "@assets/export/options.svg";
 import FileIcon from "@assets/export/file.svg";
 import FolderIcon from "@assets/export/folder.svg";
 import { useExport } from "@/context/ExportContext";
