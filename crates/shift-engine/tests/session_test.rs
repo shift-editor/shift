@@ -15,7 +15,10 @@ use shift_font::{
     GlyphId, GlyphLayer, GlyphName, GlyphSubcategory, LayerId, MoveAnchors, MovePoints, NamedGlyph,
     OpenTypeCategory, RemoveAnchors, SourceId, UpdateGlyph, contour,
 };
-use shift_font::{MetricsKey, MetricsKeySide, ShiftSidebearing, Sidebearing};
+use shift_font::{
+    MarkColor, MetricsKey, MetricsKeySide, NamedMarkColor, SetMarkColor, ShiftSidebearing,
+    Sidebearing,
+};
 
 const BASES: usize = 4;
 const MARKS: usize = 2;
@@ -1164,4 +1167,42 @@ fn opening_a_glyph_page_keeps_the_history_at_its_save() {
         history.matches_saved(),
         "navigation leaves the history at its save"
     );
+}
+
+#[test]
+fn tagging_several_glyphs_in_a_partly_loaded_session_undoes_as_one_edit() {
+    let glyph_ids = vec![GlyphId::from_raw("base0"), GlyphId::from_raw("composite0")];
+    let red = Some(MarkColor::Named(NamedMarkColor::Red));
+    let tag = FontIntentSet::from(SetMarkColor {
+        glyph_ids: glyph_ids.clone(),
+        color: red,
+    });
+    let font = composite_font();
+    let mut persisted = Persisted(font.clone());
+    let mut session = EngineSession::open_directory(placeholders(&font));
+    let mut history = EditHistory::default();
+    let colors = |session: &EngineSession| {
+        let color = |id: &GlyphId| session.font().glyph(*id).unwrap().mark_color();
+        glyph_ids.iter().map(color).collect::<Vec<_>>()
+    };
+
+    history.begin(None);
+    history.record(session.apply(&mut persisted, &tag).unwrap().changes);
+    history
+        .end(session.font(), session.scene(), Recording::Undoable)
+        .unwrap()
+        .expect("the edit tagged the glyphs");
+    assert_eq!(colors(&session), [red, red]);
+
+    history.undo(&mut session, &mut persisted).unwrap();
+    assert_eq!(colors(&session), [None, None]);
+    assert!(
+        history
+            .undo(&mut session, &mut persisted)
+            .unwrap()
+            .is_none()
+    );
+
+    history.redo(&mut session, &mut persisted).unwrap();
+    assert_eq!(colors(&session), [red, red]);
 }

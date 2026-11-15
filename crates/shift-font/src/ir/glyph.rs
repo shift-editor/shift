@@ -9,6 +9,7 @@ use crate::entity::{
 use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
+use crate::mark_color::MarkColor;
 use crate::metrics_keys::{MetricsKey, MetricsKeySide, MetricsKeys};
 use crate::point::{Canonical, Point};
 use crate::{CoreError, CoreResult, GlyphName};
@@ -32,6 +33,9 @@ pub struct Glyph {
     /// Keys that apply in every source; a layer's own keys override them.
     #[serde(default, skip_serializing_if = "MetricsKeys::is_empty")]
     metrics_keys: MetricsKeys,
+    /// The colour the glyph is tagged with, in every source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    mark_color: Option<MarkColor>,
 }
 
 impl Identified for Glyph {
@@ -507,19 +511,14 @@ impl Glyph {
             layers: BTreeMap::new(),
             lib: LibData::new(),
             metrics_keys: MetricsKeys::new(),
+            mark_color: None,
         }
     }
 
     pub fn with_unicode(name: impl Into<GlyphName>, unicode: u32) -> Self {
         Self {
-            id: GlyphId::new(),
-            name: name.into(),
             unicodes: vec![unicode],
-            category: None,
-            sub_category: None,
-            layers: BTreeMap::new(),
-            lib: LibData::new(),
-            metrics_keys: MetricsKeys::new(),
+            ..Self::new(name)
         }
     }
 
@@ -598,6 +597,18 @@ impl Glyph {
 
     pub fn metrics_keys_mut(&mut self) -> &mut MetricsKeys {
         &mut self.metrics_keys
+    }
+
+    /// The colour the glyph is tagged with, if any. A layer's lib may hold
+    /// a colour of its own from the file it came from; this is the one the
+    /// editor shows.
+    pub fn mark_color(&self) -> Option<MarkColor> {
+        self.mark_color
+    }
+
+    /// Tags the glyph with `color`, or clears its tag.
+    pub fn set_mark_color(&mut self, color: Option<MarkColor>) {
+        self.mark_color = color;
     }
 
     pub fn layers(&self) -> &BTreeMap<LayerId, Arc<GlyphLayer>> {

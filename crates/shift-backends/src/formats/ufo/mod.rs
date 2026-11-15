@@ -2,6 +2,7 @@ pub(crate) mod glif;
 mod glyph_order;
 mod import;
 mod kerning;
+mod mark_color;
 mod metrics_keys;
 mod reader;
 mod source;

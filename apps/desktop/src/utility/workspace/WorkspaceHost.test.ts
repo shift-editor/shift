@@ -1530,6 +1530,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
         mark: false,
         nonspacingMark: false,
         ligature: null,
+        markColor: null,
       },
     ]);
     expect(applied.dependents).toEqual([]);

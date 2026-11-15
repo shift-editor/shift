@@ -10,6 +10,7 @@ use shift_font::{
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
+use super::mark_color::take_mark_color;
 use super::metrics_keys::take_metrics_keys;
 
 pub struct UfoReader;
@@ -212,13 +213,14 @@ impl UfoReader {
         (glyph_layer, pending_components)
     }
 
-    /// Gives `glyph` the codepoints, glyph-level metrics keys, and lib of
-    /// `first`, the GLIF of its first layer: a UFO keeps them per layer, and
-    /// import reads the default layer's.
+    /// Gives `glyph` the codepoints, glyph-level metrics keys, mark colour,
+    /// and lib of `first`, the GLIF of its first layer: a UFO keeps them per
+    /// layer, and import reads the default layer's.
     pub(crate) fn set_glyph_identity(glyph: &mut Glyph, first: &norad::Glyph) {
         glyph.set_unicodes(first.codepoints.iter().map(u32::from).collect());
         let mut lib = first.lib.clone();
         *glyph.metrics_keys_mut() = take_metrics_keys(&mut lib).glyph;
+        glyph.set_mark_color(take_mark_color(&mut lib));
         if !lib.is_empty() {
             *glyph.lib_mut() = Self::convert_lib(&lib);
         }

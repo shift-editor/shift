@@ -1,5 +1,6 @@
 //! Documents, working stores, and recovery overlays at schema version 2
-//! open in this version and gain glyph categories.
+//! open in this version and gain glyph categories, and documents at version
+//! 5 gain a mark colour column.
 
 use std::path::Path;
 
@@ -17,6 +18,7 @@ fn downgrade_to_version_2(path: &Path) {
          ALTER TABLE glyphs DROP COLUMN left_metrics_key;
          ALTER TABLE glyphs DROP COLUMN right_metrics_key;
          ALTER TABLE glyphs DROP COLUMN width_metrics_key;
+         ALTER TABLE glyphs DROP COLUMN mark_color;
          ALTER TABLE glyph_layers DROP COLUMN left_metrics_key;
          ALTER TABLE glyph_layers DROP COLUMN right_metrics_key;
          ALTER TABLE glyph_layers DROP COLUMN width_metrics_key;
@@ -122,4 +124,28 @@ fn reopening_a_version_2_document_with_its_recovery_overlay_upgrades_both() {
     drop(store);
     assert_eq!(user_version(&document), SHIFT_DOCUMENT_SCHEMA_VERSION);
     assert_eq!(user_version(&recovery), SHIFT_DOCUMENT_SCHEMA_VERSION);
+}
+
+#[test]
+fn opening_a_version_5_document_upgrades_it_and_its_glyphs_have_no_mark_colour() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("Old.shift");
+    let font = sample_font();
+    drop(ShiftStore::create_document(&path, &font).unwrap());
+    rusqlite::Connection::open(&path)
+        .unwrap()
+        .execute_batch("ALTER TABLE glyphs DROP COLUMN mark_color; PRAGMA user_version = 5;")
+        .unwrap();
+    assert_eq!(user_version(&path), 5);
+
+    let store = ShiftStore::open_document(&path).unwrap();
+    let loaded = store.load_font_state().unwrap();
+    drop(store);
+
+    let names = |font: &shift_font::Font| -> Vec<String> {
+        font.glyphs().map(|glyph| glyph.name().to_owned()).collect()
+    };
+    assert_eq!(names(&loaded), names(&font));
+    assert!(loaded.glyphs().all(|glyph| glyph.mark_color().is_none()));
+    assert_eq!(user_version(&path), SHIFT_DOCUMENT_SCHEMA_VERSION);
 }
