@@ -60,6 +60,7 @@ import {
   type KerningGroupId,
   type KerningPosition,
   type MetricsKeySide,
+  type MarkColor,
   type PointId,
   type SelectableId,
   type NamedInstance,
@@ -1250,6 +1251,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   async deleteAxis(tag: string): Promise<void> {
     this.#actions.deleteAxis(tag);
+    await this.settle();
+  }
+
+  async tagGlyphs(names: readonly string[], color: MarkColor | null): Promise<void> {
+    this.#actions.tagGlyphs(names, color);
     await this.settle();
   }
 

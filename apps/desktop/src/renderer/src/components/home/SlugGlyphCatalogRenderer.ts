@@ -176,7 +176,8 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
       !sameCoordinates(previousTarget.location, frame.location) ||
       previousTarget.metrics !== frame.metrics ||
       previousTarget.sourceId !== frame.sourceId ||
-      previousTarget.resolvedTheme !== frame.resolvedTheme
+      previousTarget.resolvedTheme !== frame.resolvedTheme ||
+      previousTarget.tileSize !== frame.tileSize
     ) {
       this.#needsRedraw = true;
     }
@@ -192,8 +193,8 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     }
     // Selection is drawn by the overlay alone, so it never waits for glyphs to load.
     if (this.#activeFrame && this.#activeFrame !== frame) {
-      const { selection, selectionBox } = frame;
-      this.#activeFrame = { ...this.#activeFrame, selection, selectionBox };
+      const { selection, selectionBox, tileSize } = frame;
+      this.#activeFrame = { ...this.#activeFrame, selection, selectionBox, tileSize };
     }
 
     this.#overlay.setInputContainer(inputContainer);
@@ -453,6 +454,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
       this.#container.clientWidth,
       this.#container.clientHeight,
       frame?.glyphs.length ?? 0,
+      frame?.tileSize,
     );
   }
 
@@ -502,6 +504,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
       hoveredNameIndex: hoveredName?.catalogIndex ?? null,
       selection: input.selection,
       selectionBox: input.selectionBox,
+      editingGlyphId: input.editingGlyphId,
       emptyGlyphIds,
     });
 

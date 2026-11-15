@@ -27,6 +27,7 @@ export function SlugGlyphCatalogSurface({
   openGlyph,
   selection,
   selectGlyphs,
+  tileSize,
   onPendingGlyphName,
   onSelected,
   onFallback,
@@ -47,8 +48,8 @@ export function SlugGlyphCatalogSurface({
   const [ready, setReady] = useState(false);
   const [editingGlyph, setEditingGlyph] = useState<GlyphCatalogItem | null>(null);
   const layout = useMemo(
-    () => new GlyphCatalogLayout(viewportWidth, viewportHeight, glyphs.length),
-    [glyphs.length, viewportHeight, viewportWidth],
+    () => new GlyphCatalogLayout(viewportWidth, viewportHeight, glyphs.length, tileSize),
+    [glyphs.length, tileSize, viewportHeight, viewportWidth],
   );
   const selecting = useCatalogSelection({
     containerRef,
@@ -68,6 +69,7 @@ export function SlugGlyphCatalogSurface({
       resolvedTheme,
       active,
       editingGlyphId: editingGlyph?.id ?? null,
+      tileSize,
       selection,
       selectionBox,
     }),
@@ -81,6 +83,7 @@ export function SlugGlyphCatalogSurface({
       selection,
       selectionBox,
       sourceId,
+      tileSize,
     ],
   );
   const controllerFrameRef = useRef(controllerFrame);

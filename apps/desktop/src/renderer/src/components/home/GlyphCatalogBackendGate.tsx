@@ -21,6 +21,7 @@ export function GlyphCatalogBackendGate({
   openGlyph,
   selection,
   selectGlyphs,
+  tileSize,
   onFirstFrame,
   onUnavailable,
 }: GlyphCatalogBackendGateProps) {
@@ -105,6 +106,7 @@ export function GlyphCatalogBackendGate({
         openGlyph={openGlyph}
         selection={selection}
         selectGlyphs={selectGlyphs}
+        tileSize={tileSize}
         onPendingGlyphName={handlePendingGlyphName}
         onFirstFrame={onFirstFrame}
         onUnavailable={onUnavailable}
@@ -125,6 +127,7 @@ export function GlyphCatalogBackendGate({
       openGlyph={openGlyph}
       selection={selection}
       selectGlyphs={selectGlyphs}
+      tileSize={tileSize}
       onPendingGlyphName={handlePendingGlyphName}
       onSelected={handleSlugSelected}
       onFallback={handleSlugFallback}

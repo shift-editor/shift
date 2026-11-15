@@ -10,6 +10,7 @@ function catalog(count: number): GlyphCatalogItem[] {
     name: `name-${index}` as GlyphName,
     displayName: `name-${index}`,
     unicode: index,
+    markColor: null,
   }));
 }
 
@@ -119,6 +120,24 @@ describe("revealing a glyph", () => {
 
   it("scrolls up to a cell above the viewport", () => {
     expect(layout.scrollTopToReveal(0, 5000)).toBe(0);
+  });
+});
+
+describe("sizing the catalog's tiles", () => {
+  it("fits more, shorter tiles at a smaller size and fewer, taller ones at a larger", () => {
+    const small = new GlyphCatalogLayout(500, 240, 40, 56);
+    const normal = new GlyphCatalogLayout(500, 240, 40);
+    const large = new GlyphCatalogLayout(500, 240, 40, 200);
+
+    expect([small.columns, normal.columns, large.columns]).toEqual([6, 4, 2]);
+    expect([small.previewHeight, normal.previewHeight, large.previewHeight]).toEqual([42, 75, 150]);
+    expect([small.rowPitch, normal.rowPitch, large.rowPitch]).toEqual([90, 123, 198]);
+    expect(large.frame(catalog(40), 0).cells[0]!.cellRect.height).toBe(186);
+  });
+
+  it("keeps a size outside its limits at the nearest one", () => {
+    expect(new GlyphCatalogLayout(500, 240, 40, 5).previewHeight).toBe(42);
+    expect(new GlyphCatalogLayout(500, 240, 40, 5000).previewHeight).toBe(165);
   });
 });
 

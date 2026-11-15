@@ -17,6 +17,7 @@ import type {
   AnchorId,
   AxisId,
   GlyphName,
+  MarkColor,
   PointId,
   SelectableId,
   Source as SourceRecord,
@@ -109,6 +110,16 @@ export class SurfaceActions {
   /** Deletes the source named `name`, as the Sources panel does. */
   deleteSource(name: string): void {
     this.#editor.font.deleteSource(this.#sourceNamed(name).id);
+  }
+
+  /** Tags the glyphs named `names` with `color`, or clears their colour with null, as the grid's Colour menu does. */
+  tagGlyphs(names: readonly string[], color: MarkColor | null): void {
+    const glyphIds = names.map((name) => {
+      const record = this.#editor.font.recordForName(name as GlyphName);
+      if (!record) throw new Error(`The font has no glyph named ${name}`);
+      return record.id;
+    });
+    this.#editor.setMarkColor(glyphIds, color);
   }
 
   /** Renames the source `source` to `name`, as Settings › Sources does. */

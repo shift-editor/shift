@@ -48,6 +48,24 @@
   --color-state-on: #16a34a;
   --color-state-off: #dc2626;
 
+  /* Glyph tag colours: bg-tag-red and the like. The names are the tags a designer sees. */
+  --color-tag-red: #cf584a;
+  --color-tag-orange: #e07f45;
+  --color-tag-brown: #a8805a;
+  --color-tag-yellow: #e3c55b;
+  --color-tag-light-green: #a3c96a;
+  --color-tag-green: #66ad6b;
+  --color-tag-light-blue: #6fb9d6;
+  --color-tag-blue: #5b8fd9;
+  --color-tag-purple: #8a78d6;
+  --color-tag-pink: #d36fa6;
+  --color-tag-light-gray: #b9b9b9;
+  --color-tag-charcoal: #5c5c5c;
+
+  /* A glyph tile: its grey fill, and the ink that darkens its name band under the pointer. */
+  --color-tile: #ededed;
+  --color-tile-ink: rgba(0, 0, 0, 0.5);
+
   /* Low-emphasis icon and control colors */
   --color-icon-subtle: #9f9f9f;
   --color-control-muted: #c2c2c2;

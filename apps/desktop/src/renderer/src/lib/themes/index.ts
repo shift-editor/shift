@@ -481,6 +481,26 @@ function colorName(variable: string): string {
   return variable.replace(/^--color-/, "").replace(/^--/, "");
 }
 
+/**
+ * The glyph tag colours, the same in every theme unless its file overrides one
+ * (`tag-red = "#…"`): a tag is a shared name for a colour, so it does not
+ * follow the palette.
+ */
+const TAG_COLORS: Record<string, string> = {
+  "--color-tag-red": "#cf584a",
+  "--color-tag-orange": "#e07f45",
+  "--color-tag-brown": "#a8805a",
+  "--color-tag-yellow": "#e3c55b",
+  "--color-tag-light-green": "#a3c96a",
+  "--color-tag-green": "#66ad6b",
+  "--color-tag-light-blue": "#6fb9d6",
+  "--color-tag-blue": "#5b8fd9",
+  "--color-tag-purple": "#8a78d6",
+  "--color-tag-pink": "#d36fa6",
+  "--color-tag-light-gray": "#b9b9b9",
+  "--color-tag-charcoal": "#5c5c5c",
+};
+
 function colorThemeVariables(theme: ColorTheme): Record<string, string> {
   const { palette } = theme;
   const dark = theme.appearance === "dark";
@@ -527,6 +547,10 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--color-error-ring": palette.base08,
     "--color-destructive": palette.base08,
     "--color-destructive-hover": withAlpha(palette.base08, dark ? 0.18 : 0.1),
+    ...TAG_COLORS,
+    "--color-tile": dark ? withAlpha(palette.base05, 0.12) : palette.base01,
+    // The tile's ink is the theme's: black on a light palette, white on a dark one.
+    "--color-tile-ink": dark ? "rgba(255, 255, 255, 0.5)" : "rgba(0, 0, 0, 0.5)",
     "--color-icon-subtle": muted,
     "--color-control-muted": secondary,
     "--color-canvas-purple": palette.base0E,

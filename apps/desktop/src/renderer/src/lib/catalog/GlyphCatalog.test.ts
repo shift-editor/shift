@@ -61,4 +61,24 @@ describe("GlyphCatalog", () => {
 
     expect(ascenders.at(-1)).toBeCloseTo(before + 100);
   });
+
+  it("gives a glyph its tag colour once the edit that set it lands, and takes it back on undo", async () => {
+    editor = await startTestEditor();
+    await editor.addGlyph("tagged", null);
+    await editor.addGlyph("plain", null);
+    const catalog = new GlyphCatalog(editor.asEditor(), getGlyphInfo(), authoredGlyphAtlas(editor));
+    const yellow = { kind: "named", named: "yellow" } as const;
+    const colors = () =>
+      Object.fromEntries(catalog.glyphsCell.peek().map((glyph) => [glyph.name, glyph.markColor]));
+    const reader = effect(() => {
+      catalog.glyphsCell.value;
+    });
+
+    await editor.tagGlyphs(["tagged"], yellow);
+    expect(colors()).toMatchObject({ tagged: yellow, plain: null });
+
+    await editor.undo();
+    reader.dispose();
+    expect(colors()).toMatchObject({ tagged: null, plain: null });
+  });
 });

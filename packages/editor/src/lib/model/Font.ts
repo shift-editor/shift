@@ -36,6 +36,7 @@ import type {
   NamedInstanceDefinition,
   NamedInstanceId,
   SourceMetrics,
+  MarkColor,
 } from "@shift/types";
 import {
   mintAxisId,
@@ -1698,6 +1699,23 @@ export class Font {
     }
 
     return sourceId;
+  }
+
+  /**
+   * Queues tagging glyphs with a mark colour, or clearing their tags, on the
+   * workspace edit lane.
+   *
+   * @remarks
+   * The glyphs' records change only after the workspace echo is folded. Call
+   * inside an edit-coordinator transaction to control the undo step label.
+   *
+   * @param color - null clears the glyphs' colour.
+   */
+  setMarkColor(glyphIds: readonly GlyphId[], color: MarkColor | null): void {
+    this.editCoordinator.push({
+      kind: "setMarkColor",
+      setMarkColor: { glyphIds: [...glyphIds], color },
+    });
   }
 
   /**
