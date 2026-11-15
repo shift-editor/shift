@@ -16,6 +16,22 @@ pub(super) struct LayerInput {
     pub anchors: Vec<AnchorInput>,
     #[serde(default)]
     pub components: Vec<ComponentInput>,
+    /// Metrics keys for this layer's source only, overriding the glyph's.
+    #[serde(default)]
+    pub metrics_keys: Option<MetricsKeysInput>,
+}
+
+/// Metrics keys such as `=space` or `=n+10`, by side. An omitted side keeps its
+/// key; empty or blank text clears it.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct MetricsKeysInput {
+    #[serde(default)]
+    pub left: Option<String>,
+    #[serde(default)]
+    pub right: Option<String>,
+    #[serde(default)]
+    pub width: Option<String>,
 }
 
 /// A reference to another glyph, by name, placed with an optional transform.
@@ -80,6 +96,9 @@ pub(super) struct GlyphEntryInput {
     pub unicodes: Option<Vec<String>>,
     #[serde(default)]
     pub source: Option<String>,
+    /// Metrics keys that apply in every source the glyph's layers do not override.
+    #[serde(default)]
+    pub metrics_keys: Option<MetricsKeysInput>,
     #[serde(default)]
     pub layer: Option<LayerInput>,
 }

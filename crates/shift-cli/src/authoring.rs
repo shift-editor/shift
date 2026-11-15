@@ -28,6 +28,7 @@ mod input;
 mod instance;
 mod kerning;
 mod layer_payload;
+mod metrics_keys;
 mod report;
 
 pub(crate) use axis::set_axis;
@@ -155,6 +156,17 @@ pub(super) fn apply_mutation(
     options: &MutationArgs,
     set: &FontIntentSet,
 ) -> Result<AuthoringReport> {
+    apply_checked_mutation(path, options, set, |_| Ok(()))
+}
+
+/// As [`apply_mutation`], running `check` on the edited font before anything
+/// is written, so a failed check leaves the document as it was.
+pub(super) fn apply_checked_mutation(
+    path: &Path,
+    options: &MutationArgs,
+    set: &FontIntentSet,
+    check: impl FnOnce(&Font) -> Result<()>,
+) -> Result<AuthoringReport> {
     let destination = mutation_destination(path, options.output.as_deref())?;
     let recovery = tempfile::tempdir()
         .into_diagnostic()
@@ -169,6 +181,7 @@ pub(super) fn apply_mutation(
             .apply(set, None)
             .into_diagnostic()
             .wrap_err("authoring change is invalid")?;
+        check(workspace.font())?;
         report_changes(workspace.font(), &outcome.changes)
     };
     let wrote = !options.dry_run && (options.output.is_some() || !changes.is_empty());

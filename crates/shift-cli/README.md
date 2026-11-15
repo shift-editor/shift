@@ -179,7 +179,7 @@ correctly scaled test documents from real fonts.
 }
 ```
 
-Identity is not part of the layer payload. `pointType` defaults to `onCurve`; accepted values are `onCurve`, `offCurve`, and `qCurve`. A layer payload authors contours, anchors, and components. `layer copy` preserves complete authored layer content, including components, while minting fresh internal identities.
+Identity is not part of the layer payload. `pointType` defaults to `onCurve`; accepted values are `onCurve`, `offCurve`, and `qCurve`. A layer payload authors contours, anchors, components, and the layer's own metrics keys. `layer copy` preserves complete authored layer content, including components, while minting fresh internal identities.
 
 ### Replacing drawings
 
@@ -202,6 +202,17 @@ A payload's `components` name their base glyph and may give a transform, either 
 {
   "advance": 600,
   "components": [{ "base": "A" }, { "base": "acute", "transform": [1, 0, 0, 1, 99, 20] }]
+}
+```
+
+A layer payload may also carry `metricsKeys`, keys for that layer's source only, which win over
+the glyph's (see [Metrics keys](#metrics-keys)):
+
+```json
+{
+  "advance": 600,
+  "svgPath": "M100 0 L500 0 L500 700 L100 700 Z",
+  "metricsKeys": { "width": "=space+20" }
 }
 ```
 
@@ -248,6 +259,37 @@ shift glyph set Lab.shift --input - --dry-run --json < glyphs.json
 - Omitted `unicodes` preserves existing assignments; `[]` clears them.
 - A component's base may be a glyph created earlier or later in the same batch.
 - `"format": 1` names the batch format; a `shift-cli` that reads another format refuses the file.
+- `metricsKeys` on an entry sets the glyph's keys for every source; entries for the same glyph
+  must agree on them, as on `unicodes`.
+
+### Metrics keys
+
+Metrics keys link a glyph's sidebearings or width to other glyphs' metrics, as the app's spacing
+fields do: `=space`, `=n+10`, `=|H`, `=(n+o)/2`. A glyph entry's `metricsKeys` apply in every
+source; a layer's `metricsKeys` apply in its source only and win over the glyph's.
+
+```json
+{
+  "format": 1,
+  "glyphs": [
+    { "name": "space", "unicodes": ["U+0020"], "layer": { "advance": 600 } },
+    {
+      "name": "H",
+      "unicodes": ["U+0048"],
+      "metricsKeys": { "width": "=space" },
+      "layer": { "advance": 600, "svgPath": "M100 0 L500 0 L500 700 L100 700 Z" }
+    }
+  ]
+}
+```
+
+- Sides are `left`, `right` and `width`. An omitted side keeps its key; `""` removes it.
+- Keys apply in the same edit, as in the app: the linked sides move to what the keys give, and
+  later edits that change a glyph a key reads (such as `layer set` on `space`) move them again.
+- A key that cannot be evaluated in some source (unreadable text, a glyph that does not exist,
+  keys that depend on each other) fails the command and nothing is written. `--dry-run` checks
+  the same way.
+- `glyph export` writes the keys it finds, so exported glyphs keep their links.
 
 ### Copying glyphs from other fonts
 

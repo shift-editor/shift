@@ -6,9 +6,10 @@ use std::path::Path;
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use serde_json::{Map, Value, json};
 use shift_backends::font_loader::FontLoader;
-use shift_font::{Font, Glyph, GlyphLayer, PointType, SourceId};
+use shift_font::{Font, Glyph, GlyphLayer, MetricsKeys, PointType, SourceId};
 
 use super::glyph_batch::GLYPH_BATCH_FORMAT;
+use super::metrics_keys::side_name;
 
 /// Which of a font's sources to read layers from.
 pub(crate) enum ExportSources {
@@ -22,8 +23,8 @@ pub(crate) enum ExportSources {
 }
 
 /// Reads `names` and every glyph their components use from the font at `path`, as a
-/// glyph batch: names, Unicode values, and each layer's advance, outlines, anchors,
-/// and components.
+/// glyph batch: names, Unicode values, glyph metrics keys, and each layer's advance,
+/// outlines, anchors, components, and own metrics keys.
 ///
 /// # Errors
 ///
@@ -113,6 +114,9 @@ fn glyph_entry(glyph: &Glyph, layer: Option<&GlyphLayer>, source: Option<String>
     if let Some(source) = source {
         entry.insert("source".into(), json!(source));
     }
+    if let Some(keys) = metrics_keys_value(glyph.metrics_keys()) {
+        entry.insert("metricsKeys".into(), keys);
+    }
     if let Some(layer) = layer {
         entry.insert("layer".into(), layer_value(layer));
     }
@@ -175,5 +179,20 @@ fn layer_value(layer: &GlyphLayer) -> Value {
     if !components.is_empty() {
         value.insert("components".into(), json!(components));
     }
+    if let Some(keys) = metrics_keys_value(layer.metrics_keys()) {
+        value.insert("metricsKeys".into(), keys);
+    }
     Value::Object(value)
+}
+
+/// The keys as `glyph set` reads them, or `None` when there are none.
+fn metrics_keys_value(keys: &MetricsKeys) -> Option<Value> {
+    if keys.is_empty() {
+        return None;
+    }
+    let mut value = Map::new();
+    for (side, key) in keys.iter() {
+        value.insert(side_name(side).into(), json!(key.as_str()));
+    }
+    Some(Value::Object(value))
 }
