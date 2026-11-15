@@ -277,10 +277,10 @@ const ExportFooter = ({ canAuthor }: { canAuthor: boolean }) => {
   const exports = useExport();
   const { run, rows } = exports;
   const host = getShiftHost();
-  const shortcut = commandShortcutLabel(
-    commandShortcuts["file.export"],
-    host.platform === "darwin",
-  );
+  const isMac = host.platform === "darwin";
+  const shortcut = commandShortcutLabel(commandShortcuts["file.export"], isMac);
+  // Save converts a preview to .shift, so Save as .shift shows Save's shortcut.
+  const saveShortcut = commandShortcutLabel(commandShortcuts["file.save"], isMac);
 
   if (!canAuthor) {
     return (
@@ -294,7 +294,10 @@ const ExportFooter = ({ canAuthor }: { canAuthor: boolean }) => {
           });
         }}
       >
-        {message("export.saveAsShift")}
+        <span className="flex items-center gap-2">
+          {message("export.saveAsShift")}
+          <kbd className="font-sans text-ui text-on-accent/70">{saveShortcut}</kbd>
+        </span>
       </Button>
     );
   }
