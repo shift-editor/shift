@@ -1,34 +1,26 @@
 #[expect(dead_code, reason = "import tests use only some of the shared helpers")]
 mod support;
 
-use std::path::Path;
-
 use shift_backends::font_loader::FontLoader;
 use support::{load_font, shift};
 
-fn fixture(name: &str) -> String {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/fonts")
-        .join(name)
-        .to_string_lossy()
-        .into_owned()
-}
-
-fn stderr(output: &std::process::Output) -> String {
-    String::from_utf8_lossy(&output.stderr).into_owned()
-}
+const FONTS: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../fixtures/fonts");
 
 #[test]
 fn imports_a_designspace_with_its_glyphs_masters_instances_and_kerning() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("MutatorSans.shift");
     let path = path.to_str().unwrap();
-    let designspace = fixture("mutatorsans-variable/MutatorSans.designspace");
+    let designspace = format!("{FONTS}/mutatorsans-variable/MutatorSans.designspace");
     let source = FontLoader::new().read_font(&designspace).unwrap();
 
     let output = shift(&["import", &designspace, "--output", path, "--json"]);
 
-    assert!(output.status.success(), "{}", stderr(&output));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     let imported = load_font(path);
     assert_eq!(imported.glyph_count(), source.glyph_count());
     assert!(imported.glyph_count() > 0);
@@ -56,11 +48,19 @@ fn an_imported_document_compiles() {
     let path = path.to_str().unwrap();
     let ttf = temp.path().join("Homenaje.ttf");
 
-    let imported = shift(&["import", &fixture("Homenaje.glyphs"), "-o", path]);
-    assert!(imported.status.success(), "{}", stderr(&imported));
+    let imported = shift(&["import", &format!("{FONTS}/Homenaje.glyphs"), "-o", path]);
+    assert!(
+        imported.status.success(),
+        "{}",
+        String::from_utf8_lossy(&imported.stderr)
+    );
     let compiled = shift(&["compile", path, "-o", ttf.to_str().unwrap()]);
 
-    assert!(compiled.status.success(), "{}", stderr(&compiled));
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
     assert!(ttf.is_file());
 }
 
@@ -69,7 +69,7 @@ fn refuses_to_overwrite_or_write_a_non_shift_path() {
     let temp = tempfile::tempdir().unwrap();
     let existing = temp.path().join("Taken.shift");
     std::fs::write(&existing, b"keep").unwrap();
-    let ufo = fixture("ShapingTest.ufo");
+    let ufo = format!("{FONTS}/ShapingTest.ufo");
 
     let overwrite = shift(&["import", &ufo, "-o", existing.to_str().unwrap()]);
     let wrong_extension = shift(&[

@@ -16,7 +16,7 @@ use crate::cli::ImportArgs;
 /// What one import wrote, and what reading the source dropped.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ImportReport {
+pub(crate) struct ImportSummary {
     pub source: PathBuf,
     pub document: PathBuf,
     pub glyphs: usize,
@@ -26,7 +26,7 @@ pub(crate) struct ImportReport {
     pub import: Vec<String>,
 }
 
-impl Report for ImportReport {
+impl Report for ImportSummary {
     fn render(&self) -> String {
         let mut lines = vec![format!(
             "{}: {} glyphs, {} masters, {} named instances",
@@ -48,7 +48,7 @@ impl Report for ImportReport {
 ///
 /// Refuses an output that exists or doesn't end in `.shift`, and reports
 /// sources that can't be read and documents that can't be written.
-pub(crate) fn import(args: &ImportArgs) -> Result<ImportReport> {
+pub(crate) fn import(args: &ImportArgs) -> Result<ImportSummary> {
     validate_new_document_path(&args.output)?;
     let (font, losses) = read_font(&args.source)?;
     drop(
@@ -57,7 +57,7 @@ pub(crate) fn import(args: &ImportArgs) -> Result<ImportReport> {
             .wrap_err_with(|| format!("failed to write {}", args.output.display()))?,
     );
 
-    Ok(ImportReport {
+    Ok(ImportSummary {
         source: args.source.clone(),
         document: args.output.clone(),
         glyphs: font.glyph_count(),
