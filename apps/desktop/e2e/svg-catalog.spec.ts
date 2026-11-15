@@ -73,16 +73,15 @@ test.describe("SVG glyph catalog fallback", () => {
     await expect(svg).toHaveAttribute("data-grid-readiness", "Complete");
     const tiles = svg.getByRole("button", { name: /^Open / });
     const selected = svg.getByRole("button", { name: /^Open /, pressed: true });
-    const clickBlankFoot = async (sidebar: Locator) => {
-      const box = (await sidebar.boundingBox())!;
-      await page.mouse.click(box.x + box.width / 2, box.y + box.height - 12);
-    };
+    // A press on the sidebar element itself lands on no control: its blank space.
+    const pressBlankSpace = (sidebar: Locator) =>
+      sidebar.dispatchEvent("pointerdown", { bubbles: true, button: 0, isPrimary: true });
 
     for (const sidebar of [fontNavigation(page), glyphProperties(page)]) {
       await tiles.nth(0).click();
       await expect(selected).toHaveCount(1);
 
-      await clickBlankFoot(sidebar);
+      await pressBlankSpace(sidebar);
 
       await expect(selected).toHaveCount(0);
     }
