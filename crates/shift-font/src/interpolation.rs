@@ -510,16 +510,18 @@ impl Font {
 
         let mut compatible_sources = Vec::new();
 
-        for (source, layer) in self.masters_with_layers(glyph) {
-            if !reference_layer.match_with(layer).is_complete() {
+        for located in glyph.located_layers(self) {
+            if !reference_layer.match_with(located.layer).is_complete() {
                 continue;
             }
+            let (Some(source_id), Some(location)) = (
+                located.location.base_source_id(),
+                located.location.design_location(self),
+            ) else {
+                continue;
+            };
 
-            compatible_sources.push((
-                source.id(),
-                source.location().clone(),
-                layer.interpolation_values(),
-            ));
+            compatible_sources.push((source_id, location, located.layer.interpolation_values()));
         }
 
         let source_locations = compatible_sources

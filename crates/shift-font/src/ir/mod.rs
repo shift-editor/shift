@@ -15,6 +15,7 @@ pub mod grid;
 pub mod guideline;
 pub mod kerning;
 pub mod lib_data;
+pub mod located_layer;
 pub mod mark_color;
 pub mod metrics;
 pub mod metrics_keys;
@@ -54,6 +55,7 @@ pub use kerning::{
     SourceKerning,
 };
 pub use lib_data::{LibData, LibValue};
+pub use located_layer::{LayerLocation, LocatedLayer};
 pub use mark_color::{InvalidMarkColor, MarkColor, NamedMarkColor, Rgba};
 pub use metrics::{
     FontMetrics, MetricDefinition, MetricDefinitionList, MetricKind, MetricValue, StandardMetrics,
