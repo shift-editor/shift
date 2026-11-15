@@ -51,8 +51,8 @@ const TARGET_ICON = {
  * Export button, which writes every row.
  *
  * @remarks
- * A preview of a UFO or Glyphs file shows its rows with Save as .shift in
- * place of Export, since only a .shift document can be exported. A preview
+ * A preview of a UFO or Glyphs file shows only Save as .shift, since only a
+ * .shift document can be exported. A preview
  * of a compiled font has nothing to export, so it shows no section.
  */
 export const ExportSection = () => {
@@ -69,31 +69,29 @@ export const ExportSection = () => {
         open={exports.open}
         onOpenChange={exports.setOpen}
         actions={
-          <Tooltip content={message("export.addRow")}>
-            <SidebarActionButton
-              label={message("export.addRow")}
-              aria-disabled={!canAuthor || undefined}
-              onClick={() => {
-                if (canAuthor) exports.addRow();
-              }}
-            >
-              <PlusIcon className="h-3 w-3" />
-            </SidebarActionButton>
-          </Tooltip>
+          canAuthor ? (
+            <Tooltip content={message("export.addRow")}>
+              <SidebarActionButton label={message("export.addRow")} onClick={exports.addRow}>
+                <PlusIcon className="h-3 w-3" />
+              </SidebarActionButton>
+            </Tooltip>
+          ) : undefined
         }
       >
         <div className="flex flex-col gap-2 px-2 pb-2">
-          <ul aria-label={message("export.rows")} className="flex flex-col gap-1">
-            {exports.rows.map((row) => (
-              <ExportRowLine
-                key={row.id}
-                row={row}
-                status={rowStatus(exports.run, row.id)}
-                canAuthor={canAuthor}
-                panelAnchor={section}
-              />
-            ))}
-          </ul>
+          {/* A preview's rows could not run, so it shows only Save as .shift. */}
+          {canAuthor ? (
+            <ul aria-label={message("export.rows")} className="flex flex-col gap-1">
+              {exports.rows.map((row) => (
+                <ExportRowLine
+                  key={row.id}
+                  row={row}
+                  status={rowStatus(exports.run, row.id)}
+                  panelAnchor={section}
+                />
+              ))}
+            </ul>
+          ) : null}
           <ExportFooter canAuthor={canAuthor} />
         </div>
       </CollapsibleSection>
@@ -108,18 +106,16 @@ function rowStatus(run: ExportRun, id: string): ExportRowStatus | null {
 const ExportRowLine = ({
   row,
   status,
-  canAuthor,
   panelAnchor,
 }: {
   row: ExportRow;
   status: ExportRowStatus | null;
-  canAuthor: boolean;
   /** The section, so a row's options open beside the sidebar rather than over it. */
   panelAnchor: HTMLElement | null;
 }) => {
   const exports = useExport();
   const running = exports.run.status === "exporting";
-  const locked = !canAuthor || running;
+  const locked = running;
   const changeTarget = (target: ExportTarget) => {
     const output = isOutputOf(target, row.output) ? row.output : outputsFor[target][0];
     exports.updateRow(row.id, { target, output });
@@ -146,7 +142,7 @@ const ExportRowLine = ({
         grow="narrow"
         onChange={(output) => exports.updateRow(row.id, { target: row.target, output })}
       />
-      <ExportRowOptions row={row} disabled={!canAuthor} anchor={panelAnchor} />
+      <ExportRowOptions row={row} anchor={panelAnchor} />
       <span className="flex h-6 w-6 shrink-0 items-center justify-center">
         <RowEnd row={row} status={status} disabled={locked} />
       </span>
@@ -289,8 +285,8 @@ const ExportFooter = ({ canAuthor }: { canAuthor: boolean }) => {
   if (!canAuthor) {
     return (
       <Button
-        variant="outline"
-        size="sm"
+        variant="primary"
+        size="compact"
         className="w-full"
         onClick={() => {
           void host.commands.run("file.save").catch((error: unknown) => {
@@ -311,7 +307,7 @@ const ExportFooter = ({ canAuthor }: { canAuthor: boolean }) => {
         <div role="status">
           <Button
             variant="outline"
-            size="sm"
+            size="compact"
             className="w-full"
             onClick={() => void exports.reveal()}
           >
@@ -335,7 +331,7 @@ const ExportFooter = ({ canAuthor }: { canAuthor: boolean }) => {
           ) : null}
           <Button
             variant="outline"
-            size="sm"
+            size="compact"
             className="w-full"
             aria-disabled={rows.length === 0 || undefined}
             onClick={() => {

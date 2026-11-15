@@ -13,7 +13,7 @@ export type ButtonProps = BaseButtonProps & {
     | "muted"
     | "transparent"
     | "field";
-  size?: "sm" | "md" | "lg" | "action" | "prompt" | "icon" | "icon-sm" | "field";
+  size?: "sm" | "compact" | "md" | "lg" | "action" | "prompt" | "icon" | "icon-sm" | "field";
   isActive?: boolean;
   icon?: React.ReactNode;
 };
@@ -39,6 +39,8 @@ const variantStyles = {
 
 const sizeStyles = {
   sm: "h-7 px-2 text-xs",
+  /** A sidebar button at the sidebar's 11px type, such as the Export section's. */
+  compact: "h-7 px-2 text-ui",
   md: "h-9 px-4 text-sm",
   lg: "h-11 px-6 text-base",
   /** A page's main actions, with room for a shortcut after the label. */

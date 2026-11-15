@@ -32,11 +32,9 @@ import { outputLabel, targetLabel } from "./exportLabels";
  */
 export const ExportRowOptions = ({
   row,
-  disabled,
   anchor,
 }: {
   row: ExportRow;
-  disabled: boolean;
   /** What the panel lines up with: the Export section, so it opens beside the sidebar. */
   anchor: HTMLElement | null;
 }) => {
@@ -47,7 +45,6 @@ export const ExportRowOptions = ({
     <Popover open={open} onOpenChange={setOpen} modal={false}>
       <Tooltip content={message("export.options")}>
         <PopoverTrigger
-          disabled={disabled}
           render={
             <Button
               variant="ghost"
@@ -113,7 +110,7 @@ const OptionsBody = ({ row, workspace }: { row: ExportRow; workspace: Workspace 
                 : folderBreadcrumb(folder).join(" › ")}
             </span>
           </div>
-          <Button variant="outline" size="sm" onClick={() => void exports.chooseFolder(row.target)}>
+          <Button variant="outline" size="compact" onClick={() => void exports.chooseFolder(row.target)}>
             {message("export.folder.choose")}
           </Button>
         </div>
@@ -135,7 +132,7 @@ const NoInstances = () => {
   return (
     <div className="flex flex-col items-start gap-2 text-ui text-secondary">
       {message("export.static.noInstances")}
-      <Button variant="outline" size="sm" onClick={() => settings.open({ category: "instances" })}>
+      <Button variant="outline" size="compact" onClick={() => settings.open({ category: "instances" })}>
         {message("export.static.addInstances")}
       </Button>
     </div>
