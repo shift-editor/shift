@@ -47,8 +47,8 @@ import type { PendingEditId } from "./editing";
 import type { WorkspaceEditListener } from "./history";
 import type { GlyphReader } from "./glyph";
 
-/** `FontStore` lookup key for the layer a glyph authors in one source. */
-export type GlyphSourceKey = string & { readonly __glyphSourceKey: unique symbol };
+/** `FontStore` lookup key for the layer a glyph authors on one source. */
+export type SourceLayerKey = string & { readonly __sourceLayerKey: unique symbol };
 
 /**
  * Every committed glyph relation, derived once by `FontStore` from one workspace or font snapshot.
@@ -74,7 +74,7 @@ export interface FontRecordIndex {
   /** Glyphs that reference each base glyph as a component. */
   readonly dependentsById: ReadonlyMap<GlyphId, ReadonlySet<GlyphId>>;
   /** At most one layer per glyph and source, as Rust enforces. */
-  readonly layerByGlyphSource: ReadonlyEntityMap<GlyphSourceKey, LayerId>;
+  readonly layerBySource: ReadonlyEntityMap<SourceLayerKey, LayerId>;
   readonly glyphByLayer: ReadonlyEntityMap<LayerId, GlyphId>;
 }
 

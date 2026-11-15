@@ -14,9 +14,7 @@ fn drawing_and_identity_batch_is_one_exact_undo_step_in_native_recovery() {
     let mut before = sample_font();
     let source_id = before.default_source_id().unwrap();
     let glyph_id = before.glyph_id_by_name("A").unwrap();
-    let layer_id = before
-        .layer_id_for_glyph_source(glyph_id, source_id)
-        .unwrap();
+    let layer_id = before.layer_id_for_source(glyph_id, source_id).unwrap();
     before
         .layer_mut(layer_id)
         .unwrap()

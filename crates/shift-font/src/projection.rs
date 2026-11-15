@@ -1018,10 +1018,10 @@ mod tests {
             .unwrap()
             .clone();
         let reference_layer_id = font
-            .layer_id_for_glyph_source(glyph_id, reference_source_id)
+            .layer_id_for_source(glyph_id, reference_source_id)
             .unwrap();
         let bold_layer_id = font
-            .layer_id_for_glyph_source(glyph_id, bold_source.id())
+            .layer_id_for_source(glyph_id, bold_source.id())
             .unwrap();
         let c_id = GlyphId::from_raw("C");
         let caron_id = GlyphId::from_raw("caron.cap");

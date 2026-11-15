@@ -645,7 +645,7 @@ export class Font {
 
   /** The layer `glyphId` authors in `sourceId`, or `null` when it has none. */
   layerIdFor(glyphId: GlyphId, sourceId: SourceId): LayerId | null {
-    return this.#store.layerIdForGlyphSource(glyphId, sourceId);
+    return this.#store.layerIdForSource(glyphId, sourceId);
   }
 
   /**
