@@ -34,6 +34,7 @@ Authoring commands work on `.shift` documents and change them atomically: an inv
 ```sh
 shift-cli font create Lab.shift
 shift-cli font create Lab.shift --from Family.glyphspackage   # names, UPM, metrics, axes, masters; no glyphs
+shift-cli import Family.glyphspackage --output Family.shift    # the whole font: glyphs, kerning, features, instances
 shift-cli axis add Lab.shift --tag wght --name Weight --min 100 --default 400 --max 900
 shift-cli source add Lab.shift --name Black --location wght=900
 shift-cli glyph add Lab.shift A --unicode U+0041
@@ -79,8 +80,9 @@ shift-cli compile Family.shift --output Family.ttf
 shift-cli compile Family.shift --static --output fonts/           # one static .ttf per named instance
 shift-cli export Family.shift --output out/Family.designspace   # designspace plus one UFO per master
 shift-cli export Family.shift --output Family.ufo               # a font with one master
+shift-cli import Family.designspace --output Family.shift       # the reverse: any source into a new document
 ```
 
-`compile --static` writes each named instance as its own static font, named after its PostScript name; it needs named instances (add them with `instance add`). `export` writes editable sources for other tools and build pipelines; the output's extension picks the format. Masters made in Shift are written as `<name>-<master>.ufo` beside the designspace. A UFO holds one master, so a font with several exports as a designspace. Neither command changes the document.
+`compile --static` writes each named instance as its own static font, named after its PostScript name; it needs named instances (add them with `instance add`). `export` writes editable sources for other tools and build pipelines; the output's extension picks the format. Masters made in Shift are written as `<name>-<master>.ufo` beside the designspace. A UFO holds one master, so a font with several exports as a designspace. Neither command changes the document. `import` reads a UFO, Designspace, Glyphs, TTF, or OTF font the way the app opens one and writes it as a new `.shift`; it refuses an existing output and lists what the import dropped (`--json` for scripts).
 
 Compile after authoring to confirm the font builds. A compile error usually names the glyph and source; incompatible masters are the most common cause in variable fonts (see [variable-fonts.md](variable-fonts.md)).

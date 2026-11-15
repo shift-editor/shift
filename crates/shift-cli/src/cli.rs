@@ -63,6 +63,13 @@ pub(crate) enum Command {
     /// UFO for a font with a single master. Use `compile` for binaries.
     Export(ExportArgs),
 
+    /// Import a font source as a new SQLite .shift document.
+    ///
+    /// Reads a UFO, Designspace, Glyphs, TTF, or OTF font the way the app opens
+    /// one, and writes every glyph, layer, kerning pair, feature, and named
+    /// instance into the new document. Prints what the import dropped.
+    Import(ImportArgs),
+
     /// Render text or a glyph grid set in a font to a PNG or SVG proof image.
     Proof(ProofArgs),
 
@@ -428,6 +435,21 @@ pub(crate) struct ExportArgs {
     /// Path for the exported .designspace or .ufo; its extension picks the format.
     #[arg(short, long, value_hint = ValueHint::AnyPath)]
     pub output: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct ImportArgs {
+    /// Path to a UFO, Designspace, Glyphs, TTF, or OTF font source.
+    #[arg(value_hint = ValueHint::AnyPath)]
+    pub source: PathBuf,
+
+    /// Path for the new .shift document; refuses to overwrite an existing file.
+    #[arg(short, long, value_hint = ValueHint::FilePath)]
+    pub output: PathBuf,
+
+    /// Emit a structured result for scripts and agents.
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Debug, Parser)]

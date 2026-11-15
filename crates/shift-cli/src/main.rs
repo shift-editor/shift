@@ -3,6 +3,7 @@ mod check;
 mod cli;
 mod format;
 mod glyph_inspect;
+mod import;
 mod inspect;
 mod kerning;
 mod pack;
@@ -54,6 +55,7 @@ fn main() -> miette::Result<()> {
             let result = export(args)?;
             write_stdout(&result.path.display().to_string())
         }
+        Command::Import(args) => write_report(&import::import(&args)?, args.json),
         Command::Proof(args) => {
             let summary = proof::proof(&args)?;
             write_report(&summary, args.json)
