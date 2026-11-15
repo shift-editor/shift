@@ -1,12 +1,13 @@
 //! Glyph identity and sparse authored-layer commands.
 //!
 //! The command path and selectors establish layer membership. A layer JSON
-//! payload owns only authored values: advance, contours, points, and anchors.
+//! payload owns only authored values: advance, contours, points, anchors,
+//! components, and the layer's own metrics keys.
 //! Every payload is lowered to a single [`FontIntentSet`], preserving the same
 //! validation and all-or-nothing behavior as interactive authoring.
 
 use shift_font::{CloneGlyphLayer, CreateGlyph, CreateGlyphLayer};
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::Path;
 
 use crate::selector::FontSelectors;
@@ -18,7 +19,8 @@ use crate::cli::{AddGlyphArgs, CopyLayerArgs, LayerPayloadArgs};
 
 use super::input::LayerInput;
 use super::layer_payload::read_json_input;
-use super::{AuthoringReport, apply_mutation};
+use super::metrics_keys::check_written_keys;
+use super::{AuthoringReport, apply_checked_mutation, apply_mutation};
 
 /// Adds glyph identity and Unicode assignments without implicitly creating geometry.
 ///
@@ -57,19 +59,28 @@ pub(crate) fn add_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     let source_id = font.source_id_for(&args.source)?;
     let layer_id = LayerId::new();
     let input = read_json_input::<LayerInput>(&args.input, "layer payload")?;
-    let set = FontIntentSet {
-        intents: vec![
-            CreateGlyphLayer {
-                layer_id,
-                glyph_id,
-                source_id,
-            }
-            .into(),
-            input.into_intent(layer_id, &|name| font.glyph_id_for(name))?,
-        ],
-    };
+    let mut written = BTreeSet::new();
+    let mut intents = vec![
+        CreateGlyphLayer {
+            layer_id,
+            glyph_id,
+            source_id,
+        }
+        .into(),
+    ];
+    intents.extend(input.into_intents(
+        glyph_id,
+        layer_id,
+        &|name| font.glyph_id_for(name),
+        &mut written,
+    )?);
 
-    apply_mutation(&args.path, &args.mutation, &set)
+    apply_checked_mutation(
+        &args.path,
+        &args.mutation,
+        &FontIntentSet { intents },
+        |font| check_written_keys(font, &written),
+    )
 }
 
 /// Creates or replaces one layer's drawing, preserving an existing layer's identity.
@@ -98,9 +109,20 @@ pub(crate) fn set_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
             .into(),
         );
     }
-    intents.push(input.into_intent(layer_id, &|name| font.glyph_id_for(name))?);
+    let mut written = BTreeSet::new();
+    intents.extend(input.into_intents(
+        glyph_id,
+        layer_id,
+        &|name| font.glyph_id_for(name),
+        &mut written,
+    )?);
 
-    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
+    apply_checked_mutation(
+        &args.path,
+        &args.mutation,
+        &FontIntentSet { intents },
+        |font| check_written_keys(font, &written),
+    )
 }
 
 /// Copies one glyph layer to another source with fresh internal identities.
