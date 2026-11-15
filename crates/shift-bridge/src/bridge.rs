@@ -1,4 +1,4 @@
-use crate::errors::{self, BridgeError, BridgeResult, generic_failure};
+use crate::errors::{self, BridgeError, BridgeResult, generic_failure, invalid_arg};
 use crate::input::parse_id_list;
 use crate::reply::{PackedReply, answer};
 use crate::wire_napi::IntoEach;
@@ -11,8 +11,8 @@ use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::{
   AxisIndex as SourceAxisIndex, BinaryEncoding, BinaryEncodings, DirectoryGlyph, DirectoryInstance,
-  DirectorySource, ExportError, ExportFormat, FontDirectory, FontExportRequest, FontExportResult,
-  FontExporter, FontSource, FontView, GlyphIndex, GlyphPointKind as SourceGlyphPointKind,
+  DirectorySource, ExportFormat, FontDirectory, FontExportRequest, FontExportResult, FontExporter,
+  FontSource, FontView, GlyphIndex, GlyphPointKind as SourceGlyphPointKind,
   GlyphProjection as SourceGlyphProjection, GlyphShape as SourceGlyphShape, OpenedFont,
   SourceAtlasDescriptor, SourceIds, VariationAxisKind, font_loader::FontLoader,
 };
@@ -75,13 +75,12 @@ fn binary_encodings(tokens: Option<&[String]>) -> Result<BinaryEncodings> {
   let Some(tokens) = tokens else {
     return Ok(BinaryEncodings::ttf());
   };
-  let invalid = |error: ExportError| Error::new(Status::InvalidArg, error.to_string());
   let encodings = tokens
     .iter()
     .map(|token| BinaryEncoding::try_from(token.as_str()))
     .collect::<std::result::Result<Vec<_>, _>>()
-    .map_err(invalid)?;
-  BinaryEncodings::new(encodings).map_err(invalid)
+    .map_err(invalid_arg)?;
+  BinaryEncodings::new(encodings).map_err(invalid_arg)
 }
 
 /// Whether an export request writes its files or only lists them.
@@ -1115,8 +1114,7 @@ impl Bridge {
     request: NapiFontExportRequest,
   ) -> Result<AsyncTask<ExportFontTask>> {
     let mode = ExportMode::try_from(request.mode.as_deref())?;
-    let format = ExportFormat::try_from(request.format.as_str())
-      .map_err(|error| Error::new(Status::InvalidArg, error.to_string()))?;
+    let format = ExportFormat::try_from(request.format.as_str()).map_err(invalid_arg)?;
     let encodings = binary_encodings(request.encodings.as_deref())?;
     let font = self.font_with_all_layers().map_err(generic_failure)?;
     let request = FontExporter::request_in(&font, format, Path::new(&request.directory));

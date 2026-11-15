@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Button,
   Check,
@@ -44,10 +44,16 @@ export const ExportPopover = ({
 }) => {
   const exports = useExport();
   const { run, rows } = exports;
+  // Home stays mounted, inert, behind the editor, and the editor keeps its Designspace tab
+  // mounted: only the Export section on screen opens its popover.
+  const [onScreen, setOnScreen] = useState(false);
+  useLayoutEffect(() => {
+    setOnScreen(anchor !== null && anchor.checkVisibility() && anchor.closest("[inert]") === null);
+  });
 
   return (
     <Popover
-      open={exports.popoverOpen}
+      open={exports.popoverOpen && onScreen}
       onOpenChange={(open) => {
         exports.setPopoverOpen(open);
         if (!open) exports.dismiss();

@@ -19,7 +19,7 @@ pub struct StaticInstanceFile {
 }
 
 impl FontExporter {
-    /// Names the files [`Self::export_static_instances`] writes for `font`,
+    /// Names the files [`Self::export_static_instances_with`] writes for `font`,
     /// in named-instance order.
     ///
     /// Each file is named after the instance's PostScript name, or else
@@ -82,21 +82,10 @@ impl FontExporter {
     /// cannot be created, [`ExportError::StaticInstance`] when an instance
     /// cannot be evaluated, and the compile and write errors of TrueType
     /// export.
-    pub fn export_static_instances(
-        &self,
-        font: &Font,
-        directory: &Path,
-    ) -> Result<Vec<FontExportResult>, ExportError> {
-        self.export_static_instances_with(font, directory, &BinaryEncodings::ttf())
-    }
-
-    /// [`Self::export_static_instances`], writing each instance's binary in
-    /// every one of `encodings` from one compile.
     ///
-    /// # Errors
-    ///
-    /// Returns the errors of [`Self::export_static_instances`], and
-    /// [`ExportError::EncodeWoff2`] when a binary cannot be WOFF2 encoded.
+    /// Each instance's binary is written in every one of `encodings`, from
+    /// one compile; [`ExportError::EncodeWoff2`] when a binary cannot be
+    /// WOFF2 encoded.
     pub fn export_static_instances_with(
         &self,
         font: &Font,

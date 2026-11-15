@@ -8,13 +8,24 @@ export function exportSection(page: Page): Locator {
 }
 
 /**
+ * Shows the Export section: in the editor it is on the left sidebar's
+ * Designspace tab; Home shows it without tabs.
+ */
+export async function showExportSection(page: Page): Promise<void> {
+  const designspace = page.getByRole("tab", { name: "Designspace" });
+  if (await designspace.isVisible()) await designspace.click();
+  await expect(exportSection(page)).toBeVisible();
+}
+
+/**
  * Opens the first Export row's options and chooses its folder; the scripted
  * chooser answers with `SHIFT_E2E_EXPORT_DIRECTORY`.
  */
 export async function chooseExportFolder(page: Page): Promise<void> {
+  await showExportSection(page);
   await exportSection(page).getByRole("button", { name: "Export options" }).first().click();
   const options = page.getByRole("dialog");
-  await options.getByRole("button", { name: "Choose…" }).click();
+  await options.getByRole("button", { name: "Export folder" }).click();
   await page.keyboard.press("Escape");
   await expect(options).toBeHidden();
 }

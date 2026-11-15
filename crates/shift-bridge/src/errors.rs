@@ -94,7 +94,17 @@ impl From<BridgeError> for Error {
 /// A `GenericFailure` NAPI error carrying `error`'s message, whatever kind of
 /// failure it is.
 pub(crate) fn generic_failure(error: impl std::fmt::Display) -> Error {
-  Error::new(Status::GenericFailure, error.to_string())
+  failure(Status::GenericFailure, &error)
+}
+
+/// An `InvalidArg` NAPI error carrying `error`'s message: a request the
+/// caller sent that names something the engine doesn't know.
+pub(crate) fn invalid_arg(error: impl std::fmt::Display) -> Error {
+  failure(Status::InvalidArg, &error)
+}
+
+fn failure(status: Status, error: &dyn std::fmt::Display) -> Error {
+  Error::new(status, error.to_string())
 }
 
 impl From<BridgeError> for JsError {

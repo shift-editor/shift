@@ -8,7 +8,7 @@
 //! the XML that names them.
 //!
 //! Static instances, one binary per named instance, are exported by
-//! `FontExporter::export_static_instances`. Still to come: WOFF2 and WOFF (a
+//! `FontExporter::export_static_instances_with`. Still to come: WOFF2 and WOFF (a
 //! TTF re-encoded, which needs an encoder crate that passes `cargo deny`) and
 //! a Glyphs writer (`glyphs-reader` only reads).
 
@@ -38,7 +38,7 @@ pub enum ExportFormat {
     /// One UFO; only for fonts with a single master.
     Ufo,
     /// One static TrueType binary per named instance, written into a
-    /// directory; see [`FontExporter::export_static_instances`].
+    /// directory; see [`FontExporter::export_static_instances_with`].
     StaticTtf,
 }
 
@@ -249,7 +249,7 @@ impl FontExporter {
     /// folder cannot be created, [`ExportError::UfoNeedsOneMaster`] for a UFO export
     /// of a font with several masters, [`ExportError::WriteSources`] when a
     /// source format cannot represent the font or its files cannot be written,
-    /// the errors of [`Self::export_static_instances`], and the compile and
+    /// the errors of [`Self::export_static_instances_with`], and the compile and
     /// write errors of TrueType export.
     pub fn export(
         &self,
