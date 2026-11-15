@@ -1123,6 +1123,8 @@ export class App {
   }
 
   #closeReplacedLauncher(launcher: Window): void {
+    // A second open of the same font, such as a double-click, reaches here after the first closed it.
+    if (launcher.window.isDestroyed() || this.#replacedLaunchers.has(launcher)) return;
     this.#replacedLaunchers.add(launcher);
     launcher.close();
   }
