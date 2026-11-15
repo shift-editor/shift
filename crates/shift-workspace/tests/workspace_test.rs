@@ -2227,11 +2227,12 @@ fn tracked_languages_persist_across_resume_and_undo_restores_absence() {
 }
 
 /// A new untitled workspace in a temporary directory, with its store path.
-fn untitled_workspace() -> (tempfile::TempDir, PathBuf, FontWorkspace) {
-    let temp = tempfile::tempdir().unwrap();
+fn untitled_workspace()
+-> Result<(tempfile::TempDir, PathBuf, FontWorkspace), Box<dyn std::error::Error>> {
+    let temp = tempfile::tempdir()?;
     let store_path = temp.path().join("working.sqlite");
-    let workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new()).unwrap();
-    (temp, store_path, workspace)
+    let workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new())?;
+    Ok((temp, store_path, workspace))
 }
 
 fn set_grid(workspace: &mut FontWorkspace, grid: Option<Grid>) -> Result<(), WorkspaceError> {
@@ -2245,7 +2246,7 @@ fn set_grid(workspace: &mut FontWorkspace, grid: Option<Grid>) -> Result<(), Wor
 
 #[test]
 fn the_font_grid_persists_across_resume_and_undo_restores_the_previous_grid() {
-    let (_temp, store_path, mut workspace) = untitled_workspace();
+    let (_temp, store_path, mut workspace) = untitled_workspace().unwrap();
     assert_eq!(workspace.font().grid(), None);
     let fine = Grid {
         spacing_x: 50.0,
@@ -2283,7 +2284,7 @@ fn the_font_grid_persists_across_resume_and_undo_restores_the_previous_grid() {
 
 #[test]
 fn an_invalid_grid_is_refused_and_leaves_the_font_unchanged() {
-    let (_temp, _, mut workspace) = untitled_workspace();
+    let (_temp, _, mut workspace) = untitled_workspace().unwrap();
     let invalid = Grid {
         spacing_x: 0.0,
         spacing_y: 100.0,
