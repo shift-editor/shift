@@ -17,10 +17,7 @@ import { VariationPanel } from "./VariationPanel";
 const TAB_CLASS =
   "h-5 flex-1 rounded-sm px-2 text-ui data-[active]:bg-surface data-[active]:font-medium data-[active]:shadow-sm";
 
-/**
- * The document's lists, its pages and what the canvas holds or its sources and
- * instances, above the Export section.
- */
+/** The document's lists: its pages and what the canvas holds, or its sources, instances and exports. */
 export const LeftSidebar = () => (
   <aside
     aria-label="Layers and designspace"
@@ -55,10 +52,11 @@ export const LeftSidebar = () => (
         <ScrollArea className="h-full">
           <div className="px-1 pb-2">
             <VariationPanel />
+            <Separator className="-mx-1 my-2 w-auto" />
+            <ExportSection />
           </div>
         </ScrollArea>
       </TabsPanel>
     </Tabs>
-    <ExportSection />
   </aside>
 );

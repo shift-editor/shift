@@ -34,10 +34,11 @@ export const LeftSidebar = () => {
           <SourcesSection section={ObjectSectionRow} />
           <Separator className="-mx-1 w-auto" />
           <InstancesSection section={ObjectSectionRow} />
+          <Separator className="-mx-1 w-auto" />
+          <ExportSection />
         </div>
         <div ref={spacerRef} aria-hidden />
       </ScrollArea>
-      <ExportSection />
     </aside>
   );
 };

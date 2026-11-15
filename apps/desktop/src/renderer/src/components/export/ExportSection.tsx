@@ -46,25 +46,24 @@ const TARGET_ICON = {
 } as const satisfies Record<ExportTarget, React.ComponentType<React.SVGProps<SVGSVGElement>>>;
 
 /**
- * The left sidebar's Export section, pinned below its lists in Home and the
- * editor: one row per output, then the Export button, which writes every row.
+ * The left sidebar's Export section, after the font's sources and instances
+ * in Home and the editor's Designspace tab: one row per output, then the
+ * Export button, which writes every row.
  *
  * @remarks
- * Collapsing hides the rows but keeps the button and a run's progress.
- * A read-only preview shows its rows with Save as .shift in place of Export,
- * since only a .shift document can be exported.
+ * A preview of a UFO or Glyphs file shows its rows with Save as .shift in
+ * place of Export, since only a .shift document can be exported. A preview
+ * of a compiled font has nothing to export, so it shows no section.
  */
 export const ExportSection = () => {
   const exports = useExport();
-  const canAuthor = useFontSession().mode === "workspace";
+  const session = useFontSession();
+  const canAuthor = session.mode === "workspace";
   const [section, setSection] = useState<HTMLElement | null>(null);
+  if (session.mode === "preview" && !session.canConvert) return null;
 
   return (
-    <section
-      ref={setSection}
-      aria-label={message("export.title")}
-      className="flex shrink-0 flex-col gap-2 border-t border-line-subtle px-1 pt-2 pb-3"
-    >
+    <section ref={setSection} aria-label={message("export.title")}>
       <CollapsibleSection
         title={message("export.title")}
         open={exports.open}
@@ -83,21 +82,21 @@ export const ExportSection = () => {
           </Tooltip>
         }
       >
-        <ul aria-label={message("export.rows")} className="flex flex-col gap-1 px-2">
-          {exports.rows.map((row) => (
-            <ExportRowLine
-              key={row.id}
-              row={row}
-              status={rowStatus(exports.run, row.id)}
-              canAuthor={canAuthor}
-              panelAnchor={section}
-            />
-          ))}
-        </ul>
+        <div className="flex flex-col gap-2 px-2 pb-2">
+          <ul aria-label={message("export.rows")} className="flex flex-col gap-1">
+            {exports.rows.map((row) => (
+              <ExportRowLine
+                key={row.id}
+                row={row}
+                status={rowStatus(exports.run, row.id)}
+                canAuthor={canAuthor}
+                panelAnchor={section}
+              />
+            ))}
+          </ul>
+          <ExportFooter canAuthor={canAuthor} />
+        </div>
       </CollapsibleSection>
-      <div className="px-2">
-        <ExportFooter canAuthor={canAuthor} />
-      </div>
     </section>
   );
 };
