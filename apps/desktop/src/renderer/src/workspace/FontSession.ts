@@ -50,9 +50,11 @@ export function createPreviewFontSession(
   preview: PreviewFont,
 ): PreviewFontSession {
   const { font, editor } = preview;
+  const sourcePath = client.sourceCell.peek()?.canonicalPath ?? null;
   return {
     mode: "preview",
-    canConvert: isConvertiblePreviewPath(client.sourceCell.peek()?.canonicalPath ?? ""),
+    canConvert: isConvertiblePreviewPath(sourcePath ?? ""),
+    sourcePath,
     catalog,
     workspace: null,
     font,
