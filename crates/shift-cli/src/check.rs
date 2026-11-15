@@ -133,7 +133,7 @@ fn reported(font: &Font, finding: Finding) -> ReportedFinding {
 }
 
 /// Reads a font and what the import dropped, streaming when the format can.
-fn read_font(path: &Path) -> Result<(Font, Vec<ImportLoss>)> {
+pub(crate) fn read_font(path: &Path) -> Result<(Font, Vec<ImportLoss>)> {
     let path_text = path
         .to_str()
         .ok_or_else(|| miette!("font path is not valid UTF-8"))?;

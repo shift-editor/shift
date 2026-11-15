@@ -257,7 +257,7 @@ fn mutation_destination(path: &Path, output: Option<&Path>) -> Result<PathBuf> {
     Ok(output.to_path_buf())
 }
 
-fn validate_new_document_path(path: &Path) -> Result<()> {
+pub(crate) fn validate_new_document_path(path: &Path) -> Result<()> {
     if !path
         .extension()
         .and_then(|extension| extension.to_str())
