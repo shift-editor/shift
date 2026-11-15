@@ -884,6 +884,7 @@ export interface GlyphRecord {
     readonly layers: readonly GlyphLayerRecord[];
     readonly ligature?: Ligature | null;
     readonly mark: boolean;
+    readonly markColor?: MarkColor | null;
     // (undocumented)
     readonly name: GlyphName;
     readonly nonspacingMark: boolean;
