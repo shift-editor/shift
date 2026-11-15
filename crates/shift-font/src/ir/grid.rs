@@ -55,9 +55,9 @@ impl Grid {
             return None;
         };
         let grid = Self {
-            spacing_x: lib_number(fields.get("spacingX")?)?,
-            spacing_y: lib_number(fields.get("spacingY")?)?,
-            subdivisions: u32::try_from(lib_integer(fields.get("subdivisions")?)?).ok()?,
+            spacing_x: fields.get("spacingX")?.as_f64()?,
+            spacing_y: fields.get("spacingY")?.as_f64()?,
+            subdivisions: u32::try_from(fields.get("subdivisions")?.as_i64()?).ok()?,
         };
 
         grid.validate().ok()
@@ -73,21 +73,6 @@ impl Grid {
                 LibValue::Integer(i64::from(self.subdivisions)),
             ),
         ]))
-    }
-}
-
-fn lib_number(value: &LibValue) -> Option<f64> {
-    match value {
-        LibValue::Float(number) => Some(*number),
-        LibValue::Integer(number) => Some(*number as f64),
-        _ => None,
-    }
-}
-
-fn lib_integer(value: &LibValue) -> Option<i64> {
-    match value {
-        LibValue::Integer(number) => Some(*number),
-        _ => None,
     }
 }
 

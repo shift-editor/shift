@@ -251,7 +251,7 @@ pub(crate) trait NativeWorkspace {
   /// # Errors
   ///
   /// Fails when no workspace is open.
-  fn get_grid(&self) -> Result<Option<shift_font::Grid>, NativeWorkspaceError>;
+  fn grid(&self) -> Result<Option<shift_font::Grid>, NativeWorkspaceError>;
 
   /// The font's named instances, in order.
   ///
@@ -622,7 +622,7 @@ impl NativeWorkspace for Bridge {
     Ok(self.font()?.language_ids())
   }
 
-  fn get_grid(&self) -> Result<Option<shift_font::Grid>, NativeWorkspaceError> {
+  fn grid(&self) -> Result<Option<shift_font::Grid>, NativeWorkspaceError> {
     Ok(self.font()?.grid())
   }
 
