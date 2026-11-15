@@ -133,7 +133,7 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
         None => font.glyph_id_for(name),
     };
     for (glyph_id, source_id, input, context) in layers {
-        let existing = font.layer_id_for_master(glyph_id, source_id);
+        let existing = font.layer_id_for_source(glyph_id, source_id);
         let layer_id = existing.unwrap_or_else(LayerId::new);
         if existing.is_none() {
             intents.push(
