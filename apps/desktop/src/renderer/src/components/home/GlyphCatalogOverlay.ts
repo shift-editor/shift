@@ -7,15 +7,15 @@ import { resolvedMarkColor } from "@/lib/glyph-grid/markColor";
 import type { GlyphCatalogFrame } from "@/types/glyphCatalog";
 
 const LABEL_HORIZONTAL_INSET = 8;
-/** A tile is a card: slightly rounded, with a hard shadow down and to the right. */
-const TILE_RADIUS = 2;
-const TILE_SHADOW_OFFSET = 2;
+/** The preview is a rounded card, empty until hovered or tagged. */
+const CARD_RADIUS = 8;
+/** The name sits below the card as its own field. */
+const NAME_RADIUS = 6;
 /** How much of the tile's ink darkens the part of a tile under the pointer. */
 const TILE_HOVER_ALPHA = 0.2;
 /** The character drawn for an empty glyph, as a fraction of the preview's height. */
 const EMPTY_GLYPH_FONT_RATIO = 0.43;
-/** The selection ring sits this far outside a tile, and is this wide. */
-const SELECTION_RING_OFFSET = 2;
+/** How wide the selection ring is; it sits inside the card's edge. */
 const SELECTION_RING_WIDTH = 2;
 /** How opaque the fill of the box dragged to select glyphs is. */
 const SELECTION_BOX_FILL_ALPHA = 0.12;
@@ -68,85 +68,52 @@ export class GlyphCatalogOverlay {
     const mutedColor = style.getPropertyValue("--color-muted").trim() || style.color;
     const token = (name: string) => style.getPropertyValue(name).trim() || style.color;
     const inputColor = token("--color-input");
-    const tileColor = token("--color-tile");
+    const hoverColor = token("--color-hover");
     const inkColor = token("--color-tile-ink");
-    const shadowColor = token("--color-tile-shadow");
     const accentColor = style.getPropertyValue("--color-accent").trim() || style.color;
     const fontFamily = style.fontFamily;
     context.clearRect(0, 0, frame.layout.viewportWidth, frame.layout.viewportHeight);
 
     for (const cell of frame.cells) {
-      const tile = cell.cellRect;
+      const card = cell.previewRect;
+      const name = cell.nameRect;
       const { markColor } = cell.glyph;
 
-      // A hard shadow down and to the right, then the tile over it.
-      context.fillStyle = shadowColor;
       context.beginPath();
-      context.roundRect(
-        tile.x + TILE_SHADOW_OFFSET,
-        tile.y + TILE_SHADOW_OFFSET,
-        tile.width,
-        tile.height,
-        TILE_RADIUS,
-      );
-      context.fill();
-      // Cleared first, so a translucent fill does not show the shadow under it.
-      context.clearRect(tile.x, tile.y, tile.width, tile.height);
-      context.fillStyle = markColor ? resolvedMarkColor(markColor, style) : tileColor;
-      context.beginPath();
-      context.roundRect(tile.x, tile.y, tile.width, tile.height, TILE_RADIUS);
-      context.fill();
-
-      // The name is a field that stays grey whatever the tile's colour.
-      context.clearRect(
-        cell.nameRect.x,
-        cell.nameRect.y,
-        cell.nameRect.width,
-        cell.nameRect.height,
-      );
-      context.fillStyle = inputColor;
-      context.beginPath();
-      context.roundRect(
-        cell.nameRect.x,
-        cell.nameRect.y,
-        cell.nameRect.width,
-        cell.nameRect.height,
-        [0, 0, TILE_RADIUS, TILE_RADIUS],
-      );
-      context.fill();
-
-      // Each part of a tile darkens only under the pointer: the preview or the name.
-      const hovered = cell.catalogIndex === hoveredPreviewIndex;
-      const hoveredName = cell.catalogIndex === hoveredNameIndex;
-      if (hovered || hoveredName) {
-        const top = hovered ? tile.y : cell.nameRect.y;
-        const bottom = hovered ? cell.nameRect.y : tile.bottom;
-        context.globalAlpha = TILE_HOVER_ALPHA;
-        context.fillStyle = inkColor;
-        context.fillRect(tile.x, top, tile.width, bottom - top);
+      context.roundRect(card.x, card.y, card.width, card.height, CARD_RADIUS);
+      // An untagged card is empty until the pointer is over it or it is selected; a tagged one is its colour.
+      const selected = selection.has(cell.glyph.id);
+      // A selected card keeps the hover fill, so it stays marked once the pointer leaves.
+      const shaded = cell.catalogIndex === hoveredPreviewIndex || selected;
+      if (markColor) {
+        context.fillStyle = resolvedMarkColor(markColor, style);
+        context.fill();
+      }
+      if (shaded) {
+        context.fillStyle = markColor ? inkColor : hoverColor;
+        context.globalAlpha = markColor ? TILE_HOVER_ALPHA : 1;
+        context.fill();
         context.globalAlpha = 1;
       }
 
-      context.strokeStyle = inkColor;
-      context.lineWidth = 1;
+      // The name is a field that stays grey whatever the card's colour, a shade darker under the pointer.
+      context.fillStyle = cell.catalogIndex === hoveredNameIndex ? hoverColor : inputColor;
       context.beginPath();
-      context.roundRect(tile.x + 0.5, tile.y + 0.5, tile.width - 1, tile.height - 1, TILE_RADIUS);
-      context.moveTo(tile.x, cell.nameRect.y + 0.5);
-      context.lineTo(tile.right, cell.nameRect.y + 0.5);
-      context.stroke();
+      context.roundRect(name.x, name.y, name.width, name.height, NAME_RADIUS);
+      context.fill();
 
-      // The ring goes outside the tile.
-      if (selection.has(cell.glyph.id)) {
-        const offset = SELECTION_RING_OFFSET + SELECTION_RING_WIDTH / 2;
+      // The ring sits on the card's own edge, so it never reaches into the gap.
+      if (selected) {
+        const inset = SELECTION_RING_WIDTH / 2;
         context.strokeStyle = accentColor;
         context.lineWidth = SELECTION_RING_WIDTH;
         context.beginPath();
         context.roundRect(
-          tile.x - offset,
-          tile.y - offset,
-          tile.width + 2 * offset,
-          tile.height + 2 * offset,
-          TILE_RADIUS + offset,
+          card.x + inset,
+          card.y + inset,
+          card.width - 2 * inset,
+          card.height - 2 * inset,
+          CARD_RADIUS - inset,
         );
         context.stroke();
       }
