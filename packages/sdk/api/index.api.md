@@ -579,6 +579,7 @@ export class Font {
     createKerningGroup(position: KerningPairPosition, name: string, glyphIds?: readonly GlyphId[]): Promise<KerningGroupId>;
     createNamedInstance(instance: NamedInstanceDefinition): NamedInstanceId;
     createSource(name: string, externalLocation: ExternalAxisLocation): SourceId;
+    decomposeGlyphs(glyphIds: readonly GlyphId[]): void;
     // (undocumented)
     defaultLocation(): ExternalAxisLocation;
     get defaultSource(): Source;
@@ -595,6 +596,7 @@ export class Font {
     get designspace(): Designspace;
     // (undocumented)
     dispose(): void;
+    duplicateGlyphs(glyphIds: readonly GlyphId[]): GlyphId[];
     get editCoordinator(): WorkspaceEditCoordinator;
     entryForId(glyphId: GlyphId): GlyphEntry | null;
     entryForName(name: GlyphName): GlyphEntry | null;
@@ -619,6 +621,7 @@ export class Font {
     glyphRecords(): readonly GlyphRecord[];
     get glyphRecordsCell(): Signal<readonly GlyphRecord[]>;
     glyphsAfter(after: GlyphId | null, limit: number): GlyphDirectoryPage | null;
+    hasComponents(glyphId: GlyphId): boolean;
     hasGlyph(glyphId: GlyphId): boolean;
     get invalidGlyphsCell(): Signal<GlyphInvalidation>;
     isNonspacingMark(name: GlyphName): boolean;
@@ -685,6 +688,7 @@ export class Font {
     setMarkColor(glyphIds: readonly GlyphId[], color: MarkColor | null): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
     setPrimaryCodepoint(glyphId: GlyphId, text: string): GlyphIdentityEdit;
+    setSidebearings(glyphIds: readonly GlyphId[], scope: LayerScope, left: SidebearingEdit$1, right: SidebearingEdit$1): void;
     source(sourceId: SourceId): Source | null;
     sourceAt(location: ExternalAxisLocation): Source | null;
     sourceAtCell(location: Signal<ExternalAxisLocation>): ComputedSignal<Source | null>;
