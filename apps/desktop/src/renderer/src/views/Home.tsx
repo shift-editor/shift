@@ -5,6 +5,7 @@ import { RightSidebar } from "@/components/editor/RightSidebar";
 import { Toolbar } from "@/components/chrome/Toolbar";
 import { useSidebarLayout } from "@/components/chrome/useSidebarLayout";
 import { UpdateStrip } from "@/components/chrome/UpdateStrip";
+import { useDismissGridSelection } from "@/components/home/useDismissGridSelection";
 
 export const Home = () => {
   const {
@@ -19,6 +20,7 @@ export const Home = () => {
     resetLeftSidebar,
     resetRightSidebar,
   } = useSidebarLayout("home");
+  const dismissGridSelection = useDismissGridSelection();
 
   return (
     <main className="grid h-screen w-full grid-rows-[auto_minmax(0,1fr)]">
@@ -35,7 +37,7 @@ export const Home = () => {
         className="min-h-0 overflow-hidden"
       >
         <ResizablePanel {...sidebarPanelProps("left")}>
-          <div ref={leftSidebarContentRef} className="h-full">
+          <div ref={leftSidebarContentRef} className="h-full" onPointerDown={dismissGridSelection}>
             <LeftSidebar />
           </div>
         </ResizablePanel>
@@ -58,7 +60,7 @@ export const Home = () => {
           onDoubleClick={resetRightSidebar}
         />
         <ResizablePanel {...sidebarPanelProps("right")}>
-          <div ref={rightSidebarContentRef} className="h-full">
+          <div ref={rightSidebarContentRef} className="h-full" onPointerDown={dismissGridSelection}>
             <RightSidebar />
           </div>
         </ResizablePanel>
