@@ -381,6 +381,7 @@ export class Editor {
     setExternalLocation(location: ExternalAxisLocation): void;
     setLanguageIds(ids: readonly string[]): void;
     setLeftSidebearing(value: number): void;
+    setMarkColor(glyphIds: readonly GlyphId[], color: MarkColor | null): void;
     // (undocumented)
     setPan(pan: Point2D): void;
     // (undocumented)
@@ -681,6 +682,7 @@ export class Font {
     setKerningException(sourceId: SourceId, first: GlyphId, second: GlyphId, position: KerningPairPosition, exception: boolean): boolean;
     setKerningValues(edits: readonly KerningValueEdit[], label: string): void;
     setLanguageIds(languageIds: readonly string[]): void;
+    setMarkColor(glyphIds: readonly GlyphId[], color: MarkColor | null): void;
     setMetricDefinitions(definitions: readonly MetricDefinition[]): Promise<void>;
     setPrimaryCodepoint(glyphId: GlyphId, text: string): GlyphIdentityEdit;
     source(sourceId: SourceId): Source | null;
