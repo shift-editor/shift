@@ -51,7 +51,11 @@ fn width(font: &Font, glyph: &str, source: &str) -> Option<f64> {
         .iter()
         .find(|candidate| candidate.name() == source)?
         .id();
-    Some(font.glyph_by_name(glyph)?.layer_for_source(source_id)?.width())
+    Some(
+        font.glyph_by_name(glyph)?
+            .layer_for_source(source_id)?
+            .width(),
+    )
 }
 
 /// A space, and `H` and `O` drawn narrower than it, in both masters.

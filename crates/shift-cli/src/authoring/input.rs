@@ -1,7 +1,9 @@
 //! Identity-free JSON contracts for CLI authoring.
 
 use serde::Deserialize;
-use shift_font::{DecomposedTransform, PointType};
+use std::collections::BTreeMap;
+
+use shift_font::{DecomposedTransform, MetricsKeySide, PointType};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -21,17 +23,33 @@ pub(super) struct LayerInput {
     pub metrics_keys: Option<MetricsKeysInput>,
 }
 
-/// Metrics keys such as `=space` or `=n+10`, by side. An omitted side keeps its
-/// key; empty or blank text clears it.
+/// Metrics keys such as `=space` or `=n+10`, by side (`left`, `right`,
+/// `width`). An omitted side keeps its key; empty or blank text clears it.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct MetricsKeysInput {
-    #[serde(default)]
-    pub left: Option<String>,
-    #[serde(default)]
-    pub right: Option<String>,
-    #[serde(default)]
-    pub width: Option<String>,
+#[serde(try_from = "BTreeMap<String, String>")]
+pub(super) struct MetricsKeysInput(pub BTreeMap<MetricsKeySide, String>);
+
+impl TryFrom<BTreeMap<String, String>> for MetricsKeysInput {
+    type Error = String;
+
+    fn try_from(keys: BTreeMap<String, String>) -> Result<Self, Self::Error> {
+        keys.into_iter()
+            .map(|(name, text)| {
+                let side = match name.as_str() {
+                    "left" => MetricsKeySide::Left,
+                    "right" => MetricsKeySide::Right,
+                    "width" => MetricsKeySide::Width,
+                    _ => {
+                        return Err(format!(
+                            "unknown metrics key side `{name}`, expected `left`, `right` or `width`"
+                        ));
+                    }
+                };
+                Ok((side, text))
+            })
+            .collect::<Result<_, _>>()
+            .map(Self)
+    }
 }
 
 /// A reference to another glyph, by name, placed with an optional transform.

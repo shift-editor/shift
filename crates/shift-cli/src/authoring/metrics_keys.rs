@@ -18,13 +18,7 @@ pub(super) type WrittenKey = (GlyphId, MetricsKeySide);
 impl MetricsKeysInput {
     /// Each side the payload names, with its text; blank text clears the key.
     fn sides(&self) -> impl Iterator<Item = (MetricsKeySide, &str)> {
-        [
-            (MetricsKeySide::Left, self.left.as_deref()),
-            (MetricsKeySide::Right, self.right.as_deref()),
-            (MetricsKeySide::Width, self.width.as_deref()),
-        ]
-        .into_iter()
-        .filter_map(|(side, text)| text.map(|text| (side, text)))
+        self.0.iter().map(|(side, text)| (*side, text.as_str()))
     }
 
     /// Intents setting these keys on the glyph, for every source.
