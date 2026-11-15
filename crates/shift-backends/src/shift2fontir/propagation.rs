@@ -5,7 +5,7 @@ use fontir::propagate_anchors::propagate_all_anchors;
 use fontir::source::Source;
 use shift_font::SourceId;
 
-use super::source::ShiftIrSource;
+use super::source::{ShiftIrSource, located_master_layers};
 
 /// One glyph's anchors as export compiles them, at each master source it has a layer for.
 #[derive(Clone, Debug, PartialEq)]
@@ -56,11 +56,12 @@ impl ShiftIrSource {
                 let anchors = context
                     .anchors
                     .try_get(&WorkId::Anchor(glyph.name().into()));
-                let sources = masters
-                    .iter()
-                    .filter(|(source, _)| glyph.layer_for_source(source.id()).is_some())
-                    .map(|(source, location)| PropagatedSourceAnchors {
-                        source_id: source.id(),
+                let sources = located_master_layers(glyph, &masters)
+                    .filter_map(|(located, location)| {
+                        Some((located.location.base_source_id()?, location))
+                    })
+                    .map(|(source_id, location)| PropagatedSourceAnchors {
+                        source_id,
                         anchors: anchors
                             .iter()
                             .flat_map(|anchors| anchors.anchors.iter())

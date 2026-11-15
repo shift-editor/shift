@@ -722,20 +722,23 @@ impl Font {
     ///
     /// That is its [default master layer](Self::default_master_layer), or else
     /// the master layer with the most contours and components, taking the
-    /// earliest in [`Self::master_layers`] order on a tie.
+    /// earliest in [`Glyph::located_layers`] order on a tie.
     pub fn fallback_layer<'a>(&'a self, glyph: &'a Glyph) -> Option<&'a Arc<GlyphLayer>> {
         if let Some(layer) = self.default_master_layer(glyph) {
             return Some(layer);
         }
 
         let complexity = |layer: &GlyphLayer| layer.contours().len() + layer.components().len();
-        self.master_layers(glyph).reduce(|preferred, candidate| {
-            if complexity(candidate) > complexity(preferred) {
-                candidate
-            } else {
-                preferred
-            }
-        })
+        glyph
+            .located_layers(self)
+            .map(|located| located.layer)
+            .reduce(|preferred, candidate| {
+                if complexity(candidate) > complexity(preferred) {
+                    candidate
+                } else {
+                    preferred
+                }
+            })
     }
 
     /// Returns each master that `glyph` draws, paired with the glyph's layer on it, in source
@@ -747,23 +750,6 @@ impl Font {
         glyph.located_layers(self).filter_map(|located| {
             let source = located.location.base_source(self)?;
             Some((source, located.layer.as_ref()))
-        })
-    }
-
-    /// Returns `glyph`'s layers on [master sources](Self::masters), in source order, and by
-    /// layer ID among layers on the same source.
-    pub fn master_layers<'a>(
-        &'a self,
-        glyph: &'a Glyph,
-    ) -> impl Iterator<Item = &'a Arc<GlyphLayer>> {
-        self.masters().flat_map(move |source| {
-            let mut layers = glyph
-                .layers()
-                .values()
-                .filter(|layer| layer.source_id() == source.id())
-                .collect::<Vec<_>>();
-            layers.sort_by(|left, right| left.id().as_str().cmp(right.id().as_str()));
-            layers
         })
     }
 
