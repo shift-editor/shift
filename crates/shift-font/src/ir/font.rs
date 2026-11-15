@@ -977,11 +977,7 @@ impl Font {
         self.index().owner(layer_id).copied()
     }
 
-    pub fn layer_id_for_source(
-        &self,
-        glyph_id: GlyphId,
-        source_id: SourceId,
-    ) -> Option<LayerId> {
+    pub fn layer_id_for_source(&self, glyph_id: GlyphId, source_id: SourceId) -> Option<LayerId> {
         self.index().layer_at(glyph_id, source_id).copied()
     }
 
@@ -1502,10 +1498,7 @@ impl Font {
         if self.index().owner(layer_id).is_some() {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
-        if self
-            .layer_id_for_source(glyph_id, source_id)
-            .is_some()
-        {
+        if self.layer_id_for_source(glyph_id, source_id).is_some() {
             return Err(CoreError::DuplicateGlyphLayer {
                 glyph_id,
                 source_id,
