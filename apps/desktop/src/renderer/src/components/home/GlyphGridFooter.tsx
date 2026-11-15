@@ -32,6 +32,7 @@ export function GlyphGridFooter({
             color={color}
             label={color ? `Show ${markColorLabel(color)} glyphs` : "Show untagged glyphs"}
             pressed={colorFilter.has(key)}
+            dimmed={colorFilter.size > 0 && !colorFilter.has(key)}
             onPress={(event) => filterColor(color, event.metaKey || event.ctrlKey)}
           />
         ))}
