@@ -87,8 +87,6 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   const [openedGlyph, setOpenedGlyph] = useState<GlyphCatalogSource["openedGlyph"]>(null);
   const openedGlyphKeyRef = useRef<GlyphCatalogItem["id"] | null>(null);
   const openRequestRef = useRef(new LatestRequest());
-  // The window's tabs keep the overview's selection; the catalog only shows it.
-  const selectedGlyphId = useSignalState(session.tabs.selectedGlyphCell);
   const selectRequestRef = useRef(new LatestRequest());
   const observeAtlasInvalidation = useCallback<GlyphCatalogSource["observeAtlasInvalidation"]>(
     (listener) => {
@@ -215,9 +213,9 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     [catalog],
   );
 
-  const selectGlyphById = useCallback(
+  /** Loads the overview's selected glyph and shows it on the overview's own page. */
+  const showSelectedGlyph = useCallback(
     async (glyphId: GlyphId) => {
-      session.tabs.selectGlyph(glyphId);
       if (!workspace) return;
 
       // Loaded as opening loads it, then shown on the overview's own page, never navigated to.
@@ -232,9 +230,22 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     },
     [catalog, session.tabs, workspace],
   );
-  const selectGlyph = useCallback<GlyphCatalogSource["selectGlyph"]>(
-    (glyph) => selectGlyphById(glyph.id),
-    [selectGlyphById],
+  const selectGlyphById = useCallback(
+    async (glyphId: GlyphId) => {
+      session.tabs.selectGlyph(glyphId);
+      await showSelectedGlyph(glyphId);
+    },
+    [session.tabs, showSelectedGlyph],
+  );
+  // The window's tabs keep the overview's selection; the catalog only changes it.
+  const selectGlyphs = useCallback<GlyphCatalogSource["selectGlyphs"]>(
+    (selection) => {
+      const shown = session.tabs.selectedGlyphCell.peek();
+      session.tabs.selectGlyphs(selection);
+      const primary = selection.primary;
+      if (primary !== null && primary !== shown) void showSelectedGlyph(primary);
+    },
+    [session.tabs, showSelectedGlyph],
   );
 
   useEffect(() => {
@@ -356,8 +367,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     canAuthor,
     openedGlyph,
     openGlyph,
-    selectedGlyphId,
-    selectGlyph,
+    selectGlyphs,
     createQuickGlyph,
     selectAll: () => {
       setCategoryFilters([]);

@@ -83,11 +83,31 @@ export class GlyphSelection {
   }
 
   /**
-   * The selection after an arrow key: the focus moves one glyph, stopping at
-   * either end, selecting only it, or with `extend` (Shift) the range from the
-   * anchor to it. With nothing focused, it starts at the first glyph.
+   * The selection after dragging a box over `glyphs`: those glyphs, added to
+   * the glyphs `kept` has when the drag began with Shift or ⌘ held.
    */
-  step(offset: -1 | 1, extend: boolean): GlyphSelection {
+  box(glyphs: readonly GlyphId[], kept: GlyphSelection | null): GlyphSelection {
+    const boxed = new Set(glyphs).intersection(this.#glyphSet);
+    const selected = kept ? boxed.union(kept.#selected) : boxed;
+    return this.#with(selected, glyphs[0] ?? kept?.anchor ?? null, glyphs.at(-1) ?? null);
+  }
+
+  /**
+   * The glyph a single-glyph view such as the sidebar describes: the one
+   * last moved to while it is selected, or else the last selected glyph.
+   */
+  get primary(): GlyphId | null {
+    if (this.focus !== null && this.#selected.has(this.focus)) return this.focus;
+    return this.ids.at(-1) ?? null;
+  }
+
+  /**
+   * The selection after an arrow key: the focus moves `offset` glyphs (one
+   * along a row, a row's worth between rows), stopping at either end,
+   * selecting only it, or with `extend` (Shift) the range from the anchor to
+   * it. With nothing focused, it starts at the first glyph.
+   */
+  step(offset: number, extend: boolean): GlyphSelection {
     const first = this.glyphs[0];
     if (first === undefined) return this.clear();
     const focusIndex = this.focus === null ? -1 : this.glyphs.indexOf(this.focus);

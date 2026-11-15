@@ -506,9 +506,9 @@ These are allowed to jump around when energy is high, but they should not silent
 - [ ] List view alternative
 - [x] Search by glyph name, unicode, or character
 - [ ] Filter: show only empty / filled / charset subset
-- [ ] Multi-select glyphs in grid
+- [x] Multi-select glyphs in grid
 - [ ] Right-click context menu
-- [ ] Keyboard navigation (arrows, Enter to open)
+- [x] Keyboard navigation (arrows, Enter to open)
 
 **Character Set Management**
 

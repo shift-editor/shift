@@ -27,6 +27,59 @@ test.describe("SVG glyph catalog fallback", () => {
     await waitForEditorReady(page, glyphId);
   });
 
+  test("selects glyphs by click, Shift-click, ⌘-click, a dragged box and the keyboard", async ({
+    page,
+  }) => {
+    const svg = glyphCatalogSvg(page);
+    await expect(svg).toHaveAttribute("data-grid-readiness", "Complete");
+    const tiles = svg.getByRole("button", { name: /^Open / });
+    const selected = svg.getByRole("button", { name: /^Open /, pressed: true });
+    const names = (await tiles.evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute("aria-label")),
+    )) as string[];
+    expect(names.length).toBeGreaterThanOrEqual(3);
+    const selectedNames = async () =>
+      selected.evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label")));
+
+    await tiles.nth(0).click();
+    await expect.poll(selectedNames).toEqual(names.slice(0, 1));
+
+    await tiles.nth(2).click({ modifiers: ["Shift"] });
+    await expect.poll(selectedNames).toEqual(names.slice(0, 3));
+
+    await tiles.nth(1).click({ modifiers: ["ControlOrMeta"] });
+    await expect.poll(selectedNames).toEqual([names[0], names[2]]);
+
+    // A drag from the margin left of the first glyph to the middle of the second boxes both.
+    const first = (await tiles.nth(0).boundingBox())!;
+    const second = (await tiles.nth(1).boundingBox())!;
+    await page.mouse.move(first.x - 10, first.y + first.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(second.x + second.width / 2, second.y + second.height / 2, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(selectedNames).toEqual(names.slice(0, 2));
+
+    await page.keyboard.press("ArrowRight");
+    await expect.poll(selectedNames).toEqual(names.slice(2, 3));
+
+    await page.keyboard.press("Escape");
+    await expect(selected).toHaveCount(0);
+  });
+
+  test("opens the glyph the arrow keys reached on Enter", async ({ page }) => {
+    const svg = glyphCatalogSvg(page);
+    await expect(svg).toHaveAttribute("data-grid-readiness", "Complete");
+    const glyphId = await glyphCatalogSurface(page).getAttribute("data-first-glyph-id");
+    if (!glyphId) throw new Error("Expected a visible catalog glyph");
+
+    await svg.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(svg.getByRole("button", { name: /^Open /, pressed: true })).toHaveCount(1);
+    await page.keyboard.press("Enter");
+
+    await waitForEditorReady(page, glyphId);
+  });
+
   test("shows the system character for an empty encoded glyph", async ({ editor, page }) => {
     const [name] = await editor.createGlyphsForUnicodes([0x3042]);
     if (!name) throw new Error("Expected an empty Hiragana glyph");

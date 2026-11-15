@@ -8,12 +8,14 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@shift/ui";
+import type { GlyphSelection } from "@/lib/glyph-grid/GlyphSelection";
 import type { GlyphCatalogItem } from "@/types/glyphCatalog";
 
 interface GlyphContextMenuProps {
   /** The glyph under a right-click, or null over empty space, where no menu opens. */
   readonly glyphAt: (event: MouseEvent<HTMLElement>) => GlyphCatalogItem | null;
-  readonly selectGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
+  readonly selection: GlyphSelection;
+  readonly selectGlyphs: (selection: GlyphSelection) => void;
   readonly openGlyph: (glyph: GlyphCatalogItem) => Promise<void>;
   /** Starts renaming in place; omitted where glyphs cannot be renamed. */
   readonly renameGlyph?: (glyph: GlyphCatalogItem) => void;
@@ -24,12 +26,14 @@ interface GlyphContextMenuProps {
  * The glyph grid's right-click menu: open, rename, copy name.
  *
  * @remarks
- * Right-clicking a glyph selects it first, so the menu and the glyph sidebar
- * describe the same glyph. Over empty space no menu opens.
+ * Right-clicking a glyph outside the selection selects it alone first, so the
+ * menu and the glyph sidebar describe the same glyph; right-clicking one of
+ * the selected glyphs keeps the selection. Over empty space no menu opens.
  */
 export const GlyphContextMenu = ({
   glyphAt,
-  selectGlyph,
+  selection,
+  selectGlyphs,
   openGlyph,
   renameGlyph,
   children,
@@ -53,7 +57,9 @@ export const GlyphContextMenu = ({
           const target = glyphAt(event);
           targetRef.current = target;
           setGlyph(target);
-          if (target) void selectGlyph(target);
+          if (target && !selection.has(target.id)) {
+            selectGlyphs(selection.click(target.id, { range: false, toggle: false }));
+          }
         }}
       >
         {children}

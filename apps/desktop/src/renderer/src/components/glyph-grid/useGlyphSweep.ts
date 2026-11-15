@@ -1,11 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import type { GlyphId } from "@shift/types";
-
-/** How close to the container's top or bottom a drag starts scrolling it, in CSS pixels. */
-const AUTOSCROLL_EDGE_PX = 12;
-/** Scroll speed per pixel the pointer is past that edge, per frame, up to a maximum. */
-const AUTOSCROLL_RATE = 0.4;
-const AUTOSCROLL_MAX_PX = 16;
+import { useDragAutoscroll } from "./useDragAutoscroll";
 
 interface GlyphSweepOptions {
   /** The scrolling element the glyphs are drawn in. */
@@ -32,54 +27,24 @@ export interface GlyphSweep {
 export function useGlyphSweep({ containerRef, glyphAt, onSweep }: GlyphSweepOptions): GlyphSweep {
   // non-reactive: the glyph the drag started on, while the pointer is down.
   const anchorRef = useRef<GlyphId | null>(null);
-  // non-reactive: the dragging pointer in client pixels, for the autoscroll frame.
-  const pointerRef = useRef<{ x: number; y: number } | null>(null);
-  const frameRef = useRef<number | null>(null);
-  // The autoscroll frame outlives renders, so it reads the latest callbacks through a ref.
-  const latest = useRef({ glyphAt, onSweep });
-  latest.current = { glyphAt, onSweep };
-
-  const scroll = () => {
-    const container = containerRef.current;
-    const pointer = pointerRef.current;
-    const anchor = anchorRef.current;
-    if (!container || !pointer || !anchor) return;
-    const bounds = container.getBoundingClientRect();
-    const above = bounds.top + AUTOSCROLL_EDGE_PX - pointer.y;
-    const below = pointer.y - (bounds.bottom - AUTOSCROLL_EDGE_PX);
-    const reach = Math.max(above, below);
-    if (reach > 0) {
-      const speed = Math.min(reach * AUTOSCROLL_RATE, AUTOSCROLL_MAX_PX);
-      container.scrollTop += above > 0 ? -speed : speed;
-      const y = Math.min(Math.max(pointer.y, bounds.top + 1), bounds.bottom - 1);
-      const glyph = latest.current.glyphAt(pointer.x, y);
-      if (glyph) latest.current.onSweep(anchor, glyph);
-    }
-    frameRef.current = requestAnimationFrame(scroll);
-  };
-
-  const end = () => {
-    anchorRef.current = null;
-    pointerRef.current = null;
-    if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
-    frameRef.current = null;
-  };
-
-  useEffect(() => end, []);
+  const drag = useDragAutoscroll({
+    containerRef,
+    onDrag: (clientX, clientY) => {
+      const anchor = anchorRef.current;
+      const glyph = glyphAt(clientX, clientY);
+      if (anchor && glyph) onSweep(anchor, glyph);
+    },
+  });
 
   return {
     start(anchor, clientX, clientY) {
       anchorRef.current = anchor;
-      pointerRef.current = { x: clientX, y: clientY };
-      frameRef.current = requestAnimationFrame(scroll);
+      drag.start(clientX, clientY);
     },
-    move(clientX, clientY) {
-      const anchor = anchorRef.current;
-      if (!anchor) return;
-      pointerRef.current = { x: clientX, y: clientY };
-      const glyph = glyphAt(clientX, clientY);
-      if (glyph) onSweep(anchor, glyph);
+    move: drag.move,
+    end() {
+      anchorRef.current = null;
+      drag.end();
     },
-    end,
   };
 }

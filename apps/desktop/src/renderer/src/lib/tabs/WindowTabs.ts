@@ -4,6 +4,7 @@ import type { GlyphNode, PageNode } from "@shift/editor/types";
 import type { EditLocation } from "@shift/wasm/protocol";
 import type { GlyphId, NodeId } from "@shift/types";
 import { CANVAS_PATH, glyphIdFromPath } from "@/lib/editorRoute";
+import { GlyphSelection } from "@/lib/glyph-grid/GlyphSelection";
 import type { StoredTab } from "@/lib/workspace/documentViews";
 
 /** The pinned font overview tab's id. */
@@ -80,7 +81,8 @@ export class WindowTabs {
   /** The tabs as opened and arranged, before pages deleted since are accounted for. */
   readonly #openedCell: WritableSignal<readonly MovableTab[]>;
   readonly #tabsCell: Signal<readonly WindowTab[]>;
-  readonly #selectedGlyphCell: WritableSignal<GlyphId | null>;
+  readonly #gridSelectionCell: WritableSignal<GlyphSelection>;
+  readonly #selectedGlyphCell: Signal<GlyphId | null>;
   readonly #selectionPageIdCell: WritableSignal<NodeId | null>;
   // non-reactive: the glyph pages this window has fitted the view to, read only when a glyph opens
   readonly #framed = new Set<NodeId>();
@@ -89,7 +91,12 @@ export class WindowTabs {
   constructor(editor: Editor) {
     this.#editor = editor;
     this.#openedCell = signal<readonly MovableTab[]>([], { name: "desktop.windowTabs.opened" });
-    this.#selectedGlyphCell = signal<GlyphId | null>(null, { name: "desktop.overviewSelection" });
+    this.#gridSelectionCell = signal(GlyphSelection.empty([]), {
+      name: "desktop.overviewSelection",
+    });
+    this.#selectedGlyphCell = computed(() => this.#gridSelectionCell.value.primary, {
+      name: "desktop.overviewSelectedGlyph",
+    });
     this.#selectionPageIdCell = signal<NodeId | null>(null, {
       name: "desktop.overviewSelectionPage",
     });
@@ -110,12 +117,25 @@ export class WindowTabs {
   }
 
   /**
-   * The glyph selected in the font overview, or null.
+   * The glyphs selected in the font overview's grid.
    *
    * @remarks
-   * The one record of the overview's selection. Selection is not a tab: the
-   * glyph goes on a glyph page of the overview's own, shown while the overview
-   * is, so the glyph sidebar describes and edits it.
+   * The one record of the overview's selection, kept while other tabs are
+   * shown. It is the window's alone: never saved, never undone, and separate
+   * from what is selected on a canvas.
+   */
+  get gridSelectionCell(): Signal<GlyphSelection> {
+    return this.#gridSelectionCell;
+  }
+
+  /**
+   * The one glyph of the overview's selection that the glyph sidebar
+   * describes ({@link GlyphSelection.primary}), or null with none selected.
+   *
+   * @remarks
+   * Selection is not a tab: the glyph goes on a glyph page of the overview's
+   * own, shown while the overview is, so the glyph sidebar describes and
+   * edits it.
    */
   get selectedGlyphCell(): Signal<GlyphId | null> {
     return this.#selectedGlyphCell;
@@ -243,7 +263,12 @@ export class WindowTabs {
    * overview's page.
    */
   selectGlyph(glyphId: GlyphId): void {
-    this.#selectedGlyphCell.set(glyphId);
+    this.#gridSelectionCell.set(GlyphSelection.empty([glyphId]).all());
+  }
+
+  /** Replaces the overview's selection, as clicking and dragging in its grid do. */
+  selectGlyphs(selection: GlyphSelection): void {
+    this.#gridSelectionCell.set(selection);
   }
 
   /**

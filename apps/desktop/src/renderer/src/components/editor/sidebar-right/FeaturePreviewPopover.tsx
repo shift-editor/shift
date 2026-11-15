@@ -19,7 +19,7 @@ import {
   cn,
 } from "@shift/ui";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import { GlyphSelection } from "../../glyph-grid/GlyphSelection";
+import { GlyphSelection } from "@/lib/glyph-grid/GlyphSelection";
 import { copyGlyphNames } from "../../glyph-grid/glyphNames";
 import { useGlyphSelection } from "../../glyph-grid/useGlyphSelection";
 import { GlyphThumbnail } from "../../kerning/groups/GlyphThumbnail";
