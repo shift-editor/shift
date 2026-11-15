@@ -62,10 +62,9 @@
   --color-tag-light-gray: #b9b9b9;
   --color-tag-charcoal: #5c5c5c;
 
-  /* A glyph tile: its fill when untagged, its border, and its hard offset shadow. */
+  /* A glyph tile: its grey fill, and the ink that darkens its name band under the pointer. */
   --color-tile: #ededed;
   --color-tile-ink: rgba(0, 0, 0, 0.5);
-  --color-tile-shadow: rgba(0, 0, 0, 0.2);
 
   /* Low-emphasis icon and control colors */
   --color-icon-subtle: #9f9f9f;
@@ -171,11 +170,6 @@
   box-shadow:
     0 2px 5px -1px var(--color-shadow-ambient),
     0 1px 3px -1px var(--color-shadow-key);
-}
-
-/* A glyph tile's hard shadow, down and to the right, in the theme's ink. */
-@utility tile-shadow {
-  box-shadow: 2px 2px 0 var(--color-tile-shadow);
 }
 
 /* Unstyled text follows the theme instead of the browser's color-scheme default. */

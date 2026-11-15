@@ -504,6 +504,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
       hoveredNameIndex: hoveredName?.catalogIndex ?? null,
       selection: input.selection,
       selectionBox: input.selectionBox,
+      editingGlyphId: input.editingGlyphId,
       emptyGlyphIds,
     });
 

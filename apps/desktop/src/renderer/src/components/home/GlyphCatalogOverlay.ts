@@ -1,21 +1,22 @@
-import type { Rect2D } from "@shift/geo";
+import { Rect, type Rect2D } from "@shift/geo";
 import type { GlyphId } from "@shift/types";
 import { Canvas2DSurface } from "@shift/editor/rendering";
 import { fitCanvasText } from "@/lib/graphics/canvasText";
 import type { GlyphSelection } from "@/lib/glyph-grid/GlyphSelection";
 import { resolvedMarkColor } from "@/lib/glyph-grid/markColor";
-import type { GlyphCatalogFrame } from "@/types/glyphCatalog";
+import type { GlyphCatalogCell, GlyphCatalogFrame } from "@/types/glyphCatalog";
 
 const LABEL_HORIZONTAL_INSET = 8;
-/** The preview is a rounded card, empty until hovered or tagged. */
-const CARD_RADIUS = 8;
-/** The name sits below the card as its own field. */
-const NAME_RADIUS = 6;
-/** How much of the tile's ink darkens the part of a tile under the pointer. */
-const TILE_HOVER_ALPHA = 0.2;
+/** Each glyph is one rounded grey cell: its preview above a band holding its name. A tag colours the band. */
+const CELL_RADIUS = 8;
+/** How much ink darkens a name band under the pointer. */
+const BAND_HOVER_ALPHA = 0.12;
+/** The rename field sits inside the band: the compact input's height, centred. */
+const NAME_FIELD_HEIGHT = 24;
+const NAME_FIELD_INSET_X = 3;
 /** The character drawn for an empty glyph, as a fraction of the preview's height. */
 const EMPTY_GLYPH_FONT_RATIO = 0.43;
-/** How wide the selection ring is; it sits inside the card's edge. */
+/** How wide the selection ring is; it sits inside the cell's edge. */
 const SELECTION_RING_WIDTH = 2;
 /** How opaque the fill of the box dragged to select glyphs is. */
 const SELECTION_BOX_FILL_ALPHA = 0.12;
@@ -30,6 +31,8 @@ export interface GlyphCatalogOverlayState {
   readonly selection: GlyphSelection;
   /** The box being dragged to select glyphs, in the scrolled content; null when none is. */
   readonly selectionBox: Rect2D | null;
+  /** The glyph being renamed, whose name the input shows instead; null when none is. */
+  readonly editingGlyphId: GlyphId | null;
   /** Glyphs with no outline, drawn as their character in a muted colour. */
   readonly emptyGlyphIds: ReadonlySet<GlyphId>;
 }
@@ -55,65 +58,76 @@ export class GlyphCatalogOverlay {
       return false;
     }
 
-    container.style.width = `${cell.nameRect.width}px`;
-    container.style.height = `${cell.nameRect.height}px`;
-    container.style.transform = `translate(${cell.nameRect.x}px, ${cell.nameRect.y}px)`;
+    const field = nameFieldRect(cell);
+    container.style.width = `${field.width}px`;
+    container.style.height = `${field.height}px`;
+    container.style.transform = `translate(${field.x}px, ${field.y}px)`;
     return true;
   }
 
   draw(container: HTMLElement, frame: GlyphCatalogFrame, state: GlyphCatalogOverlayState): void {
-    const { hoveredPreviewIndex, hoveredNameIndex, selection, selectionBox, emptyGlyphIds } = state;
+    const {
+      hoveredPreviewIndex,
+      hoveredNameIndex,
+      selection,
+      selectionBox,
+      editingGlyphId,
+      emptyGlyphIds,
+    } = state;
     const context = Canvas2DSurface.from(this.#canvas).ctx;
     const style = getComputedStyle(container);
     const mutedColor = style.getPropertyValue("--color-muted").trim() || style.color;
     const token = (name: string) => style.getPropertyValue(name).trim() || style.color;
-    const inputColor = token("--color-input");
+    const tileColor = token("--color-tile");
     const hoverColor = token("--color-hover");
     const inkColor = token("--color-tile-ink");
+    const primaryColor = token("--color-primary");
     const accentColor = style.getPropertyValue("--color-accent").trim() || style.color;
     const fontFamily = style.fontFamily;
     context.clearRect(0, 0, frame.layout.viewportWidth, frame.layout.viewportHeight);
 
     for (const cell of frame.cells) {
-      const card = cell.previewRect;
-      const name = cell.nameRect;
+      const box = cell.cellRect;
+      const band = nameBandRect(cell);
       const { markColor } = cell.glyph;
-
-      context.beginPath();
-      context.roundRect(card.x, card.y, card.width, card.height, CARD_RADIUS);
-      // An untagged card is empty until the pointer is over it or it is selected; a tagged one is its colour.
+      const tagColor = markColor ? resolvedMarkColor(markColor, style) : null;
       const selected = selection.has(cell.glyph.id);
-      // A selected card keeps the hover fill, so it stays marked once the pointer leaves.
+      // A selected cell keeps the hover fill, so it stays marked once the pointer leaves.
       const shaded = cell.catalogIndex === hoveredPreviewIndex || selected;
-      if (markColor) {
-        context.fillStyle = resolvedMarkColor(markColor, style);
-        context.fill();
+
+      // The cell is grey, a shade darker while hovered or selected.
+      context.save();
+      context.beginPath();
+      context.roundRect(box.x, box.y, box.width, box.height, CELL_RADIUS);
+      context.fillStyle = shaded ? hoverColor : tileColor;
+      context.fill();
+      context.clip();
+
+      // A tagged cell's name sits on a band of its colour across the cell's foot.
+      if (tagColor) {
+        context.fillStyle = tagColor;
+        context.fillRect(band.x, band.y, band.width, band.height);
       }
-      if (shaded) {
-        context.fillStyle = markColor ? inkColor : hoverColor;
-        context.globalAlpha = markColor ? TILE_HOVER_ALPHA : 1;
-        context.fill();
+      if (cell.catalogIndex === hoveredNameIndex) {
+        context.fillStyle = inkColor;
+        context.globalAlpha = BAND_HOVER_ALPHA;
+        context.fillRect(band.x, band.y, band.width, band.height);
         context.globalAlpha = 1;
       }
+      context.restore();
 
-      // The name is a field that stays grey whatever the card's colour, a shade darker under the pointer.
-      context.fillStyle = cell.catalogIndex === hoveredNameIndex ? hoverColor : inputColor;
-      context.beginPath();
-      context.roundRect(name.x, name.y, name.width, name.height, NAME_RADIUS);
-      context.fill();
-
-      // The ring sits on the card's own edge, so it never reaches into the gap.
+      // The ring sits on the cell's own edge, so it never reaches into the gap.
       if (selected) {
         const inset = SELECTION_RING_WIDTH / 2;
         context.strokeStyle = accentColor;
         context.lineWidth = SELECTION_RING_WIDTH;
         context.beginPath();
         context.roundRect(
-          card.x + inset,
-          card.y + inset,
-          card.width - 2 * inset,
-          card.height - 2 * inset,
-          CARD_RADIUS - inset,
+          box.x + inset,
+          box.y + inset,
+          box.width - 2 * inset,
+          box.height - 2 * inset,
+          CELL_RADIUS - inset,
         );
         context.stroke();
       }
@@ -131,18 +145,18 @@ export class GlyphCatalogOverlay {
         );
       }
 
-      context.fillStyle = mutedColor;
+      // The input shows the name of the glyph being renamed.
+      if (cell.glyph.id === editingGlyphId) continue;
+
+      // On a band the name reads in the primary text colour.
+      context.fillStyle = tagColor ? primaryColor : mutedColor;
       context.font = `400 10px ${fontFamily}`;
       context.textAlign = "center";
       context.textBaseline = "middle";
       context.fillText(
-        fitCanvasText(
-          context,
-          cell.glyph.displayName,
-          cell.nameRect.width - 2 * LABEL_HORIZONTAL_INSET,
-        ),
-        cell.nameRect.x + cell.nameRect.width / 2,
-        cell.nameRect.y + cell.nameRect.height / 2,
+        fitCanvasText(context, cell.glyph.displayName, band.width - 2 * LABEL_HORIZONTAL_INSET),
+        band.x + band.width / 2,
+        band.y + band.height / 2,
       );
     }
 
@@ -174,4 +188,21 @@ export class GlyphCatalogOverlay {
       frame.layout.viewportHeight / 2,
     );
   }
+}
+
+/** The band across a cell's foot that holds its name. */
+function nameBandRect(cell: GlyphCatalogCell): Rect2D {
+  const name = cell.nameRect;
+  return Rect.fromXYWH(name.x, name.y, name.width, cell.cellRect.bottom - name.y);
+}
+
+/** Where the rename field sits: inside the name band. */
+function nameFieldRect(cell: GlyphCatalogCell): Rect2D {
+  const band = nameBandRect(cell);
+  return Rect.fromXYWH(
+    band.x + NAME_FIELD_INSET_X,
+    band.y + (band.height - NAME_FIELD_HEIGHT) / 2,
+    band.width - 2 * NAME_FIELD_INSET_X,
+    NAME_FIELD_HEIGHT,
+  );
 }

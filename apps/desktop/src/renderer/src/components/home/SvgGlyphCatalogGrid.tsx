@@ -175,7 +175,12 @@ export function SvgGlyphCatalogGrid({
             }
 
             let nameCell = (
-              <div className="flex h-7 w-full items-center justify-center truncate px-2 text-xs text-muted">
+              <div
+                className={cn(
+                  "flex h-7 w-full items-center justify-center truncate px-2 text-xs",
+                  cell.glyph.markColor ? "text-primary" : "text-muted",
+                )}
+              >
                 {cell.glyph.displayName}
               </div>
             );
@@ -184,7 +189,10 @@ export function SvgGlyphCatalogGrid({
                 <Button
                   aria-label={`Rename ${cell.glyph.displayName}`}
                   variant="ghost"
-                  className="h-7 w-full truncate px-2 text-center font-ui text-xs font-normal text-muted"
+                  className={cn(
+                    "h-7 w-full truncate px-2 text-center font-ui text-xs font-normal",
+                    cell.glyph.markColor ? "text-primary" : "text-muted",
+                  )}
                   onClick={() => setEditingGlyphId(cell.glyph.id)}
                 >
                   {cell.glyph.displayName}
@@ -204,18 +212,19 @@ export function SvgGlyphCatalogGrid({
               );
             }
 
+            const selected = selection.has(cell.glyph.id);
+            // The preview fills the cell down to the band that holds the name.
+            const bandHeight = cell.cellRect.bottom - cell.nameRect.top;
             return (
               <div
                 key={cell.glyph.id}
                 data-glyph-id={cell.glyph.id}
                 data-mark-color={markColorKey(cell.glyph.markColor)}
                 className={cn(
-                  "absolute flex flex-col overflow-hidden rounded-xs border border-tile-ink bg-tile tile-shadow",
-                  selection.has(cell.glyph.id) && "outline-2 outline-offset-2 outline-accent",
+                  "absolute flex flex-col overflow-hidden rounded-lg",
+                  selected ? "bg-hover" : "bg-tile",
                 )}
                 style={{
-                  // A tag's colour is data, so it is set here; an untagged tile keeps bg-tile.
-                  background: cell.glyph.markColor ? markColorCss(cell.glyph.markColor) : undefined,
                   height: cell.cellRect.height,
                   left: cell.cellRect.left,
                   top,
@@ -225,10 +234,9 @@ export function SvgGlyphCatalogGrid({
                 <Button
                   aria-label={glyphActionLabel?.(cell.glyph) ?? `Open ${cell.glyph.displayName}`}
                   variant="ghost"
-                  aria-pressed={selection.has(cell.glyph.id)}
+                  aria-pressed={selected}
                   className="flex w-full items-center justify-center overflow-hidden p-0"
-                  // The tile's border and the rule above the name take three pixels of its height.
-                  style={{ height: cell.cellRect.height - targetFrame.layout.nameHeight - 3 }}
+                  style={{ height: cell.cellRect.height - bandHeight }}
                   // The pointer selects on press; this is the keyboard's Enter and Space.
                   onClick={(event) => {
                     if (event.detail === 0)
@@ -237,8 +245,24 @@ export function SvgGlyphCatalogGrid({
                 >
                   {previewContent}
                 </Button>
-                {/* The name stays grey whatever the tile's colour. */}
-                <div className="border-t border-tile-ink bg-input">{nameCell}</div>
+                {/* A tag colours the band that holds the name; the preview is never tinted. */}
+                <div
+                  className="flex items-center px-0.75"
+                  style={{
+                    background: cell.glyph.markColor
+                      ? markColorCss(cell.glyph.markColor)
+                      : undefined,
+                    height: bandHeight,
+                  }}
+                >
+                  {nameCell}
+                </div>
+                {selected ? (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 rounded-lg ring-2 ring-inset ring-accent"
+                  />
+                ) : null}
               </div>
             );
           })}

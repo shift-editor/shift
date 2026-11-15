@@ -551,7 +551,6 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--color-tile": dark ? withAlpha(palette.base05, 0.12) : palette.base01,
     // The tile's ink is the theme's: black on a light palette, white on a dark one.
     "--color-tile-ink": dark ? "rgba(255, 255, 255, 0.5)" : "rgba(0, 0, 0, 0.5)",
-    "--color-tile-shadow": dark ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.2)",
     "--color-icon-subtle": muted,
     "--color-control-muted": secondary,
     "--color-canvas-purple": palette.base0E,
