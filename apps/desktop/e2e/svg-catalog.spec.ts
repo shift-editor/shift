@@ -2,6 +2,8 @@ import type { Locator, Page } from "@playwright/test";
 import { workspaceTest as test, expect } from "./fixtures/electronApp";
 import {
   clickFirstCatalogGlyph,
+  fontNavigation,
+  glyphProperties,
   glyphCatalogCanvas,
   glyphCatalogSvg,
   glyphCatalogSurface,
@@ -64,6 +66,26 @@ test.describe("SVG glyph catalog fallback", () => {
 
     await page.keyboard.press("Escape");
     await expect(selected).toHaveCount(0);
+  });
+
+  test("clears the selection from either sidebar's blank space", async ({ page }) => {
+    const svg = glyphCatalogSvg(page);
+    await expect(svg).toHaveAttribute("data-grid-readiness", "Complete");
+    const tiles = svg.getByRole("button", { name: /^Open / });
+    const selected = svg.getByRole("button", { name: /^Open /, pressed: true });
+    const clickBlankFoot = async (sidebar: Locator) => {
+      const box = (await sidebar.boundingBox())!;
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height - 12);
+    };
+
+    for (const sidebar of [fontNavigation(page), glyphProperties(page)]) {
+      await tiles.nth(0).click();
+      await expect(selected).toHaveCount(1);
+
+      await clickBlankFoot(sidebar);
+
+      await expect(selected).toHaveCount(0);
+    }
   });
 
   test("opens the glyph the arrow keys reached on Enter", async ({ page }) => {
