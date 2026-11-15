@@ -13,7 +13,6 @@ import {
 } from "@shift/ui";
 import { message } from "@shared/messages";
 import OptionsIcon from "@assets/export/options.svg";
-import FileIcon from "@assets/export/file.svg";
 import FolderIcon from "@assets/export/folder.svg";
 import { useExport } from "@/context/ExportContext";
 import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
@@ -100,29 +99,26 @@ const OptionsBody = ({ row, workspace }: { row: ExportRow; workspace: Workspace 
 
   return (
     <div className="flex flex-col gap-3 p-2">
-      <div className="flex flex-col gap-1.5">
-        <span className="text-ui text-secondary">{message("export.folder.label")}</span>
-        <div className="flex items-center gap-1">
-          <div
-            title={folder ?? undefined}
-            className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded bg-input px-2 text-ui text-primary"
-          >
-            <FolderIcon aria-hidden className="h-3.5 w-3.5 shrink-0 text-secondary" />
+      {/* The folder is its own chooser: click it to pick another. */}
+      <Tooltip content={folder ?? message("export.folder.choose")}>
+        <Button
+          variant="field"
+          size="field"
+          aria-label={message("export.folder.label")}
+          onClick={() => void exports.chooseFolder(row.target)}
+        >
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span aria-hidden className="flex shrink-0 text-secondary">
+              <FolderIcon className="h-3.5 w-3.5" />
+            </span>
             <span className="truncate">
               {folder === null
                 ? message("export.folder.none")
                 : folderBreadcrumb(folder).join(" › ")}
             </span>
-          </div>
-          <Button
-            variant="outline"
-            size="compact"
-            onClick={() => void exports.chooseFolder(row.target)}
-          >
-            {message("export.folder.choose")}
-          </Button>
-        </div>
-      </div>
+          </span>
+        </Button>
+      </Tooltip>
       {needsInstances ? <NoInstances /> : <PlannedFiles plan={plan} />}
     </div>
   );
@@ -151,22 +147,8 @@ const NoInstances = () => {
   );
 };
 
-/** The files the row writes, as Rust names them; a UFO is a folder. */
-const PlannedFiles = ({ plan }: { plan: ExportPlan }) => (
-  <div className="flex flex-col gap-1">
-    <div className="flex items-center justify-between text-ui text-secondary">
-      <span>{message("export.files")}</span>
-      {plan.status === "ready" ? <span>{fileCount(plan.files.length)}</span> : null}
-    </div>
-    <PlannedFileRows plan={plan} />
-  </div>
-);
-
-function fileCount(count: number): string {
-  return count === 1 ? message("export.files.one") : message("export.files.many", { count });
-}
-
-const PlannedFileRows = ({ plan }: { plan: ExportPlan }) => {
+/** The files the row writes, as Rust names them, under how many there are. */
+const PlannedFiles = ({ plan }: { plan: ExportPlan }) => {
   switch (plan.status) {
     // Names come back within a moment; the list fills in rather than showing a placeholder.
     case "planning":
@@ -175,20 +157,20 @@ const PlannedFileRows = ({ plan }: { plan: ExportPlan }) => {
       return <p className="text-ui text-secondary">{plan.reason}</p>;
     case "ready":
       return (
-        <ul className="scrollbar-hidden flex max-h-48 flex-col overflow-y-auto">
-          {plan.files.map((file) => {
-            const name = pathName(file);
-            const Icon = name.toLowerCase().endsWith(".ufo") ? FolderIcon : FileIcon;
-            return (
-              <li key={file} className="flex h-6 min-w-0 items-center gap-1.5 text-ui text-primary">
-                <Icon aria-hidden className="h-3.5 w-3.5 shrink-0 text-secondary" />
-                <span className="truncate" title={file}>
-                  {name}
-                </span>
+        <div className="flex flex-col gap-1">
+          <span className="text-ui text-primary">{fileCount(plan.files.length)}</span>
+          <ul className="scrollbar-hidden flex max-h-40 flex-col overflow-y-auto text-ui text-secondary">
+            {plan.files.map((file) => (
+              <li key={file} className="truncate leading-5" title={file}>
+                {pathName(file)}
               </li>
-            );
-          })}
-        </ul>
+            ))}
+          </ul>
+        </div>
       );
   }
 };
+
+function fileCount(count: number): string {
+  return count === 1 ? message("export.files.one") : message("export.files.many", { count });
+}
