@@ -881,7 +881,7 @@ impl Font {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
         if self
-            .layer_id_for_glyph_source(glyph_id, source_id)
+            .layer_id_for_master(glyph_id, source_id)
             .is_some()
         {
             return Err(CoreError::DuplicateGlyphLayer {
@@ -934,7 +934,7 @@ impl Font {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
         if self
-            .layer_id_for_glyph_source(glyph_id, source_id)
+            .layer_id_for_master(glyph_id, source_id)
             .is_some()
         {
             return Err(CoreError::DuplicateGlyphLayer {

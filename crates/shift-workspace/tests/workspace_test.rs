@@ -1104,7 +1104,7 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
     assert_eq!(
         workspace
             .font()
-            .layer_id_for_glyph_source(glyph_id, source_id),
+            .layer_id_for_master(glyph_id, source_id),
         Some(layer_id)
     );
 
@@ -1128,7 +1128,7 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
     assert_eq!(
         workspace
             .font()
-            .layer_id_for_glyph_source(glyph_id, source_id),
+            .layer_id_for_master(glyph_id, source_id),
         None
     );
 
@@ -1140,7 +1140,7 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
     assert_eq!(
         workspace
             .font()
-            .layer_id_for_glyph_source(glyph_id, source_id),
+            .layer_id_for_master(glyph_id, source_id),
         Some(layer_id)
     );
 }
@@ -1187,7 +1187,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
     assert_eq!(
         workspace
             .font()
-            .layer_id_for_glyph_source(glyph_b, source_id),
+            .layer_id_for_master(glyph_b, source_id),
         None
     );
 
@@ -1229,7 +1229,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
     assert_eq!(
         workspace
             .font()
-            .layer_id_for_glyph_source(glyph_b, source_id),
+            .layer_id_for_master(glyph_b, source_id),
         None
     );
     assert_persisted_font_matches_workspace(&mut workspace);

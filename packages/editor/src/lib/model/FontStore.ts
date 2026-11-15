@@ -41,7 +41,7 @@ import type {
   FontEngine,
   FontRecordIndex,
   FontStoreOptions,
-  GlyphSourceKey,
+  GlyphMasterKey,
 } from "../../types/font";
 import type { GlyphObjectIndex, GlyphObjectSegment } from "../../types/glyph";
 import { GlyphLayerState, type LayerUpdate } from "./GlyphLayerState";
@@ -187,8 +187,8 @@ export class FontStore {
   }
 
   /** The layer `glyphId` authors in `sourceId`, or `null` when it has none. */
-  layerIdForGlyphSource(glyphId: GlyphId, sourceId: SourceId): LayerId | null {
-    return this.#indexCell.peek().layerByGlyphSource.get(glyphSourceKey(glyphId, sourceId));
+  layerIdForMaster(glyphId: GlyphId, sourceId: SourceId): LayerId | null {
+    return this.#indexCell.peek().layerByGlyphMaster.get(glyphMasterKey(glyphId, sourceId));
   }
 
   layerIdForPoint(pointId: PointId): LayerId | null {
@@ -573,7 +573,7 @@ export class FontStore {
   #applyLayerSnapshot(snapshot: WorkspaceGlyphLayerSnapshot): boolean {
     const layerId = this.#indexCell
       .peek()
-      .layerByGlyphSource.get(glyphSourceKey(snapshot.glyphId, snapshot.sourceId));
+      .layerByGlyphMaster.get(glyphMasterKey(snapshot.glyphId, snapshot.sourceId));
     if (layerId !== snapshot.state.layerId) return false;
 
     this.#replaceLayerState(snapshot.state);
@@ -764,7 +764,7 @@ function recordIndex(
   const recordsById = new EntityMap<GlyphId, GlyphRecord>("glyph record");
   const recordByName = new EntityMap<GlyphName, GlyphRecord>("glyph record name");
   const dependentsById = new Map<GlyphId, Set<GlyphId>>();
-  const layerByGlyphSource = new EntityMap<GlyphSourceKey, LayerId>("glyph source layer");
+  const layerByGlyphMaster = new EntityMap<GlyphMasterKey, LayerId>("glyph master layer");
   const glyphByLayer = new EntityMap<LayerId, GlyphId>("layer glyph");
   for (const record of knownRecords) {
     recordsById.set(record.id, record);
@@ -778,7 +778,7 @@ function recordIndex(
       dependents.add(record.id);
     }
     for (const layer of record.layers) {
-      layerByGlyphSource.set(glyphSourceKey(record.id, layer.sourceId), layer.id);
+      layerByGlyphMaster.set(glyphMasterKey(record.id, layer.sourceId), layer.id);
       glyphByLayer.set(layer.id, record.id);
     }
   }
@@ -793,13 +793,13 @@ function recordIndex(
     recordByName,
     nameByUnicode,
     dependentsById,
-    layerByGlyphSource,
+    layerByGlyphMaster,
     glyphByLayer,
   };
 }
 
-function glyphSourceKey(glyphId: GlyphId, sourceId: SourceId): GlyphSourceKey {
-  return `${glyphId}:${sourceId}` as GlyphSourceKey;
+function glyphMasterKey(glyphId: GlyphId, sourceId: SourceId): GlyphMasterKey {
+  return `${glyphId}:${sourceId}` as GlyphMasterKey;
 }
 
 /** The glyphs `changes` gave new or different layers, or removed. */

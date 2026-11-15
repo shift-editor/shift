@@ -977,7 +977,7 @@ impl Font {
         self.index().owner(layer_id).copied()
     }
 
-    pub fn layer_id_for_glyph_source(
+    pub fn layer_id_for_master(
         &self,
         glyph_id: GlyphId,
         source_id: SourceId,
@@ -1503,7 +1503,7 @@ impl Font {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
         if self
-            .layer_id_for_glyph_source(glyph_id, source_id)
+            .layer_id_for_master(glyph_id, source_id)
             .is_some()
         {
             return Err(CoreError::DuplicateGlyphLayer {
@@ -2161,7 +2161,7 @@ mod tests {
         assert!(font.glyph_by_name("A").is_some());
         assert_eq!(font.glyph_id_by_layer(layer_id), Some(glyph_id));
         assert_eq!(
-            font.layer_id_for_glyph_source(glyph_id, font.default_source_id().unwrap()),
+            font.layer_id_for_master(glyph_id, font.default_source_id().unwrap()),
             Some(layer_id)
         );
         assert_eq!(
@@ -2681,7 +2681,7 @@ mod tests {
         assert_eq!(decoded.glyph_id_by_name("A"), Some(glyph_id));
         assert_eq!(decoded.glyph_id_by_layer(layer_id), Some(glyph_id));
         assert_eq!(
-            decoded.layer_id_for_glyph_source(glyph_id, source_id),
+            decoded.layer_id_for_master(glyph_id, source_id),
             Some(layer_id)
         );
         assert_eq!(
@@ -2724,7 +2724,7 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_glyph_source_layer_is_an_error() {
+    fn duplicate_glyph_master_layer_is_an_error() {
         let mut font = Font::new();
         let source_id = font.default_source_id().unwrap();
         let glyph_id = font.insert_glyph(Glyph::new("A")).unwrap();
@@ -2774,18 +2774,18 @@ mod tests {
 
         assert_eq!(font.glyph_id_by_layer(layer_id), Some(glyph_id));
         assert_eq!(
-            font.layer_id_for_glyph_source(glyph_id, source_id),
+            font.layer_id_for_master(glyph_id, source_id),
             Some(layer_id)
         );
 
         font.remove_glyph_layer(layer_id).unwrap();
 
         assert_eq!(font.glyph_id_by_layer(layer_id), None);
-        assert_eq!(font.layer_id_for_glyph_source(glyph_id, source_id), None);
+        assert_eq!(font.layer_id_for_master(glyph_id, source_id), None);
     }
 
     #[test]
-    fn index_validation_rejects_duplicate_layers_for_one_glyph_source() {
+    fn index_validation_rejects_duplicate_layers_for_one_glyph_master() {
         let source_id = SourceId::new();
         let mut glyph = Glyph::new("A");
         glyph.set_layer(GlyphLayer::new(LayerId::new(), source_id));
@@ -2931,7 +2931,7 @@ mod tests {
         let mut font = synthetic_point_heavy_font(mark);
         let glyph_id = font.glyph_id_by_name("g05000").unwrap();
         let layer_id = font
-            .layer_id_for_glyph_source(glyph_id, font.default_source_id().unwrap())
+            .layer_id_for_master(glyph_id, font.default_source_id().unwrap())
             .unwrap();
         let point_ids: Vec<PointId> = font
             .layer(layer_id)
@@ -3029,7 +3029,7 @@ mod tests {
         let default_source_id = font.default_source_id().unwrap();
         let glyph_id = font.glyph_id_by_name("g00000").unwrap();
         let layer_id = font
-            .layer_id_for_glyph_source(glyph_id, default_source_id)
+            .layer_id_for_master(glyph_id, default_source_id)
             .unwrap();
         let other_glyph_id = font.glyph_id_by_name("g00001").unwrap();
         let start = Instant::now();
@@ -3148,7 +3148,7 @@ mod tests {
 
         assert_eq!(removed.id(), layer_id);
         assert_eq!(font.glyph_id_by_layer(layer_id), None);
-        assert_eq!(font.layer_id_for_glyph_source(glyph_id, source_id), None);
+        assert_eq!(font.layer_id_for_master(glyph_id, source_id), None);
         print_perf_mark("create/remove layer and rebuild indexes", mark, elapsed);
         assert_within_budget(
             elapsed,
