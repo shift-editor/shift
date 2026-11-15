@@ -32,6 +32,25 @@ pub enum LibValue {
     Uid(u64),
 }
 
+impl LibValue {
+    /// A number as `f64`: a float, or an integer widened to one.
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            Self::Float(number) => Some(*number),
+            Self::Integer(number) => Some(*number as f64),
+            _ => None,
+        }
+    }
+
+    /// A signed integer; floats are not rounded.
+    pub fn as_i64(&self) -> Option<i64> {
+        match self {
+            Self::Integer(number) => Some(*number),
+            _ => None,
+        }
+    }
+}
+
 impl LibData {
     pub fn new() -> Self {
         Self {

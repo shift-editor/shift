@@ -619,6 +619,8 @@ export class Font {
     glyphRecords(): readonly GlyphRecord[];
     get glyphRecordsCell(): Signal<readonly GlyphRecord[]>;
     glyphsAfter(after: GlyphId | null, limit: number): GlyphDirectoryPage | null;
+    get gridCell(): Signal<Grid$1 | null>;
+    get gridRevisionCell(): Signal<number>;
     hasGlyph(glyphId: GlyphId): boolean;
     get invalidGlyphsCell(): Signal<GlyphInvalidation>;
     isNonspacingMark(name: GlyphName): boolean;
@@ -678,6 +680,7 @@ export class Font {
     renameKerningGroup(groupId: KerningGroupId, name: string): Promise<void>;
     resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]>;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
+    setGrid(grid: Grid$1 | null): void;
     setIndependentAxisMapping(axis: Axis$1, mapping: AxisMapping): Promise<void>;
     setKerningException(sourceId: SourceId, first: GlyphId, second: GlyphId, position: KerningPairPosition, exception: boolean): boolean;
     setKerningValues(edits: readonly KerningValueEdit[], label: string): void;
@@ -737,6 +740,7 @@ export interface FontSnapshot {
     readonly axisMappings: readonly AxisMapping[];
     // (undocumented)
     readonly glyphs: readonly GlyphEntry[];
+    readonly grid?: Grid$1 | null;
     // (undocumented)
     readonly kerning: KerningSnapshot;
     readonly languageIds?: readonly string[] | null;

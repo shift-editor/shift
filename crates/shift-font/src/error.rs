@@ -279,6 +279,12 @@ pub enum CoreError {
 
     #[error("kerning value {0} is not finite")]
     InvalidKerningValue(f64),
+
+    #[error(
+        "grid {0:?} needs positive finite spacing and 1 to {max} subdivisions",
+        max = crate::MAX_GRID_SUBDIVISIONS
+    )]
+    InvalidGrid(crate::Grid),
 }
 
 /// The kind of authoring entity an error is about.
