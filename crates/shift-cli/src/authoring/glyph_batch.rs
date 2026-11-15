@@ -172,7 +172,9 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
 
     // Glyph keys come last, so the glyphs and layers they read already exist.
     for (name, keys) in &glyph_keys {
-        let (glyph_id, _) = glyphs[name];
+        let Some(&(glyph_id, _)) = glyphs.get(name) else {
+            bail!("metrics keys name glyph `{name}`, which the batch did not create");
+        };
         intents.extend(keys.glyph_intents(glyph_id, &mut written));
     }
 

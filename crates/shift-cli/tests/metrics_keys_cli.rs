@@ -7,7 +7,7 @@ use support::{load_font, shift, shift_with_stdin};
 /// A new document with a Regular and a Bold master on a weight axis.
 fn two_master_document(temp: &tempfile::TempDir) -> String {
     let path = temp.path().join("Mono.shift");
-    let path = path.to_str().unwrap().to_string();
+    let path = path.to_string_lossy().into_owned();
     for args in [
         vec!["font", "create", &path],
         vec![
@@ -45,18 +45,13 @@ fn glyph_set(path: &str, batch: &Value) -> std::process::Output {
     shift_with_stdin(&["glyph", "set", path, "--input", "-"], &batch.to_string())
 }
 
-fn width(font: &Font, glyph: &str, source: &str) -> f64 {
+fn width(font: &Font, glyph: &str, source: &str) -> Option<f64> {
     let source_id = font
         .sources()
         .iter()
-        .find(|candidate| candidate.name() == source)
-        .unwrap()
+        .find(|candidate| candidate.name() == source)?
         .id();
-    font.glyph_by_name(glyph)
-        .unwrap()
-        .layer_for_source(source_id)
-        .unwrap()
-        .width()
+    Some(font.glyph_by_name(glyph)?.layer_for_source(source_id)?.width())
 }
 
 /// A space, and `H` and `O` drawn narrower than it, in both masters.
@@ -72,8 +67,8 @@ fn monospace_batch(glyph_keys: &Value, bold_layer_keys: Option<&Value>) -> Value
             "layer": {"advance": 500, "svgPath": "M100 0 L400 0 L400 700 L100 700 Z"},
         }));
         let mut bold = json!({"advance": 500, "svgPath": "M100 0 L400 0 L400 700 L100 700 Z"});
-        if let Some(keys) = bold_layer_keys {
-            bold["metricsKeys"] = keys.clone();
+        if let (Some(keys), Some(layer)) = (bold_layer_keys, bold.as_object_mut()) {
+            layer.insert("metricsKeys".to_string(), keys.clone());
         }
         glyphs.push(json!({"name": name, "source": "Bold", "layer": bold}));
     }
@@ -90,8 +85,8 @@ fn width_keys_follow_space_in_every_source() {
 
     let font = load_font(&path);
     for glyph in ["H", "O"] {
-        assert_eq!(width(&font, glyph, "Regular"), 600.0);
-        assert_eq!(width(&font, glyph, "Bold"), 650.0);
+        assert_eq!(width(&font, glyph, "Regular"), Some(600.0));
+        assert_eq!(width(&font, glyph, "Bold"), Some(650.0));
         let keys = font.glyph_by_name(glyph).unwrap().metrics_keys();
         assert_eq!(keys.get(MetricsKeySide::Width).unwrap().as_str(), "=space");
     }
@@ -105,9 +100,9 @@ fn width_keys_follow_space_in_every_source() {
     );
     assert!(output.status.success(), "{:?}", output.stderr);
     let font = load_font(&path);
-    assert_eq!(width(&font, "H", "Regular"), 720.0);
-    assert_eq!(width(&font, "O", "Regular"), 720.0);
-    assert_eq!(width(&font, "H", "Bold"), 650.0);
+    assert_eq!(width(&font, "H", "Regular"), Some(720.0));
+    assert_eq!(width(&font, "O", "Regular"), Some(720.0));
+    assert_eq!(width(&font, "H", "Bold"), Some(650.0));
 }
 
 #[test]
@@ -123,8 +118,8 @@ fn a_layer_key_overrides_the_glyph_key_in_its_source_only() {
     assert!(output.status.success(), "{:?}", output.stderr);
 
     let font = load_font(&path);
-    assert_eq!(width(&font, "H", "Regular"), 600.0);
-    assert_eq!(width(&font, "H", "Bold"), 670.0);
+    assert_eq!(width(&font, "H", "Regular"), Some(600.0));
+    assert_eq!(width(&font, "H", "Bold"), Some(670.0));
 }
 
 #[test]
@@ -163,8 +158,8 @@ fn exported_keys_set_into_another_document_unchanged() {
     let output = glyph_set(&copy_path, &exported);
     assert!(output.status.success(), "{:?}", output.stderr);
     let font = load_font(&copy_path);
-    assert_eq!(width(&font, "H", "Regular"), 600.0);
-    assert_eq!(width(&font, "H", "Bold"), 670.0);
+    assert_eq!(width(&font, "H", "Regular"), Some(600.0));
+    assert_eq!(width(&font, "H", "Bold"), Some(670.0));
 }
 
 #[test]
