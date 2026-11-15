@@ -285,7 +285,7 @@ const ExportFooter = ({ canAuthor }: { canAuthor: boolean }) => {
   if (!canAuthor) {
     return (
       <Button
-        variant="primary"
+        variant="outline"
         size="compact"
         className="w-full"
         onClick={() => {
@@ -296,7 +296,7 @@ const ExportFooter = ({ canAuthor }: { canAuthor: boolean }) => {
       >
         <span className="flex items-center gap-2">
           {message("export.saveAsShift")}
-          <kbd className="font-sans text-ui text-on-accent/70">{saveShortcut}</kbd>
+          <kbd className="font-sans text-ui text-secondary">{saveShortcut}</kbd>
         </span>
       </Button>
     );
