@@ -20,7 +20,7 @@ import {
 import { GlyphTiles } from "@/components/glyph-grid/GlyphTiles";
 import { GlyphGridFooter } from "@/components/home/GlyphGridFooter";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
-import { colorsInUse, filterByColor, glyphCountLabel } from "@/lib/glyph-grid/colorFilter";
+import { colorsInUse, filterByColor } from "@/lib/glyph-grid/colorFilter";
 import { glyphSearchMatcher, NO_SEARCH } from "@/lib/glyph-grid/glyphSearch";
 import { insertGlyphIntoText } from "@/lib/glyph-grid/insertGlyph";
 import type { GlyphCatalogItem } from "@/types/glyphCatalog";
@@ -40,7 +40,6 @@ import { useFontSession } from "@/workspace/WorkspaceContext";
 export const GlyphsPanel = () => {
   const session = useFontSession();
   const {
-    availableGlyphs,
     filterGlyphs,
     categories,
     languageScripts,
@@ -209,7 +208,7 @@ export const GlyphsPanel = () => {
           </ul>
         ) : null}
       </div>
-      <div className="min-h-0 flex-1 text-primary">
+      <div className="min-h-0 flex-1 text-primary" data-filtered-glyph-count={shown.length}>
         <GlyphTiles
           glyphs={shown}
           location={location}
@@ -221,7 +220,6 @@ export const GlyphsPanel = () => {
         />
       </div>
       <GlyphGridFooter
-        countLabel={glyphCountLabel(shown.length, availableGlyphs.length, colorFilter)}
         colors={colors}
         colorFilter={colorFilter}
         filterColor={(color, add) => view.filterColor(color, add)}

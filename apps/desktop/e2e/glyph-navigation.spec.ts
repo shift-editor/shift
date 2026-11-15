@@ -140,17 +140,17 @@ test("finds a glyph in the canvas's Glyphs tab and opens it from there", async (
   const sidebar = editorSidebar(page);
   await sidebar.getByRole("tab", { name: "Glyphs list" }).click();
   const total = (await editor.glyphNames()).length;
-  const count = sidebar.getByTestId("glyph-count");
-  await expect(count).toHaveText(`${total} glyphs`);
+  const tiles = sidebar.locator("[data-filtered-glyph-count]");
+  await expect(tiles).toHaveAttribute("data-filtered-glyph-count", `${total}`);
 
   const search = sidebar.getByRole("textbox", { name: "Search glyphs" });
   await search.fill("NAVIGATION");
-  await expect(count).toHaveText(`2 of ${total}`);
+  await expect(tiles).toHaveAttribute("data-filtered-glyph-count", "2");
   await sidebar.getByRole("button", { name: "Match case" }).click();
-  await expect(count).toHaveText(`0 of ${total}`);
+  await expect(tiles).toHaveAttribute("data-filtered-glyph-count", "0");
   await sidebar.getByRole("button", { name: "Regular expression" }).click();
   await search.fill("^navigation[B-Z]$");
-  await expect(count).toHaveText(`1 of ${total}`);
+  await expect(tiles).toHaveAttribute("data-filtered-glyph-count", "1");
 
   await sidebar.getByRole("button", { name: "navigationB", exact: true }).click();
   await waitForEditorReady(page, secondId);
