@@ -17,7 +17,7 @@ import {
   runCommand,
 } from "./fixtures/documentLifecycle";
 import { EditorDriver } from "./fixtures/EditorDriver";
-import { exportedFiles, exportWithDialog } from "./fixtures/exportDialog";
+import { exportedFiles, exportFromSidebar } from "./fixtures/exportSection";
 import type { RelaunchApp } from "./fixtures/types";
 import type { GlyphId } from "@shift/types";
 import { square } from "@/testing/fixtures";
@@ -89,7 +89,7 @@ async function persistEvidence(
 ): Promise<void> {
   await runCommand(page, "file.save");
   await expect.poll(() => fs.existsSync(saveShiftPath)).toBe(true);
-  expect(await exportWithDialog(page, "Variable")).toBe("done");
+  expect(await exportFromSidebar(page)).toBe("done");
   const [exportTtfPath] = exportedFiles(exportDirectory, ".ttf");
   if (exportTtfPath === undefined) throw new Error(`Export wrote no .ttf into ${exportDirectory}`);
 

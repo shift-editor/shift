@@ -16,12 +16,17 @@ export function Select<Value, Multiple extends boolean | undefined = false>(
 }
 
 export interface SelectTriggerProps extends React.ComponentProps<typeof BaseSelect.Trigger> {
-  variant?: "filled" | "plain";
+  variant?: "filled" | "plain" | "field";
 }
 
 const triggerVariantStyles = {
   filled: "bg-input",
   plain: "bg-background",
+  /**
+   * A compact sidebar field, like Button's `field`: a shade lighter than a
+   * text input's fill, with a hairline border and the sidebar's small type.
+   */
+  field: "gap-1.5 border border-line-subtle bg-surface-muted pr-1.5 text-ui hover:bg-input",
 };
 
 export function SelectTrigger({ className, variant = "filled", ...props }: SelectTriggerProps) {

@@ -53,6 +53,7 @@ export type RendererToMain = {
   "clipboard.readText": () => string;
   /** Shows a native folder chooser for an export; resolves null when canceled. */
   "exports.chooseFolder": (defaultPath: string | null) => string | null;
+  "exports.reveal": (path: string) => void;
   "clipboard.writeText": (text: string) => void;
   /**
    * Asks main to transfer a document request lane to the renderer. The port

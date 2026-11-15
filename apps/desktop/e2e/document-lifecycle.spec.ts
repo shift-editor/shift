@@ -24,7 +24,7 @@ import {
 import { EditorDriver } from "./fixtures/EditorDriver";
 import { glyphClickTargets } from "./fixtures/editorInteractions";
 import { createAuthoredDocument } from "./fixtures/fontSource";
-import { exportedFiles, exportWithDialog } from "./fixtures/exportDialog";
+import { exportedFiles, exportFromSidebar, exportSection } from "./fixtures/exportSection";
 import { exportedGlyphNames, savedGlyphNames } from "./fixtures/savedDocument";
 import {
   clickFirstCatalogGlyph,
@@ -713,14 +713,14 @@ saveOnCloseTest(
 );
 
 workspaceTest(
-  "closing Export without exporting preserves document state",
+  "closing an Export row's options without exporting preserves document state",
   async ({ electronApp, page }) => {
     const workspace = new EditorDriver(page, electronApp);
     const before = await workspace.documentState();
     await expect.poll(() => windowTitle(page, electronApp)).toContain("font.shift -");
     const titleBefore = await windowTitle(page, electronApp);
 
-    await runCommand(page, "file.export");
+    await exportSection(page).getByRole("button", { name: "Export options" }).first().click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toBeHidden();
@@ -738,7 +738,7 @@ failedExportTest(
     await expect.poll(() => windowTitle(page, electronApp)).toContain("font.shift -");
     const titleBefore = await windowTitle(page, electronApp);
 
-    expect(await exportWithDialog(page, "Variable")).toBe("failed");
+    expect(await exportFromSidebar(page)).toBe("failed");
 
     expect(await workspace.documentState()).toEqual(before);
     expect(await windowTitle(page, electronApp)).toBe(titleBefore);
@@ -755,7 +755,7 @@ workspaceTest(
     await expect.poll(() => windowTitle(page, electronApp)).toContain("font.shift -");
     const titleBefore = await windowTitle(page, electronApp);
 
-    expect(await exportWithDialog(page, "Variable")).toBe("done");
+    expect(await exportFromSidebar(page)).toBe("done");
 
     const [exported] = exportedFiles(exportDirectory, ".ttf");
     expect(exported).toBeDefined();

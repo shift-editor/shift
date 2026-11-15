@@ -8,6 +8,7 @@ import {
   TabsTab,
 } from "@shift/ui";
 import { SidebarBrand } from "@/components/chrome/SidebarBrand";
+import { ExportSection } from "@/components/export/ExportSection";
 import { PagesSection } from "@/components/pages/PagesSection";
 import { ObjectSectionRow } from "./object-tree/ObjectSectionRow";
 import { ObjectsPanel } from "./ObjectsPanel";
@@ -16,7 +17,10 @@ import { VariationPanel } from "./VariationPanel";
 const TAB_CLASS =
   "h-5 flex-1 rounded-sm px-2 text-ui data-[active]:bg-surface data-[active]:font-medium data-[active]:shadow-sm";
 
-/** The document's lists: its pages and what the canvas holds, or its sources and instances. */
+/**
+ * The document's lists, its pages and what the canvas holds or its sources and
+ * instances, above the Export section.
+ */
 export const LeftSidebar = () => (
   <aside
     aria-label="Layers and designspace"
@@ -55,5 +59,6 @@ export const LeftSidebar = () => (
         </ScrollArea>
       </TabsPanel>
     </Tabs>
+    <ExportSection />
   </aside>
 );

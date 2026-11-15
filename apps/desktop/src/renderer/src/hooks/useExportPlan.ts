@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSignalState } from "@shift/editor/signals";
 import type { WorkspaceBinaryEncoding, WorkspaceExportFormat } from "@shared/workspace/lanes";
 import { useAxes } from "@/hooks/useAxes";
+import { errorReason } from "@/lib/export/errorReason";
 import type { Workspace } from "@/workspace/Workspace";
 import { useFont } from "@/workspace/WorkspaceContext";
 
@@ -53,7 +54,3 @@ export function useExportPlan(
   return plan;
 }
 
-/** The message an export failure carries, for showing under a generic headline. */
-export function errorReason(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}

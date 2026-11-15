@@ -595,6 +595,9 @@ export class App {
       const window = this.#requireWindowForWebContents(event.sender);
       return this.#nativeDialogs.chooseExportFolder(window, defaultPath);
     });
+    ipc.handle(ipcMain, "exports.reveal", (_event, exportedPath) => {
+      shell.showItemInFolder(exportedPath);
+    });
     ipc.handle(ipcMain, "clipboard.readText", () => {
       return clipboard.readText();
     });

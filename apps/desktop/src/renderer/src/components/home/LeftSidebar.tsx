@@ -1,6 +1,7 @@
 import { ScrollArea, Separator } from "@shift/ui";
 import { ObjectSectionRow } from "@/components/editor/object-tree/ObjectSectionRow";
 import { SidebarBrand } from "@/components/chrome/SidebarBrand";
+import { ExportSection } from "@/components/export/ExportSection";
 import { PagesSection } from "@/components/pages/PagesSection";
 import { AxesSection } from "@/components/variation/AxesSection";
 import { InstancesSection } from "@/components/variation/InstancesSection";
@@ -36,6 +37,7 @@ export const LeftSidebar = () => {
         </div>
         <div ref={spacerRef} aria-hidden />
       </ScrollArea>
+      <ExportSection />
     </aside>
   );
 };

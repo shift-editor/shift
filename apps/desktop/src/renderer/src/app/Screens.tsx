@@ -14,6 +14,7 @@ import { PreviewNoticeProvider } from "@/context/PreviewNoticeProvider";
 import { useDocumentViewMemory } from "@/hooks/useDocumentViewMemory";
 import { AboutScreen } from "@/views/AboutScreen";
 import { FeedbackScreen } from "@/views/FeedbackScreen";
+import { ExportProvider } from "@/context/ExportProvider";
 import { DocumentErrorBoundary } from "./DocumentErrorBoundary";
 
 declare const __PLAYWRIGHT__: boolean;
@@ -65,6 +66,7 @@ const FontSessionScreens = () => {
   return (
     <GlyphCatalogProvider>
       <PreviewNoticeProvider>
+        <ExportProvider>
         <SettingsNavigationProvider>
           <ShiftSessionSetup />
           <div
@@ -80,6 +82,7 @@ const FontSessionScreens = () => {
             <Outlet />
           </div>
         </SettingsNavigationProvider>
+        </ExportProvider>
       </PreviewNoticeProvider>
     </GlyphCatalogProvider>
   );

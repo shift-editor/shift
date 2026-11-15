@@ -226,7 +226,7 @@ const fileCommands: Command[] = [
   {
     id: "file.export",
     effect: "file",
-    label: "Export…",
+    label: "Export",
     enabled: (ctx) => ctx.document.hasWorkspace() && ctx.renderer.available(),
     run: (ctx) => ctx.renderer.run("file.export"),
   },

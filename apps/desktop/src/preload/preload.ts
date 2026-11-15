@@ -74,6 +74,7 @@ const shiftHost: ShiftHost = {
   },
   exports: {
     chooseFolder: invoke(ipcRenderer, "exports.chooseFolder"),
+    reveal: invoke(ipcRenderer, "exports.reveal"),
   },
   clipboard: {
     writeText: invoke(ipcRenderer, "clipboard.writeText"),

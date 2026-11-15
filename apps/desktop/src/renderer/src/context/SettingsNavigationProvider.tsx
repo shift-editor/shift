@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ExportDialog } from "@/components/chrome/export/ExportDialog";
 import { SettingsDialog } from "@/components/chrome/settings/SettingsDialog";
 import { ComponentPickerDialog } from "@/components/editor/ComponentPickerDialog";
 import { getShiftHost } from "@/host/shiftHost";
@@ -7,6 +6,8 @@ import { runRendererCommand } from "@/lib/commands/rendererCommands";
 import type { SettingsTarget } from "@/types/settings";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { useWindowTabs } from "@/hooks/useWindowTabs";
+import { useExport } from "./ExportContext";
+import { usePreviewNotice } from "./PreviewNoticeProvider";
 import { SettingsNavigationContext, type SettingsNavigation } from "./SettingsNavigationContext";
 
 export const SettingsNavigationProvider = ({ children }: { children: ReactNode }) => {
@@ -14,7 +15,8 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
   const { closeShown } = useWindowTabs();
   const [target, setTarget] = useState<SettingsTarget | null>(null);
   const [componentPickerOpen, setComponentPickerOpen] = useState(false);
-  const [exportOpen, setExportOpen] = useState(false);
+  const { exportAll } = useExport();
+  const showPreviewNotice = usePreviewNotice();
   const open = useCallback((next: SettingsTarget) => setTarget(next), []);
   const navigation = useMemo<SettingsNavigation>(() => ({ open, target }), [open, target]);
 
@@ -26,7 +28,9 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
           return;
         }
         if (id === "file.export") {
-          setExportOpen(session.mode === "workspace");
+          // A preview exports once it is saved as .shift, which the notice offers.
+          if (session.mode === "workspace") await exportAll();
+          else showPreviewNotice();
           return;
         }
         if (id === "tab.close") {
@@ -47,14 +51,13 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
           console.error("renderer command failed", id, error);
         }
       }),
-    [closeShown, session.editor, session.mode],
+    [closeShown, exportAll, session.editor, session.mode, showPreviewNotice],
   );
 
   return (
     <SettingsNavigationContext.Provider value={navigation}>
       {children}
       <ComponentPickerDialog open={componentPickerOpen} onOpenChange={setComponentPickerOpen} />
-      <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
       <SettingsDialog
         target={target}
         canAuthor={session.mode === "workspace"}
