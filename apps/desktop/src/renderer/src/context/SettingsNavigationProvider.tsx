@@ -15,7 +15,7 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
   const { closeShown } = useWindowTabs();
   const [target, setTarget] = useState<SettingsTarget | null>(null);
   const [componentPickerOpen, setComponentPickerOpen] = useState(false);
-  const { exportAll } = useExport();
+  const { setOpen: setExportOpen, setPopoverOpen: setExportPopoverOpen } = useExport();
   const showPreviewNotice = usePreviewNotice();
   const open = useCallback((next: SettingsTarget) => setTarget(next), []);
   const navigation = useMemo<SettingsNavigation>(() => ({ open, target }), [open, target]);
@@ -28,9 +28,12 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
           return;
         }
         if (id === "file.export") {
+          // The Export popover opens from the section's Export button, so the section opens too.
           // A preview exports once it is saved as .shift, which the notice offers.
-          if (session.mode === "workspace") await exportAll();
-          else showPreviewNotice();
+          if (session.mode === "workspace") {
+            setExportOpen(true);
+            setExportPopoverOpen(true);
+          } else showPreviewNotice();
           return;
         }
         if (id === "tab.close") {
@@ -51,7 +54,14 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
           console.error("renderer command failed", id, error);
         }
       }),
-    [closeShown, exportAll, session.editor, session.mode, showPreviewNotice],
+    [
+      closeShown,
+      session.editor,
+      session.mode,
+      setExportOpen,
+      setExportPopoverOpen,
+      showPreviewNotice,
+    ],
   );
 
   return (

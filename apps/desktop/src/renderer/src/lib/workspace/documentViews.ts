@@ -42,11 +42,7 @@ const documentViewSchema = z
     exportFolders: z.partialRecord(z.enum(EXPORT_TARGETS), z.string()).optional(),
     /** The Export section's rows, in order. */
     exportRows: z
-      .array(
-        z
-          .object({ target: z.enum(EXPORT_TARGETS), output: z.enum(EXPORT_OUTPUTS) })
-          .strict(),
-      )
+      .array(z.object({ target: z.enum(EXPORT_TARGETS), output: z.enum(EXPORT_OUTPUTS) }).strict())
       .optional(),
     /** Whether the Export section was left open. */
     exportOpen: z.boolean().optional(),

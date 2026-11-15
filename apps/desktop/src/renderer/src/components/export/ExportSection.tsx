@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   Button,
   Check,
-  Progress,
   Select,
   SelectItem,
   SelectItemIndicator,
@@ -36,6 +35,7 @@ import {
   type ExportTarget,
 } from "@/types/export";
 import { useFontSession } from "@/workspace/WorkspaceContext";
+import { ExportPopover } from "./ExportPopover";
 import { ExportRowOptions } from "./ExportRowOptions";
 import { outputLabel, targetLabel } from "./exportLabels";
 
@@ -92,12 +92,18 @@ export const ExportSection = () => {
               ))}
             </ul>
           ) : null}
-          <ExportFooter canAuthor={canAuthor} />
+          <ExportFooter anchor={section} />
         </div>
       </CollapsibleSection>
     </section>
   );
 };
+
+/** Why row `id` didn't export in `run`, or null. */
+function failureReason(run: ExportRun, id: string): string | null {
+  const outcome = run.status === "idle" ? undefined : run.outcomes[id];
+  return outcome !== undefined && "reason" in outcome ? outcome.reason : null;
+}
 
 function rowStatus(run: ExportRun, id: string): ExportRowStatus | null {
   return run.status === "idle" ? null : (run.rows[id] ?? null);
@@ -244,7 +250,7 @@ const RowEnd = ({
       );
     case "failed":
       return (
-        <Tooltip content={exports.run.status === "failed" ? exports.run.reason : null}>
+        <Tooltip content={failureReason(exports.run, row.id)}>
           <WarningIcon
             role="img"
             aria-label={message("export.status.failed")}
@@ -272,17 +278,15 @@ const RowEnd = ({
   }
 };
 
-/** Export, a run's progress, its result, or Save as .shift for a preview. */
-const ExportFooter = ({ canAuthor }: { canAuthor: boolean }) => {
-  const exports = useExport();
-  const { run, rows } = exports;
+/** The Export button, which opens the Export popover, or Save as .shift for a preview. */
+const ExportFooter = ({ anchor }: { anchor: HTMLElement | null }) => {
+  const session = useFontSession();
   const host = getShiftHost();
   const isMac = host.platform === "darwin";
-  const shortcut = commandShortcutLabel(commandShortcuts["file.export"], isMac);
-  // Save converts a preview to .shift, so Save as .shift shows Save's shortcut.
-  const saveShortcut = commandShortcutLabel(commandShortcuts["file.save"], isMac);
 
-  if (!canAuthor) {
+  if (session.mode !== "workspace") {
+    // Save converts a preview to .shift, so Save as .shift shows Save's shortcut.
+    const saveShortcut = commandShortcutLabel(commandShortcuts["file.save"], isMac);
     return (
       <Button
         variant="outline"
@@ -296,103 +300,17 @@ const ExportFooter = ({ canAuthor }: { canAuthor: boolean }) => {
       >
         <span className="flex items-center gap-2">
           {message("export.saveAsShift")}
-          <kbd className="font-sans text-ui text-secondary">{saveShortcut}</kbd>
+          <kbd className="font-ui text-ui text-secondary">{saveShortcut}</kbd>
         </span>
       </Button>
     );
   }
 
-  switch (run.status) {
-    case "exporting":
-      return <ExportProgress run={run} rows={rows} />;
-    case "done":
-      return (
-        <div role="status">
-          <Button
-            variant="outline"
-            size="compact"
-            className="w-full"
-            onClick={() => void exports.reveal()}
-          >
-            <span className="flex items-center gap-1.5">
-              <span aria-hidden className="flex text-state-on">
-                <Check className="h-3.5 w-3.5" strokeWidth={2} />
-              </span>
-              {message("export.done")}
-            </span>
-          </Button>
-        </div>
-      );
-    case "failed":
-    case "idle":
-      return (
-        <div className="flex flex-col gap-2">
-          {run.status === "failed" ? (
-            <p role="alert" title={run.reason} className="text-ui text-error">
-              {message("export.failed")}
-            </p>
-          ) : null}
-          <Button
-            variant="outline"
-            size="compact"
-            className="w-full"
-            aria-disabled={rows.length === 0 || undefined}
-            onClick={() => {
-              if (rows.length > 0) void exports.exportAll();
-            }}
-          >
-            <span className="flex items-center gap-2">
-              {message("export.action")}
-              <kbd className="font-sans text-ui text-secondary">{shortcut}</kbd>
-            </span>
-          </Button>
-        </div>
-      );
-  }
-};
-
-/** Which row is being written, how many are done, Stop, and a bar that fills per row. */
-const ExportProgress = ({
-  run,
-  rows,
-}: {
-  run: Extract<ExportRun, { status: "exporting" }>;
-  rows: readonly ExportRow[];
-}) => {
-  const exports = useExport();
-  const current = rows.find((row) => run.rows[row.id] === "exporting");
-  const finished = rows.filter((row) => {
-    const status = run.rows[row.id];
-    return status === "done" || status === "failed";
-  }).length;
-  const position = Math.min(finished + 1, rows.length);
-  const label = current
-    ? `${targetLabel(current.target)} · ${outputLabel(current.output)}`
-    : message("export.exporting");
-
   return (
-    <div role="status" className="flex flex-col gap-2">
-      <div className="flex h-4 min-w-0 items-center gap-2 text-ui">
-        <span className="min-w-0 flex-1 truncate text-primary">
-          {message("export.exportingRow", { row: label })}
-        </span>
-        <span className="shrink-0 text-secondary">
-          {message("export.position", { position, total: rows.length })}
-        </span>
-        <button
-          type="button"
-          disabled={run.stopping}
-          className={cn("shrink-0 text-secondary hover:text-primary", run.stopping && "opacity-50")}
-          onClick={exports.stop}
-        >
-          {message("export.stop")}
-        </button>
-      </div>
-      <Progress
-        aria-label={message("export.progress")}
-        value={(finished / rows.length) * 100}
-        trackClassName="h-1"
-      />
-    </div>
+    <ExportPopover
+      workspace={session.workspace}
+      shortcut={commandShortcutLabel(commandShortcuts["file.export"], isMac)}
+      anchor={anchor}
+    />
   );
 };

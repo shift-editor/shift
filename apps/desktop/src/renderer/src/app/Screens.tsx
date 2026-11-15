@@ -67,21 +67,21 @@ const FontSessionScreens = () => {
     <GlyphCatalogProvider>
       <PreviewNoticeProvider>
         <ExportProvider>
-        <SettingsNavigationProvider>
-          <ShiftSessionSetup />
-          <div
-            aria-hidden={!catalogActive}
-            className={catalogActive ? undefined : "pointer-events-none fixed inset-0 z-0"}
-            inert={!catalogActive}
-          >
-            <HeldGlyphCatalog held={!catalogActive}>
-              <Home />
-            </HeldGlyphCatalog>
-          </div>
-          <div className={catalogActive ? undefined : "relative z-10"}>
-            <Outlet />
-          </div>
-        </SettingsNavigationProvider>
+          <SettingsNavigationProvider>
+            <ShiftSessionSetup />
+            <div
+              aria-hidden={!catalogActive}
+              className={catalogActive ? undefined : "pointer-events-none fixed inset-0 z-0"}
+              inert={!catalogActive}
+            >
+              <HeldGlyphCatalog held={!catalogActive}>
+                <Home />
+              </HeldGlyphCatalog>
+            </div>
+            <div className={catalogActive ? undefined : "relative z-10"}>
+              <Outlet />
+            </div>
+          </SettingsNavigationProvider>
         </ExportProvider>
       </PreviewNoticeProvider>
     </GlyphCatalogProvider>

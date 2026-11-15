@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Button,
   Popover,
@@ -13,13 +13,14 @@ import {
 } from "@shift/ui";
 import { message } from "@shared/messages";
 import OptionsIcon from "@assets/export/options.svg";
+import FileIcon from "@assets/export/file.svg";
 import FolderIcon from "@assets/export/folder.svg";
 import { useExport } from "@/context/ExportContext";
 import { useSettingsNavigation } from "@/context/SettingsNavigationContext";
 import { useAxes } from "@/hooks/useAxes";
 import { useExportPlan, type ExportPlan } from "@/hooks/useExportPlan";
 import { useNamedInstances } from "@/hooks/useNamedInstances";
-import { folderBreadcrumb, pathName } from "@/lib/export/exportPaths";
+import { folderBreadcrumb, middleCut, pathName } from "@/lib/export/exportPaths";
 import { exportRequestFor, type ExportRow } from "@/types/export";
 import type { Workspace } from "@/workspace/Workspace";
 import { useFontSession } from "@/workspace/WorkspaceContext";
@@ -147,7 +148,7 @@ const NoInstances = () => {
   );
 };
 
-/** The files the row writes, as Rust names them, under how many there are. */
+/** The files the row writes, as Rust names them, nested under the folder they go into. */
 const PlannedFiles = ({ plan }: { plan: ExportPlan }) => {
   switch (plan.status) {
     // Names come back within a moment; the list fills in rather than showing a placeholder.
@@ -155,28 +156,61 @@ const PlannedFiles = ({ plan }: { plan: ExportPlan }) => {
       return null;
     case "failed":
       return <p className="text-ui text-secondary">{plan.reason}</p>;
-    case "ready": {
-      const [only] = plan.files;
-      // One file reads as a sentence; several list every name under their count.
-      if (plan.files.length === 1 && only !== undefined) {
-        return (
-          <p className="truncate text-ui text-secondary" title={only}>
-            {message("export.files.writes")} <span className="text-primary">{pathName(only)}</span>
-          </p>
-        );
-      }
+    case "ready":
+      // Eight rows, then the list scrolls.
       return (
-        <div className="flex flex-col gap-1">
-          <span className="text-ui text-primary">{message("export.files.many", { count: plan.files.length })}</span>
-          <ul className="scrollbar-hidden flex max-h-40 flex-col overflow-y-auto text-ui text-secondary">
-            {plan.files.map((file) => (
-              <li key={file} className="truncate leading-5" title={file}>
-                {pathName(file)}
-              </li>
-            ))}
-          </ul>
-        </div>
+        <ul
+          aria-label={message("export.files")}
+          className="scrollbar-hidden -mt-2 flex max-h-40 flex-col overflow-y-auto"
+        >
+          {plan.files.map((file, index) => (
+            <FileRow key={file} path={file} last={index === plan.files.length - 1} />
+          ))}
+        </ul>
       );
-    }
   }
 };
+
+/** One file, joined to the folder above by a tree line: `├` for every row but the last, `└` for it. */
+export const FileRow = ({ path, last }: { path: string; last: boolean }) => (
+  <li className="flex h-5 shrink-0 items-center gap-1 pr-2 pl-3.5" title={path}>
+    <svg aria-hidden width="10" height="20" viewBox="0 0 10 20" className="shrink-0 text-chrome">
+      <path d={last ? "M1 0v10h9" : "M1 0v20M1 10h9"} fill="none" stroke="currentColor" />
+    </svg>
+    <span aria-hidden className="flex shrink-0 text-secondary">
+      <FileIcon className="h-3.5 w-3.5" />
+    </span>
+    <MiddleCutName name={pathName(path)} />
+  </li>
+);
+
+/**
+ * A file name that keeps its end when it doesn't fit, as in
+ * `Mutator…-LightCondensed.ttf`, so the instance it names stays readable.
+ */
+const MiddleCutName = ({ name }: { name: string }) => {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [shown, setShown] = useState(name);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    const context = measuringContext();
+    if (!element || !context) return;
+    context.font = getComputedStyle(element).font;
+    const width = element.clientWidth;
+    setShown(middleCut(name, (text) => context.measureText(text).width <= width));
+  }, [name]);
+
+  return (
+    <span ref={ref} className="min-w-0 flex-1 truncate text-ui text-muted">
+      {shown}
+    </span>
+  );
+};
+
+let measuring: CanvasRenderingContext2D | null | undefined;
+
+/** A canvas context for measuring text, shared by every row; null where canvas is missing. */
+function measuringContext(): CanvasRenderingContext2D | null {
+  measuring ??= document.createElement("canvas").getContext("2d");
+  return measuring;
+}

@@ -21,21 +21,22 @@ export async function chooseExportFolder(page: Page): Promise<void> {
 
 /**
  * Exports the first Export row, a variable TrueType by default, into the
- * scripted folder, and presses Export.
+ * scripted folder: presses Export, then Export in the popover it opens.
  *
- * @returns whether the section reported the export done or failed.
+ * @returns whether the popover reported the export done or failed.
  */
 export async function exportFromSidebar(page: Page): Promise<"done" | "failed"> {
   await chooseExportFolder(page);
-  const section = exportSection(page);
-  await section
+  await exportSection(page)
     .getByRole("button", { name: /^Export/ })
     .last()
     .click();
+  const popover = page.getByRole("dialog");
+  await popover.getByRole("button", { name: /^Export/ }).click();
 
-  const done = section.getByText("Exported · Show in Finder");
-  const failed = section.getByRole("alert");
-  await expect(done.or(failed)).toBeVisible();
+  const done = popover.getByRole("button", { name: "Show in Finder" });
+  const failed = popover.getByRole("alert");
+  await expect(done.or(failed).first()).toBeVisible();
   return (await failed.count()) > 0 ? "failed" : "done";
 }
 

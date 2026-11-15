@@ -16,12 +16,10 @@ import { useFontSession } from "@/workspace/WorkspaceContext";
 import {
   ExportContext,
   type ExportControls,
+  type ExportRowOutcome,
   type ExportRowStatus,
   type ExportRun,
 } from "./ExportContext";
-
-/** How long a finished run shows "Exported" before the section goes back to Export. */
-const DONE_NOTICE_MS = 4000;
 
 /**
  * Holds the open document's Export rows and runs them, for the Export section
@@ -53,9 +51,12 @@ const PreviewExportProvider = ({ children }: { children: ReactNode }) => {
       removeRow: () => {},
       folder: () => null,
       chooseFolder: async () => {},
+      popoverOpen: false,
+      setPopoverOpen: () => {},
       exportAll: async () => {},
       stop: () => {},
-      reveal: async () => {},
+      revealRow: async () => {},
+      dismiss: () => {},
     }),
     [open, setup],
   );
@@ -78,6 +79,7 @@ const WorkspaceExportProvider = ({
   const [open, setOpenState] = useState(() => setup.isOpen(document));
   const [chosen, setChosen] = useState<Partial<Record<ExportTarget, string>>>({});
   const [run, setRun] = useState<ExportRun>({ status: "idle" });
+  const [popoverOpen, setPopoverOpen] = useState(false);
   const stopping = useRef(false);
   const documentRef = useRef(document);
   documentRef.current = document;
@@ -139,66 +141,69 @@ const WorkspaceExportProvider = ({
     [folder, remember],
   );
 
-  const exportAll = useCallback(async () => {
-    if (run.status === "exporting" || rows.length === 0) return;
+  const exportAll = useCallback(
+    async (only?: readonly string[]) => {
+      if (run.status === "exporting") return;
+      const chosenRows = only === undefined ? rows : rows.filter((row) => only.includes(row.id));
+      if (chosenRows.length === 0) return;
 
-    const statuses: Record<string, ExportRowStatus> = {};
-    for (const row of rows) statuses[row.id] = "waiting";
-    const show = (next: Partial<Record<string, ExportRowStatus>>) =>
-      setRun({ status: "exporting", rows: { ...Object.assign(statuses, next) }, stopping: false });
+      const statuses: Record<string, ExportRowStatus> = {};
+      const outcomes: Record<string, ExportRowOutcome> = {};
+      for (const row of chosenRows) statuses[row.id] = "waiting";
+      const show = (next: Partial<Record<string, ExportRowStatus>>) =>
+        setRun({
+          status: "exporting",
+          rows: { ...Object.assign(statuses, next) },
+          outcomes: { ...outcomes },
+          stopping: stopping.current,
+        });
 
-    stopping.current = false;
-    show({});
-    let written: string | null = null;
-    let reason: string | null = null;
-    // Folders chosen during this run, so two rows of one target ask only once.
-    const directories: Partial<Record<ExportTarget, string>> = {};
+      stopping.current = false;
+      show({});
+      // Folders chosen during this run, so two rows of one target ask only once.
+      const directories: Partial<Record<ExportTarget, string>> = {};
 
-    for (const row of rows) {
-      if (stopping.current) break;
+      for (const row of chosenRows) {
+        if (stopping.current) break;
 
-      const directory =
-        directories[row.target] ?? folder(row.target) ?? (await askForFolder(row.target));
-      if (directory === null) {
+        const directory =
+          directories[row.target] ?? folder(row.target) ?? (await askForFolder(row.target));
+        if (directory === null) {
+          setRun({ status: "idle" });
+          return;
+        }
+        directories[row.target] = directory;
+
+        show({ [row.id]: "exporting" });
+        try {
+          const result = await workspace.editCoordinator.export({
+            directory,
+            mode: "write",
+            ...exportRequestFor(row),
+          });
+          remember(row.target, directory);
+          outcomes[row.id] = { written: result.path };
+          show({ [row.id]: "done" });
+        } catch (error) {
+          outcomes[row.id] = { reason: errorReason(error) };
+          show({ [row.id]: "failed" });
+        }
+      }
+
+      const failed = Object.values(outcomes).some((outcome) => "reason" in outcome);
+      if (failed) setOpen(true);
+      if (Object.keys(outcomes).length === 0) {
         setRun({ status: "idle" });
         return;
       }
-      directories[row.target] = directory;
-
-      show({ [row.id]: "exporting" });
-      try {
-        const result = await workspace.editCoordinator.export({
-          directory,
-          mode: "write",
-          ...exportRequestFor(row),
-        });
-        remember(row.target, directory);
-        written = result.path;
-        show({ [row.id]: "done" });
-      } catch (error) {
-        reason ??= errorReason(error);
-        show({ [row.id]: "failed" });
-      }
-    }
-
-    if (reason !== null) {
-      setRun({ status: "failed", rows: { ...statuses }, reason });
-      setOpen(true);
-      return;
-    }
-    if (written === null || stopping.current) {
-      setRun({ status: "idle" });
-      return;
-    }
-    setRun({ status: "done", rows: { ...statuses }, written });
-  }, [askForFolder, folder, remember, rows, run.status, setOpen, workspace]);
-
-  // "Exported" shows for a moment, then the section goes back to its Export button.
-  useEffect(() => {
-    if (run.status !== "done") return;
-    const timer = setTimeout(() => setRun({ status: "idle" }), DONE_NOTICE_MS);
-    return () => clearTimeout(timer);
-  }, [run]);
+      setRun({
+        status: failed ? "failed" : "done",
+        rows: { ...statuses },
+        outcomes: { ...outcomes },
+      });
+    },
+    [askForFolder, folder, remember, rows, run.status, setOpen, workspace],
+  );
 
   const controls = useMemo<ExportControls>(
     () => ({
@@ -216,6 +221,8 @@ const WorkspaceExportProvider = ({
       chooseFolder: async (target) => {
         await askForFolder(target);
       },
+      popoverOpen,
+      setPopoverOpen,
       exportAll,
       stop: () => {
         stopping.current = true;
@@ -223,12 +230,16 @@ const WorkspaceExportProvider = ({
           previous.status === "exporting" ? { ...previous, stopping: true } : previous,
         );
       },
-      reveal: async () => {
-        if (run.status !== "done") return;
-        await getShiftHost().exports.reveal(run.written);
+      revealRow: async (id) => {
+        const outcome = run.status === "idle" ? undefined : run.outcomes[id];
+        if (outcome !== undefined && "written" in outcome) {
+          await getShiftHost().exports.reveal(outcome.written);
+        }
       },
+      dismiss: () =>
+        setRun((previous) => (previous.status === "exporting" ? previous : { status: "idle" })),
     }),
-    [askForFolder, changeRows, exportAll, folder, open, rows, run, setOpen],
+    [askForFolder, changeRows, exportAll, folder, open, popoverOpen, rows, run, setOpen],
   );
 
   return <ExportContext.Provider value={controls}>{children}</ExportContext.Provider>;

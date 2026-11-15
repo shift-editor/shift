@@ -31,3 +31,32 @@ export function childPath(folder: string, name: string): string {
 export function folderBreadcrumb(folder: string): readonly string[] {
   return folder.split(SEPARATORS).filter(Boolean).slice(-2);
 }
+
+/**
+ * `name` shortened to fit by cutting the middle: everything from its first
+ * `-` (an instance's style and the extension) is kept whole, and the start is
+ * shortened behind an ellipsis, as in `Mutator…-LightCondensed.ttf`. A name
+ * without a `-` keeps its extension instead.
+ *
+ * @param fits - Whether a candidate fits, such as by its measured width.
+ * @returns `name` itself when it fits.
+ */
+export function middleCut(name: string, fits: (text: string) => boolean): string {
+  if (fits(name)) return name;
+  const split = cutPoint(name);
+  const start = name.slice(0, split);
+  const end = name.slice(split);
+  for (let length = start.length - 1; length > 0; length -= 1) {
+    const candidate = `${start.slice(0, length)}…${end}`;
+    if (fits(candidate)) return candidate;
+  }
+  return `…${end}`;
+}
+
+/** Where `middleCut` keeps the rest whole: the first `-`, else the extension, else the end. */
+function cutPoint(name: string): number {
+  const dash = name.indexOf("-");
+  if (dash > 0) return dash;
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? dot : name.length;
+}
