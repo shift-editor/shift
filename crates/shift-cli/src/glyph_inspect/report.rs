@@ -545,5 +545,8 @@ fn format_difference(difference: &LayerDifference) -> String {
         }
         LayerDifference::AnchorSequence { .. } => "anchor sequence differs".to_string(),
         LayerDifference::ComponentSequence { .. } => "component sequence differs".to_string(),
+        LayerDifference::ComponentLocation { component } => {
+            format!("component {} location axes differ", component + 1)
+        }
     }
 }

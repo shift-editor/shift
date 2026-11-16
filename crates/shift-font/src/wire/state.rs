@@ -99,6 +99,15 @@ fn restore_components(layer: &mut GlyphLayer, components: &[ComponentData]) -> C
             IrTransform::identity(),
         );
         component.set_alignment(component_data.alignment);
+        component.set_inheritance(component_data.inheritance);
+        // Placeholders: the layer's values set them.
+        component.set_location(
+            component_data
+                .location_axes
+                .iter()
+                .map(|axis| (*axis, 0.0))
+                .collect(),
+        );
 
         layer.add_component(component);
     }
@@ -159,6 +168,35 @@ mod tests {
                 15.0,
             ]
         );
+    }
+
+    #[test]
+    fn component_locations_follow_every_transform_in_the_values_and_restore() {
+        let mut layer = sample_layer();
+        let (bleed, width) = (
+            crate::AxisId::from_raw("BLED"),
+            crate::AxisId::from_raw("wdth"),
+        );
+        let mut second = Component::new(GlyphId::from_raw("base"), "base".to_string());
+        second.set_location(crate::DesignLocation::from([(bleed, 100.0), (width, 50.0)]));
+        second.set_inheritance(crate::ComponentInheritance::Font);
+        layer.add_component(second.clone());
+
+        let values = values_from_layer(&layer);
+        let transforms_end = 7 + 2 * DecomposedTransform::VALUE_COUNT;
+        let location_values: Vec<f64> = second.location().iter().map(|(_, v)| *v).collect();
+        assert_eq!(values[transforms_end..], location_values);
+
+        let restored = layer_from_state(
+            layer.id(),
+            layer.source_id(),
+            &GlyphStructure::from(&layer),
+            &values,
+        )
+        .unwrap();
+        let component = restored.component(&second.id()).unwrap();
+        assert_eq!(component.location(), second.location());
+        assert_eq!(component.inheritance(), crate::ComponentInheritance::Font);
     }
 
     #[test]

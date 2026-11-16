@@ -3,7 +3,7 @@
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
-use shift_font::{DecomposedTransform, MetricsKeySide, PointType};
+use shift_font::{ComponentInheritance, DecomposedTransform, MetricsKeySide, PointType};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -59,6 +59,14 @@ pub(super) struct ComponentInput {
     pub base: String,
     #[serde(default)]
     pub transform: Option<TransformInput>,
+    /// The axes this component sets for its base glyph, by axis tag, in
+    /// design units: `{"BLED": 100}`.
+    #[serde(default)]
+    pub location: BTreeMap<String, f64>,
+    /// Where the base glyph takes the axes `location` doesn't set:
+    /// `parent` (the default) or `font`.
+    #[serde(default)]
+    pub inheritance: ComponentInheritance,
 }
 
 /// A component transform: Shift's decomposed form, or an affine

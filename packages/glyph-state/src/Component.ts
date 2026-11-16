@@ -1,5 +1,6 @@
 import {
   AFFINE_COMPONENT_VALUE_OFFSETS,
+  type AxisId,
   type ComponentData,
   type ComponentId,
   type ComponentTransformKind,
@@ -13,21 +14,27 @@ import { componentValueCount, componentsValueOffset, readDecomposedTransform } f
 
 export type Matrix = MatModel;
 
+/** The axes a component sets for its base glyph, in design units. */
+export type ComponentLocation = ReadonlyMap<AxisId, number>;
+
 export class Component {
   readonly #data: ComponentData;
   readonly #values: Float64Array;
   readonly #cursor: number;
+  readonly #locationCursor: number;
   readonly #transformKind: ComponentTransformKind;
 
   constructor(
     data: ComponentData,
     values: Float64Array,
     cursor: number,
+    locationCursor: number,
     transformKind: ComponentTransformKind,
   ) {
     this.#data = data;
     this.#values = values;
     this.#cursor = cursor;
+    this.#locationCursor = locationCursor;
     this.#transformKind = transformKind;
   }
 
@@ -38,10 +45,19 @@ export class Component {
   ): readonly Component[] {
     const cursor = componentsValueOffset(structure);
     const stride = componentValueCount(transformKind);
-    return structure.components.map(
-      (component, index) =>
-        new Component(component, values, cursor + index * stride, transformKind),
-    );
+    // Location values follow every transform, component by component.
+    let locationCursor = cursor + structure.components.length * stride;
+    return structure.components.map((component, index) => {
+      const built = new Component(
+        component,
+        values,
+        cursor + index * stride,
+        locationCursor,
+        transformKind,
+      );
+      locationCursor += component.locationAxes.length;
+      return built;
+    });
   }
 
   get id(): ComponentId {
@@ -62,6 +78,22 @@ export class Component {
    */
   get alignment(): NonNullable<ComponentData["alignment"]> {
     return this.#data.alignment ?? "unset";
+  }
+
+  /** The axes this component sets for its base glyph, in design units; empty when it sets none. */
+  get location(): ComponentLocation {
+    const axes = this.#data.locationAxes;
+    return new Map(
+      axes.map((axisId, index) => [axisId, this.#values[this.#locationCursor + index]]),
+    );
+  }
+
+  /**
+   * Where the base glyph takes the axes {@link location} doesn't set: the
+   * glyph the component sits in (`parent`) or the font's default location (`font`).
+   */
+  get inheritance(): ComponentData["inheritance"] {
+    return this.#data.inheritance;
   }
 
   get transform(): DecomposedTransform {

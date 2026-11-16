@@ -33,7 +33,9 @@ import type { EditorTool, KerningToolView, ResolvedGlyph } from "@shift/runtime"
 import type { AgentCallMap, DocumentOperation, TextOperation } from "@shared/agent/protocol";
 import type {
   AnchorId,
+  AxisId,
   ComponentId,
+  ComponentInheritance,
   GlyphName,
   GlyphRecord,
   KerningPosition,
@@ -312,6 +314,13 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
    * to stay put, as the sidebar's anchoring toggle does.
    */
   setSelectedComponentsAnchored(anchored: boolean): Promise<boolean>;
+  /**
+   * Sets one axis on the selected components, in design units, or stops them
+   * setting it (`null`), in every source being edited.
+   */
+  setSelectedComponentsAxis(axisId: AxisId, value: number | null): Promise<boolean>;
+  /** Sets where the selected components take the axes they don't set, in every source being edited. */
+  setSelectedComponentsInheritance(inheritance: ComponentInheritance): Promise<boolean>;
   /** Creates the glyph `name` and adds it as a component, as the Add Component dialog does for a missing glyph. */
   createGlyphAndAddComponent(name: GlyphName): Promise<ComponentId | null>;
 

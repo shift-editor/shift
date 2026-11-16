@@ -316,8 +316,7 @@ impl GlyphLayer {
         transform: DecomposedTransform,
     ) -> CoreResult<()> {
         let component = self
-            .components_iter_mut()
-            .find(|component| component.id() == *component_id)
+            .component_mut(component_id)
             .ok_or_else(|| CoreError::InvalidComponentId(component_id.to_string()))?;
         component.set_transform(transform);
         Ok(())

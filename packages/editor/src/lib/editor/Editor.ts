@@ -13,7 +13,10 @@ import {
   isTextItemId,
   isPointId,
   type AnchorId,
+  type AxisId,
   type ComponentId,
+  type ComponentInheritance,
+  type Location,
   type PointId,
   type ContourId,
   type Source,
@@ -2479,6 +2482,75 @@ export class Editor {
     this.transaction(anchored ? "Align to Anchors" : "Stop Aligning to Anchors", () => {
       for (const { layer, componentIds } of [targets, ...targets.additionalLayers]) {
         layer.setComponentAlignment(componentIds, alignment);
+      }
+    });
+    await this.font.editCoordinator.settled();
+    return true;
+  }
+
+  /**
+   * Sets one axis on the selected components, or stops them setting it, in
+   * every source being edited, as one undo step.
+   *
+   * @remarks
+   * A component that sets an axis draws its base glyph at that value, in
+   * design units, wherever its glyph is drawn. The component's other axes
+   * stay as they are.
+   *
+   * @param value - The design coordinate, or `null` to follow the glyph or font again.
+   * @returns `false` when the selection is not entirely components on the active source.
+   */
+  public async setSelectedComponentsAxis(axisId: AxisId, value: number | null): Promise<boolean> {
+    return this.#editSelectedComponentLocations(
+      value === null ? "Reset Component Location" : "Set Component Location",
+      (location) => {
+        const values = { ...location.values };
+        if (value === null) delete values[axisId];
+        else values[axisId] = value;
+        return { values };
+      },
+      (inheritance) => inheritance,
+    );
+  }
+
+  /**
+   * Sets where the selected components take the axes they don't set, in
+   * every source being edited, as one undo step.
+   *
+   * @param inheritance - `parent` follows the glyph each sits in; `font` uses
+   * the font's default location.
+   * @returns `false` when the selection is not entirely components on the active source.
+   */
+  public async setSelectedComponentsInheritance(
+    inheritance: ComponentInheritance,
+  ): Promise<boolean> {
+    return this.#editSelectedComponentLocations(
+      "Set Component Inheritance",
+      (location) => location,
+      () => inheritance,
+    );
+  }
+
+  async #editSelectedComponentLocations(
+    label: string,
+    location: (current: Location) => Location,
+    inheritance: (current: ComponentInheritance) => ComponentInheritance,
+  ): Promise<boolean> {
+    const targets = this.#componentTargets(this.selection.ids);
+    if (!targets) return false;
+
+    this.transaction(label, () => {
+      for (const { layer, componentIds } of [targets, ...targets.additionalLayers]) {
+        const components = componentIds.map((id) =>
+          layer.geometry.components.find((component) => component.id === id),
+        );
+        const locations = components.map((component) =>
+          location({ values: Object.fromEntries(component?.location ?? []) }),
+        );
+        const inheritances = components.map((component) =>
+          inheritance(component?.inheritance ?? "parent"),
+        );
+        layer.setComponentLocations(componentIds, locations, inheritances);
       }
     });
     await this.font.editCoordinator.settled();

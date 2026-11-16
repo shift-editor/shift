@@ -21,7 +21,9 @@ pub const GLYPH_ANCHOR_VALUE_COUNT: usize = GLYPH_POSITION_VALUE_FIELDS.len();
 /// Numeric glyph-layer values that participate in interpolation.
 ///
 /// Values are ordered as advance width, contour point positions, anchor
-/// positions, and component transforms. The ordering is owned alongside
+/// positions, component transforms, and then each component's
+/// [location](crate::Component::location) values, component by component and
+/// axis by axis in axis order. The ordering is owned alongside
 /// [`GlyphLayer`] so persistence and transport adapters do not define domain
 /// interpolation semantics.
 #[derive(Clone, Debug, PartialEq)]
@@ -56,6 +58,10 @@ impl GlyphInterpolationValues {
 
         for component in layer.components_iter() {
             values.extend(component.transform().to_values());
+        }
+
+        for component in layer.components_iter() {
+            values.extend(component.location().iter().map(|(_, value)| *value));
         }
 
         Self { values }
@@ -130,7 +136,11 @@ impl GlyphLayer {
                 .map(|contour| contour.points().len() * GLYPH_POINT_VALUE_COUNT)
                 .sum::<usize>()
             + self.anchors().len() * GLYPH_ANCHOR_VALUE_COUNT
-            + self.components().len() * DecomposedTransform::VALUE_COUNT;
+            + self.components().len() * DecomposedTransform::VALUE_COUNT
+            + self
+                .components_iter()
+                .map(|component| component.location().iter().count())
+                .sum::<usize>();
         let actual = values.as_slice().len();
         if actual < expected {
             return Err(CoreError::MissingGlyphValue { index: actual });
@@ -164,6 +174,15 @@ impl GlyphLayer {
                 *value = cursor.next()?;
             }
             component.set_transform(DecomposedTransform::from_values(transform));
+        }
+
+        for component in self.components_iter_mut() {
+            let axes: Vec<_> = component.location().iter().map(|(axis, _)| *axis).collect();
+            let mut location = component.location().clone();
+            for axis in axes {
+                location.set(axis, cursor.next()?);
+            }
+            component.set_location(location);
         }
 
         cursor.finish()

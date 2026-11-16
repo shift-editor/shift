@@ -626,6 +626,76 @@ impl LayerIntent for SetComponentAlignment {
     }
 }
 
+/// Sets where components draw their base glyphs: the axes each one sets,
+/// and where it takes the rest from.
+///
+/// Each component's location replaces the one it had, so an empty location
+/// removes every override. Which axes a component sets is part of its
+/// layer's structure: masters that set different axes stop interpolating
+/// together, so an edit meant for every master names each master's layer.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct SetComponentLocations {
+    pub layer_id: LayerId,
+    pub component_ids: Vec<ComponentId>,
+    /// One per component, in design units of the font's axes.
+    pub locations: Vec<DesignLocation>,
+    /// One per component.
+    pub inheritances: Vec<ComponentInheritance>,
+}
+
+impl LayerIntent for SetComponentLocations {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            component_ids,
+            locations,
+            inheritances,
+        } = self;
+        if locations.len() != component_ids.len() || inheritances.len() != component_ids.len() {
+            return Err(CoreError::InvalidPositionUpdateInput {
+                kind: "component locations",
+                message: format!(
+                    "expected one location and one inheritance for each of {} components, \
+                     got {} and {}",
+                    component_ids.len(),
+                    locations.len(),
+                    inheritances.len()
+                ),
+            });
+        }
+        for location in locations {
+            for (axis_id, _) in location.iter() {
+                font.require_axis(*axis_id)?;
+            }
+            location
+                .iter()
+                .map(|(_, value)| *value)
+                .require_finite(Coordinates::ComponentLocations)?;
+        }
+
+        let layer = font.require_layer_mut(*layer_id)?;
+        for component_id in component_ids {
+            if layer.component(component_id).is_none() {
+                return Err(CoreError::InvalidComponentId(component_id.to_string()));
+            }
+        }
+        for ((component_id, location), inheritance) in
+            component_ids.iter().zip(locations).zip(inheritances)
+        {
+            if let Some(component) = layer.component_mut(component_id) {
+                component.set_location(location.clone());
+                component.set_inheritance(*inheritance);
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct RemoveComponents {

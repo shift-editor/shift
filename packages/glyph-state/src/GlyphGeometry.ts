@@ -2,6 +2,7 @@ import { Bounds, type Bounds as BoundsType, type Point2D } from "@shift/geo";
 import {
   GLYPH_ADVANCE_VALUE_OFFSET,
   type AnchorId,
+  type AxisId,
   type ComponentId,
   type ComponentTransformKind,
   type ContourId,
@@ -154,7 +155,9 @@ export class GlyphGeometry {
         component.id !== other.id ||
         component.baseGlyphId !== other.baseGlyphId ||
         component.baseGlyphName !== other.baseGlyphName ||
-        (component.alignment ?? "unset") !== (other.alignment ?? "unset")
+        (component.alignment ?? "unset") !== (other.alignment ?? "unset") ||
+        component.inheritance !== other.inheritance ||
+        !sameAxes(component.locationAxes, other.locationAxes)
       )
         return false;
     }
@@ -420,4 +423,9 @@ class GeometryCache {
 
     return this.#sidebearings;
   }
+}
+
+/** Whether two components set the same axes, in the same order. */
+function sameAxes(left: readonly AxisId[], right: readonly AxisId[]): boolean {
+  return left.length === right.length && left.every((axisId, index) => axisId === right[index]);
 }

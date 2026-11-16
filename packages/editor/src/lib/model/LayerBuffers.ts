@@ -41,6 +41,12 @@ export class LayerBuffers {
   readonly contoursCell: WritableSignal<readonly ContourBuffer[]>;
   readonly anchors: AnchorBuffer;
   readonly components: readonly ComponentBuffer[];
+  /**
+   * The values of the axes components set, after every component transform:
+   * component by component, axis by axis, as `ComponentData.locationAxes`
+   * names them. Only whole-layer replacements change them.
+   */
+  readonly componentLocationsCell: WritableSignal<Float64Array>;
 
   // non-reactive: routes imperative point edits; render readers track contour/structure cells.
   readonly #pointContours = new EntityMap<PointId, ContourBuffer>("point contour");
@@ -58,7 +64,11 @@ export class LayerBuffers {
     contours: readonly ContourBuffer[],
     anchors: AnchorBuffer,
     components: readonly ComponentBuffer[],
+    componentLocations: Float64Array,
   ) {
+    this.componentLocationsCell = signal(componentLocations, {
+      name: "glyphLayer.buffers.componentLocations",
+    });
     this.xAdvanceCell = signal(xAdvance, {
       name: "glyphLayer.buffers.xAdvance",
     });
@@ -95,6 +105,7 @@ export class LayerBuffers {
           this.contoursCell.value.map((contour) => contour.valuesCell.value),
           this.anchors.valuesCell.value,
           this.components.map((component) => component.valuesCell.value),
+          this.componentLocationsCell.value,
         ),
       { name: "glyphLayer.buffers.snapshot" },
     );
@@ -104,6 +115,7 @@ export class LayerBuffers {
         ...this.contoursCell.value.map((contour) => contour.valuesCell.value),
         this.anchors.valuesCell.value,
         ...this.components.map((component) => component.valuesCell.value),
+        this.componentLocationsCell.value,
       ],
       { name: "glyphLayer.buffers.changed" },
     );
@@ -160,7 +172,14 @@ export class LayerBuffers {
       return new ComponentBuffer(data, values, componentIndex);
     });
 
-    return new LayerBuffers(state.structure, xAdvance, contours, anchors, components);
+    return new LayerBuffers(
+      state.structure,
+      xAdvance,
+      contours,
+      anchors,
+      components,
+      state.values.slice(cursor),
+    );
   }
 
   get xAdvance(): number {
@@ -304,6 +323,7 @@ export class LayerBuffers {
       cursor += 9;
       return replacement;
     });
+    const componentLocations = values.slice(cursor);
 
     batch(() => {
       this.xAdvanceCell.set(xAdvance);
@@ -313,6 +333,9 @@ export class LayerBuffers {
       this.anchors.replaceValues(anchors);
       for (let index = 0; index < components.length; index++) {
         this.components[index]?.replaceValues(components[index]);
+      }
+      if (!sameValues(this.componentLocationsCell.peek(), componentLocations)) {
+        this.componentLocationsCell.set(componentLocations);
       }
     });
   }
@@ -326,8 +349,9 @@ export class LayerBuffers {
     contours: readonly Float64Array[],
     anchors: Float64Array,
     components: readonly Float64Array[],
+    componentLocations: Float64Array,
   ): Float64Array {
-    let length = 1 + anchors.length;
+    let length = 1 + anchors.length + componentLocations.length;
     for (const contour of contours) length += contour.length;
     for (const component of components) length += component.length;
 
@@ -344,6 +368,7 @@ export class LayerBuffers {
       values.set(component, cursor);
       cursor += component.length;
     }
+    values.set(componentLocations, cursor);
     return values;
   }
 
@@ -355,4 +380,8 @@ export class LayerBuffers {
     }
     return result;
   }
+}
+
+function sameValues(left: Float64Array, right: Float64Array): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }

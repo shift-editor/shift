@@ -214,23 +214,16 @@ impl GlyphComponents {
         Ok(occurrences)
     }
 
-    /// The contours of every occurrence in root-glyph coordinates; with
-    /// `selected`, only those under the selected direct components.
-    fn contours(
-        &self,
-        layers: &HashMap<GlyphId, &GlyphLayer>,
-        selected: Option<&HashSet<ComponentId>>,
-    ) -> CoreResult<Vec<ResolvedContour>> {
+    /// The contours of every occurrence in root-glyph coordinates.
+    fn contours(&self, layers: &HashMap<GlyphId, &GlyphLayer>) -> CoreResult<Vec<ResolvedContour>> {
         let mut contours = Vec::new();
         for occurrence in self.occurrences(layers)? {
-            if selected.is_none_or(|selected| occurrence.is_under(selected)) {
-                contours.extend(
-                    occurrence
-                        .layer
-                        .contours_iter()
-                        .map(|contour| ResolvedContour::transformed(contour, occurrence.transform)),
-                );
-            }
+            contours.extend(
+                occurrence
+                    .layer
+                    .contours_iter()
+                    .map(|contour| ResolvedContour::transformed(contour, occurrence.transform)),
+            );
         }
         Ok(contours)
     }
@@ -242,17 +235,6 @@ struct ResolvedOccurrence<'a> {
     /// Into root-glyph coordinates.
     transform: Transform,
     layer: &'a GlyphLayer,
-}
-
-impl ResolvedOccurrence<'_> {
-    /// Whether the occurrence sits under one of the `selected` direct components.
-    fn is_under(&self, selected: &HashSet<ComponentId>) -> bool {
-        self.component
-            .component_path()
-            .as_slice()
-            .first()
-            .is_some_and(|component_id| selected.contains(component_id))
-    }
 }
 
 /// Borrows an owned layer map as the layer view consumed by composite reads.
@@ -458,6 +440,52 @@ pub(crate) fn resolved_layer_geometry_from_layers(
     })
 }
 
+/// As [`resolved_layer_geometry_from_layers`], with each occurrence's outline
+/// taken from `parts`: the root's own contours, then one part per occurrence
+/// in depth-first order, as [`crate::FontProjection`] draws them, so a
+/// component that sets its base glyph's location draws there.
+///
+/// Falls back to the layers' own outlines when `parts` doesn't line up with
+/// the occurrences.
+///
+/// # Errors
+///
+/// As [`resolved_layer_geometry_from_layers`].
+pub(crate) fn resolved_layer_geometry_from_parts(
+    root_glyph_id: GlyphId,
+    layers: &HashMap<GlyphId, GlyphLayer>,
+    parts: Vec<Vec<ResolvedContour>>,
+) -> CoreResult<ResolvedLayerGeometry> {
+    let view = layer_view(layers);
+    let relationships = GlyphComponents::from_layers(root_glyph_id, &view)?;
+    let occurrences = relationships.occurrences(&view)?;
+    if parts.len() != occurrences.len() + 1 {
+        return resolved_layer_geometry_from_layers(root_glyph_id, layers);
+    }
+    let mut parts = parts.into_iter();
+    let mut outline = parts.next().unwrap_or_default();
+    let mut components = Vec::<ResolvedComponentGeometry>::new();
+    for (occurrence, part) in occurrences.into_iter().zip(parts) {
+        let component = occurrence.component;
+        if component.parent_path().is_root() {
+            components.push(ResolvedComponentGeometry {
+                component_id: component.component_id(),
+                base_glyph_id: component.base_glyph_id(),
+                transformation: occurrence.transform,
+                outline: Vec::new(),
+            });
+        }
+        let direct = components.last_mut().ok_or_else(|| component.invalid())?;
+        direct.outline.extend(part.iter().cloned());
+        outline.extend(part);
+    }
+
+    Ok(ResolvedLayerGeometry {
+        outline,
+        components,
+    })
+}
+
 /// Flattens all component contours rooted at `root_glyph_id`.
 ///
 /// Root contours are not included in the returned value; only resolved
@@ -477,26 +505,7 @@ pub fn flatten_component_contours_from_layers(
 ) -> CoreResult<Vec<ResolvedContour>> {
     let view = layer_view(layers);
     let components = GlyphComponents::from_layers(root_glyph_id, &view)?;
-    components.contours(&view, None)
-}
-
-/// Flattens selected direct component occurrences into local contours.
-///
-/// Descendant components are included recursively. Unselected siblings
-/// contribute no contours.
-///
-/// # Errors
-///
-/// Returns an error when `layers` does not contain the complete component
-/// closure or when its component and anchor identities are inconsistent.
-pub(crate) fn flatten_selected_component_contours_from_layers(
-    root_glyph_id: GlyphId,
-    layers: &HashMap<GlyphId, GlyphLayer>,
-    component_ids: &HashSet<ComponentId>,
-) -> CoreResult<Vec<ResolvedContour>> {
-    let view = layer_view(layers);
-    let components = GlyphComponents::from_layers(root_glyph_id, &view)?;
-    components.contours(&view, Some(component_ids))
+    components.contours(&view)
 }
 
 /// Resolves root and component contours for one derived glyph layer.
@@ -520,7 +529,7 @@ pub fn resolved_contours_from_layers(
         .map(|contour| ResolvedContour::transformed(contour, Transform::identity()))
         .collect::<Vec<_>>();
     let components = GlyphComponents::from_layers(root_glyph_id, &view)?;
-    contours.extend(components.contours(&view, None)?);
+    contours.extend(components.contours(&view)?);
     Ok(contours)
 }
 
