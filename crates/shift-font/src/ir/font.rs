@@ -739,13 +739,15 @@ impl Font {
     }
 
     /// Returns each master that `glyph` draws, paired with the glyph's layer on it, in source
-    /// order.
+    /// order: [`Glyph::located_layers`] for readers that report per source.
     pub fn masters_with_layers<'a>(
         &'a self,
         glyph: &'a Glyph,
     ) -> impl Iterator<Item = (&'a Source, &'a GlyphLayer)> {
-        self.masters()
-            .filter_map(|source| Some((source, glyph.layer_for_source(source.id())?)))
+        glyph.located_layers(self).filter_map(|located| {
+            let source = located.location.base_source(self)?;
+            Some((source, located.layer.as_ref()))
+        })
     }
 
     /// Returns `glyph`'s layers on [master sources](Self::masters), in source order, and by

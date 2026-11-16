@@ -272,25 +272,25 @@ impl Font {
         let Some(fallback) = fallback else {
             return Ok(None);
         };
-        let exact_source_shapes = self
-            .masters()
-            .filter_map(|source| {
-                let layer = Arc::clone(glyph.shared_layer_for_source(source.id())?);
-                if layer.id() == fallback.id() {
+        let exact_source_shapes = glyph
+            .located_layers(self)
+            .filter_map(|located| {
+                let source_id = located.location.base_source_id()?;
+                if located.layer.id() == fallback.id() {
                     return None;
                 }
 
                 let represented_by_interpolation =
                     interpolation.as_ref().is_some_and(|interpolation| {
-                        interpolation.basis().source_ids().contains(&source.id())
+                        interpolation.basis().source_ids().contains(&source_id)
                     });
                 if represented_by_interpolation {
                     return None;
                 }
 
                 Some(GlyphSourceShape {
-                    source_id: source.id(),
-                    layer,
+                    source_id,
+                    layer: Arc::clone(located.layer),
                 })
             })
             .collect();

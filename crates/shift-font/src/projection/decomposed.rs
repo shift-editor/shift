@@ -245,12 +245,19 @@ impl Font {
         if source_ids.len() < 2 {
             return Ok(None);
         }
+        let layers_by_source: HashMap<SourceId, &GlyphLayer> = glyph
+            .located_layers(self)
+            .filter_map(|located| {
+                let source_id = located.location.base_source_id()?;
+                Some((source_id, located.layer.as_ref()))
+            })
+            .collect();
         let mut layers = Vec::with_capacity(source_ids.len());
         for source_id in source_ids {
-            let Some(layer) = glyph.layer_for_source(*source_id) else {
+            let Some(layer) = layers_by_source.get(source_id) else {
                 return Ok(None);
             };
-            layers.push(layer);
+            layers.push(*layer);
         }
         if !linear_parts_vary(layers.into_iter()) {
             return Ok(None);
