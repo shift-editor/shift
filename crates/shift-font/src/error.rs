@@ -89,6 +89,17 @@ pub enum CoreError {
         base_glyph_id: GlyphId,
     },
 
+    /// A composite was drawn as a different number of outline parts than it
+    /// has: its own contours, then one part per component occurrence.
+    #[error(
+        "glyph {glyph_id} drew {actual} outline parts, but its contours and components need {expected}"
+    )]
+    ComponentPartsMismatch {
+        glyph_id: GlyphId,
+        expected: usize,
+        actual: usize,
+    },
+
     #[error("source {0} not found")]
     SourceNotFound(SourceId),
 

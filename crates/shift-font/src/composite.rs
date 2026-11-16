@@ -396,61 +396,18 @@ impl ResolvedComponentGeometry {
     }
 }
 
-/// Resolves a root layer's composited outline and direct component subtrees.
+/// Resolves a root layer's composited outline and direct component subtrees,
+/// with each occurrence's outline taken from `parts`: the root's own
+/// contours, then one part per occurrence in depth-first order, as
+/// [`crate::FontProjection`] draws them, so a component that sets its base
+/// glyph's location draws there.
 ///
 /// # Errors
 ///
-/// Returns an error when `layers` does not contain the root or its complete
-/// component closure, or when component identities are inconsistent.
-pub(crate) fn resolved_layer_geometry_from_layers(
-    root_glyph_id: GlyphId,
-    layers: &HashMap<GlyphId, GlyphLayer>,
-) -> CoreResult<ResolvedLayerGeometry> {
-    let view = layer_view(layers);
-    let root_layer = layer_for_glyph(&view, root_glyph_id)?;
-    let relationships = GlyphComponents::from_layers(root_glyph_id, &view)?;
-    let mut outline = root_layer
-        .contours_iter()
-        .map(|contour| ResolvedContour::transformed(contour, Transform::identity()))
-        .collect::<Vec<_>>();
-    let mut components = Vec::<ResolvedComponentGeometry>::new();
-
-    // Occurrences are depth-first, so each descendant follows its direct root.
-    for occurrence in relationships.occurrences(&view)? {
-        let component = occurrence.component;
-        if component.parent_path().is_root() {
-            components.push(ResolvedComponentGeometry {
-                component_id: component.component_id(),
-                base_glyph_id: component.base_glyph_id(),
-                transformation: occurrence.transform,
-                outline: Vec::new(),
-            });
-        }
-        let direct = components.last_mut().ok_or_else(|| component.invalid())?;
-        for contour in occurrence.layer.contours_iter() {
-            let contour = ResolvedContour::transformed(contour, occurrence.transform);
-            direct.outline.push(contour.clone());
-            outline.push(contour);
-        }
-    }
-
-    Ok(ResolvedLayerGeometry {
-        outline,
-        components,
-    })
-}
-
-/// As [`resolved_layer_geometry_from_layers`], with each occurrence's outline
-/// taken from `parts`: the root's own contours, then one part per occurrence
-/// in depth-first order, as [`crate::FontProjection`] draws them, so a
-/// component that sets its base glyph's location draws there.
-///
-/// Falls back to the layers' own outlines when `parts` doesn't line up with
-/// the occurrences.
-///
-/// # Errors
-///
-/// As [`resolved_layer_geometry_from_layers`].
+/// Returns an error when `layers` does not contain the root's complete
+/// component closure, when component identities are inconsistent, and
+/// [`CoreError::ComponentPartsMismatch`] when `parts` doesn't hold one part
+/// for the root and one per occurrence.
 pub(crate) fn resolved_layer_geometry_from_parts(
     root_glyph_id: GlyphId,
     layers: &HashMap<GlyphId, GlyphLayer>,
@@ -459,8 +416,13 @@ pub(crate) fn resolved_layer_geometry_from_parts(
     let view = layer_view(layers);
     let relationships = GlyphComponents::from_layers(root_glyph_id, &view)?;
     let occurrences = relationships.occurrences(&view)?;
-    if parts.len() != occurrences.len() + 1 {
-        return resolved_layer_geometry_from_layers(root_glyph_id, layers);
+    let expected = occurrences.len() + 1;
+    if parts.len() != expected {
+        return Err(CoreError::ComponentPartsMismatch {
+            glyph_id: root_glyph_id,
+            expected,
+            actual: parts.len(),
+        });
     }
     let mut parts = parts.into_iter();
     let mut outline = parts.next().unwrap_or_default();
