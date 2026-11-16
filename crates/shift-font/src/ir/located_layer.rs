@@ -80,7 +80,17 @@ impl Glyph {
     /// the font's source order: one per [master](Font::masters) this glyph
     /// draws. A master the glyph has no layer on is skipped.
     pub fn located_layers<'a>(&'a self, font: &'a Font) -> impl Iterator<Item = LocatedLayer<'a>> {
-        font.masters().filter_map(move |source| {
+        self.located_layers_on(font.masters())
+    }
+
+    /// [`Self::located_layers`] for a reader that holds the font's master
+    /// sources without the font, such as a compiler snapshot. `masters` are
+    /// the font's master sources in source order.
+    pub fn located_layers_on<'a>(
+        &'a self,
+        masters: impl IntoIterator<Item = &'a Source> + 'a,
+    ) -> impl Iterator<Item = LocatedLayer<'a>> {
+        masters.into_iter().filter_map(move |source| {
             let layer = self.shared_layer_for_source(source.id())?;
             Some(LocatedLayer {
                 layer,

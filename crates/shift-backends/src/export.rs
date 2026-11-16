@@ -670,6 +670,27 @@ mod tests {
     }
 
     #[test]
+    fn propagated_anchors_skip_masters_a_glyph_does_not_draw() {
+        let font = sample_variable_font();
+        let glyph = font.glyphs().find(|glyph| glyph.name() == "A").unwrap();
+        let drawn: Vec<_> = font
+            .masters()
+            .filter(|source| glyph.layer_for_source(source.id()).is_some())
+            .map(shift_font::Source::id)
+            .collect();
+        assert!(
+            drawn.len() < font.masters().count(),
+            "A should skip a master"
+        );
+
+        let glyphs = FontExporter::new().propagated_anchors(&font).unwrap();
+        let a = glyphs.iter().find(|glyph| glyph.glyph_name == "A").unwrap();
+        let listed: Vec<_> = a.sources.iter().map(|source| source.source_id).collect();
+
+        assert_eq!(listed, drawn);
+    }
+
+    #[test]
     fn propagates_component_anchors_into_composites() {
         let mut font = sample_variable_font();
         add_composed_glyph(

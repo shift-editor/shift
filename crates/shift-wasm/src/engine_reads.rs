@@ -1153,12 +1153,12 @@ mod exports {
                     detail: error.to_string(),
                 }
             })?;
-            let layers = font
-                .master_layers(glyph)
-                .map(|layer| GlyphLayerSnapshot {
+            let layers = glyph
+                .located_layers(font)
+                .map(|located| GlyphLayerSnapshot {
                     glyph_id,
-                    source_id: layer.source_id(),
-                    state: GlyphState::from_layer(layer),
+                    source_id: located.layer.source_id(),
+                    state: GlyphState::from_layer(located.layer),
                 })
                 .collect();
             Ok(GlyphSnapshot {

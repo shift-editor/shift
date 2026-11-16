@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -8,7 +8,7 @@ use fontir::ir::StaticMetadata;
 use fontir::orchestration::{Flags, IrWork};
 use fontir::source::Source;
 use shift_font::{
-    Axis, FeatureData, FontMetadata, Glyph, Kerning, MetricDefinition, NamedInstance,
+    Axis, FeatureData, FontMetadata, Glyph, Kerning, LocatedLayer, MetricDefinition, NamedInstance,
     Source as ShiftSource, SourceId,
 };
 
@@ -102,6 +102,25 @@ impl ShiftSnapshot {
             })
             .collect()
     }
+}
+
+/// `glyph`'s drawings among `masters` (as [`ShiftSnapshot::glyph_masters`]
+/// returns them), each with its master's normalized location, in source order.
+/// A master the glyph has no drawing on is skipped.
+pub(super) fn located_master_layers<'a>(
+    glyph: &'a Glyph,
+    masters: &'a [(&'a ShiftSource, NormalizedLocation)],
+) -> impl Iterator<Item = (LocatedLayer<'a>, &'a NormalizedLocation)> {
+    let locations = masters
+        .iter()
+        .map(|(source, location)| (source.id(), location))
+        .collect::<HashMap<_, _>>();
+    glyph
+        .located_layers_on(masters.iter().map(|(source, _)| *source))
+        .filter_map(move |located| {
+            let location = *locations.get(&located.location.base_source_id()?)?;
+            Some((located, location))
+        })
 }
 
 impl ShiftIrSource {
