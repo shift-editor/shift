@@ -4,7 +4,7 @@ use fontdrasil::coords::NormalizedLocation;
 use fontdrasil::orchestration::{Access, AccessBuilder, Work};
 use fontdrasil::types::GlyphName;
 use fontir::error::Error;
-use fontir::ir::{AnchorBuilder, Component, GlyphBuilder, GlyphInstance};
+use fontir::ir::{AnchorBuilder, Component, ComponentTransform, GlyphBuilder, GlyphInstance};
 use fontir::orchestration::{Context, WorkId};
 use kurbo::{Affine, BezPath};
 use shift_font::{Glyph, GlyphLayer};
@@ -105,15 +105,19 @@ fn to_glyph_instance(layer: &GlyphLayer) -> GlyphInstance {
                 let transform = component.matrix();
                 Component {
                     base: component.base_glyph_name().as_str().into(),
-                    transform: Affine::new([
+                    transform: ComponentTransform::Affine(Affine::new([
                         transform.xx,
                         transform.xy,
                         transform.yx,
                         transform.yy,
                         transform.dx,
                         transform.dy,
-                    ]),
+                    ])),
                     anchor: None,
+                    // Component locations export through VARC in a later change;
+                    // until then a component draws at its glyph's location.
+                    location: NormalizedLocation::new(),
+                    reset_unspecified_axes: false,
                 }
             })
             .collect(),

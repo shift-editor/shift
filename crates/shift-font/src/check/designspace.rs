@@ -1,6 +1,6 @@
 //! Checks on axes, axis mappings, and where masters sit.
 
-use crate::{CoreResult, DesignNormalization, Font, Source};
+use crate::{CoreResult, DesignNormalization, Font, RangeBounds, Source};
 
 use super::{Check, Finding};
 
@@ -30,8 +30,8 @@ fn default_master(font: &Font, normalization: &[DesignNormalization]) -> Option<
             let value = source
                 .location()
                 .get(&axis.id())
-                .unwrap_or(bounds.range.default);
-            (value - bounds.range.default).abs() <= SAME
+                .unwrap_or_else(|| bounds.range().default);
+            (value - bounds.range().default).abs() <= SAME
         })
     };
 
@@ -43,7 +43,7 @@ fn default_master(font: &Font, normalization: &[DesignNormalization]) -> Option<
         .axes()
         .iter()
         .zip(normalization)
-        .map(|(axis, bounds)| format!("{} {}", axis.tag(), number(bounds.range.default)))
+        .map(|(axis, bounds)| format!("{} {}", axis.tag(), number(bounds.range().default)))
         .collect::<Vec<_>>()
         .join(", ");
     Some(Finding::font(
@@ -88,7 +88,9 @@ fn outside_axes<'a>(
             .zip(normalization)
             .filter_map(move |(axis, bounds)| {
                 let value = master.location().get(&axis.id())?;
-                if value >= bounds.range.minimum - SAME && value <= bounds.range.maximum + SAME {
+                // A decreasing mapping puts the design range high to low.
+                let RangeBounds { lowest, highest } = bounds.range().bounds();
+                if value >= lowest - SAME && value <= highest + SAME {
                     return None;
                 }
 
@@ -100,8 +102,8 @@ fn outside_axes<'a>(
                             master.name(),
                             axis.tag(),
                             number(value),
-                            number(bounds.range.minimum),
-                            number(bounds.range.maximum)
+                            number(lowest),
+                            number(highest)
                         ),
                     )
                     .in_source(master.id()),
@@ -123,25 +125,36 @@ fn beyond_masters<'a>(
                 master
                     .location()
                     .get(&axis.id())
-                    .unwrap_or(bounds.range.default)
+                    .unwrap_or_else(|| bounds.range().default)
             })
             .collect::<Vec<_>>();
-        let lowest = values.iter().copied().fold(bounds.range.default, f64::min);
-        let highest = values.iter().copied().fold(bounds.range.default, f64::max);
+        let lowest = values
+            .iter()
+            .copied()
+            .fold(bounds.range().default, f64::min);
+        let highest = values
+            .iter()
+            .copied()
+            .fold(bounds.range().default, f64::max);
+        // A decreasing mapping puts the design range high to low.
+        let RangeBounds {
+            lowest: axis_lowest,
+            highest: axis_highest,
+        } = bounds.range().bounds();
 
         let mut ends = Vec::new();
-        if lowest - bounds.range.minimum > SAME {
+        if lowest - axis_lowest > SAME {
             ends.push(format!(
                 "below {} (the axis goes to {})",
                 number(lowest),
-                number(bounds.range.minimum)
+                number(axis_lowest)
             ));
         }
-        if bounds.range.maximum - highest > SAME {
+        if axis_highest - highest > SAME {
             ends.push(format!(
                 "above {} (the axis goes to {})",
                 number(highest),
-                number(bounds.range.maximum)
+                number(axis_highest)
             ));
         }
         if ends.is_empty() {

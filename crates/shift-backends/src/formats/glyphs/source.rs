@@ -68,12 +68,7 @@ impl GlyphsFont {
             .map(|glyph| {
                 (
                     glyph.name.to_string(),
-                    glyph
-                        .unicode
-                        .iter()
-                        .copied()
-                        .collect::<Vec<_>>()
-                        .into_boxed_slice(),
+                    glyph.unicode.clone().into_boxed_slice(),
                 )
             })
             .collect::<Vec<_>>();

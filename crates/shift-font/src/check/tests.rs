@@ -1,7 +1,7 @@
-use crate::test_support::{closed_contour, sample_variable_font};
+use crate::test_support::{closed_contour, mapping_point, sample_variable_font};
 use crate::{
-    Contour, DesignLocation, Font, GlyphLayer, KerningGroup, KerningGroupId, KerningPair,
-    KerningPosition, KerningSide, PointType, SourceId,
+    AxisMapping, Contour, DesignLocation, Font, GlyphLayer, KerningGroup, KerningGroupId,
+    KerningPair, KerningPosition, KerningSide, PointType, SourceId,
 };
 
 use super::{Charset, Check, CheckOptions, MonospaceCell};
@@ -127,6 +127,27 @@ fn reports_a_master_outside_its_axis() {
     font.source_mut(bold).unwrap().set_location(location);
 
     assert!(checks(&font).contains(&Check::MasterOutsideAxis));
+}
+
+#[test]
+fn keeps_masters_inside_an_axis_whose_mapping_runs_backwards() {
+    let mut font = sample_variable_font();
+    let weight = font.axes()[0].clone();
+    // User 100..900 maps to design 900..100: the design range runs high to low,
+    // and the masters at 400, 600 and 800 all sit inside it.
+    font.set_axis_mappings(vec![AxisMapping::new(
+        "Reversed weight".to_string(),
+        vec![weight.id()],
+        vec![weight.id()],
+        vec![
+            mapping_point(&weight, 100.0, 900.0),
+            mapping_point(&weight, 400.0, 400.0),
+            mapping_point(&weight, 900.0, 100.0),
+        ],
+    )])
+    .unwrap();
+
+    assert!(!checks(&font).contains(&Check::MasterOutsideAxis));
 }
 
 #[test]

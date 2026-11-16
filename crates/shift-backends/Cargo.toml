@@ -14,11 +14,11 @@ shift-slug = { workspace = true }
 shift-text = { workspace = true, features = ["shaper-font"] }
 
 norad = { version = "0.18.4", features = ["kurbo"] }
-skrifa = "0.32.0"
-fontc = "1.0"
-fontdrasil = "1.0"
-fontir = "1.0"
-glyphs-reader = "1.0"
+skrifa = "0.49.0"
+fontc = "2.0"
+fontdrasil = "2.0"
+fontir = "2.0"
+glyphs-reader = "2.0"
 kurbo = "0.13"
 ordered-float = "5"
 plist = "1"
@@ -27,7 +27,7 @@ rayon = "1.10"
 serde = "1"
 tempfile = "3"
 thiserror = "2.0.18"
-write-fonts = "0.52"
+write-fonts = "0.55"
 ttf2woff2 = { version = "0.14", default-features = false }
 
 [dev-dependencies]

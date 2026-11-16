@@ -10,7 +10,6 @@
 
 #[cfg(test)]
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 
 use glyphs_reader::glyphdata::GlyphData;
 use shift_font::{Glyph, GlyphClasses, GlyphDataCategory, LibData, NamedGlyph};
@@ -28,8 +27,7 @@ impl GlyphCategories {
 
     /// The glyph data category for `name` and `unicodes`, if glyph data knows it.
     pub fn lookup(&self, name: &str, unicodes: &[u32]) -> GlyphDataCategory {
-        let codepoints: BTreeSet<u32> = unicodes.iter().copied().collect();
-        let Some(result) = self.data.query(name, Some(&codepoints)) else {
+        let Some(result) = self.data.query(name, Some(unicodes)) else {
             return GlyphDataCategory::default();
         };
         GlyphDataCategory {

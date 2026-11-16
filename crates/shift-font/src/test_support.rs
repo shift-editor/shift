@@ -482,7 +482,7 @@ fn set_source_metrics(
     }
 }
 
-fn mapping_point(axis: &Axis, user: f64, design: f64) -> AxisMappingPoint {
+pub(crate) fn mapping_point(axis: &Axis, user: f64, design: f64) -> AxisMappingPoint {
     let input = Location::from([(axis.id(), user)]);
     let output = Location::from([(axis.id(), design)]);
     AxisMappingPoint {

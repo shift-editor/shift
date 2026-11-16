@@ -54,11 +54,11 @@ unicode-bidi = { version = "0.3", optional = true }
 unicode-linebreak = { version = "0.1.5", optional = true }
 unicode-script = { version = "0.5", optional = true }
 
-fea-rs = { version = "1.0", optional = true }
-fontbe = { version = "1.0", optional = true }
-fontdrasil = { version = "1.0", optional = true }
-fontir = { version = "1.0", optional = true }
-write-fonts = { version = "0.52", optional = true }
+fea-rs = { version = "2.0", optional = true }
+fontbe = { version = "2.0", optional = true }
+fontdrasil = { version = "2.0", optional = true }
+fontir = { version = "2.0", optional = true }
+write-fonts = { version = "0.55", optional = true }
 
 unicode-segmentation = { version = "1.12", optional = true }
 

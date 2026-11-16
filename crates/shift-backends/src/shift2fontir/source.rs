@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::path::Path;
 use std::sync::Arc;
 
 use fontdrasil::coords::NormalizedLocation;
@@ -202,15 +201,6 @@ impl ShiftIrSource {
 }
 
 impl Source for ShiftIrSource {
-    fn new(_root: &Path) -> Result<Self, Error>
-    where
-        Self: Sized,
-    {
-        Err(Error::UnsupportedConstruct(
-            "ShiftIrSource is created from an in-memory Shift font".to_string(),
-        ))
-    }
-
     fn create_static_metadata_work(&self) -> Result<Box<IrWork>, Error> {
         Ok(Box::new(StaticMetadataWork::new(Arc::clone(
             &self.snapshot,
