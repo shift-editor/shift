@@ -8,7 +8,7 @@ import type { GlyphCatalogCell, GlyphCatalogFrame } from "@/types/glyphCatalog";
 
 const LABEL_HORIZONTAL_INSET = 8;
 /** Each glyph is one rounded grey cell: its preview above a band holding its name. A tag colours the band. */
-const CELL_RADIUS = 8;
+const CELL_RADIUS = 6;
 /** How much ink darkens a name band under the pointer. */
 const BAND_HOVER_ALPHA = 0.12;
 /** The rename field sits inside the band: the compact input's height, centred. */
@@ -79,6 +79,7 @@ export class GlyphCatalogOverlay {
     const mutedColor = style.getPropertyValue("--color-muted").trim() || style.color;
     const token = (name: string) => style.getPropertyValue(name).trim() || style.color;
     const tileColor = token("--color-tile");
+    const bandColor = token("--color-tile-band");
     const hoverColor = token("--color-hover");
     const inkColor = token("--color-tile-ink");
     const primaryColor = token("--color-primary");
@@ -103,11 +104,10 @@ export class GlyphCatalogOverlay {
       context.fill();
       context.clip();
 
-      // A tagged cell's name sits on a band of its colour across the cell's foot.
-      if (tagColor) {
-        context.fillStyle = tagColor;
-        context.fillRect(band.x, band.y, band.width, band.height);
-      }
+      // The name sits on a band across the cell's foot: a tagged cell's in its colour, an
+      // untagged one's a shade off the tile.
+      context.fillStyle = tagColor ?? bandColor;
+      context.fillRect(band.x, band.y, band.width, band.height);
       if (cell.catalogIndex === hoveredNameIndex) {
         context.fillStyle = inkColor;
         context.globalAlpha = BAND_HOVER_ALPHA;

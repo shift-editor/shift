@@ -221,7 +221,7 @@ export function SvgGlyphCatalogGrid({
                 data-glyph-id={cell.glyph.id}
                 data-mark-color={markColorKey(cell.glyph.markColor)}
                 className={cn(
-                  "absolute flex flex-col overflow-hidden rounded-lg",
+                  "absolute flex flex-col overflow-hidden rounded-md",
                   selected ? "bg-hover" : "bg-tile",
                 )}
                 style={{
@@ -245,13 +245,13 @@ export function SvgGlyphCatalogGrid({
                 >
                   {previewContent}
                 </Button>
-                {/* A tag colours the band that holds the name; the preview is never tinted. */}
+                {/* A tag colours the band that holds the name, else it is a shade off the tile; the preview is never tinted. */}
                 <div
                   className="flex items-center px-0.75"
                   style={{
                     background: cell.glyph.markColor
                       ? markColorCss(cell.glyph.markColor)
-                      : undefined,
+                      : "var(--color-tile-band)",
                     height: bandHeight,
                   }}
                 >
@@ -260,7 +260,7 @@ export function SvgGlyphCatalogGrid({
                 {selected ? (
                   <span
                     aria-hidden="true"
-                    className="pointer-events-none absolute inset-0 rounded-lg ring-2 ring-inset ring-accent"
+                    className="pointer-events-none absolute inset-0 rounded-md ring-2 ring-inset ring-accent"
                   />
                 ) : null}
               </div>
