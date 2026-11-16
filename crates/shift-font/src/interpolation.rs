@@ -16,6 +16,7 @@ use crate::{
     GlyphLayer, Location, SourceId,
 };
 
+mod filled_locations;
 mod kerning;
 mod layer_match;
 mod metrics;
@@ -371,8 +372,15 @@ pub struct GlyphInterpolation {
 }
 
 impl GlyphInterpolation {
-    /// Returns the master-backed layer that defines compatible topology.
+    /// Returns the master-backed layer that defines compatible topology,
+    /// with its components carrying every axis any master's sets (see
+    /// `filled_locations`).
     pub fn reference_layer(&self) -> &GlyphLayer {
+        &self.reference_layer
+    }
+
+    /// The reference layer as the shared copy this interpolation holds.
+    pub(crate) fn shared_reference_layer(&self) -> &Arc<GlyphLayer> {
         &self.reference_layer
     }
 
@@ -504,12 +512,11 @@ impl Font {
             return Ok(None);
         }
 
-        let Some(reference_layer) = self.fallback_layer(glyph).cloned() else {
+        let Some(mut reference_layer) = self.fallback_layer(glyph).cloned() else {
             return Ok(None);
         };
 
-        let mut compatible_sources = Vec::new();
-
+        let mut compatible = Vec::new();
         for located in glyph.located_layers(self) {
             if !reference_layer.match_with(located.layer).is_complete() {
                 continue;
@@ -520,9 +527,33 @@ impl Font {
             ) else {
                 continue;
             };
-
-            compatible_sources.push((source_id, location, located.layer.interpolation_values()));
+            compatible.push((source_id, location, located.layer));
         }
+
+        // Masters' components may set different axes: read each with the
+        // values it inherits filled in, so all carry the same ones.
+        let layers: Vec<&GlyphLayer> = std::iter::once(reference_layer.as_ref())
+            .chain(compatible.iter().map(|(_, _, layer)| layer.as_ref()))
+            .collect();
+        let slots = self.location_slots(&layers);
+        if let Some(reference_location) = self
+            .source(reference_layer.source_id())
+            .map(|source| source.location().clone())
+            && let Some(filled) =
+                self.filled_locations(&reference_layer, &reference_location, &slots)
+        {
+            reference_layer = Arc::new(filled);
+        }
+        let compatible_sources: Vec<_> = compatible
+            .into_iter()
+            .map(|(source_id, location, layer)| {
+                let values = self.filled_locations(layer, &location, &slots).map_or_else(
+                    || layer.interpolation_values(),
+                    |filled| filled.interpolation_values(),
+                );
+                (source_id, location, values)
+            })
+            .collect();
 
         let source_locations = compatible_sources
             .iter()

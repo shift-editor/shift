@@ -77,6 +77,7 @@ import {
   type Segment,
   GlyphGeometry,
   IdIndex,
+  componentLocationsValueOffset,
   decomposedTransformValues,
   filledContoursContain,
   type GeometryAnchorHit,
@@ -2695,13 +2696,13 @@ export class Glyph {
       if (!weights) return projectionGeometry(projection.fallback);
 
       const values = interpolateSourceValues(interpolation.basis, weights, (sourceId) => {
+        const resolved =
+          interpolation.sources.find((source) => source.sourceId === sourceId)?.values ?? null;
         const sourceLayer = this.#layersBySourceIdCell.peek().get(sourceId);
-        if (sourceLayer) {
-          track(sourceLayer.geometryCell);
-          return sourceLayer.state.values;
-        }
+        if (!sourceLayer) return resolved;
 
-        return interpolation.sources.find((source) => source.sourceId === sourceId)?.values ?? null;
+        track(sourceLayer.geometryCell);
+        return withResolvedComponentLocations(sourceLayer.state, resolved);
       });
       if (!values) return projectionGeometry(projection.fallback);
 
@@ -2924,4 +2925,30 @@ function rootContoursPath(geometry: GlyphGeometry): Path2D {
     path.addPath(ContourPath.fromContour(contour, identity).path);
   }
   return path;
+}
+
+/**
+ * A source layer's live values with its component locations as Rust's
+ * interpolation reads them.
+ *
+ * @remarks
+ * A master stores only the axes its components set, and Rust fills in the
+ * ones another master's set with what this one inherits, so all masters
+ * blend axis by axis (shift-font's `filled_locations`). Positions and
+ * transforms come from the live layer, drag previews included; the
+ * location values, which no drag changes, come from `resolved` when the
+ * live layer carries fewer of them.
+ */
+function withResolvedComponentLocations(
+  state: GlyphState,
+  resolved: Float64Array | null,
+): Float64Array {
+  const live = state.values;
+  if (!resolved || resolved.length === live.length) return live;
+
+  const offset = componentLocationsValueOffset(state.structure, "decomposed");
+  const values = new Float64Array(resolved.length);
+  values.set(live.subarray(0, offset));
+  values.set(resolved.subarray(offset), offset);
+  return values;
 }

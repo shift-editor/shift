@@ -200,3 +200,37 @@ fn a_location_on_an_unknown_axis_is_rejected() {
         vec![(None, ComponentInheritance::Parent); 2]
     );
 }
+
+#[test]
+fn setting_a_location_on_one_master_saves_only_that_master() {
+    let mut f = bleed_font().unwrap();
+    let (layer_id, component_id) = f.h[0].clone();
+    f.workspace
+        .apply(
+            &FontIntentSet::from(SetComponentLocations {
+                layer_id,
+                component_ids: vec![component_id],
+                locations: vec![DesignLocation::from([(f.axis, 0.0)])],
+                inheritances: vec![ComponentInheritance::Parent],
+            }),
+            None,
+        )
+        .unwrap();
+    let path = f.temp.path().join("Solenoid.shift");
+    f.workspace
+        .save_as_document(&path, f.temp.path().join("save-recovery.sqlite"))
+        .unwrap();
+    drop(f.workspace);
+
+    let mut reopened =
+        FontWorkspace::open_document(&path, f.temp.path().join("recovery.sqlite")).unwrap();
+    reopened.acquire_all_layers().unwrap();
+
+    assert_eq!(
+        locations(&reopened, &f.h, f.axis).unwrap(),
+        vec![
+            (Some(0.0), ComponentInheritance::Parent),
+            (None, ComponentInheritance::Parent),
+        ]
+    );
+}

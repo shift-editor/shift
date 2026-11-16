@@ -10,7 +10,12 @@ import {
 } from "@shift/types";
 import type { DecomposedTransform, MatModel } from "@shift/geo";
 import { geometry } from "@shift/wasm";
-import { componentValueCount, componentsValueOffset, readDecomposedTransform } from "./valueLayout";
+import {
+  componentLocationsValueOffset,
+  componentValueCount,
+  componentsValueOffset,
+  readDecomposedTransform,
+} from "./valueLayout";
 
 export type Matrix = MatModel;
 
@@ -46,7 +51,7 @@ export class Component {
     const cursor = componentsValueOffset(structure);
     const stride = componentValueCount(transformKind);
     // Location values follow every transform, component by component.
-    let locationCursor = cursor + structure.components.length * stride;
+    let locationCursor = componentLocationsValueOffset(structure, transformKind);
     return structure.components.map((component, index) => {
       const built = new Component(
         component,

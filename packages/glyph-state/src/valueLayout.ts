@@ -35,6 +35,23 @@ export function componentsValueOffset(structure: GlyphStructure): number {
 }
 
 /**
+ * Returns the value-buffer offset of the first component location value:
+ * location values follow every component transform.
+ *
+ * @param structure - Topology that the value buffer is laid out for.
+ * @param transformKind - Encoding the value buffer uses for component transforms.
+ */
+export function componentLocationsValueOffset(
+  structure: GlyphStructure,
+  transformKind: ComponentTransformKind,
+): number {
+  return (
+    componentsValueOffset(structure) +
+    structure.components.length * componentValueCount(transformKind)
+  );
+}
+
+/**
  * Returns how many values one component transform occupies.
  *
  * @param transformKind - Encoding the value buffer uses for component transforms.

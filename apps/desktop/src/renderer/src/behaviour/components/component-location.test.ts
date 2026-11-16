@@ -75,4 +75,18 @@ describe("a component that sets an axis draws its base glyph there", () => {
 
     expect((await drawnA()).bounds).toEqual(bold);
   });
+
+  it("keeps Aacute interpolating when only the light master sets the axis", async () => {
+    const [half, bold] = [await aAtWeight(500), await aAtWeight(1000)];
+    const weight = editor.axis({ tag: "wght" })!;
+    await selectA();
+    await editor.setSelectedComponentsAxis(weight.id, 0);
+
+    // The bold master stores nothing and inherits weight 1000 there, so
+    // halfway A blends 0 and 1000, and the bold master is unchanged.
+    editor.setLocation({ wght: 500, wdth: 0 });
+    expect((await drawnA()).bounds).toEqual(half);
+    editor.setLocation({ wght: 1000, wdth: 0 });
+    expect((await drawnA()).bounds).toEqual(bold);
+  });
 });
