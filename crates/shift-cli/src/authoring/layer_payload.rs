@@ -9,7 +9,7 @@ use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use serde::de::DeserializeOwned;
 use shift_font::svg_path;
 use shift_font::{
-    Anchor, Axis, Component, Contour, DecomposedTransform, DesignLocation, FontIntent, GlyphId,
+    Anchor, Component, Contour, DecomposedTransform, DesignLocation, Font, FontIntent, GlyphId,
     LayerId, Transform,
 };
 use svgtypes::{PathParser, PathSegment};
@@ -18,17 +18,16 @@ use super::input::{LayerInput, TransformInput};
 use super::metrics_keys::WrittenKey;
 use super::require_finite;
 
-/// A component location keyed by axis tag, as design coordinates on `axes`.
-fn component_location(values: &BTreeMap<String, f64>, axes: &[Axis]) -> Result<DesignLocation> {
+/// A component location keyed by axis tag, as design coordinates on `font`'s axes.
+fn component_location(values: &BTreeMap<String, f64>, font: &Font) -> Result<DesignLocation> {
     values
         .iter()
         .map(|(tag, value)| {
             require_finite(*value, "component location")?;
-            let axis = axes
-                .iter()
-                .find(|axis| axis.tag() == tag)
+            let axis_id = font
+                .axis_id_by_tag(tag)
                 .ok_or_else(|| miette::miette!("the font has no axis tagged {tag:?}"))?;
-            Ok((axis.id(), *value))
+            Ok((axis_id, *value))
         })
         .collect()
 }
@@ -58,7 +57,7 @@ impl LayerInput {
     ///
     /// Outlines use font units with Y up; explicit contours and SVG are mutually exclusive.
     /// Components name their base glyph, which `base_glyph` resolves to its identity,
-    /// and the axes of their location by tag, which `axes` resolves.
+    /// and the axes of their location by tag, which `font` resolves.
     ///
     /// # Errors
     ///
@@ -70,7 +69,7 @@ impl LayerInput {
         glyph_id: GlyphId,
         layer_id: LayerId,
         base_glyph: &dyn Fn(&str) -> Result<GlyphId>,
-        axes: &[Axis],
+        font: &Font,
         written: &mut BTreeSet<WrittenKey>,
     ) -> Result<Vec<FontIntent>> {
         require_finite(self.advance, "layer advance")?;
@@ -125,7 +124,7 @@ impl LayerInput {
                     })
                 }
             };
-            let location = component_location(&input.location, axes)
+            let location = component_location(&input.location, font)
                 .wrap_err_with(|| format!("component {:?} location", input.base))?;
             let mut component = Component::with_transform(base_glyph_id, input.base, transform);
             component.set_location(location);

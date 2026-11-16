@@ -165,7 +165,7 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
         }
         intents.extend(
             input
-                .into_intents(glyph_id, layer_id, &base_glyph, font.axes(), &mut written)
+                .into_intents(glyph_id, layer_id, &base_glyph, &font, &mut written)
                 .wrap_err_with(|| context)?,
         );
     }

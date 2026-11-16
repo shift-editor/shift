@@ -566,10 +566,7 @@ impl From<NapiComponentData> for ComponentData {
         .into_iter()
         .map(AxisId::from_raw)
         .collect(),
-      inheritance: match component.inheritance.as_str() {
-        "font" => ComponentInheritance::Font,
-        _ => ComponentInheritance::Parent,
-      },
+      inheritance: values::parse_inheritance(&component.inheritance),
     }
   }
 }

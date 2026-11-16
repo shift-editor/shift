@@ -315,9 +315,7 @@ impl GlyphLayer {
         component_id: &ComponentId,
         transform: DecomposedTransform,
     ) -> CoreResult<()> {
-        let component = self
-            .component_mut(component_id)
-            .ok_or_else(|| CoreError::InvalidComponentId(component_id.to_string()))?;
+        let component = self.component_mut(component_id).require(component_id)?;
         component.set_transform(transform);
         Ok(())
     }

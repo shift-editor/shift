@@ -411,14 +411,7 @@ impl GlyphLayer {
             .zip(source.components_iter())
             .enumerate()
         {
-            let axes = |component: &crate::Component| {
-                component
-                    .location()
-                    .iter()
-                    .map(|(axis, _)| *axis)
-                    .collect::<Vec<_>>()
-            };
-            if axes(reference) != axes(source) || reference.inheritance() != source.inheritance() {
+            if !reference.sets_axes_of(source) || reference.inheritance() != source.inheritance() {
                 differences.push(LayerDifference::ComponentLocation { component: index });
             }
         }

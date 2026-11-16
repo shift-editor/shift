@@ -72,7 +72,7 @@ pub(crate) fn add_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
         glyph_id,
         layer_id,
         &|name| font.glyph_id_for(name),
-        font.axes(),
+        &font,
         &mut written,
     )?);
 
@@ -115,7 +115,7 @@ pub(crate) fn set_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
         glyph_id,
         layer_id,
         &|name| font.glyph_id_for(name),
-        font.axes(),
+        &font,
         &mut written,
     )?);
 

@@ -576,9 +576,7 @@ impl LayerIntent for SetComponentTransforms {
 
         let layer = font.require_layer_mut(*layer_id)?;
         for component_id in component_ids {
-            if layer.component(component_id).is_none() {
-                return Err(CoreError::InvalidComponentId(component_id.to_string()));
-            }
+            layer.component(component_id).require(component_id)?;
         }
         let (transforms, _) = transforms.as_chunks::<{ DecomposedTransform::VALUE_COUNT }>();
         for (component_id, values) in component_ids.iter().zip(transforms) {
@@ -613,9 +611,7 @@ impl LayerIntent for SetComponentAlignment {
         } = self;
         let layer = font.require_layer_mut(*layer_id)?;
         for component_id in component_ids {
-            if layer.component(component_id).is_none() {
-                return Err(CoreError::InvalidComponentId(component_id.to_string()));
-            }
+            layer.component(component_id).require(component_id)?;
         }
         for component in layer.components_iter_mut() {
             if component_ids.contains(&component.id()) {
@@ -680,9 +676,7 @@ impl LayerIntent for SetComponentLocations {
 
         let layer = font.require_layer_mut(*layer_id)?;
         for component_id in component_ids {
-            if layer.component(component_id).is_none() {
-                return Err(CoreError::InvalidComponentId(component_id.to_string()));
-            }
+            layer.component(component_id).require(component_id)?;
         }
         for ((component_id, location), inheritance) in
             component_ids.iter().zip(locations).zip(inheritances)
@@ -717,9 +711,7 @@ impl LayerIntent for RemoveComponents {
         {
             let layer = font.require_layer_mut(*layer_id)?;
             for component_id in component_ids {
-                if layer.component(component_id).is_none() {
-                    return Err(CoreError::InvalidComponentId(component_id.to_string()));
-                }
+                layer.component(component_id).require(component_id)?;
             }
             for component_id in component_ids {
                 layer.remove_component(component_id);
@@ -750,9 +742,7 @@ impl LayerIntent for DecomposeComponents {
         } = self;
         let layer = font.require_layer(*layer_id)?;
         for component_id in component_ids {
-            if layer.component(component_id).is_none() {
-                return Err(CoreError::InvalidComponentId(component_id.to_string()));
-            }
+            layer.component(component_id).require(component_id)?;
         }
         let resolved_contours = font.layer_component_contours(
             *layer_id,

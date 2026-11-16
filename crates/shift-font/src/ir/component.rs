@@ -520,6 +520,15 @@ impl Component {
         self.inheritance = inheritance;
     }
 
+    /// Whether this component sets the same axes as `other`, in the same
+    /// order: what master compatibility asks of their locations.
+    pub fn sets_axes_of(&self, other: &Self) -> bool {
+        self.location
+            .iter()
+            .map(|(axis, _)| axis)
+            .eq(other.location.iter().map(|(axis, _)| axis))
+    }
+
     /// Whether the base glyph draws somewhere other than where its parent
     /// glyph is: the component sets an axis or resets to the font's location.
     pub fn moves_base(&self) -> bool {

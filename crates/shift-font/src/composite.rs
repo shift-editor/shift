@@ -13,11 +13,11 @@
 //! - Cycles are handled branch-locally: cyclic branches are skipped so
 //!   non-cyclic branches still contribute geometry.
 
-use crate::Require;
 use crate::{
     ComponentId, Contour, CoreError, CoreResult, CurveSegment, CurveSegmentIter, GlyphId,
     GlyphLayer, Point, Transform,
 };
+use crate::{EntityRef, Require};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -122,7 +122,7 @@ impl ComponentGlyph {
     /// The error for an occurrence whose component its parent layer no longer
     /// holds as resolved.
     fn invalid(&self) -> CoreError {
-        CoreError::InvalidComponentId(self.component_id().to_string())
+        self.component_id().not_found()
     }
 }
 

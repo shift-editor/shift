@@ -328,6 +328,13 @@ macro_rules! entity_ref {
     };
 }
 
+/// A component id is reported as text, the form layers' callers send it in.
+impl EntityRef for ComponentId {
+    fn not_found(&self) -> CoreError {
+        CoreError::InvalidComponentId(self.to_string())
+    }
+}
+
 impl<T: EntityRef + ?Sized> EntityRef for &T {
     fn not_found(&self) -> CoreError {
         (**self).not_found()
@@ -367,5 +374,22 @@ pub trait Require<T> {
 impl<T> Require<T> for Option<T> {
     fn require<I: EntityRef + ?Sized>(self, id: &I) -> CoreResult<T> {
         self.ok_or_else(|| id.not_found())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_missing_component_is_reported_by_its_id_as_text() {
+        let id = ComponentId::new();
+        let found: Option<&str> = None;
+
+        let error = found.require(&id).unwrap_err();
+
+        assert!(
+            matches!(error, CoreError::InvalidComponentId(missing) if missing == id.to_string())
+        );
     }
 }
