@@ -101,7 +101,7 @@ mod tests {
         glyph.bracket_layers.push(Layer {
             attributes: LayerAttributes {
                 axis_rules: vec![AxisRule {
-                    min: Some(400),
+                    min: Some(400.0.into()),
                     max: None,
                 }],
                 ..LayerAttributes::default()

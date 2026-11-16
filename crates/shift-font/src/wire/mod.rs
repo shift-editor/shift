@@ -446,10 +446,10 @@ pub struct DesignNormalization {
 impl From<&crate::DesignNormalization> for DesignNormalization {
     fn from(normalization: &crate::DesignNormalization) -> Self {
         Self {
-            axis_id: normalization.axis_id,
-            minimum: normalization.range.minimum,
-            default: normalization.range.default,
-            maximum: normalization.range.maximum,
+            axis_id: normalization.axis_id(),
+            minimum: normalization.range().minimum,
+            default: normalization.range().default,
+            maximum: normalization.range().maximum,
         }
     }
 }

@@ -626,7 +626,7 @@ mod tests {
         let compiled = FontRef::new(&bytes).unwrap();
         let gid = |codepoint: u32| compiled.charmap().map(codepoint).unwrap();
         let class_def = compiled.gdef().unwrap().glyph_class_def().unwrap().unwrap();
-        let class = |codepoint: u32| class_def.get(gid(codepoint).try_into().unwrap());
+        let class = |codepoint: u32| class_def.get(gid(codepoint));
         let advance = |codepoint: u32| {
             compiled
                 .glyph_metrics(
@@ -637,8 +637,8 @@ mod tests {
                 .unwrap()
         };
 
-        assert_ne!(class(0x0237), GlyphClassDef::Mark as u16);
-        assert_eq!(class(0x0301), GlyphClassDef::Mark as u16);
+        assert_ne!(class(0x0237), GlyphClassDef::Mark as u32);
+        assert_eq!(class(0x0301), GlyphClassDef::Mark as u32);
         assert_eq!(advance(0x0237), 300.0);
         assert_eq!(advance(0x0301), 0.0);
     }

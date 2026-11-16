@@ -465,7 +465,7 @@ pub(super) fn glyph_identity(glyph: &GlyphsGlyph, glyph_ids: &HashMap<String, Gl
         .get(glyph.name.as_str())
         .expect("every Glyphs glyph should have a published identity");
     let mut result = Glyph::with_id(glyph_id, glyph.name.to_string());
-    result.set_unicodes(glyph.unicode.iter().copied().collect());
+    result.set_unicodes(glyph.unicode.clone());
     // glyphs-reader fills unset categories from glyph data; keep only the
     // ones the file sets differently, so renaming a glyph still updates them.
     let overrides = GlyphCategories::new().overrides(

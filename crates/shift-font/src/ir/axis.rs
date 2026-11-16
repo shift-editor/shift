@@ -118,9 +118,12 @@ impl AxisKind {
         }
     }
 
-    /// Maps a user-space `value` to `-1..=1`; see [`AxisRange::normalize`].
+    /// Maps a user-space `value` to `-1..=1` as a font's `fvar` does
+    /// (read-fonts' `VariationAxisRecord::normalize`): clamped to the axis
+    /// range first, then normalized through [`AxisRange::normalize`].
     pub fn normalize(&self, value: f64) -> f64 {
-        self.range().normalize(value)
+        let range = self.range();
+        range.normalize(value.clamp(range.minimum, range.maximum.max(range.minimum)))
     }
 
     /// Maps a normalized `value` back to user space: the inverse of

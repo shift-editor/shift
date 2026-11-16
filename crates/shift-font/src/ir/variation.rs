@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use fontdrasil::{
-    coords::{NormalizedCoord, NormalizedLocation},
+    coords::{CoordConverter, DesignCoord, NormalizedCoord, NormalizedLocation, UserCoord},
     types::Tag,
     variations::{RoundingBehaviour, VariationModel},
 };
@@ -18,6 +18,11 @@ use crate::{
 ///
 /// The space is the caller's: user coordinates for an axis's authored range,
 /// design coordinates for [`DesignNormalization`].
+///
+/// `minimum` is the value that normalizes to `-1` and `maximum` the one that
+/// normalizes to `1`. In user space `minimum <= default <= maximum`; a design
+/// range under a decreasing axis mapping runs the other way, `minimum` above
+/// `maximum`, because normalized signs follow the user axis.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct AxisRange {
     pub minimum: f64,
@@ -26,38 +31,81 @@ pub struct AxisRange {
 }
 
 impl AxisRange {
-    /// Maps `value` to `-1..=1`: the default to `0`, the minimum to `-1` and
-    /// the maximum to `1`, linearly on each side.
+    /// Maps `value` to `-1..=1` through fontdrasil's `CoordConverter`, as
+    /// fontc normalizes: the default to `0`, the minimum to `-1` and the
+    /// maximum to `1`, linearly on each side; outside the range a value keeps
+    /// its distance from the nearest end, as fontTools extrapolates.
     ///
-    /// A side with no extent (the default at the minimum or maximum) maps to
-    /// `0`. A value within a relative `1e-9` of the default maps to exactly
-    /// `0`, and a result within `1e-9` of `-1`, `0` or `1` snaps to it.
-    /// Values outside the range are not clamped.
+    /// A value within a relative `1e-9` of the default maps to exactly `0`,
+    /// and a result within `1e-9` of `-1`, `0` or `1` snaps to it, because
+    /// mapped anchors carry rounding error and the variation model only
+    /// recognises an exact default. A range fontdrasil rejects, whose minimum
+    /// and maximum share one value away from the default, normalizes
+    /// everything to `0`; compiling such a font fails in fontc.
+    ///
+    /// Builds fontdrasil's converter on each call; a caller that normalizes
+    /// many values through one range keeps a [`DesignNormalization`], which
+    /// builds it once.
     pub fn normalize(&self, value: f64) -> f64 {
+        self.normalize_through(self.converter().as_ref(), value)
+    }
+
+    /// [`Self::normalize`] through `converter`, this range's own.
+    fn normalize_through(&self, converter: Option<&CoordConverter>, value: f64) -> f64 {
         let tolerance = 1e-9 * (1.0 + self.default.abs());
-        let extent = if value < self.default {
-            self.default - self.minimum
-        } else {
-            self.maximum - self.default
-        };
-        if extent.abs() < tolerance || (value - self.default).abs() < tolerance {
+        if (value - self.default).abs() < tolerance {
             return 0.0;
         }
-
-        snap((value - self.default) / extent)
+        let Some(converter) = converter else {
+            return 0.0;
+        };
+        snap(DesignCoord::new(value).to_normalized(converter).to_f64())
     }
 
-    /// Maps a normalized `value` back into the range's space: the inverse of
-    /// [`Self::normalize`] on a side with extent.
-    pub fn denormalize(&self, value: f64) -> f64 {
-        if value < 0.0 {
-            self.default + value * (self.default - self.minimum)
-        } else if value > 0.0 {
-            self.default + value * (self.maximum - self.default)
-        } else {
-            self.default
+    /// The lowest and highest value the range spans, whichever way it runs:
+    /// what a range check compares against.
+    pub fn bounds(&self) -> RangeBounds {
+        RangeBounds {
+            lowest: self.minimum.min(self.maximum),
+            highest: self.minimum.max(self.maximum),
         }
     }
+
+    /// Maps a normalized `value` back into the range's space through
+    /// fontdrasil's `CoordConverter`: the inverse of [`Self::normalize`] on a
+    /// side with extent.
+    pub fn denormalize(&self, value: f64) -> f64 {
+        let Some(converter) = self.converter() else {
+            return self.default;
+        };
+        NormalizedCoord::new(value).to_design(&converter).to_f64()
+    }
+
+    /// fontdrasil's converter for this range: the minimum, default and
+    /// maximum as the design values at user `-1`, `0` and `1`, so normalized
+    /// signs follow the range's own direction even when it runs backwards.
+    /// A side with no extent is left out, as fontdrasil leaves it out.
+    ///
+    /// Returns `None` for a range fontdrasil rejects.
+    fn converter(&self) -> Option<CoordConverter> {
+        let mut mappings = Vec::with_capacity(3);
+        if self.minimum != self.default {
+            mappings.push((UserCoord::new(-1.0), DesignCoord::new(self.minimum)));
+        }
+        let default_index = mappings.len();
+        mappings.push((UserCoord::new(0.0), DesignCoord::new(self.default)));
+        if self.maximum != self.default {
+            mappings.push((UserCoord::new(1.0), DesignCoord::new(self.maximum)));
+        }
+        CoordConverter::new(mappings, default_index).ok()
+    }
+}
+
+/// The lowest and highest value an [`AxisRange`] spans, in either direction.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RangeBounds {
+    pub lowest: f64,
+    pub highest: f64,
 }
 
 /// One axis's design-space bounds used to normalize authored source locations.
@@ -66,15 +114,38 @@ impl AxisRange {
 /// user-facing axis range or from the subset of masters belonging to a glyph.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DesignNormalization {
-    pub axis_id: AxisId,
-    pub range: AxisRange,
+    axis_id: AxisId,
+    range: AxisRange,
+    /// fontdrasil's converter for `range`, built once: region evaluation
+    /// normalizes through it for every support it weighs.
+    converter: Option<CoordConverter>,
 }
 
 impl DesignNormalization {
+    /// The axis this normalization is for.
+    pub fn axis_id(&self) -> AxisId {
+        self.axis_id
+    }
+
+    /// The axis's design anchors: the design values at its user minimum,
+    /// default and maximum.
+    pub fn range(&self) -> AxisRange {
+        self.range
+    }
+
+    /// `axis_id`'s normalization over `range`.
+    pub fn new(axis_id: AxisId, range: AxisRange) -> Self {
+        Self {
+            axis_id,
+            range,
+            converter: range.converter(),
+        }
+    }
+
     /// Normalizes a design coordinate around the mapped default without
     /// clamping; see [`AxisRange::normalize`].
     pub fn normalize(&self, value: f64) -> f64 {
-        self.range.normalize(value)
+        self.range.normalize_through(self.converter.as_ref(), value)
     }
 }
 
@@ -96,12 +167,14 @@ fn snap(normalized: f64) -> f64 {
 impl Font {
     /// Derives design-space normalization in authoring-axis order.
     ///
-    /// Independent mappings define the numerical design extrema over each axis's
-    /// authored range and its mapped default. Compiled support boundaries include
-    /// reversed mappings and interior extrema. Unmapped and internal axes retain
-    /// their authored bounds. Cross-axis
-    /// mappings move locations within this design space; they do not redefine
-    /// its normalization. The returned values are derived, never persisted.
+    /// As fontdrasil's `CoordConverter` normalizes, an independently mapped
+    /// axis normalizes to `-1` at the design value of its user minimum, `0` at
+    /// its mapped default and `1` at the design value of its user maximum:
+    /// normalized signs follow the user axis, even when the mapping makes
+    /// design values decrease. Unmapped and internal axes keep their authored
+    /// bounds. Cross-axis mappings move locations within this design space;
+    /// they do not redefine its normalization. The returned values are
+    /// derived, never persisted.
     ///
     /// # Errors
     ///
@@ -111,48 +184,28 @@ impl Font {
         self.axes()
             .iter()
             .map(|axis| {
-                let mut values = vec![axis.minimum(), axis.default(), axis.maximum()];
-                let mut default = axis.default();
-                if let Some(basis) = bases
+                let user = axis.kind().range();
+                let Some(basis) = bases
                     .iter()
                     .find(|basis| basis.is_independent() && basis.output_axis_ids[0] == axis.id())
-                {
-                    let location = Location::from([(axis.id(), default)]);
-                    default = basis
+                else {
+                    return Ok(DesignNormalization::new(axis.id(), user));
+                };
+                let design = |value: f64| -> CoreResult<f64> {
+                    let location = Location::from([(axis.id(), value)]);
+                    Ok(basis
                         .evaluate(&location, self.axes())?
                         .get(axis.id())
-                        .unwrap_or(default);
-                    for delta in basis.basis().deltas() {
-                        for support in delta.region().supports() {
-                            if support.axis_id() != axis.id() {
-                                continue;
-                            }
-                            for boundary in [support.minimum(), support.peak(), support.maximum()] {
-                                if (-1.0..=1.0).contains(&boundary) {
-                                    values.push(axis.denormalize(boundary));
-                                }
-                            }
-                        }
-                    }
-                    values.sort_by(f64::total_cmp);
-                    values.dedup();
-                    for value in &mut values {
-                        let location = Location::from([(axis.id(), *value)]);
-                        *value = basis
-                            .evaluate(&location, self.axes())?
-                            .get(axis.id())
-                            .unwrap_or(*value);
-                    }
-                }
-
-                Ok(DesignNormalization {
-                    axis_id: axis.id(),
-                    range: AxisRange {
-                        minimum: values.iter().copied().fold(default, f64::min),
-                        default,
-                        maximum: values.iter().copied().fold(default, f64::max),
+                        .unwrap_or(value))
+                };
+                Ok(DesignNormalization::new(
+                    axis.id(),
+                    AxisRange {
+                        minimum: design(user.minimum)?,
+                        default: design(user.default)?,
+                        maximum: design(user.maximum)?,
                     },
-                })
+                ))
             })
             .collect()
     }
@@ -475,292 +528,4 @@ fn normalized_input(location: &Location, axes: &[&Axis], tags: &[Tag]) -> Normal
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{AxisId, AxisMappingPoint};
-
-    const WEIGHT: AxisRange = AxisRange {
-        minimum: 100.0,
-        default: 400.0,
-        maximum: 900.0,
-    };
-
-    #[test]
-    fn axis_range_maps_its_bounds_to_minus_one_zero_and_one() {
-        assert_eq!(WEIGHT.normalize(100.0), -1.0);
-        assert_eq!(WEIGHT.normalize(400.0), 0.0);
-        assert_eq!(WEIGHT.normalize(900.0), 1.0);
-        assert_eq!(WEIGHT.normalize(250.0), -0.5);
-        assert_eq!(WEIGHT.normalize(650.0), 0.5);
-    }
-
-    #[test]
-    fn axis_range_maps_a_side_with_no_extent_to_the_default() {
-        let one_sided = AxisRange {
-            minimum: 400.0,
-            default: 400.0,
-            maximum: 900.0,
-        };
-
-        assert_eq!(one_sided.normalize(300.0), 0.0);
-        assert_eq!(one_sided.normalize(900.0), 1.0);
-    }
-
-    #[test]
-    fn axis_range_does_not_clamp_values_outside_it() {
-        assert_eq!(WEIGHT.normalize(1400.0), 2.0);
-        assert_eq!(WEIGHT.normalize(-200.0), -2.0);
-    }
-
-    #[test]
-    fn axis_range_snaps_rounding_error_to_the_default_and_bounds() {
-        assert_eq!(WEIGHT.normalize(400.0 + 1e-10), 0.0);
-        assert_eq!(WEIGHT.normalize(900.0 - 1e-10), 1.0);
-        assert_eq!(WEIGHT.normalize(100.0 + 1e-10), -1.0);
-        assert!(WEIGHT.normalize(400.0 + 1e-3) > 0.0);
-    }
-
-    #[test]
-    fn maps_independent_axes_before_cross_axis_mappings() {
-        let weight = Axis::weight();
-        let width = Axis::width();
-        let mut optical = Axis::continuous_with_id(
-            AxisId::new(),
-            "opsz".to_string(),
-            "Optical size".to_string(),
-            8.0,
-            12.0,
-            72.0,
-        );
-        optical.set_role(AxisRole::Internal);
-        let axes = vec![weight.clone(), width.clone(), optical.clone()];
-
-        let independent = AxisMapping::new(
-            "Weight curve".to_string(),
-            vec![weight.id()],
-            vec![weight.id()],
-            vec![
-                point(&[(weight.id(), 100.0)], &[(weight.id(), 100.0)]),
-                point(&[(weight.id(), 400.0)], &[(weight.id(), 400.0)]),
-                point(&[(weight.id(), 900.0)], &[(weight.id(), 800.0)]),
-            ],
-        );
-        let cross = AxisMapping::new(
-            "Optical compensation".to_string(),
-            vec![weight.id(), width.id()],
-            vec![optical.id()],
-            vec![point(
-                &[(weight.id(), 800.0), (width.id(), 125.0)],
-                &[(optical.id(), 72.0)],
-            )],
-        );
-
-        let external = external_location(&[
-            (weight.id(), 900.0),
-            (width.id(), 125.0),
-            (optical.id(), 40.0),
-        ]);
-        let mapped = map_location(&external, &axes, &[independent, cross]).unwrap();
-
-        assert!((mapped.get(&weight.id()).unwrap() - 800.0).abs() < 0.001);
-        assert!((mapped.get(&width.id()).unwrap() - 125.0).abs() < 0.001);
-        assert!((mapped.get(&optical.id()).unwrap() - 72.0).abs() < 0.001);
-    }
-
-    #[test]
-    fn design_normalization_uses_compiled_extrema_for_reversed_and_nonmonotonic_mappings() {
-        for (points, minimum, default, maximum) in [
-            (
-                vec![(100.0, 900.0), (400.0, 400.0), (900.0, 100.0)],
-                100.0,
-                400.0,
-                900.0,
-            ),
-            (
-                vec![(100.0, 30.0), (400.0, 86.0), (700.0, 180.0), (900.0, 160.0)],
-                30.0,
-                86.0,
-                180.0,
-            ),
-        ] {
-            let mut font = Font::empty();
-            let axis = Axis::weight();
-            font.add_axis(axis.clone()).unwrap();
-            font.set_axis_mappings(vec![AxisMapping::new(
-                "Weight mapping".to_string(),
-                vec![axis.id()],
-                vec![axis.id()],
-                points
-                    .into_iter()
-                    .map(|(input, output)| point(&[(axis.id(), input)], &[(axis.id(), output)]))
-                    .collect(),
-            )])
-            .unwrap();
-            let normalization = font.design_normalization().unwrap();
-            let range = normalization[0].range;
-            assert!((range.minimum - minimum).abs() < 1e-9);
-            assert!((range.default - default).abs() < 1e-9);
-            assert!((range.maximum - maximum).abs() < 1e-9);
-            assert!((normalization[0].normalize(minimum) + 1.0).abs() < 1e-9);
-            assert!(normalization[0].normalize(default).abs() < 1e-9);
-            assert!((normalization[0].normalize(maximum) - 1.0).abs() < 1e-9);
-        }
-    }
-
-    #[test]
-    fn design_normalization_keeps_unmapped_and_internal_axis_bounds() {
-        let mut font = Font::empty();
-        let weight = Axis::weight();
-        let mut width = Axis::width();
-        width.set_role(AxisRole::Internal);
-        font.add_axis(weight.clone()).unwrap();
-        font.add_axis(width.clone()).unwrap();
-        let normalization = font.design_normalization().unwrap();
-        for (axis, normalization) in [weight, width].iter().zip(normalization) {
-            assert_eq!(normalization.axis_id, axis.id());
-            assert_eq!(normalization.range, axis.kind().range());
-        }
-    }
-
-    #[test]
-    fn one_sided_axes_merge_equivalent_normalized_mapping_points() {
-        let axis = Axis::with_id(
-            AxisId::from_raw("one-sided"),
-            "wght".to_string(),
-            "Weight".to_string(),
-            300.0,
-            300.0,
-            800.0,
-        );
-        let mapping = AxisMapping::new(
-            "Weight curve".to_string(),
-            vec![axis.id()],
-            vec![axis.id()],
-            vec![
-                point(&[(axis.id(), 300.0)], &[(axis.id(), 300.0)]),
-                point(&[(axis.id(), 300.0)], &[(axis.id(), 300.0)]),
-                point(&[(axis.id(), 800.0)], &[(axis.id(), 800.0)]),
-            ],
-        );
-
-        let basis = AxisMappingBasis::try_from((&mapping, [axis].as_slice())).unwrap();
-
-        assert_eq!(basis.basis().deltas().len(), 2);
-    }
-
-    #[test]
-    fn unmapping_recovers_the_external_controls_a_mapping_took() {
-        let weight = Axis::weight();
-        let width = Axis::width();
-        let mut optical = Axis::continuous_with_id(
-            AxisId::new(),
-            "opsz".to_string(),
-            "Optical size".to_string(),
-            8.0,
-            12.0,
-            72.0,
-        );
-        optical.set_role(AxisRole::Internal);
-        let axes = vec![weight.clone(), width.clone(), optical.clone()];
-        let mappings = [
-            AxisMapping::new(
-                "Weight curve".to_string(),
-                vec![weight.id()],
-                vec![weight.id()],
-                vec![
-                    point(&[(weight.id(), 100.0)], &[(weight.id(), 100.0)]),
-                    point(&[(weight.id(), 400.0)], &[(weight.id(), 400.0)]),
-                    point(&[(weight.id(), 700.0)], &[(weight.id(), 520.0)]),
-                    point(&[(weight.id(), 900.0)], &[(weight.id(), 800.0)]),
-                ],
-            ),
-            AxisMapping::new(
-                "Optical compensation".to_string(),
-                vec![weight.id(), width.id()],
-                vec![optical.id()],
-                vec![point(
-                    &[(weight.id(), 800.0), (width.id(), 125.0)],
-                    &[(optical.id(), 72.0)],
-                )],
-            ),
-        ];
-        let bases: Vec<AxisMappingBasis> = mappings
-            .iter()
-            .map(|mapping| AxisMappingBasis::try_from((mapping, axes.as_slice())).unwrap())
-            .collect();
-
-        for (controlled_weight, controlled_width) in [
-            (100.0, 75.0),
-            (250.0, 100.0),
-            (650.0, 110.0),
-            (900.0, 125.0),
-        ] {
-            let external = external_location(&[
-                (weight.id(), controlled_weight),
-                (width.id(), controlled_width),
-            ]);
-            let design = map_location_with_bases(&external, &axes, &bases).unwrap();
-
-            let recovered = unmap_location_with_bases(&design, &axes, &bases);
-
-            assert!((recovered.value_on(&weight) - controlled_weight).abs() < 1e-9);
-            assert!((recovered.value_on(&width) - controlled_width).abs() < 1e-9);
-            assert_eq!(recovered.get(&optical.id()), None);
-        }
-    }
-
-    #[test]
-    fn an_axis_no_mapping_outputs_keeps_its_design_value() {
-        let mut axis = Axis::discrete_with_id(
-            AxisId::from_raw("ital"),
-            "ital".to_string(),
-            "Italic".to_string(),
-            vec![0.0, 1.0],
-            0.0,
-        );
-        axis.set_role(AxisRole::External);
-        let design = DesignLocation::from([(axis.id(), 0.8)]);
-
-        let recovered = unmap_location_with_bases(&design, std::slice::from_ref(&axis), &[]);
-
-        assert_eq!(recovered.get(&axis.id()), Some(0.8));
-    }
-
-    #[test]
-    fn external_locations_cannot_set_internal_axes_directly() {
-        let mut optical = Axis::continuous_with_id(
-            AxisId::new(),
-            "opsz".to_string(),
-            "Optical size".to_string(),
-            8.0,
-            12.0,
-            72.0,
-        );
-        optical.set_role(AxisRole::Internal);
-        let external = external_location(&[(optical.id(), 40.0)]);
-
-        let mapped = map_location(&external, &[optical.clone()], &[]).unwrap();
-
-        assert_eq!(mapped.get(&optical.id()), Some(12.0));
-    }
-
-    fn point(input: &[(AxisId, f64)], output: &[(AxisId, f64)]) -> AxisMappingPoint {
-        AxisMappingPoint {
-            description: None,
-            input: location(input),
-            output: location(output),
-        }
-    }
-
-    fn external_location(values: &[(AxisId, f64)]) -> ExternalLocation {
-        ExternalLocation::from_untyped(location(values))
-    }
-
-    fn location(values: &[(AxisId, f64)]) -> Location {
-        let location: Location = values
-            .iter()
-            .map(|(axis_id, value)| (*axis_id, *value))
-            .collect();
-        location
-    }
-}
+mod tests;

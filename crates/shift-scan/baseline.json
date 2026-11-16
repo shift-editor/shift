@@ -1,6 +1,6 @@
 {
   "collect-turbofish": {
-    "shift-backends": { "src": 14, "tests": 0 },
+    "shift-backends": { "src": 13, "tests": 0 },
     "shift-bridge": { "src": 2, "tests": 0 }
   },
   "crate-header": {
@@ -43,7 +43,7 @@
   "field-copy-conversion": {
     "shift-bridge": { "src": 8, "tests": 0 },
     "shift-cli": { "src": 1, "tests": 0 },
-    "shift-font": { "src": 2, "tests": 0 }
+    "shift-font": { "src": 1, "tests": 0 }
   },
   "generic-suffix": {
     "shift-bridge": { "src": 7, "tests": 0 },
@@ -175,7 +175,7 @@
     "shift-workspace": { "src": 0, "tests": 13 }
   },
   "stringly-error": {
-    "shift-backends": { "src": 50, "tests": 0 },
+    "shift-backends": { "src": 49, "tests": 0 },
     "shift-bridge": { "src": 8, "tests": 0 },
     "shift-font": { "src": 14, "tests": 0 },
     "shift-scan": { "src": 6, "tests": 0 },

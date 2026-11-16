@@ -32,7 +32,7 @@ engine-protocol = [
 ]
 
 [dependencies]
-fontir = "1.0.0"
+fontir = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 pack = { workspace = true }
 shift-font = { workspace = true, features = ["pack"] }
