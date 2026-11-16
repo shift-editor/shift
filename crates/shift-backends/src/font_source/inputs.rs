@@ -1,8 +1,9 @@
 use shift_slug::length::OrOverflow;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
+use kurbo::{BezPath, ParamCurve, PathSeg};
 use rayon::prelude::*;
-use shift_font::{AxisRange, Transform};
+use shift_font::{AxisRange, Transform, open_corners};
 use shift_slug::retained::{
     ExactVariant, GlyphInput, PageInput, ProjectedOutline, ProjectedPoint, ProjectedSegment,
 };
@@ -88,6 +89,26 @@ pub fn variable_glyph_inputs<S: FontSource + ?Sized>(
         }
     }
 
+    let erasable = projections
+        .values()
+        .map(|projection| {
+            let contours = projection.erasable_contours(&delta_weights, registry.regions())?;
+            Ok((projection.glyph, contours))
+        })
+        .collect::<Result<BTreeMap<_, _>, SourceAtlasError>>()?;
+    let flatten = |root: GlyphIndex, evaluation: ProjectionEvaluation<'_>| {
+        flatten_projection(
+            root,
+            &Projections {
+                projections: &projections,
+                delta_weights: &delta_weights,
+                regions: registry.regions(),
+                erasable: &erasable,
+            },
+            evaluation,
+        )
+    };
+
     let mut glyphs = Vec::with_capacity(roots.len());
     for (root, closure) in roots.iter().zip(&closures) {
         let Some(closure) = closure else {
@@ -112,24 +133,12 @@ pub fn variable_glyph_inputs<S: FontSource + ?Sized>(
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect::<Vec<_>>();
-        let base = flatten_projection(
-            *root,
-            &projections,
-            &delta_weights,
-            registry.regions(),
-            ProjectionEvaluation::Base,
-        )?;
+        let base = flatten(*root, ProjectionEvaluation::Base)?;
         let (shape, base_values) = base.shape_and_values();
         let samples = source_weights
             .iter()
             .map(|weight| {
-                let outline = flatten_projection(
-                    *root,
-                    &projections,
-                    &delta_weights,
-                    registry.regions(),
-                    ProjectionEvaluation::Region(*weight),
-                )?;
+                let outline = flatten(*root, ProjectionEvaluation::Region(*weight))?;
                 let (sample_shape, values) = outline.shape_and_values();
                 if sample_shape != shape {
                     return Err(invalid(
@@ -161,11 +170,8 @@ pub fn variable_glyph_inputs<S: FontSource + ?Sized>(
                     .enumerate()
                     .map(|(axis_index, (value, axis))| axis.normalize_design(*value, axis_index))
                     .collect::<Result<Vec<_>, _>>()?;
-                let outline = flatten_projection(
+                let outline = flatten(
                     *root,
-                    &projections,
-                    &delta_weights,
-                    registry.regions(),
                     ProjectionEvaluation::Source(exact_source, &normalized),
                 )?;
                 let (shape, values) = outline.shape_and_values();
@@ -298,25 +304,32 @@ fn atlas_region(
     Ok(AtlasRegion::new(axes))
 }
 
+/// What flattening a glyph reads: every projection of the page's glyphs, the
+/// weight each delta uploads to, the regions, and the contours of each glyph
+/// whose open corners erase alike at every evaluation.
+struct Projections<'a> {
+    projections: &'a BTreeMap<GlyphIndex, GlyphProjection>,
+    delta_weights: &'a BTreeMap<(GlyphIndex, usize), u32>,
+    regions: &'a [AtlasRegion],
+    erasable: &'a BTreeMap<GlyphIndex, BTreeSet<usize>>,
+}
+
 fn flatten_projection(
     root: GlyphIndex,
-    projections: &BTreeMap<GlyphIndex, GlyphProjection>,
-    delta_weights: &BTreeMap<(GlyphIndex, usize), u32>,
-    regions: &[AtlasRegion],
+    page: &Projections<'_>,
     evaluation: ProjectionEvaluation<'_>,
 ) -> Result<ProjectedOutline, SourceAtlasError> {
-    let projection = projections
+    let projection = page
+        .projections
         .get(&root)
         .ok_or_else(|| invalid("source atlas projection root is missing"))?;
-    let values = projection_values(projection, delta_weights, regions, evaluation)?;
+    let values = projection_values(projection, page.delta_weights, page.regions, evaluation)?;
     let advance = values[0];
     let mut segments = Vec::new();
     flatten_shape(
         projection,
         &values,
-        projections,
-        delta_weights,
-        regions,
+        page,
         evaluation,
         Transform::identity(),
         &mut HashSet::new(),
@@ -325,13 +338,10 @@ fn flatten_projection(
     Ok(ProjectedOutline { advance, segments })
 }
 
-#[allow(clippy::too_many_arguments)]
 fn flatten_shape(
     projection: &GlyphProjection,
     values: &[f64],
-    projections: &BTreeMap<GlyphIndex, GlyphProjection>,
-    delta_weights: &BTreeMap<(GlyphIndex, usize), u32>,
-    regions: &[AtlasRegion],
+    page: &Projections<'_>,
     evaluation: ProjectionEvaluation<'_>,
     transform: Transform,
     visiting: &mut HashSet<GlyphIndex>,
@@ -344,23 +354,42 @@ fn flatten_shape(
         .into());
     }
     let shape = selected_shape(projection, evaluation);
+    let erasable = page.erasable.get(&projection.glyph);
     let mut cursor = 1_usize;
-    for contour in &shape.contours {
+    for (contour_index, contour) in shape.contours.iter().enumerate() {
         let end = cursor.checked_add(contour.points.len() * 2).or_overflow()?;
         let coordinates = values
             .get(cursor..end)
             .ok_or_else(|| invalid("source atlas contour values are missing"))?;
-        let points = contour
-            .points
-            .iter()
-            .zip(coordinates.chunks_exact(2))
-            .map(|(point, values)| {
-                let kurbo::Point { x, y } =
-                    transform.transform_point(kurbo::Point::new(values[0], values[1]));
-                (point.kind, ProjectedPoint { x, y })
-            })
-            .collect::<Vec<_>>();
-        append_contour(&points, contour.closed, segments)?;
+        // An exact source's shape stands alone; elsewhere a contour erases only where it
+        // erases at every evaluation, so the samples keep the base's structure.
+        let erase = match evaluation {
+            ProjectionEvaluation::Source(..) => true,
+            ProjectionEvaluation::Base | ProjectionEvaluation::Region(_) => {
+                erasable.is_some_and(|contours| contours.contains(&contour_index))
+            }
+        };
+        let erased = if erase {
+            open_corners::erase_open_corners(&contour.bez_path(coordinates)?)
+        } else {
+            None
+        };
+        match erased {
+            Some(path) => append_path(&path, contour.closed, transform, segments),
+            None => {
+                let points = contour
+                    .points
+                    .iter()
+                    .zip(coordinates.chunks_exact(2))
+                    .map(|(point, values)| {
+                        let kurbo::Point { x, y } =
+                            transform.transform_point(kurbo::Point::new(values[0], values[1]));
+                        (point.kind, ProjectedPoint { x, y })
+                    })
+                    .collect::<Vec<_>>();
+                append_contour(&points, contour.closed, segments)?;
+            }
+        }
         cursor = end;
     }
     cursor = cursor.checked_add(shape.anchors.len() * 2).or_overflow()?;
@@ -370,16 +399,15 @@ fn flatten_shape(
             .and_then(|transform_values| transform_values.try_into().ok())
             .map(Transform::from_values)
             .ok_or_else(|| invalid("source atlas component transform is missing"))?;
-        let child = projections
+        let child = page
+            .projections
             .get(&component.glyph)
             .ok_or_else(|| invalid("source atlas component projection is missing"))?;
-        let child_values = projection_values(child, delta_weights, regions, evaluation)?;
+        let child_values = projection_values(child, page.delta_weights, page.regions, evaluation)?;
         flatten_shape(
             child,
             &child_values,
-            projections,
-            delta_weights,
-            regions,
+            page,
             evaluation,
             transform.compose(local),
             visiting,
@@ -392,6 +420,146 @@ fn flatten_shape(
     }
     visiting.remove(&projection.glyph);
     Ok(())
+}
+
+impl GlyphProjection {
+    /// The contours of the default shape whose open corners erase at the
+    /// base and at every region the glyph varies in, with the same structure
+    /// each time: `open_corners::erase_open_corners_in_masters`, as export
+    /// erases a glyph's masters.
+    fn erasable_contours(
+        &self,
+        delta_weights: &BTreeMap<(GlyphIndex, usize), u32>,
+        regions: &[AtlasRegion],
+    ) -> Result<BTreeSet<usize>, SourceAtlasError> {
+        let projection = self;
+        let deltas = projection
+            .variation
+            .as_ref()
+            .map_or(0, |variation| variation.deltas.len());
+        let evaluations = std::iter::once(ProjectionEvaluation::Base).chain(
+            (0..deltas)
+                .filter_map(|index| delta_weights.get(&(projection.glyph, index)))
+                .map(|weight| ProjectionEvaluation::Region(*weight)),
+        );
+        let authored = evaluations
+            .map(|evaluation| {
+                let values = projection_values(projection, delta_weights, regions, evaluation)?;
+                projection.fallback.contour_paths(&values)
+            })
+            .collect::<Result<Vec<_>, SourceAtlasError>>()?;
+        let mut erased = authored.clone();
+        open_corners::erase_open_corners_in_masters(&mut erased);
+        let (Some(authored), Some(erased)) = (authored.first(), erased.first()) else {
+            return Ok(BTreeSet::new());
+        };
+        let changed = authored
+            .iter()
+            .zip(erased)
+            .map(|(authored, erased)| authored != erased);
+        Ok(changed
+            .enumerate()
+            .filter_map(|(index, changed)| changed.then_some(index))
+            .collect())
+    }
+}
+
+impl GlyphShape {
+    /// Each contour as a path in its glyph's own coordinates.
+    fn contour_paths(&self, values: &[f64]) -> Result<Vec<BezPath>, SourceAtlasError> {
+        let mut cursor = 1_usize;
+        self.contours
+            .iter()
+            .map(|contour| {
+                let end = cursor.checked_add(contour.points.len() * 2).or_overflow()?;
+                let coordinates = values
+                    .get(cursor..end)
+                    .ok_or_else(|| invalid("source atlas contour values are missing"))?;
+                cursor = end;
+                contour.bez_path(coordinates)
+            })
+            .collect()
+    }
+}
+
+impl super::GlyphShapeContour {
+    /// The contour as a path in its glyph's own coordinates, segmented as the
+    /// atlas segments it.
+    fn bez_path(&self, coordinates: &[f64]) -> Result<BezPath, SourceAtlasError> {
+        let contour = self;
+        let points = contour
+            .points
+            .iter()
+            .zip(coordinates.chunks_exact(2))
+            .map(|(point, values)| {
+                let at = |index: usize| values.get(index).copied().unwrap_or_default();
+                (point.kind, ProjectedPoint { x: at(0), y: at(1) })
+            })
+            .collect::<Vec<_>>();
+        let mut segments = Vec::new();
+        append_contour(&points, contour.closed, &mut segments)?;
+        let point = |point: ProjectedPoint| kurbo::Point::new(point.x, point.y);
+        let mut path = BezPath::new();
+        for segment in &segments {
+            let (ProjectedSegment::Line([start, ..])
+            | ProjectedSegment::Quadratic([start, ..])
+            | ProjectedSegment::Cubic([start, ..])) = segment;
+            if path.elements().is_empty() {
+                path.move_to(point(*start));
+            }
+            match segment {
+                ProjectedSegment::Line([_, end]) => path.line_to(point(*end)),
+                ProjectedSegment::Quadratic([_, control, end]) => {
+                    path.quad_to(point(*control), point(*end));
+                }
+                ProjectedSegment::Cubic([_, first, second, end]) => {
+                    path.curve_to(point(*first), point(*second), point(*end));
+                }
+            }
+        }
+        if contour.closed && !segments.is_empty() {
+            path.close_path();
+        }
+        Ok(path)
+    }
+}
+
+/// Appends an erased contour's segments, placed by `transform`; an open
+/// contour gets the closing line `append_contour` gives it.
+fn append_path(
+    path: &BezPath,
+    closed: bool,
+    transform: Transform,
+    segments: &mut Vec<ProjectedSegment>,
+) {
+    let place = |point: kurbo::Point| {
+        let kurbo::Point { x, y } = transform.transform_point(point);
+        ProjectedPoint { x, y }
+    };
+    let mut first = None;
+    let mut last = None;
+    for segment in path.segments() {
+        let (start, end) = (segment.start(), segment.end());
+        first.get_or_insert(start);
+        last = Some(end);
+        segments.push(match segment {
+            PathSeg::Line(line) => ProjectedSegment::Line([place(line.p0), place(line.p1)]),
+            PathSeg::Quad(quad) => {
+                ProjectedSegment::Quadratic([place(quad.p0), place(quad.p1), place(quad.p2)])
+            }
+            PathSeg::Cubic(cubic) => ProjectedSegment::Cubic([
+                place(cubic.p0),
+                place(cubic.p1),
+                place(cubic.p2),
+                place(cubic.p3),
+            ]),
+        });
+    }
+    if let (false, Some(first), Some(last)) = (closed, first, last)
+        && first != last
+    {
+        segments.push(ProjectedSegment::Line([place(last), place(first)]));
+    }
 }
 
 fn selected_shape<'a>(
@@ -501,6 +669,71 @@ mod tests {
             &input,
             shift_slug::DEFAULT_BAND_COUNT,
         )?)
+    }
+
+    /// A one-glyph UFO whose `A` is glyphsLib's `hasCornerGlyph`, a triangle
+    /// whose apex is an open corner.
+    fn open_corner_ufo(directory: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+        let ufo = directory.join("OpenCorner.ufo");
+        std::fs::create_dir_all(ufo.join("glyphs"))?;
+        let plist = |body: &str| {
+            format!(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\">{body}</plist>\n"
+            )
+        };
+        std::fs::write(
+            ufo.join("metainfo.plist"),
+            plist(
+                "<dict><key>creator</key><string>test</string><key>formatVersion</key><integer>3</integer></dict>",
+            ),
+        )?;
+        std::fs::write(
+            ufo.join("fontinfo.plist"),
+            plist(
+                "<dict><key>familyName</key><string>Open Corner</string><key>unitsPerEm</key><integer>1000</integer></dict>",
+            ),
+        )?;
+        std::fs::write(
+            ufo.join("layercontents.plist"),
+            plist(
+                "<array><array><string>public.default</string><string>glyphs</string></array></array>",
+            ),
+        )?;
+        std::fs::write(
+            ufo.join("glyphs/contents.plist"),
+            plist("<dict><key>A</key><string>A_.glif</string></dict>"),
+        )?;
+        std::fs::write(
+            ufo.join("glyphs/A_.glif"),
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<glyph name="A" format="2">
+  <advance width="300"/>
+  <unicode hex="0041"/>
+  <outline>
+    <contour>
+      <point x="20" y="0" type="line"/>
+      <point x="179" y="0" type="line"/>
+      <point x="60" y="353" type="line"/>
+      <point x="198" y="360" type="line"/>
+    </contour>
+  </outline>
+</glyph>
+"#,
+        )?;
+        Ok(ufo)
+    }
+
+    #[test]
+    fn an_imported_open_corner_draws_erased_in_the_atlas() {
+        let directory = tempfile::tempdir().unwrap();
+        let font = UfoFont::open(&open_corner_ufo(directory.path()).unwrap()).unwrap();
+        let glyph = font.directory().glyphs[0].index;
+
+        let input = variable_glyph_inputs(&font, &[glyph]).unwrap();
+
+        // Four authored sides; the ear and its joining line are gone, leaving the triangle's three.
+        let (_, glyph) = &input.glyphs[0];
+        assert_eq!(glyph.shape.segments().len(), 3);
     }
 
     #[test]

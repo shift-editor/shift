@@ -33,7 +33,9 @@ import type {
 
 export const DEFAULT_ATLAS_CACHE_BYTE_BUDGET = 1024 * 1024 * 1024;
 
-const FORMAT = "shift.slug-atlas-cache.v1" as const;
+// Bump when the atlas a document builds changes for the same document revision, so caches of
+// the old build are rebuilt rather than read: v2 erases open corners.
+const FORMAT = "shift.slug-atlas-cache.v2" as const;
 const MAGIC = Buffer.from("SHATLAS2");
 const INDEX_CHECKSUM_BYTES = 32;
 const INDEX_CHECKSUM_OFFSET = MAGIC.byteLength + 4;

@@ -2,35 +2,14 @@
 //! Glyphs source, and only where every master can be erased alike.
 
 use shift_backends::FontExporter;
-use shift_font::test_support::sample_variable_font;
-use shift_font::{Contour, Font, PointType};
+use shift_font::test_support::{closed_contour, open_corner_contour, sample_variable_font};
+use shift_font::{Contour, Font};
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::prelude::{LocationRef, Size};
 use skrifa::{FontRef, MetadataProvider};
 
 /// A fixture step that fails with a reason instead of panicking.
 type Fixture<T> = Result<T, Box<dyn std::error::Error>>;
-
-/// glyphsLib's `hasCornerGlyph`: a triangle whose apex is an open corner,
-/// widened by `stretch`.
-fn open_corner_contour(stretch: f64) -> Contour {
-    let mut contour = Contour::new();
-    for (x, y) in [(20.0, 0.0), (179.0, 0.0), (60.0, 353.0), (198.0, 360.0)] {
-        contour.add_point(x * stretch, y, PointType::OnCurve, false);
-    }
-    contour.close();
-    contour
-}
-
-/// The same triangle with its corner closed by hand.
-fn closed_corner_contour() -> Contour {
-    let mut contour = Contour::new();
-    for (x, y) in [(20.0, 0.0), (179.0, 0.0), (114.5, 191.2)] {
-        contour.add_point(x, y, PointType::OnCurve, false);
-    }
-    contour.close();
-    contour
-}
 
 /// The sample font with `A` drawn as one contour per master, the default
 /// master first.
@@ -110,12 +89,9 @@ fn a_corner_open_in_every_master_compiles_erased() {
 fn a_corner_open_in_only_one_master_compiles_as_authored() {
     let points = compiled_points(|index| match index {
         0 => open_corner_contour(1.0),
-        _ => {
-            // Same point count as the open corner, so the masters stay compatible.
-            let mut contour = closed_corner_contour();
-            contour.add_point(20.0, 0.0, PointType::OnCurve, false);
-            contour
-        }
+        // The corner closed by hand, with as many points as the open one so the masters
+        // stay compatible.
+        _ => closed_contour(&[(20.0, 0.0), (179.0, 0.0), (114.5, 191.2), (20.0, 0.0)]),
     });
 
     assert_eq!(points, Ok(4));

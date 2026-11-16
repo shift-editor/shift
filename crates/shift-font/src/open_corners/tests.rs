@@ -1,27 +1,19 @@
 use kurbo::{BezPath, ParamCurve};
 
 use super::*;
+use crate::test_support::{closed_contour, open_corner_contour};
 
 /// glyphsLib's `hasCornerGlyph`: a triangle whose apex is an open corner.
 fn open_corner_triangle(stretch: f64) -> BezPath {
-    let mut path = BezPath::new();
-    path.move_to((20.0 * stretch, 0.0));
-    path.line_to((179.0 * stretch, 0.0));
-    path.line_to((60.0 * stretch, 353.0));
-    path.line_to((198.0 * stretch, 360.0));
-    path.line_to((20.0 * stretch, 0.0));
-    path.close_path();
-    path
+    BezPath::from(&open_corner_contour(stretch))
 }
 
 fn closed_triangle() -> BezPath {
-    let mut path = BezPath::new();
-    path.move_to((20.0, 0.0));
-    path.line_to((179.0, 0.0));
-    path.line_to((114.5, 191.2));
-    path.line_to((20.0, 0.0));
-    path.close_path();
-    path
+    BezPath::from(&closed_contour(&[
+        (20.0, 0.0),
+        (179.0, 0.0),
+        (114.5, 191.2),
+    ]))
 }
 
 #[test]
