@@ -21,6 +21,7 @@ use crate::{
 };
 
 mod component;
+mod open_corners;
 pub use component::{AuthoredWeightSet, add_authored_glyph_with_weight_sets};
 
 pub(crate) type AuthoredDefaultKey = (shift_font::GlyphId, Vec<u32>, u32);
@@ -776,6 +777,20 @@ pub(crate) fn add_resolved_sources_glyph(
     builder: &mut VariableAtlasBuilder,
     sources: &[(u32, &[ResolvedContour])],
 ) -> Result<GlyphIndex, AuthoredSlugError> {
+    // Open corners erase as export erases them, a contour in every source or in none.
+    let masters = sources
+        .iter()
+        .map(|(_, contours)| *contours)
+        .collect::<Vec<_>>();
+    let erased = open_corners::erased_masters(&masters);
+    let erased_sources = erased.as_ref().map(|erased| {
+        sources
+            .iter()
+            .zip(erased)
+            .map(|((weight_index, _), contours)| (*weight_index, contours.as_slice()))
+            .collect::<Vec<_>>()
+    });
+    let sources = erased_sources.as_deref().unwrap_or(sources);
     let ((base_weight_index, base), rest) = sources
         .split_first()
         .ok_or(AuthoredSlugError::MissingInterpolationSources)?;
@@ -880,8 +895,17 @@ fn add_default_projection_glyph(
                 actual: source_weight_indices.len(),
             });
         }
-        let topology = AuthoredCurveTopology::from_layer(projection.fallback());
-        let outline = topology.outline_of(topology.curves_from_layer(projection.fallback())?)?;
+        let authored = open_corners::resolved(projection.fallback().contours_iter());
+        let outline = match open_corners::erased_masters(&[&authored]) {
+            Some(erased) => {
+                let contours = erased.first().map_or(authored.as_slice(), Vec::as_slice);
+                CurveTopology::from_contours(contours).outline_from_contours(contours)?
+            }
+            None => {
+                let topology = AuthoredCurveTopology::from_layer(projection.fallback());
+                topology.outline_of(topology.curves_from_layer(projection.fallback())?)?
+            }
+        };
         let advance = authored_advance(projection.fallback().width(), 0)?;
         let glyph_index = builder.add_outline_glyph(outline, constant_weight_index, [])?;
         builder.set_glyph_source_advances(glyph_index, [advance])?;
@@ -910,6 +934,26 @@ fn add_default_projection_glyph(
         layer.apply_interpolation_values(source.values())?;
         source_advances.push(authored_advance(layer.width(), source_index)?);
         source_layers.push((*weight_index, layer));
+    }
+
+    let authored = source_layers
+        .iter()
+        .map(|(_, layer)| open_corners::resolved(layer.contours_iter()))
+        .collect::<Vec<_>>();
+    let masters = authored.iter().map(Vec::as_slice).collect::<Vec<_>>();
+    if open_corners::erased_masters(&masters).is_some() {
+        // Contours that erase lose their point ids, so the layers' id-checked topology
+        // can't describe them; build from the contour sets, which erase there.
+        let resolved_sources = source_layers
+            .iter()
+            .zip(&masters)
+            .map(|((weight_index, _), contours)| (*weight_index, *contours))
+            .collect::<Vec<_>>();
+        let glyph_index = add_resolved_sources_glyph(builder, &resolved_sources)?;
+        builder.set_glyph_source_advances(glyph_index, source_advances)?;
+        defaults.insert(key.clone(), glyph_index);
+        inserted_defaults.push(key);
+        return Ok(glyph_index);
     }
 
     let topology = AuthoredCurveTopology::from_compatible_layers(

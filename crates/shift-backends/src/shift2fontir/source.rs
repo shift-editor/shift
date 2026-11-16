@@ -249,8 +249,10 @@ impl Source for ShiftIrSource {
         Ok(Box::new(ColorGlyphsWork))
     }
 
-    /// Propagates component anchors into composites, as fontc does for Glyphs sources.
+    /// Propagates component anchors into composites and erases open corners,
+    /// as fontc does for Glyphs sources. fontc's frontends erase in their own
+    /// path building, so `GlyphWork` erases; the flag records that it did.
     fn compilation_flags(&self) -> Flags {
-        Flags::PROPAGATE_ANCHORS
+        Flags::PROPAGATE_ANCHORS | Flags::ERASE_OPEN_CORNERS
     }
 }

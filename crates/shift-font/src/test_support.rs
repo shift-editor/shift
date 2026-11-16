@@ -28,6 +28,18 @@ pub fn closed_contour(points: &[(f64, f64)]) -> Contour {
     contour
 }
 
+/// glyphsLib's `hasCornerGlyph`, a triangle whose apex is an open corner,
+/// widened by `stretch`. Its edges cross at (114.5417 × `stretch`, 191.2080),
+/// where fontc erases the corner.
+pub fn open_corner_contour(stretch: f64) -> Contour {
+    closed_contour(&[
+        (20.0 * stretch, 0.0),
+        (179.0 * stretch, 0.0),
+        (60.0 * stretch, 353.0),
+        (198.0 * stretch, 360.0),
+    ])
+}
+
 /// A closed contour of on-curve points: `contour![(0, 0), (40, 0), (40, 700)]`.
 #[macro_export]
 macro_rules! contour {

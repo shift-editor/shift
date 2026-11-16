@@ -48,6 +48,7 @@ crates/shift-font/src/
   composite.rs     -- component occurrences, anchor-aligned placement, and flattening
   anchor_attachment.rs  -- which components follow their anchors after an edit, and where to
   anchor_propagation.rs -- fontc's anchor propagation into composites, over plain data
+  open_corners.rs  -- open corners erased as fontc erases them (`fontir::ir::erase_open_corners`), per contour for the canvas fill and across a glyph's masters for export
   positioning.rs   -- the generated features (kern, mark, mkmk, curs) applied to shaped runs over the live font
   drag_rules.rs    -- point-neighbourhood drag rules (handles follow anchors, smooth points stay smooth): pattern table, matching once per drag, positions per frame
   check.rs         -- read-only font checks: findings, codes, severities, options

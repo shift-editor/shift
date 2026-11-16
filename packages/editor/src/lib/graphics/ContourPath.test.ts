@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Mat } from "@shift/geo";
-import { Contour, Point, segmentContour } from "@shift/glyph-state";
+import { Contour, Point, erasedOutline, segmentContour } from "@shift/glyph-state";
 import { asContourId, asPointId } from "@shift/types";
 import { ContourPath } from "./ContourPath";
 
@@ -92,5 +92,35 @@ describe("contour path output", () => {
 
     expect(path.svgPath).toBe("M 12 -7 L 12 -7 Z");
     expect(contour.bounds).toEqual({ min: { x: 12, y: -7 }, max: { x: 12, y: -7 } });
+  });
+
+  it("draws an open corner erased at the crossing, placed after erasing", () => {
+    // glyphsLib's `hasCornerGlyph`: the apex is an open corner whose edges cross near (114.5, 191.2).
+    const points = [
+      Point.onCurve({ x: 20, y: 0 }),
+      Point.onCurve({ x: 179, y: 0 }),
+      Point.onCurve({ x: 60, y: 353 }),
+      Point.onCurve({ x: 198, y: 360 }),
+    ];
+    const outline = erasedOutline({ points, closed: true });
+    if (!outline) throw new Error("expected the open corner to be erased");
+
+    const path = ContourPath.fromOutline(outline, Mat.Translate(10, 0));
+
+    expect(path.commands).toHaveLength(5);
+    const corner = path.commands[2]!;
+    if (corner.type !== "lineTo") throw new Error(`expected a line, got ${corner.type}`);
+    expect(corner.x).toBeCloseTo(124.5417, 3);
+    expect(corner.y).toBeCloseTo(191.208, 3);
+  });
+
+  it("leaves a contour without open corners to its own path", () => {
+    const points = [
+      Point.onCurve({ x: 20, y: 0 }),
+      Point.onCurve({ x: 179, y: 0 }),
+      Point.onCurve({ x: 114, y: 191 }),
+    ];
+
+    expect(erasedOutline({ points, closed: true })).toBeNull();
   });
 });
