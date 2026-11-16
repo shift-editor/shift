@@ -50,7 +50,6 @@ import type { PropagatedAnchors, PropagationAnchor } from "@shift/wasm/protocol"
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import type { WeightedSource } from "../../types/glyphRender";
 import {
-  asDesignAxisLocation,
   designAxisLocationFromLocation,
   designAxisLocationsEqual,
   externalAxisLocationsEqual,
@@ -2802,14 +2801,14 @@ export class Glyph {
    * @returns `parent` itself when the component sets no axis and follows this glyph.
    */
   #baseLocation(parent: ExternalAxisLocation, component: Component): ExternalAxisLocation {
-    const location = component.location;
-    const inheritsFont = component.inheritance === "font";
-    if (location.size === 0 && !inheritsFont) return parent;
+    // A component that sets nothing and follows this glyph has nothing to ask.
+    if (component.location.size === 0 && component.inheritance === "parent") return parent;
 
-    const start = inheritsFont ? this.#designspace.defaultLocation() : parent;
-    const design = new Map(this.#designspace.toDesign(start));
-    for (const [axisId, value] of location) design.set(axisId, value);
-    const moved = this.#designspace.toExternal(asDesignAxisLocation(design));
+    const moved = this.#designspace.componentBaseLocation(
+      parent,
+      component.location,
+      component.inheritance,
+    );
     return externalAxisLocationsEqual(moved, parent) ? parent : moved;
   }
 

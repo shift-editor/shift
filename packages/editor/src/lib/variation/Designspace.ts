@@ -2,6 +2,7 @@ import type {
   AxisId,
   AxisMappingBasis,
   Axis as AxisRecord,
+  ComponentInheritance,
   InterpolationBasis,
   Source,
   SourceId,
@@ -137,6 +138,23 @@ export class Designspace {
   toExternal(location: DesignAxisLocation): ExternalAxisLocation {
     if (this.axes.length === 0) return emptyExternalAxisLocation();
     return this.#mapping().toExternal(location);
+  }
+
+  /**
+   * Where a component's base glyph draws when the glyph it sits in draws at
+   * `parent`, as the engine resolves it: the axes the component sets, in
+   * design units, laid over `parent` or, for `font` inheritance, over the
+   * font's default location. The empty location in a font without axes.
+   *
+   * @throws When the font has axes and its engine is not open.
+   */
+  componentBaseLocation(
+    parent: ExternalAxisLocation,
+    set: ReadonlyMap<AxisId, number>,
+    inheritance: ComponentInheritance,
+  ): ExternalAxisLocation {
+    if (this.axes.length === 0) return emptyExternalAxisLocation();
+    return this.#mapping().componentBaseLocation(parent, set, inheritance);
   }
 
   /**

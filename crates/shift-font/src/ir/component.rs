@@ -34,6 +34,25 @@ pub enum ComponentInheritance {
     Font,
 }
 
+impl ComponentInheritance {
+    /// The location a base glyph draws at when its component sets `set` and
+    /// the glyph the component is placed in draws at `parent`: `parent`, or
+    /// `font_default` for [`Self::Font`], with `set` laid over it.
+    pub fn base_location(
+        self,
+        set: &DesignLocation,
+        parent: &DesignLocation,
+        font_default: &DesignLocation,
+    ) -> DesignLocation {
+        let mut location = match self {
+            Self::Parent => parent.clone(),
+            Self::Font => font_default.clone(),
+        };
+        location.extend(set.iter().map(|(axis, value)| (*axis, *value)));
+        location
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Component {
@@ -516,12 +535,8 @@ impl Component {
         parent: &DesignLocation,
         font_default: &DesignLocation,
     ) -> DesignLocation {
-        let mut location = match self.inheritance {
-            ComponentInheritance::Parent => parent.clone(),
-            ComponentInheritance::Font => font_default.clone(),
-        };
-        location.extend(self.location.iter().map(|(axis, value)| (*axis, *value)));
-        location
+        self.inheritance
+            .base_location(&self.location, parent, font_default)
     }
 
     pub fn translate(&mut self, dx: f64, dy: f64) {

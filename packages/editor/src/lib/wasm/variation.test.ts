@@ -31,6 +31,7 @@ const released: EngineVariation = {
   sourceSetWeights: () => ({ weights: new Float64Array(), starts: [] }),
   designLocation: () => [],
   externalLocation: () => [],
+  componentBaseLocation: () => [],
   variationNumber: () => 0,
   variationAt: () => [],
 };

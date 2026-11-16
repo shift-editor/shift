@@ -29,9 +29,9 @@ use shift_engine::scene::{RevisedNode, SceneNode, TextRun};
 use shift_font::glyph_identity::GlyphIdentityChange;
 use shift_font::linked_metrics::SideLink;
 use shift_font::{
-    AnchorId, Axis, ComponentId, Counterparts, CounterpartsError, FontChangeFlag, GlyphId,
-    GlyphRecords, LayerId, MetricValue, MissingKerningOrigin, NodeId, PointId, ResolvedKerning,
-    Source, SourceId,
+    AnchorId, Axis, ComponentId, ComponentInheritance, Counterparts, CounterpartsError,
+    FontChangeFlag, GlyphId, GlyphRecords, LayerId, MetricValue, MissingKerningOrigin, NodeId,
+    PointId, ResolvedKerning, Source, SourceId,
 };
 use shift_text::layout::{LayoutError, TextLayout};
 
@@ -243,6 +243,17 @@ pub trait EngineReads {
     /// The external location a design location's mapping came from, NaN on
     /// internal axes: `unmap_location_with_bases`.
     fn external_location(&self, design: Vec<f64>) -> Vec<f64>;
+    /// Where a component's base glyph draws, as an external location, when
+    /// the glyph it is placed in draws at the external location `parent` and
+    /// the component sets `set` (design units, NaN on an axis it doesn't
+    /// set): `ComponentInheritance::base_location` between the font's axis
+    /// mappings; NaN on internal axes.
+    fn component_base_location(
+        &self,
+        parent: Vec<f64>,
+        set: Vec<f64>,
+        inheritance: ComponentInheritance,
+    ) -> Vec<f64>;
     /// The `target` layer's ids for `points`, `anchors` and `components` in
     /// `reference`, each in the order given, as `Font::counterparts` pairs
     /// them, unsaved edits included; null when the layers don't match
@@ -466,12 +477,12 @@ mod exports {
     use wasm_bindgen::prelude::*;
 
     use super::{
-        AnchorId, Axis, CompiledVariationError, ComponentId, Counterparts, CounterpartsReadError,
-        EditablePair, EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag,
-        FontFeature, FontHeader, FontRecordsError, GlyphIdentityChange, GlyphSnapshot,
-        InterpolatedMetrics, KerningSnapshot, LayerId, LayoutError, NodeId, PageLayout,
-        PageLayoutError, PageLayoutRequest, PlacedText, PointId, RevisedNode, SceneNode, Source,
-        SourceSetWeights, TextLayoutRequest, engine_reads_request,
+        AnchorId, Axis, CompiledVariationError, ComponentId, ComponentInheritance, Counterparts,
+        CounterpartsReadError, EditablePair, EngineReads, FeatureListError, FeatureSubstitution,
+        FontChangeFlag, FontFeature, FontHeader, FontRecordsError, GlyphIdentityChange,
+        GlyphSnapshot, InterpolatedMetrics, KerningSnapshot, LayerId, LayoutError, NodeId,
+        PageLayout, PageLayoutError, PageLayoutRequest, PlacedText, PointId, RevisedNode,
+        SceneNode, Source, SourceSetWeights, TextLayoutRequest, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::page_layout::{PlaceKey, RunLayouts, lay_out_page};
@@ -1013,6 +1024,25 @@ mod exports {
         fn external_location(&self, design: Vec<f64>) -> Vec<f64> {
             let font = self.session.font();
             external_values(font.axes(), &self.variation().mappings, &design)
+        }
+
+        fn component_base_location(
+            &self,
+            parent: Vec<f64>,
+            set: Vec<f64>,
+            inheritance: ComponentInheritance,
+        ) -> Vec<f64> {
+            let font = self.session.font();
+            let axes = font.axes();
+            let mappings = &self.variation().mappings;
+            let parent = design_location(font, &design_values(axes, mappings, &parent));
+            // An empty location is the font's default location, as native projection reads it.
+            let base = inheritance.base_location(
+                &design_location(font, &set),
+                &parent,
+                &DesignLocation::new(),
+            );
+            external_values(axes, mappings, &base.as_untyped().values_in(axes))
         }
 
         fn scene_pages(&self) -> Vec<SceneNode> {
@@ -1608,6 +1638,33 @@ mod exports {
             });
 
             assert_close(&recovered[..2], &external[..2]);
+        }
+
+        #[test]
+        fn lays_a_components_axes_over_its_parent_or_the_font_default_between_mappings() {
+            let axes = axes();
+            let session = Session::mapped(vec![weight_curve()]);
+            // External weight 900 is design 800; width is unmapped.
+            let parent = values(&axes, &[("axis_weight", 900.0), ("axis_width", 125.0)]);
+            let sets_weight = values(&axes, &[("axis_weight", 400.0)]);
+            let sets_nothing = values(&axes, &[]);
+
+            let [follows, overrides, resets, resets_and_sets] = session.read(|engine| {
+                [
+                    (sets_nothing.clone(), ComponentInheritance::Parent),
+                    (sets_weight.clone(), ComponentInheritance::Parent),
+                    (sets_nothing.clone(), ComponentInheritance::Font),
+                    (sets_weight.clone(), ComponentInheritance::Font),
+                ]
+                .map(|(set, inheritance)| {
+                    engine.component_base_location(parent.clone(), set, inheritance)
+                })
+            });
+
+            assert_close(&follows[..2], &[900.0, 125.0]);
+            assert_close(&overrides[..2], &[400.0, 125.0]);
+            assert_close(&resets[..2], &[400.0, 100.0]);
+            assert_close(&resets_and_sets[..2], &[400.0, 100.0]);
         }
 
         #[test]
