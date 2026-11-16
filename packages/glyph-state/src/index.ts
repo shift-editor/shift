@@ -2,7 +2,11 @@ export { Anchor, type AnchorHit } from "./Anchor";
 export { Component, type ComponentLocation, type Matrix } from "./Component";
 export { Contour } from "./Contour";
 export { IdIndex } from "./IdIndex";
-export { decomposedTransformValues, readDecomposedTransform } from "./valueLayout";
+export {
+  componentLocationsValueOffset,
+  decomposedTransformValues,
+  readDecomposedTransform,
+} from "./valueLayout";
 export { Point, type NewPoint, type PointHit, type PointWithNeighbors } from "./Point";
 export type { ContourGeometry, SegmentedContour } from "./types/contour";
 export {

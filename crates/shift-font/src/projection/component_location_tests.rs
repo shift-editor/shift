@@ -154,25 +154,124 @@ fn an_exact_layer_resolves_its_components_where_they_draw() {
     assert_eq!(resolved.components()[1].outline()[0].points[0].x(), 0.0);
 }
 
+impl Bleed {
+    /// Sets `H`'s second `dot` on the Regular master alone, through the intent.
+    fn set_on_regular(&mut self, location: DesignLocation, inheritance: ComponentInheritance) {
+        let layer_id = self.layer(self.regular);
+        let component_id = self
+            .font
+            .layer(layer_id)
+            .and_then(|layer| layer.components_iter().nth(1))
+            .map(Component::id)
+            .unwrap();
+        self.font
+            .apply_intents(&crate::FontIntentSet::from(crate::SetComponentLocations {
+                layer_id,
+                component_ids: vec![component_id],
+                locations: vec![location],
+                inheritances: vec![inheritance],
+            }))
+            .unwrap();
+    }
+
+    /// The second `dot`'s stored location and inheritance on each master.
+    fn second_dots(&self) -> Vec<(DesignLocation, ComponentInheritance)> {
+        [self.regular, self.bled]
+            .into_iter()
+            .map(|source| {
+                let layer = self.font.layer(self.layer(source)).unwrap();
+                let component = layer.components_iter().nth(1).unwrap();
+                (component.location().clone(), component.inheritance())
+            })
+            .collect()
+    }
+
+    fn interpolated_masters(&self) -> usize {
+        self.font
+            .glyph_interpolation(self.h)
+            .unwrap()
+            .map_or(0, |interpolation| interpolation.sources().len())
+    }
+}
+
 #[test]
-fn masters_that_set_different_axes_do_not_interpolate_together() {
-    // Only Regular overrides the second dot.
-    let bleed = bleed(|axis, master, component, index| {
-        if index == 1 && master == 0 {
-            component.set_location(DesignLocation::from([(axis, 100.0)]));
+fn an_axis_set_on_one_master_is_stored_there_only_and_the_glyph_still_interpolates() {
+    let mut bleed = bleed(|_, _, _, _| {});
+
+    bleed.set_on_regular(
+        DesignLocation::from([(bleed.axis, 0.0)]),
+        ComponentInheritance::Parent,
+    );
+
+    assert_eq!(
+        bleed.second_dots(),
+        vec![
+            (
+                DesignLocation::from([(bleed.axis, 0.0)]),
+                ComponentInheritance::Parent
+            ),
+            (DesignLocation::new(), ComponentInheritance::Parent),
+        ]
+    );
+    assert_eq!(bleed.interpolated_masters(), 2);
+    // Bled draws its dot where it inherits it, Bleed 100, so halfway the
+    // second dot blends 0 and 100: Bleed 50.
+    assert_eq!(bleed.dots_at(50.0), vec![10.0, 10.0]);
+}
+
+#[test]
+fn a_master_without_the_axis_blends_from_where_it_inherits_it() {
+    let mut bleed = bleed(|_, _, _, _| {});
+
+    bleed.set_on_regular(
+        DesignLocation::from([(bleed.axis, 100.0)]),
+        ComponentInheritance::Parent,
+    );
+
+    assert_eq!(bleed.interpolated_masters(), 2);
+    assert_eq!(bleed.dots_at(0.0), vec![0.0, 20.0]);
+    assert_eq!(bleed.dots_at(50.0), vec![10.0, 20.0]);
+    assert_eq!(bleed.dots_at(100.0), vec![20.0, 20.0]);
+}
+
+#[test]
+fn resetting_an_axis_on_one_master_keeps_the_others_values() {
+    let mut bleed = bleed(|axis, master, component, index| {
+        if index == 1 {
+            let value = if master == 0 { 100.0 } else { 40.0 };
+            component.set_location(DesignLocation::from([(axis, value)]));
         }
     });
-    let glyph = bleed.font.glyph(bleed.h).unwrap();
-    let regular = glyph.layer_for_source(bleed.regular).unwrap();
-    let bled = glyph.layer_for_source(bleed.bled).unwrap();
 
-    let matched = regular.match_with(bled);
+    bleed.set_on_regular(DesignLocation::new(), ComponentInheritance::Parent);
 
-    assert!(!matched.is_complete());
     assert_eq!(
-        matched.differences(),
-        &[crate::LayerDifference::ComponentLocation { component: 1 }]
+        bleed.second_dots(),
+        vec![
+            (DesignLocation::new(), ComponentInheritance::Parent),
+            (
+                DesignLocation::from([(bleed.axis, 40.0)]),
+                ComponentInheritance::Parent
+            ),
+        ]
     );
-    let interpolation = bleed.font.glyph_interpolation(bleed.h).unwrap().unwrap();
-    assert_eq!(interpolation.sources().len(), 1);
+    // Regular now inherits Bleed 0; halfway the second dot blends 0 and 40.
+    assert_eq!(bleed.dots_at(50.0), vec![10.0, 4.0]);
+}
+
+#[test]
+fn masters_whose_components_inherit_differently_still_interpolate() {
+    // Regular's second dot follows H; Bled's uses the font's location.
+    let bleed = bleed(|_, master, component, index| {
+        if index == 1 && master == 1 {
+            component.set_inheritance(ComponentInheritance::Font);
+        }
+    });
+
+    assert_eq!(bleed.interpolated_masters(), 2);
+    assert_eq!(bleed.dots_at(0.0), vec![0.0, 0.0]);
+    // Bled's dot draws at the font's default, Bleed 0, and Regular's at its
+    // own Bleed 0, so the second dot stays at Bleed 0 all the way.
+    assert_eq!(bleed.dots_at(50.0), vec![10.0, 0.0]);
+    assert_eq!(bleed.dots_at(100.0), vec![20.0, 0.0]);
 }

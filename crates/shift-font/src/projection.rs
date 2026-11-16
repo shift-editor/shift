@@ -265,10 +265,11 @@ impl Font {
             return Ok(None);
         };
         let interpolation = self.glyph_interpolation_with_bases(glyph_id, interpolation_bases)?;
+        // The interpolation's reference, with its components' locations
+        // filled in as interpolation reads them.
         let fallback = interpolation
             .as_ref()
-            .and_then(|interpolation| glyph.layers().get(&interpolation.reference_layer().id()))
-            .cloned()
+            .map(|interpolation| Arc::clone(interpolation.shared_reference_layer()))
             .or_else(|| self.fallback_layer(glyph).cloned());
         let Some(fallback) = fallback else {
             return Ok(None);
