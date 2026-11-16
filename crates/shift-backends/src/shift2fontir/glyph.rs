@@ -7,7 +7,7 @@ use fontir::error::Error;
 use fontir::ir::{AnchorBuilder, Component, ComponentTransform, GlyphBuilder, GlyphInstance};
 use fontir::orchestration::{Context, WorkId};
 use kurbo::{Affine, BezPath};
-use shift_font::{Glyph, GlyphLayer};
+use shift_font::{Glyph, GlyphLayer, open_corners};
 
 use super::source::{ShiftSnapshot, located_master_layers};
 
@@ -76,6 +76,7 @@ impl Work<Context, WorkId, Error> for GlyphWork {
         let mut anchors = AnchorBuilder::new(self.glyph_name.clone());
 
         let masters = self.snapshot.glyph_masters(&metadata)?;
+        let mut sources = Vec::new();
         for (located, location) in located_master_layers(&self.glyph, &masters) {
             let layer = located.layer.as_ref();
             let mut instance = to_glyph_instance(layer);
@@ -83,13 +84,31 @@ impl Work<Context, WorkId, Error> for GlyphWork {
                 // Glyphs exports nonspacing marks with no advance.
                 instance.width = 0.0;
             }
-            builder.try_add_source(location, instance)?;
             add_anchors(&mut anchors, layer, location)?;
+            sources.push((location, instance));
+        }
+        erase_open_corners(&mut sources);
+        for (location, instance) in sources {
+            builder.try_add_source(location, instance)?;
         }
 
         context.anchors.set(anchors.build()?);
         context.glyphs.set(builder.build()?);
         Ok(())
+    }
+}
+
+/// Erases open corners in the glyph's masters, as fontc erases them for a
+/// Glyphs source, keeping a contour as authored in every master when erasing
+/// would leave the masters different: `shift_font::open_corners`.
+fn erase_open_corners(sources: &mut [(&NormalizedLocation, GlyphInstance)]) {
+    let mut contours: Vec<Vec<BezPath>> = sources
+        .iter_mut()
+        .map(|(_, instance)| std::mem::take(&mut instance.contours))
+        .collect();
+    open_corners::erase_open_corners_in_masters(&mut contours);
+    for ((_, instance), erased) in sources.iter_mut().zip(contours) {
+        instance.contours = erased;
     }
 }
 

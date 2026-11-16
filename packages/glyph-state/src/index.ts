@@ -10,6 +10,7 @@ export {
   type ContourSegment,
   type SegmentedContourGeometry,
 } from "./segmentContour";
+export { erasedOutline } from "./openCorners";
 export { filledContoursContain } from "./filledContoursContain";
 export {
   GlyphGeometry,

@@ -84,6 +84,8 @@ export interface EditorRenderTheme {
   variationOutline: { color: string; widthPx: number };
   /** Pre-gesture outline drawn under the live outline while a local edit is in progress. */
   editGhost: { color: string; widthPx: number };
+  /** A contour's own path where it has open corners, drawn under the erased outline. */
+  openCorner: { color: string; widthPx: number };
   readOnlyLock: { color: string };
   penReady: { fill: string; stroke: string; size: number; widthPx: number };
   debug: {
@@ -267,6 +269,7 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
   preview: { color: "#1886D7", widthPx: 1 },
   variationOutline: { color: "rgba(12, 146, 244, 0.45)", widthPx: 1 },
   editGhost: { color: "rgba(0, 0, 0, 0.12)", widthPx: 1 },
+  openCorner: { color: "rgba(0, 0, 0, 0.3)", widthPx: 1 },
   readOnlyLock: { color: "#171717" },
   penReady: { fill: "#ffffff", stroke: "#3b82f6", size: 3, widthPx: 2 },
   debug: {
@@ -452,6 +455,7 @@ export function readEditorRenderTheme(
     theme.variationOutline.color,
   );
   theme.editGhost.color = readColor("--editor-edit-ghost-color", theme.editGhost.color);
+  theme.openCorner.color = readColor("--editor-open-corner-color", theme.openCorner.color);
   theme.readOnlyLock.color = readColor("--editor-read-only-lock-color", theme.readOnlyLock.color);
   theme.penReady.fill = readColor("--editor-pen-ready-fill", theme.penReady.fill);
   theme.penReady.stroke = readColor("--editor-pen-ready-stroke", theme.penReady.stroke);

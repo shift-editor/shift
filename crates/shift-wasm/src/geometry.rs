@@ -1,8 +1,12 @@
-//! A contour's segments and bounds, and a component's placement as a
-//! matrix, as shift-font computes them.
+//! A contour's segments and bounds, its outline with open corners erased,
+//! and a component's placement as a matrix, as shift-font computes them.
 
 use pack::Pack;
-use shift_font::{DecomposedTransform, PointType, SegmentIndexIter, SegmentIndices, Transform};
+use shift_font::Contour;
+use shift_font::kurbo::{BezPath, PathEl};
+use shift_font::{
+    DecomposedTransform, PointType, SegmentIndexIter, SegmentIndices, Transform, open_corners,
+};
 use wasm_bindgen::prelude::wasm_bindgen;
 
 /// A contour's segments and bounds, and a component's placement, as
@@ -11,6 +15,10 @@ use wasm_bindgen::prelude::wasm_bindgen;
 pub trait Geometry {
     /// Segments one contour and bounds each segment and the whole contour.
     fn contour_geometry(&self, contour: ContourPoints) -> ContourGeometry;
+    /// The contour's outline with its outside open corners erased, as
+    /// export erases them: `open_corners::erase_open_corners`. Absent when
+    /// the contour has none.
+    fn erased_outline(&self, contour: ContourPoints) -> Option<Outline>;
     /// A component placement's matrix: `DecomposedTransform::to_matrix`.
     fn compose_transform(&self, transform: DecomposedTransform) -> Transform;
     /// The placement a matrix makes: `DecomposedTransform::from_matrix`.
@@ -23,6 +31,10 @@ pub struct GeometryRules;
 impl Geometry for GeometryRules {
     fn contour_geometry(&self, contour: ContourPoints) -> ContourGeometry {
         contour.geometry()
+    }
+
+    fn erased_outline(&self, contour: ContourPoints) -> Option<Outline> {
+        open_corners::erase_open_corners(&contour.path()).map(|path| Outline::from(&path))
     }
 
     fn compose_transform(&self, transform: DecomposedTransform) -> Transform {
@@ -92,7 +104,65 @@ pub struct ContourGeometry {
     pub bounds: Option<SegmentBounds>,
 }
 
+/// How one element of an [`Outline`] draws.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Pack)]
+pub enum PathVerb {
+    #[default]
+    MoveTo,
+    LineTo,
+    QuadTo,
+    CubicTo,
+    Close,
+}
+
+/// A path as parallel lists: each element's verb, and the coordinates of
+/// the points it ends with, as `x, y` pairs in order (one point for a move
+/// or line, two for a quad, three for a cubic, none for a close).
+#[derive(Clone, Debug, Default, PartialEq, Pack)]
+pub struct Outline {
+    pub verbs: Vec<PathVerb>,
+    pub coordinates: Vec<f64>,
+}
+
+impl From<&BezPath> for Outline {
+    fn from(path: &BezPath) -> Self {
+        let mut outline = Self::default();
+        for element in path.elements() {
+            let (verb, points) = match *element {
+                PathEl::MoveTo(p) => (PathVerb::MoveTo, vec![p]),
+                PathEl::LineTo(p) => (PathVerb::LineTo, vec![p]),
+                PathEl::QuadTo(c, p) => (PathVerb::QuadTo, vec![c, p]),
+                PathEl::CurveTo(c1, c2, p) => (PathVerb::CubicTo, vec![c1, c2, p]),
+                PathEl::ClosePath => (PathVerb::Close, Vec::new()),
+            };
+            outline.verbs.push(verb);
+            outline
+                .coordinates
+                .extend(points.into_iter().flat_map(|point| [point.x, point.y]));
+        }
+        outline
+    }
+}
+
 impl ContourPoints {
+    /// The contour as a path, as shift-font draws it: `From<&Contour> for BezPath`.
+    fn path(&self) -> BezPath {
+        let mut contour = Contour::new();
+        for (index, &kind) in self.point_types.iter().enumerate() {
+            let at = |offset: usize| self.coordinates.get(index * 2 + offset).copied();
+            contour.add_point(
+                at(0).unwrap_or_default(),
+                at(1).unwrap_or_default(),
+                kind,
+                false,
+            );
+        }
+        if self.closed {
+            contour.close();
+        }
+        BezPath::from(&contour)
+    }
+
     fn geometry(&self) -> ContourGeometry {
         let position = |index: usize| {
             let at = |offset: usize| self.coordinates.get(index * 2 + offset).copied();
@@ -198,6 +268,48 @@ mod tests {
         );
         assert_eq!(geometry.firsts, [0, 3, 5]);
         assert_eq!(geometry.segment_bounds.len(), 12);
+    }
+
+    fn contour_points(points: &[(f64, f64, PointType)], closed: bool) -> ContourPoints {
+        ContourPoints {
+            closed,
+            point_types: points.iter().map(|point| point.2).collect(),
+            coordinates: points.iter().flat_map(|point| [point.0, point.1]).collect(),
+        }
+    }
+
+    #[test]
+    fn an_open_corner_comes_back_erased_and_a_plain_contour_comes_back_absent() {
+        let corner = [
+            (20.0, 0.0, PointType::OnCurve),
+            (179.0, 0.0, PointType::OnCurve),
+            (60.0, 353.0, PointType::OnCurve),
+            (198.0, 360.0, PointType::OnCurve),
+        ];
+        let plain = [
+            (20.0, 0.0, PointType::OnCurve),
+            (179.0, 0.0, PointType::OnCurve),
+            (114.5, 191.2, PointType::OnCurve),
+        ];
+
+        let erased = GeometryRules
+            .erased_outline(contour_points(&corner, true))
+            .expect("an open corner");
+
+        assert_eq!(
+            erased.verbs,
+            [
+                PathVerb::MoveTo,
+                PathVerb::LineTo,
+                PathVerb::LineTo,
+                PathVerb::LineTo,
+                PathVerb::Close
+            ]
+        );
+        assert_eq!(
+            GeometryRules.erased_outline(contour_points(&plain, true)),
+            None
+        );
     }
 
     #[test]

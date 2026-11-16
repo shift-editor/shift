@@ -1,5 +1,5 @@
 import { Bounds, Mat, type Bounds as BoundsType, type MatModel } from "@shift/geo";
-import { Point, Segment, segmentContour } from "@shift/glyph-state";
+import { Point, Segment, erasedOutline, segmentContour } from "@shift/glyph-state";
 import type {
   ComponentGlyph as ComponentGlyphDefinition,
   ComponentId,
@@ -116,7 +116,7 @@ export class ComponentGlyph {
       const path = new Path2D();
       for (const contour of this.contoursCell.value) {
         contour.trackShape();
-        if (contour.contour.closed) path.addPath(contour.path);
+        if (contour.contour.closed) path.addPath(contour.fillPath);
       }
       return path;
     });
@@ -236,6 +236,7 @@ export class GlyphContour {
   readonly #matrixCell: Signal<MatModel>;
   readonly #component: ComponentGlyph | null;
   readonly #contourPathCell: Signal<ContourPath>;
+  readonly #erasedPathCell: Signal<ContourPath | null>;
   readonly #boundsCell: Signal<BoundsType | null>;
 
   /**
@@ -257,6 +258,13 @@ export class GlyphContour {
       const contour = this.#contourCell.value;
       contour.trackShape();
       return ContourPath.fromContour(contour, this.#matrixCell.value);
+    });
+    // Erased in the contour's own coordinates, as export erases the base glyph, then placed.
+    this.#erasedPathCell = computed(() => {
+      const contour = this.#contourCell.value;
+      contour.trackShape();
+      const outline = erasedOutline(contour);
+      return outline ? ContourPath.fromOutline(outline, this.#matrixCell.value) : null;
     });
     this.#boundsCell = computed(() => {
       const contour = this.#contourCell.value;
@@ -313,6 +321,16 @@ export class GlyphContour {
     return this.contourPath.svgPath;
   }
 
+  /** The outline to fill: the contour with its open corners erased, or its own path. */
+  get fillPath(): Path2D {
+    return this.#erasedPathCell.peek()?.path ?? this.path;
+  }
+
+  /** Whether the contour has an open corner, so its fill outline differs from its points. */
+  get hasOpenCorners(): boolean {
+    return this.#erasedPathCell.peek() !== null;
+  }
+
   get bounds(): BoundsType | null {
     return this.#boundsCell.peek();
   }
@@ -327,5 +345,6 @@ export class GlyphContour {
 
   trackShape(): void {
     track(this.#contourPathCell);
+    track(this.#erasedPathCell);
   }
 }

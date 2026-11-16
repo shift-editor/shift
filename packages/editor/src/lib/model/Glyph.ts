@@ -1613,6 +1613,8 @@ export class GlyphRenderModel {
   readonly #contoursCell: Signal<readonly GlyphContour[]>;
   readonly #boundsCell: Signal<BoundsType | null>;
   readonly #drawPathCell: Signal<Path2D>;
+  readonly #outlinePathCell: Signal<Path2D>;
+  readonly #openCornerContoursPathCell: Signal<Path2D>;
   readonly #rootClosedContoursPathCell: Signal<Path2D>;
   readonly #closedContoursPathCell: Signal<Path2D>;
   readonly #openContoursPathCell: Signal<Path2D>;
@@ -1759,11 +1761,27 @@ export class GlyphRenderModel {
       }
       return path;
     });
+    this.#outlinePathCell = computed(() => {
+      const path = new Path2D();
+      for (const contour of this.#contoursCell.value) {
+        contour.trackShape();
+        path.addPath(contour.fillPath);
+      }
+      return path;
+    });
+    this.#openCornerContoursPathCell = computed(() => {
+      const path = new Path2D();
+      for (const contour of this.#contoursCell.value) {
+        contour.trackShape();
+        if (contour.hasOpenCorners) path.addPath(contour.path);
+      }
+      return path;
+    });
     this.#rootClosedContoursPathCell = computed(() => {
       const path = new Path2D();
       for (const contour of this.#rootContoursCell.value) {
         contour.trackShape();
-        if (contour.contour.closed) path.addPath(contour.path);
+        if (contour.contour.closed) path.addPath(contour.fillPath);
       }
       return path;
     });
@@ -1771,7 +1789,7 @@ export class GlyphRenderModel {
       const path = new Path2D();
       for (const contour of this.#contoursCell.value) {
         contour.trackShape();
-        if (contour.contour.closed) path.addPath(contour.path);
+        if (contour.contour.closed) path.addPath(contour.fillPath);
       }
       return path;
     });
@@ -2155,6 +2173,16 @@ export class GlyphRenderModel {
 
   get drawPath(): Path2D {
     return this.#drawPathCell.peek();
+  }
+
+  /** Every contour, components' included, as it fills: with its open corners erased. */
+  get outlinePathCell(): Signal<Path2D> {
+    return this.#outlinePathCell;
+  }
+
+  /** The own paths of every contour, components' included, that has an open corner. */
+  get openCornerContoursPathCell(): Signal<Path2D> {
+    return this.#openCornerContoursPathCell;
   }
 
   get rootClosedContoursPathCell(): Signal<Path2D> {

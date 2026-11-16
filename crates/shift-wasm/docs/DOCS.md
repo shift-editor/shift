@@ -33,7 +33,7 @@ crates/shift-wasm/src/
   engine_reads.rs   engineGlyphNumbers, engineSourceNumbers, engineSourceSetNumber; EngineReads (axes, sources, kerning, glyphRecords, kerningRun, kerningPairs, kerningPairsNaming, missingKerningOrigin, sourceMetricsAt, sourceSetWeights, atlasWeights, designLocation, externalLocation, componentBaseLocation, scenePages, sceneNodes, pageNodes, sceneNode, counterparts, pageLayout, pageLayoutInputs) per session; FontVariation
   page_layout.rs    a scene page laid out by shift-layout, text runs measured by shift-text through the session's shaper (EngineReads.pageLayout)
   scene.rs       Scenes (openScene, applyScene, sceneNodes), releaseScene: a scene for a session with no engine
-  geometry.rs    Geometry: contourGeometry (a contour's segments and bounds), composeTransform and decomposeMatrix (component placements), called by glyph-state
+  geometry.rs    Geometry: contourGeometry (a contour's segments and bounds), erasedOutline (its outline with open corners erased), composeTransform and decomposeMatrix (component placements), called by glyph-state
   index_keys.rs  IndexKeys (between): shift-font's sibling order keys, called by the editor's `IndexKey`; keys compare as plain strings
   svg.rs         SvgPaths (svgPathContours), answered in the engine module only
   typed_text.rs  TypedText (layoutTyped): text laid out as typed by shift-text's layout over a `TypedFont`, for an editor whose font has no engine session open yet (every font the editor shows opens one, compiled previews included); answered in the engine module only
