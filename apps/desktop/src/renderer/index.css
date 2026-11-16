@@ -62,8 +62,10 @@
   --color-tag-light-gray: #b9b9b9;
   --color-tag-charcoal: #5c5c5c;
 
-  /* A glyph tile: its grey fill, and the ink that darkens its name band under the pointer. */
+  /* A glyph tile: its grey fill, the shade over an untagged name band, and the ink that darkens
+     its name band under the pointer. */
   --color-tile: #ededed;
+  --color-tile-band: rgba(0, 0, 0, 0.035);
   --color-tile-ink: rgba(0, 0, 0, 0.5);
 
   /* Low-emphasis icon and control colors */

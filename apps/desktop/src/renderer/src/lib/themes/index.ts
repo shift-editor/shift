@@ -549,6 +549,8 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     "--color-destructive-hover": withAlpha(palette.base08, dark ? 0.18 : 0.1),
     ...TAG_COLORS,
     "--color-tile": dark ? withAlpha(palette.base05, 0.12) : palette.base01,
+    // An untagged name band is a shade off the tile, so the band reads before it has a tag.
+    "--color-tile-band": dark ? "rgba(255, 255, 255, 0.045)" : "rgba(0, 0, 0, 0.035)",
     // The tile's ink is the theme's: black on a light palette, white on a dark one.
     "--color-tile-ink": dark ? "rgba(255, 255, 255, 0.5)" : "rgba(0, 0, 0, 0.5)",
     "--color-icon-subtle": muted,
