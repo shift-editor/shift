@@ -431,6 +431,8 @@ impl RetainedSource {
           base_glyph_id,
           base_glyph_name,
           alignment: Default::default(),
+          location_axes: Vec::new(),
+          inheritance: Default::default(),
         })
       })
       .collect::<BridgeResult<Vec<_>>>()?;

@@ -396,6 +396,10 @@ impl GlyphLayer {
         self.components.get(id)
     }
 
+    pub fn component_mut(&mut self, id: &ComponentId) -> Option<&mut Component> {
+        self.components.get_mut(id)
+    }
+
     pub fn add_component(&mut self, component: Component) -> ComponentId {
         let id = component.id();
         self.components.insert(component);

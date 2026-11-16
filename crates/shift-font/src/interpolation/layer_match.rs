@@ -55,6 +55,10 @@ pub enum LayerDifference {
         reference: Vec<GlyphId>,
         source: Vec<GlyphId>,
     },
+    /// Corresponding components set different axes for their base glyph, or
+    /// take the rest from different places. Their location values
+    /// interpolate axis by axis, so every master must set the same axes.
+    ComponentLocation { component: usize },
 }
 
 /// Describes the difference for a person reading a check report, counting
@@ -95,6 +99,11 @@ impl fmt::Display for LayerDifference {
             Self::ComponentSequence { .. } => {
                 f.write_str("the components are different or in a different order")
             }
+            Self::ComponentLocation { component } => write!(
+                f,
+                "component {} sets different axes or inherits from a different place",
+                component + 1
+            ),
         }
     }
 }
@@ -395,6 +404,16 @@ impl GlyphLayer {
                 reference: self.component_glyph_ids().collect(),
                 source: source.component_glyph_ids().collect(),
             });
+            return;
+        }
+        for (index, (reference, source)) in self
+            .components_iter()
+            .zip(source.components_iter())
+            .enumerate()
+        {
+            if !reference.sets_axes_of(source) || reference.inheritance() != source.inheritance() {
+                differences.push(LayerDifference::ComponentLocation { component: index });
+            }
         }
     }
 }

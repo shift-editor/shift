@@ -182,6 +182,7 @@ export class Designspace {
     // (undocumented)
     axis(axisId: AxisId): Axis | null;
     axisTagged(tag: string): Axis | null;
+    componentBaseLocation(parent: ExternalAxisLocation, set: ReadonlyMap<AxisId, number>, inheritance: ComponentInheritance): ExternalAxisLocation;
     coordinates(location: ExternalAxisLocation | DesignAxisLocation): {
         axisId: AxisId;
         value: number;
@@ -388,6 +389,8 @@ export class Editor {
     setRenderTheme(theme: EditorRenderTheme): void;
     setRightSidebearing(value: number): void;
     setSelectedComponentsAnchored(anchored: boolean): Promise<boolean>;
+    setSelectedComponentsAxis(axisId: AxisId, value: number | null): Promise<boolean>;
+    setSelectedComponentsInheritance(inheritance: ComponentInheritance): Promise<boolean>;
     setSourceToDefault(): void;
     // (undocumented)
     setToolState(scope: ToolStateScope, toolId: string, key: string, value: unknown): void;

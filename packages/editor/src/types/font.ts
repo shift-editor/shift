@@ -1,6 +1,7 @@
 import type { SceneDocument, SceneIntent } from "./sceneDocument";
 import type {
   AppliedChange,
+  ComponentInheritance,
   FontIntent,
   FontSnapshot,
   GlyphEntry,
@@ -320,6 +321,17 @@ export interface EngineVariation {
   designLocation(external: readonly number[]): readonly number[];
   /** The external location a design location's mapping came from; NaN on internal axes. */
   externalLocation(design: readonly number[]): readonly number[];
+  /**
+   * Where a component's base glyph draws, as an external location, when the
+   * glyph it sits in draws at the external location `parent` and the
+   * component sets `set` (design units, NaN on an axis it doesn't set); NaN
+   * on internal axes.
+   */
+  componentBaseLocation(
+    parent: readonly number[],
+    set: readonly number[],
+    inheritance: ComponentInheritance,
+  ): readonly number[];
   /**
    * The number the session interned the compiled variation `basis` as, a
    * compiled font's glyph deltas; intern each basis once, when its glyph loads.

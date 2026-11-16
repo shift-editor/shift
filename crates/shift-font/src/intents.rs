@@ -14,10 +14,10 @@ use crate::error::{CoreError, CoreResult};
 use crate::interpolation::GlyphInterpolationValues;
 use crate::ir::{
     Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Component, ComponentAlignment,
-    ComponentId, Contour, ContourId, DecomposedTransform, DesignLocation, Font, FontMetadata,
-    GRID_LIB_KEY, Glyph, GlyphId, GlyphLayer, GlyphName, Grid, LANGUAGES_LIB_KEY, LayerId,
-    LibValue, MarkColor, MetricDefinition, MetricId, MetricValue, NamedInstance, NamedInstanceId,
-    PointId, PointType, Source, SourceId, Transform,
+    ComponentId, ComponentInheritance, Contour, ContourId, DecomposedTransform, DesignLocation,
+    Font, FontMetadata, GRID_LIB_KEY, Glyph, GlyphId, GlyphLayer, GlyphName, Grid,
+    LANGUAGES_LIB_KEY, LayerId, LibValue, MarkColor, MetricDefinition, MetricId, MetricValue,
+    NamedInstance, NamedInstanceId, PointId, PointType, Source, SourceId, Transform,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::linked_metrics::ChangedGlyphs;
@@ -139,6 +139,7 @@ font_intents! {
         AddComponent,
         SetComponentTransforms,
         SetComponentAlignment,
+        SetComponentLocations,
         RemoveComponents,
         DecomposeComponents,
         ReverseContour,
@@ -220,6 +221,7 @@ enum Coordinates {
     AnchorPositions,
     AdvanceWidth,
     ComponentTransforms,
+    ComponentLocations,
     LayerTransform,
     PointTransform,
     SidebearingDelta,
@@ -235,6 +237,7 @@ impl Coordinates {
             Self::AnchorPositions => "anchor positions",
             Self::AdvanceWidth => "advance width",
             Self::ComponentTransforms => "component transforms",
+            Self::ComponentLocations => "component locations",
             Self::LayerTransform => "layer transform",
             Self::PointTransform => "point transform",
             Self::SidebearingDelta => "sidebearing delta",

@@ -4,15 +4,16 @@ use crate::Require;
 use std::collections::{HashMap, HashSet};
 
 mod anchors;
+#[cfg(test)]
+mod component_location_tests;
 mod decomposed;
 
 pub use decomposed::{Decomposition, OutlineParts};
 use std::sync::Arc;
 
 use crate::composite::{
-    GlyphComponents, ResolvedContour, ResolvedLayerGeometry,
-    flatten_selected_component_contours_from_layers, resolved_contours_from_layers,
-    resolved_layer_geometry_from_layers,
+    GlyphComponents, ResolvedContour, ResolvedLayerGeometry, resolved_contours_from_layers,
+    resolved_layer_geometry_from_parts,
 };
 use crate::{
     Axis, ComponentId, CoreError, CoreResult, DesignLocation, Font, GlyphId, GlyphInterpolation,
@@ -726,8 +727,9 @@ impl Font {
     /// resolvable shape, or an interpolation error for incompatible
     /// referenced geometry.
     pub fn resolve_layer(&self, layer_id: LayerId) -> CoreResult<ResolvedLayerGeometry> {
-        let (glyph_id, projection) = self.layer_tree_projection(layer_id)?;
-        resolved_layer_geometry_from_layers(glyph_id, &projection.layers)
+        let (glyph_id, mut projection) = self.layer_tree_projection(layer_id)?;
+        let parts = projection.composed_layer_parts(glyph_id)?;
+        resolved_layer_geometry_from_parts(glyph_id, &projection.layers, parts)
     }
 
     /// The outlines `component_ids` of one exact authored layer draw, at that
@@ -744,8 +746,15 @@ impl Font {
         layer_id: LayerId,
         component_ids: &HashSet<ComponentId>,
     ) -> CoreResult<Vec<ResolvedContour>> {
-        let (glyph_id, projection) = self.layer_tree_projection(layer_id)?;
-        flatten_selected_component_contours_from_layers(glyph_id, &projection.layers, component_ids)
+        let (glyph_id, mut projection) = self.layer_tree_projection(layer_id)?;
+        let parts = projection.composed_layer_parts(glyph_id)?;
+        let resolved = resolved_layer_geometry_from_parts(glyph_id, &projection.layers, parts)?;
+        Ok(resolved
+            .components()
+            .iter()
+            .filter(|component| component_ids.contains(&component.component_id()))
+            .flat_map(|component| component.outline().iter().cloned())
+            .collect())
     }
 
     /// A projection at one authored layer's source, with that layer as its

@@ -11,8 +11,8 @@ use crate::composite::{ComponentGlyph as IrComponentGlyph, GlyphComponents as Ir
 use crate::{
     Anchor as IrAnchor, AnchorId, AxisId, AxisMapping as IrAxisMapping,
     AxisMappingBasis as IrAxisMappingBasis, AxisMappingId, Component as IrComponent,
-    ComponentAlignment, ComponentId, Contour as IrContour, ContourId, Font as IrFont,
-    FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, GlyphId,
+    ComponentAlignment, ComponentId, ComponentInheritance, Contour as IrContour, ContourId,
+    Font as IrFont, FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, GlyphId,
     GlyphInterpolation as IrGlyphInterpolation, GlyphLayer, GlyphName,
     GlyphProjection as IrGlyphProjection, GlyphSourceComponents as IrGlyphSourceComponents,
     GuidelineId, InterpolationBasis as IrInterpolationBasis, KerningPosition as IrKerningPosition,
@@ -758,6 +758,14 @@ pub struct ComponentData {
     /// Whether the component is placed by its anchors or by hand.
     #[serde(default)]
     pub alignment: ComponentAlignment,
+    /// The axes the component sets for its base glyph, in axis order. Their
+    /// values follow every component transform in the layer's values,
+    /// component by component.
+    #[serde(default)]
+    pub location_axes: Vec<AxisId>,
+    /// Where the base glyph takes the axes the component doesn't set.
+    #[serde(default)]
+    pub inheritance: ComponentInheritance,
 }
 
 impl From<&IrComponent> for ComponentData {
@@ -767,6 +775,8 @@ impl From<&IrComponent> for ComponentData {
             base_glyph_id: component.base_glyph_id(),
             base_glyph_name: component.base_glyph_name().clone(),
             alignment: component.alignment(),
+            location_axes: component.location().iter().map(|(axis, _)| *axis).collect(),
+            inheritance: component.inheritance(),
         }
     }
 }

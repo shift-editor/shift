@@ -33,7 +33,9 @@ pub use axis::{
 };
 pub use binary_data::BinaryData;
 pub use boolean::{BooleanOp, boolean};
-pub use component::{Component, ComponentAlignment, DecomposedTransform, Transform};
+pub use component::{
+    Component, ComponentAlignment, ComponentInheritance, DecomposedTransform, Transform,
+};
 pub use contour::{Contour, Contours};
 pub use entity::{
     AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, EntityId, GlyphEntityId,

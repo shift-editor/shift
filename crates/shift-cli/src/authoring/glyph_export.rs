@@ -6,7 +6,7 @@ use std::path::Path;
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use serde_json::{Map, Value, json};
 use shift_backends::font_loader::FontLoader;
-use shift_font::{Font, Glyph, GlyphLayer, MetricsKeys, PointType, SourceId};
+use shift_font::{ComponentInheritance, Font, Glyph, GlyphLayer, MetricsKeys, PointType, SourceId};
 
 use super::glyph_batch::GLYPH_BATCH_FORMAT;
 use super::metrics_keys::side_name;
@@ -72,11 +72,11 @@ pub(crate) fn export_glyphs(
                         .map(|source| source.name().to_string())
                 })
                 .flatten();
-            entries.push(glyph_entry(glyph, Some(layer), source_name));
+            entries.push(glyph_entry(glyph, Some(layer), source_name, &font));
             wrote_layer = true;
         }
         if !wrote_layer {
-            entries.push(glyph_entry(glyph, None, None));
+            entries.push(glyph_entry(glyph, None, None, &font));
         }
     }
     entries.reverse();
@@ -100,7 +100,12 @@ fn selected_sources(font: &Font, sources: &ExportSources) -> Result<Vec<SourceId
     }
 }
 
-fn glyph_entry(glyph: &Glyph, layer: Option<&GlyphLayer>, source: Option<String>) -> Value {
+fn glyph_entry(
+    glyph: &Glyph,
+    layer: Option<&GlyphLayer>,
+    source: Option<String>,
+    font: &Font,
+) -> Value {
     let mut entry = Map::new();
     entry.insert("name".into(), json!(glyph.name()));
     if !glyph.unicodes().is_empty() {
@@ -118,12 +123,12 @@ fn glyph_entry(glyph: &Glyph, layer: Option<&GlyphLayer>, source: Option<String>
         entry.insert("metricsKeys".into(), keys);
     }
     if let Some(layer) = layer {
-        entry.insert("layer".into(), layer_value(layer));
+        entry.insert("layer".into(), layer_value(layer, font));
     }
     Value::Object(entry)
 }
 
-fn layer_value(layer: &GlyphLayer) -> Value {
+fn layer_value(layer: &GlyphLayer, font: &Font) -> Value {
     let contours: Vec<Value> = layer
         .contours()
         .iter()
@@ -172,6 +177,22 @@ fn layer_value(layer: &GlyphLayer) -> Value {
             );
             if !component.transform().is_identity() {
                 value.insert("transform".into(), json!(component.transform()));
+            }
+            if !component.location().is_empty() {
+                let location: Map<String, Value> = component
+                    .location()
+                    .iter()
+                    .map(|(axis_id, coordinate)| {
+                        let tag = font
+                            .axis(*axis_id)
+                            .map_or_else(|| axis_id.to_string(), |axis| axis.tag().to_string());
+                        (tag, json!(coordinate))
+                    })
+                    .collect();
+                value.insert("location".into(), Value::Object(location));
+            }
+            if component.inheritance() == ComponentInheritance::Font {
+                value.insert("inheritance".into(), json!("font"));
             }
             Value::Object(value)
         })

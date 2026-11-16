@@ -29,7 +29,7 @@
     "shift-cli": { "src": 35, "tests": 0 },
     "shift-config": { "src": 6, "tests": 0 },
     "shift-engine": { "src": 8, "tests": 0 },
-    "shift-font": { "src": 94, "tests": 0 },
+    "shift-font": { "src": 93, "tests": 0 },
     "shift-layout": { "src": 1, "tests": 0 },
     "shift-proof": { "src": 10, "tests": 0 },
     "shift-scan": { "src": 3, "tests": 0 },
@@ -88,7 +88,7 @@
     "shift-backends": { "src": 3, "tests": 0 },
     "shift-cli": { "src": 3, "tests": 0 },
     "shift-engine": { "src": 1, "tests": 0 },
-    "shift-font": { "src": 32, "tests": 0 },
+    "shift-font": { "src": 31, "tests": 0 },
     "shift-slug": { "src": 1, "tests": 0 },
     "shift-store": { "src": 3, "tests": 0 }
   },
