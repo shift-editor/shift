@@ -4,7 +4,7 @@ import { GlyphPreviewSvg } from "./GlyphPreviewSvg";
 import { GlyphCatalogLayout } from "@/components/home/glyphCatalogLayout";
 import { useGlyphPreviewFrame } from "@/components/home/useGlyphPreviewFrame";
 import { GLYPH_DRAG_TYPE } from "@/lib/glyph-grid/insertGlyph";
-import { markColorCss, markColorKey } from "@/lib/glyph-grid/markColor";
+import { markColorCss, markColorInk, markColorKey } from "@/lib/glyph-grid/markColor";
 import type { CatalogMetrics } from "@shift/types";
 import type { CatalogLocation, GlyphCatalogItem, GlyphCatalogSource } from "@/types/glyphCatalog";
 
@@ -87,8 +87,10 @@ export function GlyphTiles({
               // The main grid's tile: a rounded grey cell, with no border or shadow.
               className="absolute overflow-hidden rounded-md bg-tile"
               style={{
-                // A tag's colour is data; an untagged tile keeps bg-tile.
+                // A tag's colour is data; an untagged tile keeps bg-tile. The glyph draws in the
+                // ink that reads on its tag colour, whatever the theme.
                 background: cell.glyph.markColor ? markColorCss(cell.glyph.markColor) : undefined,
+                color: cell.glyph.markColor ? markColorInk(cell.glyph.markColor) : undefined,
                 height: cell.cellRect.height,
                 left: cell.cellRect.left,
                 top: cell.cellRect.top + frame.scrollTop,
