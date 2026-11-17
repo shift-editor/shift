@@ -120,11 +120,21 @@ test.describe("SVG glyph catalog fallback", () => {
     await expect(tiles).toHaveCount(2);
     await expect(svg.locator('[data-mark-color="yellow"]')).toHaveCount(2);
 
+    // A click adds a colour to the ones shown, and takes it out again.
     await page.getByRole("button", { name: "Show untagged glyphs" }).click();
+    await expect(surface).toHaveAttribute("data-filtered-glyph-count", `${total}`);
+
+    await page.getByRole("button", { name: "Show yellow glyphs" }).click();
     await expect(surface).toHaveAttribute("data-filtered-glyph-count", `${total - 2}`);
     await expect(svg.locator('[data-mark-color="yellow"]')).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Show untagged glyphs" }).click();
+    // A ⌘-click shows only that colour.
+    await page
+      .getByRole("button", { name: "Show yellow glyphs" })
+      .click({ modifiers: ["ControlOrMeta"] });
+    await expect(surface).toHaveAttribute("data-filtered-glyph-count", "2");
+
+    await page.getByRole("button", { name: "Show yellow glyphs" }).click();
     await expect(surface).toHaveAttribute("data-filtered-glyph-count", `${total}`);
   });
 

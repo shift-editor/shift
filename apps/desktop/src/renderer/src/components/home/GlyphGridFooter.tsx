@@ -9,7 +9,7 @@ interface GlyphGridFooterProps {
   /** The colours the grid can be filtered to; empty when no glyph is tagged. */
   readonly colors: readonly MarkColorCount[];
   readonly colorFilter: MarkColorFilter;
-  /** Filters by a colour, or with `add` adds it to or takes it out of the colours shown. */
+  /** Adds a colour to or takes it out of the colours shown, or without `add` shows only it. */
   readonly filterColor: (color: MarkColor | null, add: boolean) => void;
   readonly tileSize: number;
   readonly setTileSize: (size: number) => void;
@@ -33,7 +33,8 @@ export function GlyphGridFooter({
             label={color ? `Show ${markColorLabel(color)} glyphs` : "Show untagged glyphs"}
             pressed={colorFilter.has(key)}
             dimmed={colorFilter.size > 0 && !colorFilter.has(key)}
-            onPress={(event) => filterColor(color, event.metaKey || event.ctrlKey)}
+            // A click adds or removes the colour; ⌘-click shows only it.
+            onPress={(event) => filterColor(color, !(event.metaKey || event.ctrlKey))}
           />
         ))}
       </div>
