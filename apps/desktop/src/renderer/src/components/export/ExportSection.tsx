@@ -23,7 +23,8 @@ import StaticIcon from "@assets/export/target-static.svg";
 import UfoIcon from "@assets/export/target-ufo.svg";
 import VariableIcon from "@assets/export/target-variable.svg";
 import WarningIcon from "@assets/general/warning.svg";
-import { CollapsibleSection, SidebarActionButton } from "@/components/sidebar";
+import { SidebarActionButton } from "@/components/sidebar";
+import { SidebarSection } from "@/components/editor/sidebar-right/SidebarSection";
 import { useExport, type ExportRowStatus, type ExportRun } from "@/context/ExportContext";
 import { getShiftHost } from "@/host/shiftHost";
 import { commandShortcutLabel } from "@/lib/keyboard/commandShortcutLabel";
@@ -46,9 +47,9 @@ const TARGET_ICON = {
 } as const satisfies Record<ExportTarget, React.ComponentType<React.SVGProps<SVGSVGElement>>>;
 
 /**
- * The left sidebar's Export section, after the font's sources and instances
- * in Home and the editor's Designspace tab: one row per output, then the
- * Export button, which writes every row.
+ * The Export section, at the foot of the right sidebar in the editor and
+ * Home: one row per output, then the Export button, which writes every row.
+ * Its panels open to the sidebar's left.
  *
  * @remarks
  * A preview of a UFO or Glyphs file shows only Save as .shift, since only a
@@ -64,10 +65,8 @@ export const ExportSection = () => {
 
   return (
     <section ref={setSection} aria-label={message("export.title")}>
-      <CollapsibleSection
+      <SidebarSection
         title={message("export.title")}
-        open={exports.open}
-        onOpenChange={exports.setOpen}
         actions={
           canAuthor ? (
             <Tooltip content={message("export.addRow")}>
@@ -78,7 +77,7 @@ export const ExportSection = () => {
           ) : undefined
         }
       >
-        <div className="flex flex-col gap-2 px-2 pb-2">
+        <div className="flex flex-col gap-2">
           {/* A preview's rows could not run, so it shows only Save as .shift. */}
           {canAuthor ? (
             <ul aria-label={message("export.rows")} className="flex flex-col gap-1">
@@ -94,7 +93,7 @@ export const ExportSection = () => {
           ) : null}
           <ExportFooter anchor={section} />
         </div>
-      </CollapsibleSection>
+      </SidebarSection>
     </section>
   );
 };

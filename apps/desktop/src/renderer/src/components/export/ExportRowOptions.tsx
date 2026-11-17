@@ -59,7 +59,7 @@ export const ExportRowOptions = ({
         />
       </Tooltip>
       <PopoverPortal>
-        <PopoverPositioner anchor={anchor} side="right" align="start" sideOffset={8}>
+        <PopoverPositioner anchor={anchor} side="left" align="start" sideOffset={8}>
           {open ? <OptionsPanel row={row} title={label} /> : null}
         </PopoverPositioner>
       </PopoverPortal>

@@ -39,13 +39,13 @@ export const ExportPopover = ({
   workspace: Workspace;
   /** Export's shortcut, shown after the button's label. */
   shortcut: string;
-  /** What the popover's top lines up with: the Export section, so it opens beside the sidebar. */
+  /** What the popover's top lines up with: the Export section, so it opens left of the right sidebar. */
   anchor: HTMLElement | null;
 }) => {
   const exports = useExport();
   const { run, rows } = exports;
-  // Home stays mounted, inert, behind the editor, and the editor keeps its Designspace tab
-  // mounted: only the Export section on screen opens its popover.
+  // Home stays mounted, inert, behind the editor, each with its own right
+  // sidebar: only the Export section on screen opens its popover.
   const [onScreen, setOnScreen] = useState(false);
   useLayoutEffect(() => {
     setOnScreen(anchor !== null && anchor.checkVisibility() && anchor.closest("[inert]") === null);
@@ -83,7 +83,7 @@ export const ExportPopover = ({
         */}
         <PopoverPositioner
           anchor={anchor}
-          side="right"
+          side="left"
           align="start"
           sideOffset={8}
           collisionAvoidance={{ side: "none", align: "none" }}

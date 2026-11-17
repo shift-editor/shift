@@ -2,18 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, type Locator, type Page } from "@playwright/test";
 
-/** The left sidebar's Export section. */
+/** The Export section: the editor's right sidebar, or Home's sidebar. */
 export function exportSection(page: Page): Locator {
   return page.getByRole("region", { name: "Export", exact: true });
 }
 
-/**
- * Shows the Export section: in the editor it is on the left sidebar's
- * Designspace tab; Home shows it without tabs.
- */
+/** Waits for the Export section, which the editor's right sidebar and Home always show. */
 export async function showExportSection(page: Page): Promise<void> {
-  const designspace = page.getByRole("tab", { name: "Designspace" });
-  if (await designspace.isVisible()) await designspace.click();
   await expect(exportSection(page)).toBeVisible();
 }
 
