@@ -27,6 +27,8 @@ export function MarkColorSwatch({
       <Button
         aria-label={label}
         aria-pressed={pressed}
+        // A pressed swatch sits on the ghost button's active tile.
+        isActive={pressed}
         variant="ghost"
         size="icon-sm"
         onClick={onPress}
@@ -35,9 +37,8 @@ export function MarkColorSwatch({
           aria-hidden="true"
           className={cn(
             "block h-3.5 w-3.5 rounded-full",
-            // The untagged dot is hollow; a pressed dot is ringed.
+            // The untagged dot is hollow.
             color ? null : "border border-control-muted bg-surface",
-            pressed && "ring-1 ring-primary/40 ring-offset-1 ring-offset-surface",
             dimmed && "opacity-35",
           )}
           // A tag's colour is data.

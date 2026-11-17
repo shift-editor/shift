@@ -157,7 +157,7 @@ test.describe("SVG glyph catalog fallback", () => {
     // The open menu hides the grid from roles, so the pressed tiles are read by attribute.
     await expect(svg.locator('button[aria-pressed="true"]')).toHaveCount(2);
     await expect(page.getByRole("menuitem", { name: "Rename" })).toHaveCount(0);
-    await page.getByRole("button", { name: "Tag yellow" }).click();
+    await page.getByRole("button", { name: "Yellow", exact: true }).click();
     await page.getByRole("button", { name: "Show yellow glyphs" }).click();
     await expect(glyphCatalogSurface(page)).toHaveAttribute("data-filtered-glyph-count", "2");
 

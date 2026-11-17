@@ -46,7 +46,7 @@ export function MarkColorPicker({ current, onPick }: MarkColorPickerProps) {
         <MarkColorSwatch
           key={markColorKey(color)}
           color={color}
-          label={color ? `Tag ${markColorLabel(color)}` : "Clear colour"}
+          label={color ? capitalized(markColorLabel(color)) : "Clear colour"}
           pressed={only === markColorKey(color)}
           onPress={() => onPick(color)}
         />
@@ -66,4 +66,9 @@ export function MarkColorPicker({ current, onPick }: MarkColorPickerProps) {
       </Button>
     </div>
   );
+}
+
+/** A colour's name as a tooltip shows it: `Orange`, `Light green`. */
+function capitalized(name: string): string {
+  return name.charAt(0).toUpperCase() + name.slice(1);
 }
