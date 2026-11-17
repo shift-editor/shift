@@ -52,6 +52,9 @@ function useGlyphTag(): GlyphTagState {
   }, [pathname, records, selection, shown]);
 }
 
+/** The most colours the dot shows overlapped; its label names them all. */
+const MAX_DOTS = 3;
+
 /**
  * The glyphs' tag colour beside the Glyph heading, as a dot for each colour
  * they have (a hollow one when they have none). Clicking it opens the colour
@@ -68,23 +71,27 @@ export function GlyphTagButton() {
     .filter((color) => color !== null)
     .toArray();
   const label = tags.length > 0 ? `Colour, ${tags.map(markColorLabel).join(", ")}` : "Colour";
+  // Several colours overlap, so the button stays a 24px square however many there are.
+  const shownTags = tags.slice(0, MAX_DOTS);
   const dots =
-    tags.length > 0 ? (
-      tags.map((color) => (
-        <span
-          key={markColorKey(color)}
-          className="block h-2.5 w-2.5 rounded-full"
-          // A tag's colour is data.
-          style={{ background: markColorCss(color) }}
-        />
-      ))
+    shownTags.length > 0 ? (
+      <span className="flex -space-x-1.5">
+        {shownTags.map((color) => (
+          <span
+            key={markColorKey(color)}
+            className="block h-2.5 w-2.5 rounded-full"
+            // A tag's colour is data.
+            style={{ background: markColorCss(color) }}
+          />
+        ))}
+      </span>
     ) : (
       <span className="block h-2.5 w-2.5 rounded-full border border-control-muted" />
     );
   // A preview session reads tags but cannot write them.
   if (session.mode !== "workspace") {
     return (
-      <span role="img" aria-label={label} className="flex gap-1">
+      <span role="img" aria-label={label} className="flex">
         {dots}
       </span>
     );
@@ -94,13 +101,7 @@ export function GlyphTagButton() {
     <Popover modal={false}>
       <PopoverTrigger
         render={
-          <Button
-            ref={trigger}
-            variant="ghost"
-            size="icon-sm"
-            aria-label={label}
-            className="w-auto gap-1 px-1"
-          >
+          <Button ref={trigger} variant="ghost" size="icon-sm" aria-label={label}>
             {dots}
           </Button>
         }
