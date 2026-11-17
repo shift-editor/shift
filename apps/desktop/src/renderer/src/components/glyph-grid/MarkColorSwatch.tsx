@@ -34,7 +34,7 @@ export function MarkColorSwatch({
         <span
           aria-hidden="true"
           className={cn(
-            "block h-3 w-3 rounded-full",
+            "block h-3.5 w-3.5 rounded-full",
             // The untagged dot is hollow; a pressed dot is ringed.
             color ? null : "border border-control-muted bg-surface",
             pressed && "ring-1 ring-primary/40 ring-offset-1 ring-offset-surface",
