@@ -84,7 +84,8 @@ export function GlyphTiles({
               key={cell.glyph.id}
               draggable
               data-mark-color={markColorKey(cell.glyph.markColor)}
-              className="absolute overflow-hidden rounded-xs border border-tile-ink bg-tile tile-shadow"
+              // The main grid's tile: a rounded grey cell, with no border or shadow.
+              className="absolute overflow-hidden rounded-md bg-tile"
               style={{
                 // A tag's colour is data; an untagged tile keeps bg-tile.
                 background: cell.glyph.markColor ? markColorCss(cell.glyph.markColor) : undefined,
