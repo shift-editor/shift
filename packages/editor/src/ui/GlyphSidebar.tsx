@@ -14,6 +14,8 @@ import { useGlyphMetrics } from "./useGlyphMetrics";
 export interface GlyphSidebarHost {
   /** Controls at the end of the header, after the glyph's name; replaces the default zoom control. */
   headerActions?: ReactNode;
+  /** Replaces the header's title, such as `Mixed` while several glyphs are selected. */
+  title?: ReactNode;
   /** Rendered beside the Glyph heading, such as the glyph's tag colour. */
   glyphHeading?: ReactNode;
   /** Rendered below the glyph metrics, for panels about the current selection. */
@@ -124,7 +126,9 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
       className="flex h-full w-full min-w-0 flex-col overflow-hidden border-l border-line-subtle bg-surface"
     >
       <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <span className="min-w-0 truncate text-ui font-medium text-primary">{title}</span>
+        <span className="min-w-0 truncate text-ui font-medium text-primary">
+          {host.title ?? title}
+        </span>
         {host.headerActions ?? (
           <Button
             variant="ghost"

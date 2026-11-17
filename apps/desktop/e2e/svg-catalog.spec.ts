@@ -216,7 +216,13 @@ test.describe("SVG glyph catalog fallback", () => {
     await picker.getByRole("button", { name: "Red", exact: true }).click();
     await tiles.nth(1).click({ modifiers: ["Shift"] });
     await sidebar.getByRole("button", { name: "Colour, red, yellow" }).click();
-    await expect(picker.getByText("Mixed")).toBeVisible();
+    // A mixed selection highlights each colour it has, as some but not all.
+    for (const name of ["Red", "Yellow"]) {
+      await expect(picker.getByRole("button", { name, exact: true })).toHaveAttribute(
+        "aria-pressed",
+        "mixed",
+      );
+    }
 
     // A colour put on every glyph comes off again with a second click.
     await picker.getByRole("button", { name: "Red", exact: true }).click();

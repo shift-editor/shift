@@ -3,6 +3,7 @@ import { useSignalState } from "@shift/editor/signals";
 import { isSegmentId } from "@shift/glyph-state";
 import { isAnchorId, isComponentId, isContourId, isPointId } from "@shift/types";
 import { useRef } from "react";
+import { useLocation } from "react-router";
 import { Button } from "@shift/ui";
 import { BooleanOps } from "./BooleanOps";
 import { AnchorSection } from "./sidebar-right/AnchorSection";
@@ -19,6 +20,7 @@ import { ZoomMenu } from "./sidebar-right/ZoomMenu";
 import { LockIcon } from "@/components/icons/LockIcon";
 import { TransformOriginProvider } from "@/context/TransformOriginContext";
 import { usePreviewNotice } from "@/context/PreviewNoticeProvider";
+import { tagTargetsOf } from "@/lib/glyph-grid/tagTargets";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 
 export const RightSidebar = () => {
@@ -33,6 +35,10 @@ export const RightSidebar = () => {
     (id) => isPointId(id) || isContourId(id) || isSegmentId(id) || isComponentId(id),
   );
   const selectionBlockRef = useRef<HTMLDivElement>(null);
+  // Several glyphs selected in the grid: the sidebar shows one of them, so its title says so.
+  const { pathname } = useLocation();
+  const gridSelection = useSignalState(session.tabs.gridSelectionCell);
+  const severalGlyphs = tagTargetsOf(pathname, gridSelection.ids, null).length > 1;
   const hasAnchorSelection = selection.ids.some(isAnchorId);
   const hasBooleanSelection = selection.ids.filter(isContourId).length >= 2;
 
@@ -40,6 +46,7 @@ export const RightSidebar = () => {
     <GlyphSidebar
       session={session}
       host={{
+        title: severalGlyphs ? "Mixed" : undefined,
         headerActions: (
           <div className="flex shrink-0 items-center gap-1">
             {readOnlyFont ? (
