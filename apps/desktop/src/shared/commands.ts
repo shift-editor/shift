@@ -36,6 +36,7 @@ export type CommandId =
   | "glyph.decomposeComponents"
   | "glyph.reverseSelectedContour"
   | "glyph.makeFirstPoint"
+  | GlyphColorCommandId
   | "window.showHome"
   | "tab.close"
   | "window.close"
@@ -48,6 +49,57 @@ export type CommandId =
   | "ui.increaseSize"
   | "ui.decreaseSize"
   | "ui.resetSize";
+
+/** A command that tags glyphs with one of the main colours, or clears their colour. */
+export type GlyphColorCommandId =
+  | "glyph.color.red"
+  | "glyph.color.orange"
+  | "glyph.color.yellow"
+  | "glyph.color.green"
+  | "glyph.color.blue"
+  | "glyph.color.purple"
+  | "glyph.color.pink"
+  | "glyph.color.none";
+
+/** One entry of the Glyph › Colour menu. */
+export interface GlyphColorCommand {
+  readonly id: GlyphColorCommandId;
+  readonly label: string;
+  /** The named mark colour the command tags with; null clears the colour. */
+  readonly color:
+    | "red"
+    | "orange"
+    | "yellow"
+    | "darkGreen"
+    | "darkBlue"
+    | "purple"
+    | "magenta"
+    | null;
+  /** The digit pressed with Control for it. */
+  readonly digit: string;
+}
+
+/** The Glyph › Colour menu in order: the seven main colours on 1–7, then None on 0. */
+export const glyphColorCommands: readonly GlyphColorCommand[] = [
+  { id: "glyph.color.red", label: "Red", color: "red", digit: "1" },
+  { id: "glyph.color.orange", label: "Orange", color: "orange", digit: "2" },
+  { id: "glyph.color.yellow", label: "Yellow", color: "yellow", digit: "3" },
+  { id: "glyph.color.green", label: "Green", color: "darkGreen", digit: "4" },
+  { id: "glyph.color.blue", label: "Blue", color: "darkBlue", digit: "5" },
+  { id: "glyph.color.purple", label: "Purple", color: "purple", digit: "6" },
+  { id: "glyph.color.pink", label: "Pink", color: "magenta", digit: "7" },
+  { id: "glyph.color.none", label: "None", color: null, digit: "0" },
+];
+
+/** Whether `id` is one of the Glyph › Colour commands. */
+export function isGlyphColorCommandId(id: CommandId): id is GlyphColorCommandId {
+  return glyphColorCommands.some((command) => command.id === id);
+}
+
+/** The named mark colour a colour command tags with; null for the one that clears. */
+export function glyphColorOf(id: GlyphColorCommandId): GlyphColorCommand["color"] {
+  return glyphColorCommands.find((command) => command.id === id)?.color ?? null;
+}
 
 /** A command in the Help menu. */
 export type HelpCommandId = Extract<CommandId, `help.${string}`>;
@@ -79,6 +131,11 @@ export const helpCommandGroups: readonly (readonly HelpCommandId[])[] = [
 export interface CommandShortcut {
   readonly key: string;
   readonly primaryModifier: boolean;
+  /**
+   * The Control key itself, on every platform: ⌃ on macOS, where the primary
+   * modifier is ⌘, and the same key as the primary modifier elsewhere.
+   */
+  readonly controlKey: boolean;
   readonly shiftKey: boolean;
   readonly altKey: boolean;
 }
@@ -109,6 +166,7 @@ export const commandShortcuts = {
   "glyph.addComponent": shortcut("c", true),
   "view.toggleGrid": canvasKey("g"),
   "view.toggleSnapToGrid": canvasKey("g", true),
+  ...glyphColorShortcuts(),
 } satisfies Partial<Record<CommandId, CommandShortcut>>;
 
 const shortcutsById: Partial<Record<CommandId, CommandShortcut>> = commandShortcuts;
@@ -122,6 +180,7 @@ export function commandShortcut(id: CommandId): CommandShortcut | null {
 export function toElectronAccelerator(shortcut: CommandShortcut): string {
   const parts: string[] = [];
   if (shortcut.primaryModifier) parts.push("CmdOrCtrl");
+  if (shortcut.controlKey) parts.push("Ctrl");
   if (shortcut.altKey) parts.push("Alt");
   if (shortcut.shiftKey) parts.push("Shift");
 
@@ -132,12 +191,23 @@ export function toElectronAccelerator(shortcut: CommandShortcut): string {
 }
 
 function shortcut(key: string, shiftKey = false, altKey = false): CommandShortcut {
-  return { key, primaryModifier: true, shiftKey, altKey };
+  return { key, primaryModifier: true, controlKey: false, shiftKey, altKey };
+}
+
+/** Control and a digit for each colour command: ⌃1–⌃7 and ⌃0. */
+function glyphColorShortcuts(): Record<GlyphColorCommandId, CommandShortcut> {
+  const shortcuts = glyphColorCommands.map(
+    ({ id, digit }): [GlyphColorCommandId, CommandShortcut] => [
+      id,
+      { key: digit, primaryModifier: false, controlKey: true, shiftKey: false, altKey: false },
+    ],
+  );
+  return Object.fromEntries(shortcuts) as Record<GlyphColorCommandId, CommandShortcut>;
 }
 
 /** A single key, with Shift at most, that acts on the canvas. */
 function canvasKey(key: string, shiftKey = false): CommandShortcut {
-  return { key, primaryModifier: false, shiftKey, altKey: false };
+  return { key, primaryModifier: false, controlKey: false, shiftKey, altKey: false };
 }
 
 /**
@@ -148,6 +218,7 @@ function canvasKey(key: string, shiftKey = false): CommandShortcut {
  */
 export type RendererCommandId =
   | EditorCommandId
+  | GlyphColorCommandId
   | "app.showSettings"
   | "file.export"
   | "glyph.addComponent"

@@ -191,6 +191,41 @@ test.describe("SVG glyph catalog fallback", () => {
     await expect(dialog).toBeHidden();
   });
 
+  test("tags the selected glyphs with ⌃3 and from the sidebar's colour popover", async ({
+    page,
+  }) => {
+    const svg = glyphCatalogSvg(page);
+    await expect(svg).toHaveAttribute("data-grid-readiness", "Complete");
+    const tiles = svg.getByRole("button", { name: /^Open / });
+    const sidebar = page.getByRole("complementary", { name: "Glyph properties" });
+    const picker = page.getByRole("dialog");
+    await tiles.nth(0).click();
+    await tiles.nth(1).click({ modifiers: ["Shift"] });
+
+    await page.keyboard.press("Control+3");
+    await expect(svg.locator('[data-mark-color="yellow"]')).toHaveCount(2);
+    await sidebar.getByRole("button", { name: "Colour, yellow" }).click();
+    await expect(picker.getByRole("button", { name: "Yellow", exact: true })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    // Tagging one of the two differently leaves the selection mixed.
+    await tiles.nth(0).click();
+    await sidebar.getByRole("button", { name: "Colour, yellow" }).click();
+    await picker.getByRole("button", { name: "Red", exact: true }).click();
+    await tiles.nth(1).click({ modifiers: ["Shift"] });
+    await sidebar.getByRole("button", { name: "Colour, red, yellow" }).click();
+    await expect(picker.getByText("Mixed")).toBeVisible();
+
+    // A colour put on every glyph comes off again with a second click.
+    await picker.getByRole("button", { name: "Red", exact: true }).click();
+    await expect(svg.locator('[data-mark-color="red"]')).toHaveCount(2);
+    await picker.getByRole("button", { name: "Red", exact: true }).click();
+    await expect(svg.locator("[data-mark-color]:not([data-mark-color=none])")).toHaveCount(0);
+    await expect(sidebar.getByRole("button", { name: "Colour", exact: true })).toBeVisible();
+  });
+
   test("shows the system character for an empty encoded glyph", async ({ editor, page }) => {
     const [name] = await editor.createGlyphsForUnicodes([0x3042]);
     if (!name) throw new Error("Expected an empty Hiragana glyph");

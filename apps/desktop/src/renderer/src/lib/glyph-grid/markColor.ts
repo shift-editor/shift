@@ -21,6 +21,26 @@ export const MORE_MARK_COLORS = [
 ] as const satisfies readonly NamedMarkColor[];
 
 /**
+ * All twelve named colours as a picker grid shows them, four to a row: by
+ * hue across the rows (warm, then green and blue, then purple and pink), the
+ * two greys last.
+ */
+export const GRID_MARK_COLORS = [
+  "red",
+  "orange",
+  "brown",
+  "yellow",
+  "lightGreen",
+  "darkGreen",
+  "lightBlue",
+  "darkBlue",
+  "purple",
+  "magenta",
+  "lightGray",
+  "charcoal",
+] as const satisfies readonly NamedMarkColor[];
+
+/**
  * Each named colour's theme token, the name people read, and whether its name
  * reads in light or dark ink. The palette is laid out in OKLCH: the main hues
  * are spaced evenly round the wheel at one lightness, dark enough that white

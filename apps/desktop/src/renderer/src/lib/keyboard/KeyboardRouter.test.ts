@@ -575,6 +575,16 @@ describe("KeyboardRouter", () => {
       expect(command).toBe("glyph.addComponent");
       expect(editor.clipboardText()).toBe(bufferBefore);
     });
+
+    it("tags with Control and a digit, and leaves ⌘ and a digit alone", async () => {
+      const tagged = await router.handleKeyDown(createKeyboardEvent({ key: "3", ctrlKey: true }));
+      expect(tagged).toBe(true);
+      expect(command).toBe("glyph.color.yellow");
+
+      command = null;
+      await router.handleKeyDown(createKeyboardEvent({ key: "3", metaKey: true }));
+      expect(command).toBeNull();
+    });
   });
 
   describe("delete key", () => {

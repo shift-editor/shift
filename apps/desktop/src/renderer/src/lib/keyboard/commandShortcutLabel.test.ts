@@ -11,4 +11,9 @@ describe("command shortcuts read the way each platform's menus show them", () =>
     expect(commandShortcutLabel(commandShortcuts["file.openFolder"], false)).toBe("Ctrl+Shift+O");
     expect(commandShortcutLabel(commandShortcuts["file.open"], false)).toBe("Ctrl+O");
   });
+
+  it("shows the Control key itself as ⌃ on macOS and Ctrl elsewhere", () => {
+    expect(commandShortcutLabel(commandShortcuts["glyph.color.yellow"], true)).toBe("⌃3");
+    expect(commandShortcutLabel(commandShortcuts["glyph.color.yellow"], false)).toBe("Ctrl+3");
+  });
 });

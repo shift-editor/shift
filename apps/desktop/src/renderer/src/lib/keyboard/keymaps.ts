@@ -1,4 +1,4 @@
-import { commandShortcuts } from "@shared/commands";
+import { commandShortcuts, glyphColorCommands } from "@shared/commands";
 import { alignSelection, applyBooleanSelection, flipSelection } from "@/lib/editor/sidebarActions";
 import { matchChord, normalizeKeyboardEvent } from "./normalize";
 import { sidebarShortcuts } from "./sidebarShortcuts";
@@ -48,6 +48,24 @@ export function createGlobalKeyDownBindings(runCommand: KeyboardCommandHandler):
         return true;
       },
     },
+    // Control and a digit tags the glyphs, wherever the keyboard is but in text.
+    ...glyphColorCommands.map(({ id, digit }) => ({
+      id: `global.${id}`,
+      preventDefault: true,
+      when: (ctx: KeyContext) => !isTyping(ctx),
+      match: (event: NormalizedKeyboardEvent) =>
+        matchChord(event, {
+          key: digit,
+          ctrlKey: true,
+          metaKey: false,
+          shiftKey: false,
+          altKey: false,
+        }),
+      run: async () => {
+        await runCommand(id);
+        return true;
+      },
+    })),
     ...(["left", "center-h", "right", "top", "center-v", "bottom"] as const).map((alignment) => ({
       id: `global.align.${alignment}`,
       preventDefault: true,

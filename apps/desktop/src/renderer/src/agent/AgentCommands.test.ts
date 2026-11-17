@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
 import { useTestEditor } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
-import type { RendererCommandId } from "@shared/commands";
+import { isGlyphColorCommandId, type RendererCommandId } from "@shared/commands";
 import { CommandRegistry, type CommandContext } from "../../../main/commands/Command";
 import { registerCommands } from "../../../main/commands/Commands";
 import { AgentCommands } from "../../../main/agent/AgentCommands";
@@ -42,12 +42,12 @@ function windowContext(editor: EditorTestSurface, state: { hasWorkspace: boolean
       available: () => true,
       // Main sends a renderer command and moves on, as `Window.runRendererCommand` does.
       run: (id: RendererCommandId) => {
-        if (
+        const windowCommand =
           id === "app.showSettings" ||
           id === "file.export" ||
           id === "tab.close" ||
-          id === "glyph.addComponent"
-        ) {
+          id === "glyph.addComponent";
+        if (windowCommand || isGlyphColorCommandId(id)) {
           unavailable();
           return;
         }
