@@ -679,6 +679,19 @@ impl FontView for FontSaveSnapshot {
   fn images(&self) -> &shift_font::BinaryData {
     self.font.images()
   }
+
+  fn glyphs_with_derived_placements(&self) -> shift_font::CoreResult<Vec<Glyph>> {
+    let Some(active_glyph) = self.active_glyph_override.as_deref() else {
+      return self.font.glyphs_with_derived_placements();
+    };
+    // Place against the font as saved, with the unsaved glyph in it.
+    let mut font = self.font.clone();
+    if font.glyph(active_glyph.id()).is_some() {
+      font.pop_glyph(active_glyph.id())?;
+    }
+    font.insert_glyph(active_glyph.clone())?;
+    font.glyphs_with_derived_placements()
+  }
 }
 
 /// Exports, or plans an export of, an owned copy of the workspace font with

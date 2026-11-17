@@ -109,8 +109,9 @@ impl FontProjection<'_> {
             .collect::<Vec<_>>();
         let mut parts = vec![own];
 
+        let transforms = self.component_placements(&layer)?;
         visiting.insert(glyph_id);
-        for component in layer.components_iter() {
+        for (component, transform) in layer.components_iter().zip(transforms) {
             let base_glyph_id = component.base_glyph_id();
             if visiting.contains(&base_glyph_id) {
                 continue;
@@ -121,7 +122,6 @@ impl FontProjection<'_> {
                     component_id: component.id(),
                     base_glyph_id,
                 })?;
-            let transform = component.matrix();
             parts.extend(base.iter().map(|part| {
                 part.iter()
                     .map(|contour| contour.placed(transform, placement))
@@ -143,20 +143,12 @@ impl FontProjection<'_> {
         placement: Placement,
     ) -> CoreResult<Option<OutlineParts>> {
         let base_glyph_id = component.base_glyph_id();
-        if !component.moves_base() {
+        let Some(location) = self.moved_location(component) else {
             return self.outline_parts(base_glyph_id, visiting, placement);
-        }
-        // An empty location is the font's default location.
-        let location = component.base_location(&self.location, &DesignLocation::new());
-        if location.is_equivalent_to(&self.location, self.font.axes()) {
-            return self.outline_parts(base_glyph_id, visiting, placement);
-        }
-
-        let mut moved = self.font.projection(&location);
-        moved.interpolation_bases = std::mem::take(&mut self.interpolation_bases);
-        let parts = moved.outline_parts(base_glyph_id, visiting, placement);
-        self.interpolation_bases = moved.interpolation_bases;
-        parts
+        };
+        self.at(&location, |moved| {
+            moved.outline_parts(base_glyph_id, visiting, placement)
+        })
     }
 
     /// Blends the glyph's outline parts at its decomposition masters when this

@@ -21,8 +21,9 @@ const IDENTITY = Mat.Identity();
  * @remarks
  * Rust has already fixed this occurrence's order, ancestry, and cycle status.
  * `componentPath` is its stable occurrence identity. The cells here only
- * evaluate authored matrices at the current external location; a component's
- * transform is its absolute placement within the parent.
+ * evaluate placements at the current external location; a component's
+ * transform is its absolute placement within the parent, anchored ones on
+ * their anchors.
  *
  * Between masters of a glyph whose components change scale, rotation, or
  * skew, the occurrence draws its outline as each master places it, blended,
@@ -85,8 +86,14 @@ export class ComponentGlyph {
 
       const component = geometry.components[definition.componentIndex];
       if (component?.baseGlyphId !== definition.baseGlyphId) return Mat.Identity();
-      // Inside a moved base, nothing is being edited: the authored placement there.
-      if (parentLocation !== locationCell.value) return component.matrix;
+      // Inside a moved base, nothing is being edited: placed where it is drawn.
+      if (parentLocation !== locationCell.value) {
+        return (
+          this.#renderModel.placementsWhere(definition.parentGlyphId, parentLocation)[
+            definition.componentIndex
+          ] ?? component.matrix
+        );
+      }
 
       // Follows the anchors it sits on while they are being edited.
       return (

@@ -3,10 +3,13 @@
 use crate::Require;
 use std::collections::{HashMap, HashSet};
 
+#[cfg(test)]
+mod anchored_placement_tests;
 mod anchors;
 #[cfg(test)]
 mod component_location_tests;
 mod decomposed;
+mod placement;
 
 pub use decomposed::{Decomposition, OutlineParts};
 use std::sync::Arc;

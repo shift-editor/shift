@@ -19,6 +19,8 @@ import { proofText } from "@/testing/proofText";
  *
  * - **hover** changes the hovered item and redraws, with no geometry edit.
  * - **pointer hit test** finds the run glyph under a point, as every pointer move does.
+ * - **drop u.top** commits a one-unit move of that anchor: the workspace
+ *   applies it, the composites on `u` follow, and the scene redraws.
  * - **drag u.top** previews a move of the edited `u`'s `top` anchor and redraws.
  *
  * Scales default to 1K and 10K characters so `pnpm test:perf` stays quick;
@@ -179,7 +181,7 @@ for (const scale of SCALES) {
           const selection = editor.positionSelection([asAnchorId(uTop(editor).id)])!;
           move = PositionEdits.fromSelection(selection).move(selection.targets);
         },
-        teardown: async (_task, mode) => {
+        teardown: async () => {
           const { editor } = await open();
           const anchor = uTop(editor);
           const expected = { x: 250 + dragFrame, y: 500 + (dragFrame % 7) };
@@ -190,6 +192,32 @@ for (const scale of SCALES) {
           move = null;
           await editor.settle();
           flushFrames();
+        },
+      },
+    );
+
+    // Drop: the workspace applies the move, composites built on `u` follow
+    // it, and the scene redraws. Alternates direction so `u.top` stays put.
+    let dropFrame = 0;
+    bench(
+      "drop u.top",
+      async () => {
+        const { editor } = await open();
+        const selection = editor.positionSelection([asAnchorId(uTop(editor).id)])!;
+        const drop = PositionEdits.fromSelection(selection).move(selection.targets);
+        drop.preview({ x: dropFrame++ % 2 === 0 ? 1 : -1, y: 0 });
+        drop.commit();
+        await editor.settle();
+        if (flushFrames() === 0) throw new Error("dropping did not redraw");
+      },
+      {
+        ...OPTIONS,
+        iterations: 20,
+        setup: async () => {
+          await open();
+        },
+        teardown: async (_task, mode) => {
+          const { editor } = await open();
           // The proof text is document content, so the session closes discarding it.
           if (mode === "run") await editor.close();
         },

@@ -42,7 +42,7 @@ impl FontProjection<'_> {
         if !visiting.insert(glyph_id) || !self.prepare_layer_tree(glyph_id)? {
             return Ok(None);
         }
-        let layer = &self.layers[&glyph_id];
+        let layer = self.layers[&glyph_id].clone();
         let own: Vec<PropagationAnchor> = layer
             .anchors_iter()
             .filter_map(|anchor| {
@@ -53,14 +53,18 @@ impl FontProjection<'_> {
                 })
             })
             .collect();
-        let placements: Vec<_> = layer
-            .components_iter()
-            .map(|component| (component.base_glyph_id(), component.matrix()))
-            .collect();
+        let placements = self.component_placements(&layer)?;
 
+        // Each component's anchors as its glyph is drawn: where it sets.
         let mut components = Vec::with_capacity(placements.len());
-        for (base, transform) in placements {
-            let anchors = self.compiled_anchors_within(base, class, visiting)?;
+        for (component, transform) in layer.components_iter().zip(placements) {
+            let base = component.base_glyph_id();
+            let anchors = match self.moved_location(component) {
+                Some(location) => self.at(&location, |moved| {
+                    moved.compiled_anchors_within(base, class, visiting)
+                })?,
+                None => self.compiled_anchors_within(base, class, visiting)?,
+            };
             components.push((anchors, transform));
         }
         let propagation_components: Vec<PropagationComponent<'_>> = components

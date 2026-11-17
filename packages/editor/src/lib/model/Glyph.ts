@@ -1862,14 +1862,41 @@ export class GlyphRenderModel {
    * @internal Where a glyph's direct components show, by component index.
    *
    * @remarks
-   * The authored placements, except while an edit is in progress at an exact
-   * source: a component that sat on anchors the edit moves follows them, as
-   * the workspace will place it when the edit lands.
+   * Anchored components sit on anchors read where each glyph is drawn, as
+   * the native projection places them (shift-font's `follow_anchors`); others
+   * where they are authored. While an edit is in progress at an exact source,
+   * a component that sat on anchors the edit moves follows them, as the
+   * workspace will place it when the edit lands.
    */
   componentMatrices(glyphId: GlyphId): readonly MatModel[] {
     const cell = this.#placementsCache.get(glyphId);
     track(cell);
     return cell.peek();
+  }
+
+  /**
+   * @internal Where a glyph's direct components sit when it is drawn at
+   * `location` with nothing being edited, by component index: anchored ones
+   * on anchors read where each glyph is drawn.
+   */
+  placementsWhere(glyphId: GlyphId, location: ExternalAxisLocation): readonly MatModel[] {
+    const geometry = this.geometryWhere(glyphId, location);
+    // A component aligns only to an earlier one.
+    if (geometry.components.length < 2) return geometry.components.map(({ matrix }) => matrix);
+
+    return followingPlacements(
+      geometry.components.map((component) => {
+        const drawnAt = this.baseLocation(location, component);
+        const anchors = this.geometryWhere(component.baseGlyphId, drawnAt).anchors;
+        return {
+          alignment: component.alignment,
+          transform: component.transform,
+          acceptedTransform: component.transform,
+          anchors,
+          acceptedAnchors: anchors,
+        };
+      }),
+    );
   }
 
   #placements(glyphId: GlyphId): readonly MatModel[] {
@@ -1879,10 +1906,14 @@ export class GlyphRenderModel {
     const location = this.#externalLocation.peek();
     const sourceId = this.#activeSourceId.peek();
     const geometry = this.geometryAt(glyphId, location);
-    const authored = geometry.components.map((component) => component.matrix);
-    if (authored.length < 2) return authored;
+    // A component aligns only to an earlier one.
+    if (geometry.components.length < 2) return geometry.components.map(({ matrix }) => matrix);
 
-    // Accepted state exists only for exact layers with an edit in progress.
+    // Where each component draws its base: `location` itself unless it sets one.
+    const drawnAt = geometry.components.map((component) => this.baseLocation(location, component));
+    const moved = drawnAt.map((drawn) => drawn !== location);
+    // Accepted state exists only for exact layers with an edit in progress,
+    // and only where the base is drawn at that layer.
     const accepted = (id: GlyphId) => {
       const cell = this.#layerAt(id, location, sourceId)?.acceptedGeometryCell;
       if (!cell) return null;
@@ -1890,14 +1921,18 @@ export class GlyphRenderModel {
       return cell.peek();
     };
     const parentAccepted = accepted(glyphId);
-    const baseAccepted = geometry.components.map((component) => accepted(component.baseGlyphId));
-    if (!parentAccepted && baseAccepted.every((base) => base === null)) return authored;
+    const baseAccepted = geometry.components.map((component, index) =>
+      moved[index] ? null : accepted(component.baseGlyphId),
+    );
 
     const acceptedComponents = parentAccepted?.components ?? geometry.components;
     return followingPlacements(
       geometry.components.map((component, index) => {
         const acceptedComponent = acceptedComponents[index] ?? component;
-        const anchors = this.geometryAt(component.baseGlyphId, location).anchors;
+        const anchors = this.geometryWhere(
+          component.baseGlyphId,
+          drawnAt[index] ?? location,
+        ).anchors;
         return {
           alignment: acceptedComponent.alignment,
           transform: component.transform,
@@ -1910,21 +1945,41 @@ export class GlyphRenderModel {
   }
 
   #propagate(glyphId: GlyphId): PropagatedAnchors {
+    // Called from the propagation computeds: track, then read.
+    track(this.#externalLocation);
+    return this.#propagateWhere(glyphId, this.#externalLocation.peek());
+  }
+
+  /**
+   * `glyphId`'s anchors with its components' propagated in, where it is
+   * drawn at `location`. Components drawn at this model's location read the
+   * cached propagation; one that draws its base elsewhere reads that base's
+   * anchors there.
+   */
+  #propagateWhere(glyphId: GlyphId, location: ExternalAxisLocation): PropagatedAnchors {
     // Rust rejects component cycles; this stops one that reaches the editor first.
     if (this.#propagating.has(glyphId)) return { anchors: [], baseGlyphCount: 0 };
     this.#propagating.add(glyphId);
     try {
-      // Called from the propagation computeds: track, then read.
-      track(this.#externalLocation);
-      const geometry = this.geometryAt(glyphId, this.#externalLocation.peek());
+      const here = this.#externalLocation.peek();
+      const geometry = this.geometryWhere(glyphId, location);
       const anchors = geometry.anchors.flatMap((anchor) =>
         anchor.name === undefined ? [] : [{ name: anchor.name, x: anchor.x, y: anchor.y }],
       );
-      const matrices = this.componentMatrices(glyphId);
+      const matrices =
+        location === here
+          ? this.componentMatrices(glyphId)
+          : this.placementsWhere(glyphId, location);
       const components = geometry.components.map((component, index) => {
-        const propagatedCell = this.#propagatedCache.get(component.baseGlyphId);
-        track(propagatedCell);
-        const propagated = propagatedCell.peek();
+        const drawnAt = this.baseLocation(location, component);
+        let propagated: PropagatedAnchors;
+        if (drawnAt === here) {
+          const propagatedCell = this.#propagatedCache.get(component.baseGlyphId);
+          track(propagatedCell);
+          propagated = propagatedCell.peek();
+        } else {
+          propagated = this.#propagateWhere(component.baseGlyphId, drawnAt);
+        }
         return {
           anchors: propagated.anchors,
           baseGlyphCount: propagated.baseGlyphCount,
