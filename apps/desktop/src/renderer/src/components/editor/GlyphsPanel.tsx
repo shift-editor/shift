@@ -120,70 +120,82 @@ export const GlyphsPanel = () => {
             value={search.text}
             onChange={(event) => setSearch({ ...search, text: event.target.value })}
           />
-          <Tooltip content="Match case">
-            <Toggle
-              aria-label="Match case"
-              pressed={search.caseSensitive}
-              onPressedChange={(caseSensitive) => setSearch({ ...search, caseSensitive })}
-            >
-              <span aria-hidden="true" className="text-ui">
-                Aa
-              </span>
-            </Toggle>
-          </Tooltip>
-          <Tooltip content="Regular expression">
-            <Toggle
-              aria-label="Regular expression"
-              pressed={search.regex}
-              onPressedChange={(regex) => setSearch({ ...search, regex })}
-            >
-              <span aria-hidden="true" className="font-mono text-ui">
-                .*
-              </span>
-            </Toggle>
-          </Tooltip>
-          <Menu>
-            <Tooltip content="Filter">
-              <MenuTrigger
-                render={<Button variant="ghost" size="icon-sm" aria-label="Filter glyphs" />}
+          {/* Fixed beside the search field, so each button stays a 24px square. */}
+          <div className="flex shrink-0 items-center gap-1">
+            <Tooltip content="Match case">
+              <Toggle
+                aria-label="Match case"
+                pressed={search.caseSensitive}
+                onPressedChange={(caseSensitive) => setSearch({ ...search, caseSensitive })}
               >
-                <ListFilter aria-hidden className="h-3.5 w-3.5" />
-              </MenuTrigger>
+                <span aria-hidden="true" className="text-ui">
+                  Aa
+                </span>
+              </Toggle>
             </Tooltip>
-            <MenuPortal>
-              <MenuPositioner side="right" align="start" sideOffset={8}>
-                <MenuPopup aria-label="Filter glyphs" className="max-h-80 min-w-44 overflow-y-auto">
-                  {categories.map(({ category }) => (
-                    <MenuCheckboxItem
-                      key={category}
-                      className="gap-2"
-                      checked={chosenCategories.includes(category)}
-                      onCheckedChange={() => toggleCategory(category)}
-                    >
-                      <MenuCheckboxItemIndicator keepMounted className="data-[unchecked]:invisible">
-                        <Check className="h-3.5 w-3.5" strokeWidth={1.75} />
-                      </MenuCheckboxItemIndicator>
-                      <span>{category}</span>
-                    </MenuCheckboxItem>
-                  ))}
-                  {languages.length > 0 ? <MenuSeparator /> : null}
-                  {languages.map(({ id, name }) => (
-                    <MenuCheckboxItem
-                      key={id}
-                      className="gap-2"
-                      checked={languageId === id}
-                      onCheckedChange={(checked) => setLanguageId(checked ? id : null)}
-                    >
-                      <MenuCheckboxItemIndicator keepMounted className="data-[unchecked]:invisible">
-                        <Check className="h-3.5 w-3.5" strokeWidth={1.75} />
-                      </MenuCheckboxItemIndicator>
-                      <span>{name}</span>
-                    </MenuCheckboxItem>
-                  ))}
-                </MenuPopup>
-              </MenuPositioner>
-            </MenuPortal>
-          </Menu>
+            <Tooltip content="Regular expression">
+              <Toggle
+                aria-label="Regular expression"
+                pressed={search.regex}
+                onPressedChange={(regex) => setSearch({ ...search, regex })}
+              >
+                <span aria-hidden="true" className="font-mono text-ui">
+                  .*
+                </span>
+              </Toggle>
+            </Tooltip>
+            <Menu>
+              <Tooltip content="Filter">
+                <MenuTrigger
+                  render={<Button variant="ghost" size="icon-sm" aria-label="Filter glyphs" />}
+                >
+                  <ListFilter aria-hidden className="h-3.5 w-3.5" />
+                </MenuTrigger>
+              </Tooltip>
+              <MenuPortal>
+                <MenuPositioner side="right" align="start" sideOffset={8}>
+                  <MenuPopup
+                    aria-label="Filter glyphs"
+                    className="max-h-80 min-w-44 overflow-y-auto"
+                  >
+                    {categories.map(({ category }) => (
+                      <MenuCheckboxItem
+                        key={category}
+                        className="gap-2"
+                        checked={chosenCategories.includes(category)}
+                        onCheckedChange={() => toggleCategory(category)}
+                      >
+                        <MenuCheckboxItemIndicator
+                          keepMounted
+                          className="data-[unchecked]:invisible"
+                        >
+                          <Check className="h-3.5 w-3.5" strokeWidth={1.75} />
+                        </MenuCheckboxItemIndicator>
+                        <span>{category}</span>
+                      </MenuCheckboxItem>
+                    ))}
+                    {languages.length > 0 ? <MenuSeparator /> : null}
+                    {languages.map(({ id, name }) => (
+                      <MenuCheckboxItem
+                        key={id}
+                        className="gap-2"
+                        checked={languageId === id}
+                        onCheckedChange={(checked) => setLanguageId(checked ? id : null)}
+                      >
+                        <MenuCheckboxItemIndicator
+                          keepMounted
+                          className="data-[unchecked]:invisible"
+                        >
+                          <Check className="h-3.5 w-3.5" strokeWidth={1.75} />
+                        </MenuCheckboxItemIndicator>
+                        <span>{name}</span>
+                      </MenuCheckboxItem>
+                    ))}
+                  </MenuPopup>
+                </MenuPositioner>
+              </MenuPortal>
+            </Menu>
+          </div>
         </div>
         {matcher.kind === "invalid" ? (
           <span role="status" className="text-xs text-error">
