@@ -55,7 +55,7 @@ export function MarkColorPicker({ current, onPick, layout = "row" }: MarkColorPi
     const named = GRID_MARK_COLORS.map((name): MarkColor => ({ kind: "named", named: name }));
 
     return (
-      <div role="group" aria-label="Colour" className="grid w-max grid-cols-4 gap-0.5">
+      <div role="group" aria-label="Colour" className="grid w-max grid-cols-4 gap-2.5">
         {named.map(swatch)}
         {custom.map(swatch)}
       </div>
