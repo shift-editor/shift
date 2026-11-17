@@ -1,3 +1,4 @@
+import { GlyphDropTarget } from "@/components/editor/GlyphDropTarget";
 import { useEffect, useRef, type ReactNode } from "react";
 
 import { useParams } from "react-router";
@@ -187,7 +188,7 @@ const EditorLayout = ({ children }: { children: ReactNode }) => {
         />
         <ResizablePanel id="canvas" minSize={300} data-shift-capture-target="editor">
           <ZoneContainer zone="canvas" className="relative h-full">
-            {children}
+            <GlyphDropTarget editor={editor}>{children}</GlyphDropTarget>
             <FloatingToolbar
               editor={editor}
               dock={toolbarDock}

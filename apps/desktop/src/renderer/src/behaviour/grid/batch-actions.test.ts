@@ -75,6 +75,18 @@ describe("acting on several glyphs from the glyph grid", () => {
     expect(editor.metricsLinks()).toMatchObject([{ side: "right", key: "=|" }]);
   });
 
+  it("adds a glyph picked in the Glyphs tab to the end of the shown page's text", async () => {
+    const pageId = (await editor.openGlyphsAsText(["n"]))!;
+    editor.showPage(pageId);
+
+    expect(await editor.insertGlyphIntoText("o")).toBe(true);
+    expect(await editor.insertGlyphIntoText("space")).toBe(true);
+    expect(editor.pageText(pageId)).toBe("/n/o/space");
+
+    await editor.undo();
+    expect(editor.pageText(pageId)).toBe("/n/o");
+  });
+
   it("opens several glyphs as one line of text on a new page", async () => {
     const pages = editor.pageList().length;
 

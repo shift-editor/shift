@@ -8,12 +8,29 @@ import type {
   GlyphCatalogLayoutMetrics,
 } from "@/types/glyphCatalog";
 
-const VIEWPORT_PADDING = 20;
-const GRID_INSET = 16;
 const COLUMN_GAP = 8;
-const ROW_GAP = 12;
-const NAME_GAP = 8;
-const NAME_HEIGHT = 28;
+
+/**
+ * How much room a catalog gives its tiles: `regular` is the font overview,
+ * with margins and a name under each preview; `compact` fits a sidebar, with
+ * small margins and the preview alone.
+ */
+export type CatalogDensity = "regular" | "compact";
+
+/** The spacing each density uses, in CSS pixels. */
+const SPACING: Record<
+  CatalogDensity,
+  {
+    readonly viewportPadding: number;
+    readonly gridInset: number;
+    readonly rowGap: number;
+    readonly nameGap: number;
+    readonly nameHeight: number;
+  }
+> = {
+  regular: { viewportPadding: 20, gridInset: 16, rowGap: 12, nameGap: 8, nameHeight: 28 },
+  compact: { viewportPadding: 8, gridInset: 0, rowGap: 8, nameGap: 0, nameHeight: 0 },
+};
 /** A tile's preview height and the inset of the glyph inside it, as fractions of its width. */
 const PREVIEW_HEIGHT_RATIO = 0.75;
 const PREVIEW_INSET_RATIO = 0.16;
@@ -27,34 +44,42 @@ export class GlyphCatalogLayout implements GlyphCatalogLayoutMetrics {
   readonly rowCount: number;
   readonly cellWidth: number;
   readonly totalHeight: number;
-  readonly viewportPadding = VIEWPORT_PADDING;
-  readonly gridInset = GRID_INSET;
-  readonly gridLeft = VIEWPORT_PADDING + GRID_INSET;
+  readonly viewportPadding: number;
+  readonly gridInset: number;
+  readonly gridLeft: number;
   readonly gridWidth: number;
   readonly columnGap = COLUMN_GAP;
   readonly rowPitch: number;
   readonly previewHeight: number;
   readonly previewContentInset: number;
-  readonly nameGap = NAME_GAP;
-  readonly nameHeight = NAME_HEIGHT;
+  readonly nameGap: number;
+  readonly nameHeight: number;
   /** A tile's height: its preview, the gap and its name. */
   readonly cellHeight: number;
 
   /**
    * @param tileSize - the width tiles are given before a row is stretched to
    * fill, within {@link TILE_SIZE}; previews keep their proportions.
+   * @param density - the margins and whether tiles carry a name.
    */
   constructor(
     viewportWidth: number,
     viewportHeight: number,
     glyphCount: number,
     tileSize: number = TILE_SIZE.default,
+    density: CatalogDensity = "regular",
   ) {
+    const spacing = SPACING[density];
+    this.viewportPadding = spacing.viewportPadding;
+    this.gridInset = spacing.gridInset;
+    this.gridLeft = spacing.viewportPadding + spacing.gridInset;
+    this.nameGap = spacing.nameGap;
+    this.nameHeight = spacing.nameHeight;
     const nominalCellWidth = clamp(Math.round(tileSize), TILE_SIZE.min, TILE_SIZE.max);
     this.previewHeight = Math.round(nominalCellWidth * PREVIEW_HEIGHT_RATIO);
     this.previewContentInset = Math.round(nominalCellWidth * PREVIEW_INSET_RATIO);
-    this.cellHeight = this.previewHeight + NAME_GAP + NAME_HEIGHT;
-    this.rowPitch = this.cellHeight + ROW_GAP;
+    this.cellHeight = this.previewHeight + spacing.nameGap + spacing.nameHeight;
+    this.rowPitch = this.cellHeight + spacing.rowGap;
     this.viewportWidth = finiteNonNegative(viewportWidth);
     this.viewportHeight = finiteNonNegative(viewportHeight);
     this.glyphCount = Math.max(0, Math.floor(finiteNonNegative(glyphCount)));
@@ -72,7 +97,8 @@ export class GlyphCatalogLayout implements GlyphCatalogLayoutMetrics {
     }
 
     this.rowCount = this.columns > 0 ? Math.ceil(this.glyphCount / this.columns) : 0;
-    this.totalHeight = this.rowCount > 0 ? 2 * VIEWPORT_PADDING + this.rowCount * this.rowPitch : 0;
+    this.totalHeight =
+      this.rowCount > 0 ? 2 * this.viewportPadding + this.rowCount * this.rowPitch : 0;
   }
 
   /** Derives only the cells intersecting the current native scroll viewport. */

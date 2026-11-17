@@ -1,5 +1,5 @@
 import type { MarkColor } from "@shift/types";
-import { signal, type Signal } from "@shift/editor/signals";
+import { signal, type Signal, type WritableSignal } from "@shift/editor/signals";
 import { markColorKey, type MarkColorKey } from "./markColor";
 
 /** The widths a glyph tile can be given, in CSS pixels; rows fill, so tiles may be a little wider. */
@@ -17,10 +17,15 @@ export type MarkColorFilter = ReadonlyMap<MarkColorKey, MarkColor | null>;
  * document or undone.
  */
 export class GlyphGridView {
-  readonly #tileSizeCell = signal<number>(TILE_SIZE.default, { name: "desktop.grid.tileSize" });
+  readonly #tileSizeCell: WritableSignal<number>;
   readonly #colorFilterCell = signal<MarkColorFilter>(new Map(), {
     name: "desktop.grid.colorFilter",
   });
+
+  /** @param tileSize - the width tiles start at. */
+  constructor(tileSize: number = TILE_SIZE.default) {
+    this.#tileSizeCell = signal(tileSize, { name: "desktop.grid.tileSize" });
+  }
 
   /** The width tiles are given, within {@link TILE_SIZE}. */
   get tileSizeCell(): Signal<number> {

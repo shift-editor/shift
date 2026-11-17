@@ -63,7 +63,7 @@ export function fontNavigation(page: Page) {
 }
 
 export function editorSidebar(page: Page) {
-  return page.getByRole("complementary", { name: "Layers and designspace" });
+  return page.getByRole("complementary", { name: "Layers, designspace and glyphs" });
 }
 
 export function variationControls(page: Page) {

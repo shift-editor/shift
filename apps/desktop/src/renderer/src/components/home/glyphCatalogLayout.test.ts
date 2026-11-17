@@ -141,6 +141,21 @@ describe("sizing the catalog's tiles", () => {
   });
 });
 
+describe("fitting the catalog into a sidebar", () => {
+  it("drops the name and most of the margins at the compact density", () => {
+    const compact = new GlyphCatalogLayout(240, 300, 12, 56, "compact");
+
+    expect(compact.columns).toBe(3);
+    expect(compact.gridLeft).toBe(8);
+    expect(compact.cellHeight).toBe(compact.previewHeight);
+    expect(compact.rowPitch).toBe(50);
+    expect(compact.frame(catalog(12), 0).cells[0]).toMatchObject({
+      cellRect: { x: 8, y: 8, height: 42 },
+      nameRect: { height: 0 },
+    });
+  });
+});
+
 describe("hit-testing the catalog's scrolled content", () => {
   it("finds the glyph whose preview or name holds a point in the scrolled content", () => {
     // Four columns of 101 with an 8 gap from x 36; rows of 123 from y 20.

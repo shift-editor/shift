@@ -500,6 +500,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   ): Promise<void>;
   /** Opens the glyphs named `names` as one line of text on a new page, as the grid's Open does for several, and returns the page's id. */
   openGlyphsAsText(names: readonly string[]): Promise<string | null>;
+  /** Adds the glyph named `name` to the shown page's text, as ⌘-clicking it in the canvas's Glyphs tab does; false when it cannot. */
+  insertGlyphIntoText(name: string): Promise<boolean>;
   /** The text on a page as slash names, such as `/n/o`; empty when it has none. */
   pageText(pageId: string): string;
   /** Renames the source `source` to `name`, as Settings › Sources does. */

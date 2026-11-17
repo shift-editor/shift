@@ -1293,6 +1293,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.#actions.openGlyphsAsText(names);
   }
 
+  async insertGlyphIntoText(name: string): Promise<boolean> {
+    return this.#actions.insertGlyphIntoText(name);
+  }
+
   pageText(pageId: string): string {
     const runs = this.scene.children(asNodeId(pageId)).filter((node) => node.kind === "textRun");
     return runs.map((run) => this.text.formatItems(this.text.items(run))).join("\n");

@@ -159,47 +159,48 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     sameCategoryFilter,
   );
 
-  const filteredGlyphs = useMemo(() => {
-    const search = NameQuery.from(query);
-    const searchLimit = Math.max(availableUnicodes.length, 200);
-    if (selectedLanguageId !== null) {
-      const inSet = new Set(languageCatalog.filter(selectedLanguageId));
-      const queryUnicodes = new Set(categoryCatalog.filter({ query, searchLimit }));
+  // One filter for every glyph list in the window: the overview's grid and the canvas's Glyphs tab.
+  const filterGlyphs = useCallback<GlyphCatalogSource["filterGlyphs"]>(
+    ({ query, categoryFilters, languageId }) => {
+      const search = NameQuery.from(query);
+      const searchLimit = Math.max(availableUnicodes.length, 200);
+      if (languageId !== null) {
+        const inSet = new Set(languageCatalog.filter(languageId));
+        const queryUnicodes = new Set(categoryCatalog.filter({ query, searchLimit }));
+
+        return availableGlyphs.filter((glyph) => {
+          if (!inSet.has(glyph.name)) return false;
+          if (search.isEmpty) return true;
+
+          const unicodeMatched = glyph.unicode !== null && queryUnicodes.has(glyph.unicode);
+          const nameMatched =
+            search.matchesText(glyph.name) || search.matchesText(glyph.displayName);
+          return unicodeMatched || nameMatched;
+        });
+      }
+
+      const matchedUnicodes = matchingUnicodes({
+        query,
+        searchLimit,
+        categoryFilters,
+        categoryCatalog,
+      });
 
       return availableGlyphs.filter((glyph) => {
-        if (!inSet.has(glyph.name)) return false;
+        const unicodeMatched = glyph.unicode !== null && matchedUnicodes.has(glyph.unicode);
+        if (categoryFilters.length > 0) return unicodeMatched;
         if (search.isEmpty) return true;
 
-        const unicodeMatched = glyph.unicode !== null && queryUnicodes.has(glyph.unicode);
         const nameMatched = search.matchesText(glyph.name) || search.matchesText(glyph.displayName);
         return unicodeMatched || nameMatched;
       });
-    }
-
-    const matchedUnicodes = matchingUnicodes({
-      query,
-      searchLimit,
-      categoryFilters,
-      categoryCatalog,
-    });
-
-    return availableGlyphs.filter((glyph) => {
-      const unicodeMatched = glyph.unicode !== null && matchedUnicodes.has(glyph.unicode);
-      if (categoryFilters.length > 0) return unicodeMatched;
-      if (search.isEmpty) return true;
-
-      const nameMatched = search.matchesText(glyph.name) || search.matchesText(glyph.displayName);
-      return unicodeMatched || nameMatched;
-    });
-  }, [
-    availableGlyphs,
-    availableUnicodes.length,
-    categoryCatalog,
-    categoryFilters,
-    languageCatalog,
-    query,
-    selectedLanguageId,
-  ]);
+    },
+    [availableGlyphs, availableUnicodes.length, categoryCatalog, languageCatalog],
+  );
+  const filteredGlyphs = useMemo(
+    () => filterGlyphs({ query, categoryFilters, languageId: selectedLanguageId }),
+    [categoryFilters, filterGlyphs, query, selectedLanguageId],
+  );
 
   const openGlyph = useCallback<GlyphCatalogSource["openGlyph"]>(
     async (glyph) => {
@@ -342,6 +343,7 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
   return {
     availableGlyphs: [...availableGlyphs],
     filteredGlyphs,
+    filterGlyphs,
     categories: categoryCatalog.categories,
     languageScripts: languageCatalog.trackedScripts,
     allLanguageScripts: languageCatalog.scripts,
