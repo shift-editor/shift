@@ -1,7 +1,7 @@
 {
   "allow_attributes": {
     "fontsrc": { "src": 0, "tests": 1 },
-    "shift-backends": { "src": 6, "tests": 2 },
+    "shift-backends": { "src": 5, "tests": 2 },
     "shift-bridge": { "src": 5, "tests": 0 },
     "shift-cli": { "src": 4, "tests": 2 },
     "shift-font": { "src": 3, "tests": 0 },

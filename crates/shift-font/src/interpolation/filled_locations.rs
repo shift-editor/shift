@@ -14,25 +14,35 @@
 
 use std::collections::BTreeSet;
 
-use crate::{AxisId, Component, ComponentInheritance, DesignLocation, Font, GlyphLayer};
+use crate::{Axis, AxisId, AxisList, Component, ComponentInheritance, DesignLocation, GlyphLayer};
 
 /// The axes, and the inheritance, one component carries in every master's
 /// interpolation values.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct LocationSlot {
+struct LocationSlot {
     axes: BTreeSet<AxisId>,
     inheritance: ComponentInheritance,
 }
 
-impl Font {
+/// How one glyph's masters carry their components' locations, so that
+/// interpolation and export read every master with the same axes: one slot
+/// per component position. Built from the masters' layers with
+/// [`ComponentLocationFill::new`], applied to each with
+/// [`ComponentLocationFill::fill`].
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ComponentLocationFill {
+    slots: Vec<LocationSlot>,
+}
+
+impl ComponentLocationFill {
     /// One slot per component of `layers`, whose components match by
     /// position: the axes any of them sets, and their inheritance; every
     /// font axis, and `Parent`, where their inheritances differ.
-    pub(crate) fn location_slots(&self, layers: &[&GlyphLayer]) -> Vec<LocationSlot> {
+    pub fn new(axes: &[Axis], layers: &[&GlyphLayer]) -> Self {
         let Some(first) = layers.first() else {
-            return Vec::new();
+            return Self::default();
         };
-        (0..first.components().len())
+        let slots = (0..first.components().len())
             .map(|index| {
                 let components: Vec<&Component> = layers
                     .iter()
@@ -45,15 +55,15 @@ impl Font {
                 let mixed = components
                     .iter()
                     .any(|component| component.inheritance() != inheritance);
-                let mut axes: BTreeSet<AxisId> = components
+                let mut slot_axes: BTreeSet<AxisId> = components
                     .iter()
                     .flat_map(|component| component.location().iter().map(|(axis, _)| *axis))
                     .collect();
                 if mixed {
-                    axes.extend(self.axes().iter().map(crate::Axis::id));
+                    slot_axes.extend(axes.iter().map(Axis::id));
                 }
                 LocationSlot {
-                    axes,
+                    axes: slot_axes,
                     inheritance: if mixed {
                         ComponentInheritance::Parent
                     } else {
@@ -61,18 +71,20 @@ impl Font {
                     },
                 }
             })
-            .collect()
+            .collect();
+        Self { slots }
     }
 
-    /// `layer`, drawn at `location`, with each component carrying its slot's
-    /// axes: an axis it doesn't set takes the value it inherits there.
-    /// `None` when no slot asks for anything the layer lacks.
-    pub(crate) fn filled_locations(
+    /// `layer`, a master drawn at `location`, with each component carrying
+    /// its slot's axes: an axis it doesn't set takes the value it inherits
+    /// there. `None` when no slot asks for anything the layer lacks.
+    pub fn fill(
         &self,
+        axes: &[Axis],
         layer: &GlyphLayer,
         location: &DesignLocation,
-        slots: &[LocationSlot],
     ) -> Option<GlyphLayer> {
+        let slots = &self.slots;
         let needs_fill = layer.components_iter().zip(slots).any(|(component, slot)| {
             component.inheritance() != slot.inheritance
                 || slot
@@ -91,7 +103,7 @@ impl Font {
                 if component_location.get(axis_id).is_some() {
                     continue;
                 }
-                let Some(axis) = self.axis(*axis_id) else {
+                let Some(axis) = axes.axis(*axis_id) else {
                     continue;
                 };
                 let inherited = match component.inheritance() {

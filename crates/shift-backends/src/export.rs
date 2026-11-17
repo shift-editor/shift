@@ -223,12 +223,35 @@ pub enum ExportError {
     },
 }
 
+/// How a compiled font writes a component that sets its own location.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum VariableComponents {
+    /// Decomposed into outlines drawn at the component's location, which
+    /// every renderer draws.
+    #[default]
+    Decompose,
+    /// Kept as a variable component in a `VARC` table, smaller, but drawn
+    /// only by renderers that read `VARC`.
+    Varc,
+}
+
 /// Exports [`FontView`] snapshots as binaries or editable sources.
-pub struct FontExporter;
+#[derive(Clone, Debug, Default)]
+pub struct FontExporter {
+    variable_components: VariableComponents,
+}
 
 impl FontExporter {
     pub fn new() -> Self {
-        Self
+        Self::default()
+    }
+
+    /// This exporter, writing components that set their own location as
+    /// `variable_components` says.
+    #[must_use]
+    pub fn with_variable_components(mut self, variable_components: VariableComponents) -> Self {
+        self.variable_components = variable_components;
+        self
     }
 
     /// Writes `font` in the requested format, replacing each destination
@@ -392,13 +415,14 @@ impl FontExporter {
     ///
     /// Returns [`ExportError`] when the source cannot be represented in the
     /// supported compiler model or compilation fails.
-    #[allow(
-        clippy::unused_self,
-        reason = "an exporter method; the exporter is the export entry point callers hold"
-    )]
     pub fn compile_ttf(&self, font: &impl FontView) -> Result<Vec<u8>, ExportError> {
         let source = ShiftIrSource::from_font_view(font)?;
-        let bytes = fontc::generate_font(Box::new(source), fontc::Options::default())
+        let mut options = fontc::Options::default();
+        options.flags.set(
+            fontir::orchestration::Flags::EMIT_VARC_TABLE,
+            self.variable_components == VariableComponents::Varc,
+        );
+        let bytes = fontc::generate_font(Box::new(source), options)
             .map_err(|error| compile_error(&error))?;
         strip_compiler_version(&bytes)
     }
@@ -445,12 +469,6 @@ impl FontExporter {
         ShiftIrSource::from_font_view(font)?
             .propagated_anchors()
             .map_err(|error| compile_error(&error))
-    }
-}
-
-impl Default for FontExporter {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

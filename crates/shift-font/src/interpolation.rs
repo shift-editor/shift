@@ -17,6 +17,7 @@ use crate::{
 };
 
 mod filled_locations;
+pub use filled_locations::ComponentLocationFill;
 mod kerning;
 mod layer_match;
 mod metrics;
@@ -374,7 +375,7 @@ pub struct GlyphInterpolation {
 impl GlyphInterpolation {
     /// Returns the master-backed layer that defines compatible topology,
     /// with its components carrying every axis any master's sets (see
-    /// `filled_locations`).
+    /// `ComponentLocationFill`).
     pub fn reference_layer(&self) -> &GlyphLayer {
         &self.reference_layer
     }
@@ -535,19 +536,18 @@ impl Font {
         let layers: Vec<&GlyphLayer> = std::iter::once(reference_layer.as_ref())
             .chain(compatible.iter().map(|(_, _, layer)| layer.as_ref()))
             .collect();
-        let slots = self.location_slots(&layers);
+        let fill = ComponentLocationFill::new(self.axes(), &layers);
         if let Some(reference_location) = self
             .source(reference_layer.source_id())
             .map(|source| source.location().clone())
-            && let Some(filled) =
-                self.filled_locations(&reference_layer, &reference_location, &slots)
+            && let Some(filled) = fill.fill(self.axes(), &reference_layer, &reference_location)
         {
             reference_layer = Arc::new(filled);
         }
         let compatible_sources: Vec<_> = compatible
             .into_iter()
             .map(|(source_id, location, layer)| {
-                let values = self.filled_locations(layer, &location, &slots).map_or_else(
+                let values = fill.fill(self.axes(), layer, &location).map_or_else(
                     || layer.interpolation_values(),
                     |filled| filled.interpolation_values(),
                 );

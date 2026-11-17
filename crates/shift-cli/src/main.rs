@@ -32,7 +32,7 @@ use miette::IntoDiagnostic;
 use serde::Serialize;
 use shift_backends::{
     BinaryEncoding, BinaryEncodings, ExportFormat, FontExportRequest, FontExportResult,
-    FontExporter,
+    FontExporter, VariableComponents,
 };
 use shift_store::ShiftStore;
 use skill::{install_skill, show_skill, skill_status};
@@ -247,7 +247,12 @@ fn compile(args: CompileArgs) -> miette::Result<Vec<FontExportResult>> {
         BinaryEncodings::ttf()
     };
     let font = load_document(&args.path)?;
-    let exporter = FontExporter::new();
+    let variable_components = if args.varc {
+        VariableComponents::Varc
+    } else {
+        VariableComponents::Decompose
+    };
+    let exporter = FontExporter::new().with_variable_components(variable_components);
     if args.static_instances {
         return exporter
             .export_static_instances_with(&font, &args.output, &encodings)
@@ -370,6 +375,7 @@ mod tests {
             output: output_path.clone(),
             static_instances: false,
             woff2: false,
+            varc: false,
         })
         .unwrap();
 
