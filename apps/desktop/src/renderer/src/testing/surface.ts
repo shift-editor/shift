@@ -18,7 +18,13 @@
  * `Editor`.
  */
 import type { ControlOperation } from "@/agent/AgentControl";
-import type { DeleteMode, Editor, GridSettings, GridSettingsChange } from "@shift/editor";
+import type {
+  DeleteMode,
+  Editor,
+  GridSettings,
+  GridSettingsChange,
+  HistoryReplay,
+} from "@shift/editor";
 import type {
   GlyphOutlineTarget,
   NewGlyph,
@@ -41,6 +47,7 @@ import type {
   KerningPosition,
   MetricsKeySide,
   MarkColor,
+  SidebearingEdit,
   PointId,
   SelectableId,
   Axis,
@@ -478,6 +485,23 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   deleteAxis(tag: string): Promise<void>;
   /** Tags the glyphs named `names` with `color`, or clears their colour with null, as the grid's Colour menu does. */
   tagGlyphs(names: readonly string[], color: MarkColor | null): Promise<void>;
+  /** Duplicates the glyphs named `names`, as the grid's Duplicate does. */
+  duplicateGlyphs(names: readonly string[]): Promise<void>;
+  /** The step undo or redo last replayed, as the grid's toast names it; null before either has run. */
+  replayedStep(): Promise<HistoryReplay | null>;
+  /** Decomposes the components of the glyphs named `names` in every master, as the grid's Decompose Components does; resolves to how many had any. */
+  decomposeGlyphs(names: readonly string[]): Promise<number>;
+  /** Sets the sidebearings of the glyphs named `names`, as the grid's Set Sidebearings dialog does; in every master with `allMasters`. */
+  setSidebearings(
+    names: readonly string[],
+    left: SidebearingEdit,
+    right: SidebearingEdit,
+    allMasters?: boolean,
+  ): Promise<void>;
+  /** Opens the glyphs named `names` as one line of text on a new page, as the grid's Open does for several, and returns the page's id. */
+  openGlyphsAsText(names: readonly string[]): Promise<string | null>;
+  /** The text on a page as slash names, such as `/n/o`; empty when it has none. */
+  pageText(pageId: string): string;
   /** Renames the source `source` to `name`, as Settings › Sources does. */
   renameSource(source: string, name: string): Promise<void>;
   /** Moves the source `source` along the axis tagged `tag` to `value`, as Settings › Sources does. */

@@ -507,7 +507,7 @@ These are allowed to jump around when energy is high, but they should not silent
 - [x] Search by glyph name, unicode, or character
 - [ ] Filter: show only empty / filled / charset subset
 - [x] Multi-select glyphs in grid
-- [ ] Right-click context menu
+- [x] Right-click context menu
 - [x] Keyboard navigation (arrows, Enter to open)
 
 **Character Set Management**
@@ -520,7 +520,7 @@ These are allowed to jump around when energy is high, but they should not silent
 **Glyph Operations**
 
 - [ ] Add glyph (by unicode or name)
-- [ ] Duplicate glyph
+- [x] Duplicate glyph
 - [ ] Delete glyph (with component usage warning)
 - [ ] Generate from template (accented letters)
 

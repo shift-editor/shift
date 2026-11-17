@@ -16,13 +16,17 @@ import type { Point2D } from "@shift/geo";
 import type {
   AnchorId,
   AxisId,
+  GlyphId,
   GlyphName,
+  LayerScope,
   MarkColor,
   PointId,
+  SidebearingEdit,
   SelectableId,
   Source as SourceRecord,
   Unicode,
 } from "@shift/types";
+import { GridActions } from "@/lib/glyph-grid/gridActions";
 import { drawFixture } from "./drawFixture";
 import type { DrawOptions, GlyphFixture, PointNames } from "./fixtures";
 import type { AxisFixture, AxisLocation } from "./fonts";
@@ -114,12 +118,56 @@ export class SurfaceActions {
 
   /** Tags the glyphs named `names` with `color`, or clears their colour with null, as the grid's Colour menu does. */
   tagGlyphs(names: readonly string[], color: MarkColor | null): void {
-    const glyphIds = names.map((name) => {
+    this.#editor.setMarkColor(this.#glyphsNamed(names), color);
+  }
+
+  /** Duplicates the glyphs named `names`, as the grid's Duplicate does, and waits for the copies. */
+  async duplicateGlyphs(names: readonly string[]): Promise<void> {
+    await new GridActions(this.#editor).duplicate(this.#glyphsNamed(names));
+  }
+
+  /**
+   * Decomposes the components of the glyphs named `names` in every master, as
+   * the grid's Decompose Components does, and returns how many had any.
+   */
+  decomposeGlyphs(names: readonly string[]): number {
+    return new GridActions(this.#editor).decompose(this.#glyphsNamed(names)).length;
+  }
+
+  /**
+   * Sets the sidebearings of the glyphs named `names`, as the grid's Set
+   * Sidebearings dialog does: in the current master, or in every master
+   * with `allMasters`.
+   */
+  setSidebearings(
+    names: readonly string[],
+    left: SidebearingEdit,
+    right: SidebearingEdit,
+    allMasters = false,
+  ): void {
+    const actions = new GridActions(this.#editor);
+    const scope: LayerScope = allMasters
+      ? { kind: "everyMaster" }
+      : { kind: "source", source: actions.currentSourceId };
+    actions.setSidebearings(this.#glyphsNamed(names), scope, left, right);
+  }
+
+  /**
+   * Opens the glyphs named `names` as one line of text on a new page, as the
+   * grid's Open does for several glyphs, and returns the page's id.
+   */
+  async openGlyphsAsText(names: readonly string[]): Promise<string | null> {
+    const glyphIds = this.#glyphsNamed(names);
+    await this.#editor.font.loadGlyphs(glyphIds);
+    return new GridActions(this.#editor).openAsText(glyphIds)?.id ?? null;
+  }
+
+  #glyphsNamed(names: readonly string[]): GlyphId[] {
+    return names.map((name) => {
       const record = this.#editor.font.recordForName(name as GlyphName);
       if (!record) throw new Error(`The font has no glyph named ${name}`);
       return record.id;
     });
-    this.#editor.setMarkColor(glyphIds, color);
   }
 
   /** Renames the source `source` to `name`, as Settings › Sources does. */

@@ -1644,7 +1644,7 @@ export class Editor {
   public setMarkColor(glyphIds: readonly GlyphId[], color: MarkColor | null): void {
     if (glyphIds.length === 0) return;
 
-    this.font.editCoordinator.transaction("Set Colour", () => {
+    this.transaction("Set Colour", () => {
       this.font.setMarkColor(glyphIds, color);
     });
   }
@@ -1914,14 +1914,17 @@ export class Editor {
   /**
    * Groups synchronous workspace edits into one undoable operation.
    *
-   * @param label - Human-readable operation name for diagnostics and future ledger labels.
+   * @param label - Human-readable operation name: the undo step's name, which undo and redo announce.
    * @param body - Synchronous edit body that calls model mutation APIs.
    * @returns The value returned by `body`.
    */
   public transaction<TResult>(label: string, body: () => TResult): TResult {
     // A read-only font refuses each edit `body` makes; there is nothing to group.
     if (this.font.refusesEdits) return body();
-    return this.font.editCoordinator.transaction(label, body);
+    // Captured under the same name, so undo and redo can say which step they replayed.
+    return this.history.captureOrJoin(label, () =>
+      this.font.editCoordinator.transaction(label, body),
+    );
   }
 
   public setCameraRect(rect: Rect2D) {

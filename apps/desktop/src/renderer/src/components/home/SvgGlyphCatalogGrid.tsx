@@ -8,7 +8,7 @@ import { useCatalogSelection } from "./useCatalogSelection";
 import { useGlyphPreviewFrame } from "./useGlyphPreviewFrame";
 import { useRevealSelectedGlyph } from "./useRevealSelectedGlyph";
 import type { GlyphId } from "@shift/types";
-import { markColorCss, markColorKey } from "@/lib/glyph-grid/markColor";
+import { markColorCss, markColorInk, markColorKey } from "@/lib/glyph-grid/markColor";
 import type { SvgGlyphCatalogGridProps } from "@/types/glyphCatalog";
 
 const PLAIN_CLICK = { range: false, toggle: false };
@@ -115,6 +115,7 @@ export function SvgGlyphCatalogGrid({
   return (
     <GlyphContextMenu
       glyphAt={(event) => selecting.glyphAt(event.clientX, event.clientY)}
+      glyphs={glyphs}
       selection={selection}
       selectGlyphs={selectGlyphs}
       openGlyph={openGlyph}
@@ -174,12 +175,15 @@ export function SvgGlyphCatalogGrid({
               );
             }
 
+            // A tagged name reads in its colour's ink; an untagged one is muted.
+            const nameInk = cell.glyph.markColor ? markColorInk(cell.glyph.markColor) : undefined;
             let nameCell = (
               <div
                 className={cn(
                   "flex h-7 w-full items-center justify-center truncate px-2 text-xs",
-                  cell.glyph.markColor ? "text-primary" : "text-muted",
+                  !cell.glyph.markColor && "text-muted",
                 )}
+                style={{ color: nameInk }}
               >
                 {cell.glyph.displayName}
               </div>
@@ -191,8 +195,9 @@ export function SvgGlyphCatalogGrid({
                   variant="ghost"
                   className={cn(
                     "h-7 w-full truncate px-2 text-center font-ui text-xs font-normal",
-                    cell.glyph.markColor ? "text-primary" : "text-muted",
+                    !cell.glyph.markColor && "text-muted",
                   )}
+                  style={{ color: nameInk }}
                   onClick={() => setEditingGlyphId(cell.glyph.id)}
                 >
                   {cell.glyph.displayName}
@@ -258,10 +263,17 @@ export function SvgGlyphCatalogGrid({
                   {nameCell}
                 </div>
                 {selected ? (
-                  <span
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-0 rounded-md ring-2 ring-inset ring-accent"
-                  />
+                  <>
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 rounded-md ring-2 ring-inset ring-accent"
+                    />
+                    {/* A hairline of surface inside the ring, so it reads on a band of its own colour. */}
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0.5 rounded-sm ring-1 ring-inset ring-surface"
+                    />
+                  </>
                 ) : null}
               </div>
             );

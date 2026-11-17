@@ -208,6 +208,7 @@ export function SlugGlyphCatalogSurface({
   return (
     <GlyphContextMenu
       glyphAt={(event) => rendererRef.current?.glyphAt(event.clientX, event.clientY) ?? null}
+      glyphs={glyphs}
       selection={selection}
       selectGlyphs={selectGlyphs}
       openGlyph={openGlyph}

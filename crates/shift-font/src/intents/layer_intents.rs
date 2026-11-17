@@ -740,6 +740,26 @@ impl LayerIntent for DecomposeComponents {
             layer_id,
             component_ids,
         } = self;
+        font.decompose_components(*layer_id, component_ids)
+    }
+}
+
+impl Font {
+    /// Replaces `component_ids` of a layer with the contours they draw, at
+    /// the layer's source, nested components flattened; the layer's anchors
+    /// are unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidComponentId`] for a component the layer
+    /// lacks, and the font's error when a component cannot be resolved.
+    pub(crate) fn decompose_components(
+        &mut self,
+        layer_id: LayerId,
+        component_ids: &[ComponentId],
+    ) -> CoreResult<()> {
+        let font = self;
+        let layer_id = &layer_id;
         let layer = font.require_layer(*layer_id)?;
         for component_id in component_ids {
             layer.component(component_id).require(component_id)?;

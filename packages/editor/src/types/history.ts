@@ -24,6 +24,16 @@ export type HistoryEffect = RecordHistoryEffect | WorkspaceEffect;
 
 export type HistoryDirection = "undo" | "redo";
 
+/**
+ * A step undo or redo just replayed, for telling the user which: each replay
+ * is a new object, so replaying the same step twice still notifies.
+ */
+export interface HistoryReplay {
+  readonly direction: HistoryDirection;
+  /** The step's name, as the action that made it gave it: `Decompose Components`. */
+  readonly label: string;
+}
+
 /** One completed user action in the unified editor/document timeline. */
 export interface HistoryEntry {
   readonly label: string;

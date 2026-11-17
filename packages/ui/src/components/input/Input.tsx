@@ -8,7 +8,8 @@ export interface InputProps extends Omit<React.ComponentProps<typeof BaseInput>,
   label?: React.ReactNode;
   labelPosition?: "left" | "right";
   icon?: React.ReactNode;
-  iconPosition?: "left" | "right";
+  /** Where `icon` sits; `center` lays it over an empty field's middle, with no padding for it. */
+  iconPosition?: "left" | "right" | "center";
 }
 
 const sizeStyles = {
@@ -40,6 +41,7 @@ export function Input({
   ...props
 }: InputProps) {
   const iconOnLeft = iconPosition === "left";
+  const iconOnRight = iconPosition === "right";
   const labelOnRight = labelPosition === "right";
 
   const handleKeyDown: InputProps["onKeyDown"] = (event) => {
@@ -76,13 +78,16 @@ export function Input({
           label && !labelOnRight && "pl-6",
           label && labelOnRight && "pr-6",
           icon && iconOnLeft && "pl-6",
-          icon && !iconOnLeft && "pr-6",
+          icon && iconOnRight && "pr-6",
           className,
         )}
         onKeyDown={handleKeyDown}
         {...props}
       />
-      {icon && !iconOnLeft && <span className="absolute right-2 pointer-events-none">{icon}</span>}
+      {icon && iconOnRight && <span className="absolute right-2 pointer-events-none">{icon}</span>}
+      {icon && iconPosition === "center" && (
+        <span className="absolute left-1/2 -translate-x-1/2 pointer-events-none">{icon}</span>
+      )}
     </div>
   );
 }

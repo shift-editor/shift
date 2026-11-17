@@ -38,6 +38,8 @@ import type {
   SourceMetrics,
   Grid,
   MarkColor,
+  LayerScope,
+  SidebearingEdit,
 } from "@shift/types";
 import {
   mintAxisId,
@@ -1729,6 +1731,55 @@ export class Font {
       kind: "setMarkColor",
       setMarkColor: { glyphIds: [...glyphIds], color },
     });
+  }
+
+  /**
+   * Queues copying glyphs on the workspace edit lane: each copy is named
+   * after its original with a numbered suffix (`a.001`), has no code points,
+   * and keeps the original's layers, colour and metrics keys.
+   *
+   * @remarks
+   * The copies' records arrive with the workspace echo. Call inside an
+   * edit-coordinator transaction to control the undo step label.
+   *
+   * @returns The copies' ids, in the order of `glyphIds`.
+   */
+  duplicateGlyphs(glyphIds: readonly GlyphId[]): GlyphId[] {
+    const copies = glyphIds.map((glyphId) => ({ glyphId, copyId: mintGlyphId() }));
+    this.editCoordinator.push({ kind: "duplicateGlyphs", duplicateGlyphs: { copies } });
+    return copies.map((copy) => copy.copyId);
+  }
+
+  /**
+   * Queues turning every component of the glyphs into contours, in every
+   * layer, nested components included; each glyph keeps its own anchors.
+   */
+  decomposeGlyphs(glyphIds: readonly GlyphId[]): void {
+    this.editCoordinator.push({
+      kind: "decomposeGlyphs",
+      decomposeGlyphs: { glyphIds: [...glyphIds] },
+    });
+  }
+
+  /**
+   * Queues an edit of the left and right sidebearings of several glyphs, in
+   * one source or in every master: see `SetSidebearings` in shift-font.
+   */
+  setSidebearings(
+    glyphIds: readonly GlyphId[],
+    scope: LayerScope,
+    left: SidebearingEdit,
+    right: SidebearingEdit,
+  ): void {
+    this.editCoordinator.push({
+      kind: "setSidebearings",
+      setSidebearings: { glyphIds: [...glyphIds], scope, left, right },
+    });
+  }
+
+  /** Whether any layer of the glyph has a component, so it can be decomposed. */
+  hasComponents(glyphId: GlyphId): boolean {
+    return (this.recordForId(glyphId)?.componentBaseGlyphIds.length ?? 0) > 0;
   }
 
   /**

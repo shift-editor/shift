@@ -1,4 +1,4 @@
-import { batch } from "../../signals";
+import { batch, signal, type Signal, type WritableSignal } from "../../signals";
 import type { ShiftStore } from "../../store/ShiftStore";
 import type { Editor } from "../Editor";
 import type { PendingEditId } from "../../../types/editing";
@@ -8,6 +8,7 @@ import type {
   HistoryDirection,
   HistoryEffect,
   HistoryEntry,
+  HistoryReplay,
   PendingHistoryEffect,
   RecordChange,
   RecordHistoryEffect,
@@ -38,9 +39,12 @@ export class EditorHistory {
   readonly #unsubscribeWorkspace: (() => void) | null;
   readonly #undoEntries: HistoryEntry[] = [];
   readonly #redoEntries: HistoryEntry[] = [];
+  // non-reactive: edits awaiting the workspace's answer, read only while recording and replaying.
   readonly #pending = new Map<PendingEditId, PendingHistoryEffect>();
 
+  // non-reactive: callbacks registered by capture owners, called while a capture finishes.
   readonly #finishingListeners = new Set<(changed: ReadonlySet<NodeReference>) => void>();
+  readonly #replayedCell: WritableSignal<HistoryReplay | null> = signal(null);
   #capture: HistoryCaptureContext | null = null;
   #recordingDepth = 0;
   #discardingRedo: Promise<void> | null = null;
@@ -189,6 +193,14 @@ export class EditorHistory {
     }
   }
 
+  /**
+   * The step undo or redo last replayed, or null before either has; a step
+   * the font replayed without a name of its own is not published.
+   */
+  get replayedCell(): Signal<HistoryReplay | null> {
+    return this.#replayedCell;
+  }
+
   /** Reverses the latest editor action after all pending workspace edits settle. */
   async undo(): Promise<boolean> {
     this.#assertNoCapture("undo");
@@ -207,6 +219,7 @@ export class EditorHistory {
       workspaceReplayed = hasWorkspaceEffect(entry);
       this.#applyEntryRecords(entry, true);
       this.#redoEntries.push(entry);
+      this.#replayedCell.set({ direction: "undo", label: entry.label });
       return true;
     } catch (error) {
       if (workspaceReplayed) await this.#replayWorkspace(entry, "redo");
@@ -233,6 +246,7 @@ export class EditorHistory {
       workspaceReplayed = hasWorkspaceEffect(entry);
       this.#applyEntryRecords(entry, false);
       this.#undoEntries.push(entry);
+      this.#replayedCell.set({ direction: "redo", label: entry.label });
       return true;
     } catch (error) {
       if (workspaceReplayed) await this.#replayWorkspace(entry, "undo");

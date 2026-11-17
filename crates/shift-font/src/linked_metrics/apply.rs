@@ -140,7 +140,12 @@ impl Font {
     /// Moves `side` of the layer by `delta`: a left sidebearing moves the
     /// outline and keeps the right one, a right sidebearing moves the
     /// advance, and a width sets the advance.
-    fn move_side(&mut self, layer_id: LayerId, side: MetricsKeySide, delta: f64) -> CoreResult<()> {
+    pub(crate) fn move_side(
+        &mut self,
+        layer_id: LayerId,
+        side: MetricsKeySide,
+        delta: f64,
+    ) -> CoreResult<()> {
         let layer = self.require_layer_mut(layer_id)?;
         match side {
             MetricsKeySide::Left => layer.shift_sidebearing(Sidebearing::Left, delta),

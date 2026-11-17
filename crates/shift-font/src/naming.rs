@@ -32,6 +32,21 @@ impl Font {
     }
 }
 
+impl Font {
+    /// The name a copy of the glyph `name` takes: `name` followed by the
+    /// first of `.001`, `.002`, … that no glyph is called.
+    pub fn next_duplicate_glyph_name(&self, name: &str) -> String {
+        let mut index = 1_u64;
+        loop {
+            let candidate = format!("{name}.{index:03}");
+            if self.glyph_id_by_name(&candidate).is_none() {
+                return candidate;
+            }
+            index += 1;
+        }
+    }
+}
+
 /// The name a new anchor added to every one of `layers` takes: `new`,
 /// numbered past any anchor already called that in any of them.
 pub fn new_anchor_name<'a>(layers: impl IntoIterator<Item = &'a GlyphLayer>) -> String {
