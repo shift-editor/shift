@@ -145,7 +145,9 @@ export function SetSidebearingsDialog({
               >
                 <span className="flex items-center gap-2">
                   Set
-                  <kbd className="font-ui text-ui text-secondary">↵</kbd>
+                  <kbd aria-hidden className="font-ui text-ui text-secondary">
+                    ↵
+                  </kbd>
                 </span>
               </Button>
             </div>
