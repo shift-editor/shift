@@ -16,6 +16,7 @@ ignore = [
   # Unmaintained, not vulnerable: pulled in by fontc (fea-rs, ufo2fontir).
   { id = "RUSTSEC-2021-0139", reason = "ansi_term via fea-rs; unmaintained, no known vulnerability" },
   { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml via serde_yaml in ufo2fontir; unmaintained" },
+  { id = "RUSTSEC-2026-0543", reason = "chrono via fontc (fontbe, fontir); unmaintained, no known vulnerability" },
 ]
 
 [licenses]
