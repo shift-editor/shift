@@ -72,7 +72,7 @@ export const LeftSidebar = () => {
         </TabsList>
         <div className="flex min-w-0 flex-1 flex-col">
           {/* The open view titles itself, since the rail shows only icons. */}
-          <h2 className="flex h-8 shrink-0 items-center px-3 text-ui font-medium text-primary">
+          <h2 className="shrink-0 px-3 pt-2.5 text-ui font-medium text-primary">
             {VIEWS.find((view) => view.id === tab)?.label}
           </h2>
           <TabsPanel
