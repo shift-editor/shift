@@ -922,7 +922,20 @@ impl Font {
         values: &GlyphInterpolationValues,
     ) -> CoreResult<Vec<LayerId>> {
         let mut layer = self.cloned_glyph_layer(layer_id, glyph_id, source_id, from_layer_id)?;
-        layer.apply_interpolation_values(values)?;
+        // `values` come from interpolation, which reads the masters with
+        // their component locations filled in.
+        match self.glyph_interpolation(glyph_id)? {
+            Some(interpolation) => {
+                let location = self.require_source(source_id)?.location().clone();
+                layer.apply_read_values(
+                    interpolation.reference_layer(),
+                    values,
+                    self.axes(),
+                    &location,
+                )?;
+            }
+            None => layer.apply_interpolation_values(values)?,
+        }
 
         self.insert_glyph_layer(glyph_id, layer)?;
         Ok(vec![layer_id])

@@ -1,5 +1,5 @@
 use crate::GlyphName;
-use crate::axis::DesignLocation;
+use crate::axis::{Axis, DesignLocation};
 use crate::collection::Identified;
 use crate::entity::{ComponentId, GlyphId};
 use crate::point::Canonical;
@@ -35,6 +35,15 @@ pub enum ComponentInheritance {
 }
 
 impl ComponentInheritance {
+    /// The value a component that doesn't set `axis` draws its base glyph
+    /// at there, when the glyph it is placed in draws at `parent`.
+    pub fn inherited_value(self, axis: &Axis, parent: &DesignLocation) -> f64 {
+        match self {
+            Self::Parent => parent.value_on(axis),
+            Self::Font => axis.default(),
+        }
+    }
+
     /// The location a base glyph draws at when its component sets `set` and
     /// the glyph the component is placed in draws at `parent`: `parent`, or
     /// `font_default` for [`Self::Font`], with `set` laid over it.
