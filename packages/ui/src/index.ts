@@ -233,6 +233,7 @@ export {
   FileIcon,
   LayoutGrid,
   List,
+  ListFilter,
   MenuIcon,
   Minus,
   Plus,

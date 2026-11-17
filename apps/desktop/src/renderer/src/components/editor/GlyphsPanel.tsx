@@ -16,6 +16,7 @@ import {
   Toggle,
   Tooltip,
   X,
+  ListFilter,
 } from "@shift/ui";
 import { GlyphTiles } from "@/components/glyph-grid/GlyphTiles";
 import { GlyphGridFooter } from "@/components/home/GlyphGridFooter";
@@ -142,7 +143,13 @@ export const GlyphsPanel = () => {
             </Toggle>
           </Tooltip>
           <Menu>
-            <MenuTrigger render={<Button variant="ghost" size="sm" />}>Filter</MenuTrigger>
+            <Tooltip content="Filter">
+              <MenuTrigger
+                render={<Button variant="ghost" size="icon-sm" aria-label="Filter glyphs" />}
+              >
+                <ListFilter aria-hidden className="h-3.5 w-3.5" />
+              </MenuTrigger>
+            </Tooltip>
             <MenuPortal>
               <MenuPositioner side="bottom" align="end" sideOffset={4}>
                 <MenuPopup aria-label="Filter glyphs" className="max-h-80 min-w-44 overflow-y-auto">
