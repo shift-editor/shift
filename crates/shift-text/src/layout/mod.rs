@@ -98,7 +98,7 @@ pub struct TextLayout {
     /// Why some text was laid out as typed instead of shaped, when it was.
     pub unshaped: Option<String>,
     /// A key that two layouts share exactly when they place every line,
-    /// run, glyph and caret alike, glyph bounds aside, so a reader can tell
+    /// run, glyph and caret alike, so a reader can tell
     /// an edit that moved nothing in the text without comparing them; set
     /// by [`PlacementKeys::assign`], empty until then.
     pub placement: String,
@@ -176,18 +176,6 @@ pub struct PlacedGlyph {
     pub direction: Direction,
     /// Whether the font's `GDEF` classes it a mark.
     pub is_mark: bool,
-    /// Its outline's bounds, from its origin; `None` for an empty glyph.
-    pub bounds: Option<GlyphBounds>,
-}
-
-/// An outline's bounds, in its own coordinates.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-#[cfg_attr(feature = "pack", derive(pack::Pack))]
-pub struct GlyphBounds {
-    pub x_min: f64,
-    pub y_min: f64,
-    pub x_max: f64,
-    pub y_max: f64,
 }
 
 /// A word: a UAX #29 word segment that holds a letter, digit or the like,

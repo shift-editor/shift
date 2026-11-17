@@ -15,8 +15,8 @@ use crate::layout::font::{FontReads, GeneratedPositions, LayoutFont, font_units}
 
 /// The tag of the generated kerning feature.
 const KERN: Tag = Tag::new(b"kern");
+use crate::layout::Direction;
 use crate::layout::request::{LayoutError, LayoutUnit, TextOptions};
-use crate::layout::{Direction, GlyphBounds};
 
 /// The advance a nonspacing mark of zero width takes when text is laid out
 /// as typed, so it stays visible and editable beside its neighbours. Export
@@ -202,9 +202,7 @@ impl Paragraph {
                 let glyphs: Vec<RunGlyph> = run
                     .glyphs
                     .iter()
-                    .map(|glyph| {
-                        RunGlyph::from_shaped(glyph, self.start, clusters.end_of(glyph), font)
-                    })
+                    .map(|glyph| RunGlyph::from_shaped(glyph, self.start, clusters.end_of(glyph)))
                     .collect();
                 let mut shaped = ShapedRun {
                     start: self.start + run.units.start,
@@ -246,15 +244,13 @@ impl Paragraph {
                     x_offset: 0.0,
                     y_offset: 0.0,
                     is_mark: false,
-                    bounds: glyph_id.and_then(|glyph| font.bounds(glyph)),
                 };
                 if let Some(glyph_id) = glyph_id
                     && font.class(glyph_id) == Some(OpenTypeCategory::Mark)
                     && glyph.x_advance <= 0.0
                 {
                     glyph.x_advance = NONSPACING_MARK_EDITOR_ADVANCE;
-                    (glyph.x_offset, glyph.y_offset) =
-                        font.typed_mark_offset(glyph_id, glyph.bounds);
+                    (glyph.x_offset, glyph.y_offset) = font.typed_mark_offset(glyph_id);
                 }
                 glyph
             })
@@ -305,12 +301,7 @@ impl RunClusters {
 impl RunGlyph {
     /// A shaped glyph as layout reads it, its units counted in the text
     /// (`paragraph_start` on), covering units up to `end`.
-    fn from_shaped(
-        glyph: &ShapedGlyph<GlyphId>,
-        paragraph_start: u32,
-        end: u32,
-        font: &LayoutFont<'_>,
-    ) -> Self {
+    fn from_shaped(glyph: &ShapedGlyph<GlyphId>, paragraph_start: u32, end: u32) -> Self {
         Self {
             glyph_id: glyph.glyph_id,
             start: paragraph_start + glyph.cluster,
@@ -320,7 +311,6 @@ impl RunGlyph {
             x_offset: f64::from(glyph.x_offset),
             y_offset: f64::from(glyph.y_offset),
             is_mark: glyph.is_mark,
-            bounds: glyph.glyph_id.and_then(|glyph| font.bounds(glyph)),
         }
     }
 }
@@ -381,7 +371,7 @@ impl LayoutFont<'_> {
     /// Where a nonspacing mark laid out as typed is drawn from its pen
     /// position: its attaching anchor at the height it attaches at, or its
     /// outline centred between ascender and descender.
-    fn typed_mark_offset(&self, mark: GlyphId, bounds: Option<GlyphBounds>) -> (f64, f64) {
+    fn typed_mark_offset(&self, mark: GlyphId) -> (f64, f64) {
         let metrics = self.metrics();
         let middle = f64::midpoint(metrics.ascender, metrics.descender);
         let attaching = self.anchors(mark).and_then(|anchors| {
@@ -399,7 +389,7 @@ impl LayoutFont<'_> {
             };
             return (TYPED_MARK_ANCHOR_X - anchor.x, height - anchor.y);
         }
-        let Some(bounds) = bounds else {
+        let Some(bounds) = self.bounds(mark) else {
             return (0.0, 0.0);
         };
         (
@@ -439,7 +429,6 @@ pub(crate) struct RunGlyph {
     pub x_offset: f64,
     pub y_offset: f64,
     pub is_mark: bool,
-    pub bounds: Option<GlyphBounds>,
 }
 
 impl From<TextDirection> for Direction {

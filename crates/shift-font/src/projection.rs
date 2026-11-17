@@ -649,6 +649,21 @@ impl FontProjection<'_> {
         }))
     }
 
+    /// Returns the glyph's advance at this projection's location without
+    /// resolving its outline: the layer's width, with no components composed.
+    ///
+    /// `None` when the glyph has no layer here.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::glyph`]: a component whose base glyph does not resolve.
+    pub fn advance(&mut self, glyph_id: GlyphId) -> CoreResult<Option<f64>> {
+        if !self.prepare_layer_tree(glyph_id)? {
+            return Ok(None);
+        }
+        Ok(self.layers.get(&glyph_id).map(GlyphLayer::width))
+    }
+
     /// Resolves selected direct component occurrences into flattened contours.
     ///
     /// Descendant components are included recursively at this projection's
@@ -905,6 +920,20 @@ mod tests {
 
         assert_eq!(glyph.x_advance(), 700.0);
         assert_eq!(glyph.contours()[0].points[1].x(), 340.0);
+    }
+
+    #[test]
+    fn advance_is_the_glyph_advance_at_the_location() {
+        let font = sample_variable_font();
+        let glyph_id = font.glyph_by_name("A").unwrap().id();
+        let location = DesignLocation::from([(font.axes()[0].id(), 600.0)]);
+        let mut projection = font.projection(&location);
+
+        assert_eq!(projection.advance(glyph_id).unwrap(), Some(700.0));
+        assert_eq!(
+            projection.advance(GlyphId::from_raw("missing")).unwrap(),
+            None
+        );
     }
 
     #[test]

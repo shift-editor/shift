@@ -546,22 +546,6 @@ fn a_hash_collision_does_not_share_a_placement_key() {
 }
 
 #[test]
-fn glyph_bounds_are_not_placement() {
-    let fixture = Fixture::open("ShapingTest.ufo");
-    let mut keys = PlacementKeys::default();
-    let mut bounded = fixture.lay_out("fi", shaped());
-    let mut unbounded = bounded.clone();
-    for glyph in &mut unbounded.glyphs {
-        glyph.bounds = None;
-    }
-
-    keys.assign(&mut bounded);
-    keys.assign(&mut unbounded);
-
-    assert_eq!(bounded.placement, unbounded.placement);
-}
-
-#[test]
 fn words_skip_spaces_and_punctuation_and_name_their_screen_edges() {
     let fixture = Fixture::open("ShapingTest.ufo");
 

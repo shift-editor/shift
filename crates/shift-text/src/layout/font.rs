@@ -17,7 +17,6 @@ use shift_font::positioning::{
 use shift_font::projection::FontProjection;
 use shift_font::{DesignLocation, ExternalLocation, Font, GlyphId, MetricKind, OpenTypeCategory};
 
-use crate::layout::GlyphBounds;
 use crate::layout::request::{LineMetrics, TypedFont, TypedGlyph};
 
 impl LineMetrics {
@@ -50,9 +49,9 @@ impl LineMetrics {
     }
 }
 
-/// The font as layout reads it: glyph advances, bounds, anchors and kerning
-/// at one location, the shaper, and each glyph's `GDEF` class. Each glyph is
-/// resolved once per layout.
+/// The font as layout reads it: glyph advances, anchors and kerning at one
+/// location, the shaper, and each glyph's `GDEF` class. Each glyph's advance
+/// is read once per layout, from its layer alone: no outline is resolved.
 ///
 /// Over the live font ([`Self::new`]) text shapes with the font's feature
 /// code; over a [`TypedFont`] ([`Self::typed`]), which has neither outlines
@@ -61,7 +60,7 @@ pub struct LayoutFont<'a> {
     glyphs: Glyphs<'a>,
     metrics: LineMetrics,
     // non-reactive: memoized reads for one layout
-    resolved: RefCell<HashMap<GlyphId, Option<Resolved>>>,
+    advances: RefCell<HashMap<GlyphId, Option<f64>>>,
 }
 
 /// Where a [`LayoutFont`] reads its glyphs.
@@ -90,15 +89,17 @@ struct AdvanceGlyphs {
     glyphs: HashMap<GlyphId, TypedGlyph>,
 }
 
+/// An outline's bounds, in its own coordinates.
+#[derive(Clone, Copy)]
+pub(crate) struct GlyphBounds {
+    pub x_min: f64,
+    pub y_min: f64,
+    pub x_max: f64,
+    pub y_max: f64,
+}
+
 /// Why text over a [`TypedFont`] lays out as typed.
 const NO_FEATURE_CODE: &str = "the font has no feature code to shape with here";
-
-/// What layout reads of one glyph at the location.
-#[derive(Clone, Copy)]
-struct Resolved {
-    advance: f64,
-    bounds: Option<GlyphBounds>,
-}
 
 impl<'a> LayoutFont<'a> {
     /// The live font at `design` (`external` in user space), kerned with
@@ -123,7 +124,7 @@ impl<'a> LayoutFont<'a> {
                 classes,
             })),
             metrics,
-            resolved: RefCell::new(HashMap::new()),
+            advances: RefCell::new(HashMap::new()),
         }
     }
 
@@ -147,7 +148,7 @@ impl<'a> LayoutFont<'a> {
                     .collect(),
             }),
             metrics: font.metrics,
-            resolved: RefCell::new(HashMap::new()),
+            advances: RefCell::new(HashMap::new()),
         }
     }
 
@@ -202,12 +203,36 @@ impl<'a> LayoutFont<'a> {
 
     /// The glyph's advance at the location; 0 for one with no shape here.
     pub(crate) fn advance(&self, glyph: GlyphId) -> f64 {
-        self.resolve(glyph).map_or(0.0, |resolved| resolved.advance)
+        if let Some(advance) = self.advances.borrow().get(&glyph) {
+            return advance.unwrap_or(0.0);
+        }
+        let advance = match &self.glyphs {
+            Glyphs::Session(session) => session.advance(glyph),
+            Glyphs::Advances(typed) => typed.glyphs.get(&glyph).map(|typed| typed.advance),
+        };
+        self.advances.borrow_mut().insert(glyph, advance);
+        advance.unwrap_or(0.0)
     }
 
-    /// The glyph's outline bounds at the location.
+    /// The glyph's outline bounds at the location; none over a
+    /// [`TypedFont`] or a compiled font. Resolves the whole outline, so
+    /// layout asks only when it has no anchor to go by.
     pub(crate) fn bounds(&self, glyph: GlyphId) -> Option<GlyphBounds> {
-        self.resolve(glyph)?.bounds
+        let Glyphs::Session(session) = &self.glyphs else {
+            return None;
+        };
+        if session.whole_shaper().is_some() {
+            return None;
+        }
+        let resolved = session.projection.borrow_mut().glyph(glyph).ok()??;
+        resolved_contours_bbox(resolved.contours()).map(|(x_min, y_min, x_max, y_max)| {
+            GlyphBounds {
+                x_min,
+                y_min,
+                x_max,
+                y_max,
+            }
+        })
     }
 
     /// The glyph's anchors as export compiles them, at the location; none
@@ -235,21 +260,6 @@ impl<'a> LayoutFont<'a> {
             Glyphs::Advances(_) => vec![0.0; pairs.len()],
         }
     }
-
-    fn resolve(&self, glyph: GlyphId) -> Option<Resolved> {
-        if let Some(resolved) = self.resolved.borrow().get(&glyph) {
-            return *resolved;
-        }
-        let resolved = match &self.glyphs {
-            Glyphs::Session(session) => session.resolve(glyph),
-            Glyphs::Advances(typed) => typed.glyphs.get(&glyph).map(|typed| Resolved {
-                advance: typed.advance,
-                bounds: None,
-            }),
-        };
-        self.resolved.borrow_mut().insert(glyph, resolved);
-        resolved
-    }
 }
 
 impl SessionGlyphs<'_> {
@@ -263,33 +273,14 @@ impl SessionGlyphs<'_> {
             .filter(|shaper| shaper.font().is_whole())
     }
 
-    fn resolve(&self, glyph: GlyphId) -> Option<Resolved> {
-        // A compiled font's session font has no glyphs: its advances are the
-        // binary's own, as shaping starts each glyph from them.
+    /// The glyph's advance at the location: its layer's width, with no
+    /// components composed. A compiled font's session font has no glyphs:
+    /// its advances are the binary's own, as shaping starts each glyph from them.
+    fn advance(&self, glyph: GlyphId) -> Option<f64> {
         if let Some(shaper) = self.whole_shaper() {
-            return shaper
-                .own_advance(glyph, &self.external)
-                .map(|advance| Resolved {
-                    advance,
-                    bounds: None,
-                });
+            return shaper.own_advance(glyph, &self.external);
         }
-        self.projection
-            .borrow_mut()
-            .glyph(glyph)
-            .ok()
-            .flatten()
-            .map(|resolved| Resolved {
-                advance: resolved.x_advance(),
-                bounds: resolved_contours_bbox(resolved.contours()).map(
-                    |(x_min, y_min, x_max, y_max)| GlyphBounds {
-                        x_min,
-                        y_min,
-                        x_max,
-                        y_max,
-                    },
-                ),
-            })
+        self.projection.borrow_mut().advance(glyph).ok().flatten()
     }
 }
 
