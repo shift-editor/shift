@@ -16,8 +16,6 @@ export interface GlyphSidebarHost {
   headerActions?: ReactNode;
   /** Rendered beside the Glyph heading, such as the glyph's tag colour. */
   glyphHeading?: ReactNode;
-  /** Rendered below the glyph's name and code point, inside the Glyph section. */
-  glyphDetails?: ReactNode;
   /** Rendered below the glyph metrics, for panels about the current selection. */
   selection?: ReactNode;
 }
@@ -214,7 +212,6 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
                   editable={session.mode === "workspace"}
                 />
               </div>
-              {host.glyphDetails ? <div className="mt-3 w-full">{host.glyphDetails}</div> : null}
             </main>
           </section>
         </div>
