@@ -54,6 +54,7 @@ export function MarkColorPicker({ current, onPick }: MarkColorPickerProps) {
       <Button
         variant="muted"
         size="sm"
+        className="text-ui"
         aria-expanded={more}
         onClick={(event) => {
           // Shows more colours in place; a menu holding the row stays open.
