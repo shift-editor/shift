@@ -1,9 +1,9 @@
-version: 0.188.1
+version: 0.189.1
 files:
-  - url: https://releases.shift.graphics/nightly/dbff2bfc63d55ab1c12de246ae1b198b64597f86/Shift-Nightly-0.188.1-Linux-arm64.AppImage
-    sha512: R+Z7BDLHs8HZEh5xHaOR9bK/g5QBKyozGOwZ1/+iK1aV8JaWA4MY0dpOKs6R0KzWxkZoiVhQ1Cr3tPxcusWT/Q==
-    size: 157723804
-    blockMapSize: 165864
-path: https://releases.shift.graphics/nightly/dbff2bfc63d55ab1c12de246ae1b198b64597f86/Shift-Nightly-0.188.1-Linux-arm64.AppImage
-sha512: R+Z7BDLHs8HZEh5xHaOR9bK/g5QBKyozGOwZ1/+iK1aV8JaWA4MY0dpOKs6R0KzWxkZoiVhQ1Cr3tPxcusWT/Q==
-releaseDate: '2026-11-16T13:45:41.164Z'
+  - url: https://releases.shift.graphics/nightly/c70a4878c8a30842a30d0e18ec960374fb376506/Shift-Nightly-0.189.1-Linux-arm64.AppImage
+    sha512: +MALcez+tGguc6Ry+3QTr0cSuZ73oQ1sQtnHFxswI4up2gEguwYMZApsvBQGUUTynx5dyGDyrcmBdyCojO/RpA==
+    size: 157765215
+    blockMapSize: 166315
+path: https://releases.shift.graphics/nightly/c70a4878c8a30842a30d0e18ec960374fb376506/Shift-Nightly-0.189.1-Linux-arm64.AppImage
+sha512: +MALcez+tGguc6Ry+3QTr0cSuZ73oQ1sQtnHFxswI4up2gEguwYMZApsvBQGUUTynx5dyGDyrcmBdyCojO/RpA==
+releaseDate: '2026-11-17T09:26:50.345Z'
