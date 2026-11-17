@@ -4,8 +4,8 @@
 use std::collections::HashSet;
 
 use shift_font::{
-    Axis, AxisMapping, BinaryData, FeatureData, FontMetadata, FontMetrics, Glyph, Guideline,
-    Kerning, LibData, MetricDefinition, NamedInstance, Source, SourceId,
+    Axis, AxisMapping, BinaryData, CoreResult, FeatureData, FontMetadata, FontMetrics, Glyph,
+    Guideline, Kerning, LibData, MetricDefinition, NamedInstance, Source, SourceId,
 };
 
 use crate::traits::FontView;
@@ -125,5 +125,11 @@ impl<F: FontView> FontView for GlyphSubsetView<'_, F> {
 
     fn images(&self) -> &BinaryData {
         self.font.images()
+    }
+
+    fn glyphs_with_derived_placements(&self) -> CoreResult<Vec<Glyph>> {
+        let mut glyphs = self.font.glyphs_with_derived_placements()?;
+        glyphs.retain(|glyph| self.kept.contains(glyph.name()));
+        Ok(glyphs)
     }
 }

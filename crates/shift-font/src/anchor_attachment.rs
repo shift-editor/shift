@@ -243,6 +243,41 @@ pub fn follow_anchors<A: AnchorLike>(components: &[FollowingComponent<'_, A>]) -
     following
 }
 
+/// One component of a composite as anchored placement reads it.
+#[derive(Clone, Copy, Debug)]
+pub struct PlacingComponent<'a, A> {
+    pub alignment: ComponentAlignment,
+    pub transform: DecomposedTransform,
+    /// The component glyph's own anchors where the component draws it.
+    pub anchors: &'a [A],
+}
+
+/// Returns where each component of a composite sits, anchored ones on their
+/// anchors, when nothing is being edited.
+///
+/// Each component's anchors are read where it draws its glyph, so a mark
+/// whose location is set elsewhere sits on its anchor as drawn there, not
+/// as its glyph's master places it. This is [`follow_anchors`] with no edit
+/// in progress: the same rule.
+pub fn anchored_placements<A: AnchorLike>(
+    components: &[PlacingComponent<'_, A>],
+) -> Vec<DecomposedTransform> {
+    let following: Vec<_> = components
+        .iter()
+        .map(|component| FollowingComponent {
+            alignment: component.alignment,
+            transform: component.transform,
+            accepted_transform: Some(component.transform),
+            anchors: component.anchors,
+            accepted_anchors: component.anchors,
+        })
+        .collect();
+    follow_anchors(&following)
+        .into_iter()
+        .map(|following| following.transform)
+        .collect()
+}
+
 impl DecomposedTransform {
     /// Whether this transform is the plain offset that aligns `anchors` with
     /// the `placed` components' anchors.

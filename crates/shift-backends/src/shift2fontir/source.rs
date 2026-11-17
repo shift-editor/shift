@@ -40,6 +40,9 @@ pub(crate) enum ShiftIrSourceError {
 
     #[error("units per em must be a whole number in 16..=16384, got {value}")]
     InvalidUnitsPerEm { value: f64 },
+
+    #[error("cannot place the font's components: {0}")]
+    Placement(#[from] shift_font::CoreError),
 }
 
 /// Provides fontir work backed by an immutable, shared Shift snapshot.
@@ -166,7 +169,8 @@ impl ShiftIrSource {
                 named_instances: font.named_instances().to_vec(),
                 sources: font.sources().to_vec(),
                 default_source_id,
-                glyphs: font.glyphs().cloned().collect(),
+                // Export compiles each anchored component where its anchors place it.
+                glyphs: font.glyphs_with_derived_placements()?,
                 kerning: font.kerning().clone(),
                 features: font.features().clone(),
                 gdef_classes: GlyphCategories::new()

@@ -14,9 +14,9 @@ use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
 use serde::Serialize;
 use shift_font::{
-    Axis, AxisKind, AxisList, AxisMapping, BinaryData, DesignLocation, ExternalLocation,
-    FeatureData, Font, FontMetadata, FontMetrics, Glyph, Guideline, Kerning, LibData, Location,
-    MetricDefinition, NamedInstance, Source, SourceId,
+    Axis, AxisKind, AxisList, AxisMapping, BinaryData, CoreResult, DesignLocation,
+    ExternalLocation, FeatureData, Font, FontMetadata, FontMetrics, Glyph, Guideline, Kerning,
+    LibData, Location, MetricDefinition, NamedInstance, Source, SourceId,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -132,6 +132,10 @@ impl<F: FontView> FontView for UfoFileView<'_, F> {
 
     fn images(&self) -> &BinaryData {
         self.font.images()
+    }
+
+    fn glyphs_with_derived_placements(&self) -> CoreResult<Vec<Glyph>> {
+        self.font.glyphs_with_derived_placements()
     }
 }
 

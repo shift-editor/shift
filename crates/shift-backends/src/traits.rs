@@ -1,7 +1,8 @@
 use crate::errors::FormatBackendResult;
 use shift_font::{
-    Axis, AxisMapping, BinaryData, FeatureData, Font, FontMetadata, FontMetrics, Glyph, GlyphName,
-    Guideline, Kerning, LibData, MetricDefinition, NamedInstance, Source, SourceId, SourceList,
+    Axis, AxisMapping, BinaryData, CoreResult, FeatureData, Font, FontMetadata, FontMetrics, Glyph,
+    GlyphName, Guideline, Kerning, LibData, MetricDefinition, NamedInstance, Source, SourceId,
+    SourceList,
 };
 
 pub trait FontView {
@@ -22,6 +23,14 @@ pub trait FontView {
     fn fontinfo_remainder(&self) -> &LibData;
     fn data_files(&self) -> &BinaryData;
     fn images(&self) -> &BinaryData;
+    /// The glyphs with each anchored component where its anchors place it at
+    /// each layer's source ([`Font::glyphs_with_derived_placements`]), as
+    /// export compiles them.
+    ///
+    /// # Errors
+    ///
+    /// Returns the projection's resolution errors.
+    fn glyphs_with_derived_placements(&self) -> CoreResult<Vec<Glyph>>;
 
     /// The default source, when the font names one it contains.
     fn default_source(&self) -> Option<&Source> {
@@ -97,6 +106,10 @@ impl FontView for Font {
 
     fn images(&self) -> &BinaryData {
         self.images()
+    }
+
+    fn glyphs_with_derived_placements(&self) -> CoreResult<Vec<Glyph>> {
+        self.glyphs_with_derived_placements()
     }
 }
 
