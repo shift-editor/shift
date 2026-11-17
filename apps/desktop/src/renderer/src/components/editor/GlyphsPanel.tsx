@@ -111,7 +111,8 @@ export const GlyphsPanel = () => {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 flex-col gap-1 px-2 pt-2">
+      {/* The gap below keeps scrolled tiles, the search field's grey, from meeting it. */}
+      <div className="flex shrink-0 flex-col gap-1 px-2 pt-2 pb-2">
         <div className="flex items-center gap-1">
           <Input
             aria-label="Search glyphs"
