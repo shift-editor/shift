@@ -59,6 +59,7 @@ export interface GlyphSidebarHost {
     glyphHeading?: ReactNode;
     headerActions?: ReactNode;
     selection?: ReactNode;
+    title?: ReactNode;
 }
 
 // @public (undocumented)
