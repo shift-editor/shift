@@ -14,7 +14,10 @@
 
 use std::collections::BTreeSet;
 
-use crate::{Axis, AxisId, AxisList, Component, ComponentInheritance, DesignLocation, GlyphLayer};
+use crate::{
+    Axis, AxisId, AxisList, Component, ComponentInheritance, CoreResult, DesignLocation,
+    GlyphInterpolationValues, GlyphLayer,
+};
 
 /// The axes, and the inheritance, one component carries in every master's
 /// interpolation values.
@@ -106,15 +109,73 @@ impl ComponentLocationFill {
                 let Some(axis) = axes.axis(*axis_id) else {
                     continue;
                 };
-                let inherited = match component.inheritance() {
-                    ComponentInheritance::Parent => location.value_on(axis),
-                    ComponentInheritance::Font => axis.default(),
-                };
-                component_location.set(*axis_id, inherited);
+                component_location.set(
+                    *axis_id,
+                    component.inheritance().inherited_value(axis, location),
+                );
             }
             component.set_location(component_location);
             component.set_inheritance(slot.inheritance);
         }
         Some(filled)
+    }
+}
+
+impl GlyphLayer {
+    /// Applies `values`, laid out as interpolation reads `read` (this layer's
+    /// structure, its components carrying the axes the fill gives them), to
+    /// this layer drawn at `location`.
+    ///
+    /// A component keeps every axis it already sets. It also keeps a filled
+    /// axis whose value differs from the one it would inherit at `location`,
+    /// so the layer draws where `values` put it; a filled axis it would
+    /// inherit anyway is dropped. Applies `values` as they are when `read`
+    /// has a different number of components.
+    ///
+    /// # Errors
+    ///
+    /// Returns the errors of [`Self::apply_interpolation_values`].
+    pub(crate) fn apply_read_values(
+        &mut self,
+        read: &Self,
+        values: &GlyphInterpolationValues,
+        axes: &[Axis],
+        location: &DesignLocation,
+    ) -> CoreResult<()> {
+        if read.components().len() != self.components().len() {
+            return self.apply_interpolation_values(values);
+        }
+        let set: Vec<DesignLocation> = self
+            .components_iter()
+            .map(|component| component.location().clone())
+            .collect();
+        for (component, read_component) in self.components_iter_mut().zip(read.components_iter()) {
+            let mut component_location = read_component.location().clone();
+            component_location.extend(
+                component
+                    .location()
+                    .iter()
+                    .map(|(axis, value)| (*axis, *value)),
+            );
+            component.set_location(component_location);
+        }
+        self.apply_interpolation_values(values)?;
+
+        for (component, set) in self.components_iter_mut().zip(&set) {
+            let inheritance = component.inheritance();
+            let kept = component
+                .location()
+                .iter()
+                .filter(|(axis_id, value)| {
+                    set.get(axis_id).is_some()
+                        || axes.axis(**axis_id).is_none_or(|axis| {
+                            inheritance.inherited_value(axis, location) != **value
+                        })
+                })
+                .map(|(axis, value)| (*axis, *value))
+                .collect();
+            component.set_location(kept);
+        }
+        Ok(())
     }
 }

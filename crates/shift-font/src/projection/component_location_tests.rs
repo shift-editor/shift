@@ -275,3 +275,89 @@ fn masters_whose_components_inherit_differently_still_interpolate() {
     assert_eq!(bleed.dots_at(50.0), vec![10.0, 0.0]);
     assert_eq!(bleed.dots_at(100.0), vec![20.0, 0.0]);
 }
+
+impl Bleed {
+    /// Adds a Half source at Bleed 50 and gives `H` a layer there, cloned
+    /// from Regular with the values interpolation draws at Bleed 50, as the
+    /// editor does when a sparse source is selected. Returns each of the
+    /// new layer's stored component locations.
+    fn materialize_half(&mut self) -> Vec<DesignLocation> {
+        let half = DesignLocation::from([(self.axis, 50.0)]);
+        let source_id = SourceId::new();
+        self.font
+            .apply_intents(&crate::FontIntentSet::from(crate::CreateSource {
+                source_id,
+                name: "Half".into(),
+                location: half.clone(),
+            }))
+            .unwrap();
+        let values = self
+            .font
+            .glyph_interpolation(self.h)
+            .unwrap()
+            .unwrap()
+            .resolve(&half, self.font.axes())
+            .unwrap()
+            .interpolation_values();
+
+        let layer_id = LayerId::new();
+        self.font
+            .apply_intents(&crate::FontIntentSet::from(crate::MaterializeGlyphLayer {
+                layer_id,
+                glyph_id: self.h,
+                source_id,
+                from_layer_id: self.layer(self.regular),
+                values,
+            }))
+            .unwrap();
+        self.font
+            .layer(layer_id)
+            .unwrap()
+            .components_iter()
+            .map(|component| component.location().clone())
+            .collect()
+    }
+}
+
+#[test]
+fn a_materialized_layer_stores_a_filled_axis_it_does_not_inherit() {
+    // Only Bled's second dot sets Bleed, so interpolation reads Regular's
+    // with the axis filled in: it blends Bleed 0 and 0, and draws at 0.
+    let mut bleed = bleed(|axis, master, component, index| {
+        if index == 1 && master == 1 {
+            component.set_location(DesignLocation::from([(axis, 0.0)]));
+        }
+    });
+    assert_eq!(bleed.dots_at(50.0), vec![10.0, 0.0]);
+
+    let locations = bleed.materialize_half();
+
+    // Inheriting would put the second dot at Bleed 50, so Half stores 0.
+    assert_eq!(
+        locations,
+        vec![
+            DesignLocation::new(),
+            DesignLocation::from([(bleed.axis, 0.0)])
+        ]
+    );
+    assert_eq!(bleed.dots_at(50.0), vec![10.0, 0.0]);
+}
+
+#[test]
+fn a_materialized_layer_drops_a_filled_axis_it_inherits() {
+    // Bled's second dot sets Bleed 100, where Bled is, so halfway it blends
+    // to Bleed 50: what Half inherits.
+    let mut bleed = bleed(|axis, master, component, index| {
+        if index == 1 && master == 1 {
+            component.set_location(DesignLocation::from([(axis, 100.0)]));
+        }
+    });
+
+    let locations = bleed.materialize_half();
+
+    assert_eq!(
+        locations,
+        vec![DesignLocation::new(), DesignLocation::new()]
+    );
+    assert_eq!(bleed.dots_at(50.0), vec![10.0, 10.0]);
+}
