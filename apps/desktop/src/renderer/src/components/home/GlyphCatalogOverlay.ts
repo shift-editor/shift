@@ -13,7 +13,8 @@ const CELL_RADIUS = 6;
 const BAND_HOVER_ALPHA = 0.12;
 /** The rename field sits inside the band: the compact input's height, centred. */
 const NAME_FIELD_HEIGHT = 24;
-const NAME_FIELD_INSET_X = 3;
+/** CELL_RADIUS minus the input's own 4px corner, so the two corners share a centre. */
+const NAME_FIELD_INSET_X = 4;
 /** The character drawn for an empty glyph, as a fraction of the preview's height. */
 const EMPTY_GLYPH_FONT_RATIO = 0.43;
 /** How wide the selection ring is; it sits inside the cell's edge. */
