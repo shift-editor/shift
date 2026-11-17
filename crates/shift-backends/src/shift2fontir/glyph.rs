@@ -1,13 +1,16 @@
+use std::str::FromStr;
 use std::sync::Arc;
 
-use fontdrasil::coords::NormalizedLocation;
+use fontdrasil::coords::{DesignCoord, NormalizedLocation};
 use fontdrasil::orchestration::{Access, AccessBuilder, Work};
-use fontdrasil::types::GlyphName;
+use fontdrasil::types::{Axes, GlyphName, Tag};
 use fontir::error::Error;
 use fontir::ir::{AnchorBuilder, Component, ComponentTransform, GlyphBuilder, GlyphInstance};
 use fontir::orchestration::{Context, WorkId};
 use kurbo::{Affine, BezPath};
-use shift_font::{Glyph, GlyphLayer, open_corners};
+use shift_font::{
+    Axis, AxisList, ComponentInheritance, ComponentLocationFill, Glyph, GlyphLayer, open_corners,
+};
 
 use super::source::{ShiftSnapshot, located_master_layers};
 
@@ -76,10 +79,28 @@ impl Work<Context, WorkId, Error> for GlyphWork {
         let mut anchors = AnchorBuilder::new(self.glyph_name.clone());
 
         let masters = self.snapshot.glyph_masters(&metadata)?;
+        let located: Vec<_> = located_master_layers(&self.glyph, &masters).collect();
+        // A master stores only the component axes its designer set; fill each with what it
+        // inherits, as interpolation reads it, so every master locates the same axes.
+        let layers: Vec<&GlyphLayer> = located
+            .iter()
+            .map(|(layer, _)| layer.layer.as_ref())
+            .collect();
+        let fill = ComponentLocationFill::new(&self.snapshot.axes, &layers);
         let mut sources = Vec::new();
-        for (located, location) in located_master_layers(&self.glyph, &masters) {
+        for (located, location) in located {
             let layer = located.layer.as_ref();
-            let mut instance = to_glyph_instance(layer);
+            let design_location = masters
+                .iter()
+                .find(|(source, _)| Some(source.id()) == located.location.base_source_id())
+                .map(|(source, _)| source.location().clone())
+                .unwrap_or_default();
+            let filled = fill.fill(&self.snapshot.axes, layer, &design_location);
+            let mut instance = to_glyph_instance(
+                filled.as_ref().unwrap_or(layer),
+                &self.snapshot.axes,
+                &metadata.all_source_axes,
+            );
             if self.snapshot.nonspacing_marks.contains(self.glyph.name()) {
                 // Glyphs exports nonspacing marks with no advance.
                 instance.width = 0.0;
@@ -112,7 +133,26 @@ fn erase_open_corners(sources: &mut [(&NormalizedLocation, GlyphInstance)]) {
     }
 }
 
-fn to_glyph_instance(layer: &GlyphLayer) -> GlyphInstance {
+/// One master's drawing as fontir reads it. A component's location is its
+/// design values on font axes, normalized through `ir_axes` as the font's
+/// own coordinates are; `Font` inheritance is VARC's
+/// `RESET_UNSPECIFIED_AXES`. A component with either is a variable
+/// component, which fontc writes to `VARC` or decomposes at its location.
+fn to_glyph_instance(layer: &GlyphLayer, shift_axes: &[Axis], ir_axes: &Axes) -> GlyphInstance {
+    let normalized = |component: &shift_font::Component| -> NormalizedLocation {
+        component
+            .location()
+            .iter()
+            .filter_map(|(axis_id, value)| {
+                let tag = Tag::from_str(shift_axes.axis(*axis_id)?.tag()).ok()?;
+                let ir_axis = ir_axes.get(&tag)?;
+                Some((
+                    tag,
+                    DesignCoord::new(*value).to_normalized(&ir_axis.converter),
+                ))
+            })
+            .collect()
+    };
     GlyphInstance {
         width: layer.width(),
         height: layer.height(),
@@ -133,10 +173,8 @@ fn to_glyph_instance(layer: &GlyphLayer) -> GlyphInstance {
                         transform.dy,
                     ])),
                     anchor: None,
-                    // Component locations export through VARC in a later change;
-                    // until then a component draws at its glyph's location.
-                    location: NormalizedLocation::new(),
-                    reset_unspecified_axes: false,
+                    location: normalized(component),
+                    reset_unspecified_axes: component.inheritance() == ComponentInheritance::Font,
                 }
             })
             .collect(),
