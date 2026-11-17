@@ -37,7 +37,7 @@ test("exposes stable semantic selectors for major application surfaces", async (
   await expect(settings).toBeHidden();
 
   await editor.addAxis({ ...WEIGHT, name: "Weight" });
-  await navigation.getByRole("button", { name: "Axes", exact: true }).click();
+  await navigation.getByRole("button", { name: "Font axes", exact: true }).click();
   await expect(await firstAxisSlider(page)).toBeVisible();
   await expect(page.getByLabel("Weight value", { exact: true })).toBeVisible();
 

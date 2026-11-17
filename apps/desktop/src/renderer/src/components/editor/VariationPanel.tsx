@@ -2,16 +2,20 @@ import { Separator } from "@shift/ui";
 import { AxesSection } from "@/components/variation/AxesSection";
 import { InstancesSection } from "@/components/variation/InstancesSection";
 import { SourcesSection } from "@/components/variation/SourcesSection";
+import { ComponentLocationSection } from "@/components/variation/ComponentLocationSection";
 import { useVariationOutlineControls } from "@/hooks/useVariationOutlineControls";
 import { ObjectSectionRow } from "./object-tree/ObjectSectionRow";
 
+/**
+ * The Designspace tab: the font's sources and instances, then where the font
+ * is drawn (Axes) and, under it while components are selected, where they
+ * draw their base glyphs.
+ */
 export const VariationPanel = () => {
   const outlines = useVariationOutlineControls();
 
   return (
     <div className="flex flex-col gap-2">
-      <AxesSection defaultOpen />
-      <Separator className="-mx-1 w-auto" />
       <SourcesSection
         defaultOpen
         section={ObjectSectionRow}
@@ -23,6 +27,10 @@ export const VariationPanel = () => {
         section={ObjectSectionRow}
         outlineControls={outlines.instanceControls}
       />
+      <Separator className="-mx-1 w-auto" />
+      <AxesSection defaultOpen />
+      {/* Only while components are selected; it brings its own divider. */}
+      <ComponentLocationSection />
     </div>
   );
 };

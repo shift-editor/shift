@@ -359,6 +359,7 @@ export class Editor {
     screenToScene(screen: ScreenPoint): ScenePoint;
     selectAll(): void;
     selectedComponentsAnchored(): boolean | null;
+    selectedComponentsAtActiveSource(): readonly Component[] | null;
     readonly selection: Selection_2;
     selectionBounds(ids?: readonly SelectableId[]): LocalBounds | null;
     get selectionBoundsCell(): Signal<LocalBounds | null>;

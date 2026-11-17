@@ -34,7 +34,7 @@ import {
   type MetricsKeySide,
   type MarkColor,
 } from "@shift/types";
-import { isSegmentId, type GlyphGeometry } from "@shift/glyph-state";
+import { isSegmentId, type Component, type GlyphGeometry } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "../../types/variation";
 import type { SourceSelectionMode } from "../../types/sourceSelection";
 import type { GridStorage } from "../../types/grid";
@@ -992,10 +992,56 @@ export class Editor {
       return null;
     }
 
-    return this.#multiSourceEditing.matchComponentTargets({
+    const componentIds = this.#componentIdsIn(
+      components[0]!.node.glyphId,
       layer,
-      componentIds: components.map((component) => component.componentId),
+      components.map((component) => component.componentId),
+    );
+    if (!componentIds) return null;
+
+    return this.#multiSourceEditing.matchComponentTargets({ layer, componentIds });
+  }
+
+  /**
+   * `ids` as `layer`'s own component ids. The canvas draws one source's
+   * components for every source, so a selection can name another layer's
+   * components: those are mapped to their counterparts in `layer`.
+   *
+   * @returns null when another layer's components have no counterparts in `layer`.
+   */
+  #componentIdsIn(
+    glyphId: GlyphId,
+    layer: GlyphLayer,
+    ids: readonly ComponentId[],
+  ): readonly ComponentId[] | null {
+    if (ids.every((id) => layer.geometry.component(id))) return ids;
+
+    const owner = this.glyphForId(glyphId)?.layers.find((candidate) =>
+      candidate.geometry.component(ids[0]!),
+    );
+    if (!owner) return null;
+
+    const counterparts = this.font.counterparts(owner.id, layer.id, {
+      points: [],
+      anchors: [],
+      components: ids,
     });
+    return counterparts?.components ?? null;
+  }
+
+  /**
+   * The selected components as the active source stores them, with their
+   * location and inheritance there.
+   *
+   * @returns null unless the selection is only components of one glyph at the active source.
+   */
+  public selectedComponentsAtActiveSource(): readonly Component[] | null {
+    const targets = this.#componentTargets(this.selection.ids);
+    if (!targets) return null;
+
+    track(targets.layer.geometryCell);
+    const components = targets.componentIds.map((id) => targets.layer.geometry.component(id));
+    return components.every((component) => component !== null) ? (components as Component[]) : null;
   }
 
   /**

@@ -17,7 +17,7 @@ export const AxesSection = ({ defaultOpen = false }: AxesSectionProps) => {
 
   return (
     <CollapsibleSection
-      title="Axes"
+      title="Font axes"
       open={open || axisMenuOpen}
       onOpenChange={setOpen}
       isActive={axisMenuOpen}

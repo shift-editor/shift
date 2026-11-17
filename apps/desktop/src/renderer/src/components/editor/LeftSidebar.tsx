@@ -9,12 +9,10 @@ import {
   TabsTab,
   Tooltip,
 } from "@shift/ui";
-import { useEffect, useState, type ComponentType, type SVGProps } from "react";
+import { useState, type ComponentType, type SVGProps } from "react";
 import VariableIcon from "@assets/export/target-variable.svg";
 import { SidebarBrand } from "@/components/chrome/SidebarBrand";
-import { ExportSection } from "@/components/export/ExportSection";
 import { PagesSection } from "@/components/pages/PagesSection";
-import { useExport } from "@/context/ExportContext";
 import { GlyphsPanel } from "./GlyphsPanel";
 import { ObjectSectionRow } from "./object-tree/ObjectSectionRow";
 import { ObjectsPanel } from "./ObjectsPanel";
@@ -36,16 +34,11 @@ const VIEWS: readonly {
 ];
 
 /**
- * The document's lists: its pages and what the canvas holds, its sources,
- * instances and exports, or its glyphs. Opening the Export popover, such as with ⇧⌘E,
- * shows the Designspace tab, since the popover opens beside its Export section.
+ * The document's lists: its pages and what the canvas holds, its axes,
+ * sources, instances and the selected components' location, or its glyphs.
  */
 export const LeftSidebar = () => {
-  const { popoverOpen } = useExport();
   const [tab, setTab] = useState<string>("layers");
-  useEffect(() => {
-    if (popoverOpen) setTab("designspace");
-  }, [popoverOpen]);
 
   return (
     <aside
@@ -92,8 +85,6 @@ export const LeftSidebar = () => {
             <ScrollArea className="h-full">
               <div className="px-1 pb-2">
                 <VariationPanel />
-                <Separator className="-mx-1 my-2 w-auto" />
-                <ExportSection />
               </div>
             </ScrollArea>
           </TabsPanel>
