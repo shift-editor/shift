@@ -143,7 +143,7 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-3 py-3">
           <section className="flex flex-col gap-2">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center">
               <h3 className="text-ui font-medium text-primary">Glyph</h3>
               {host.glyphHeading}
             </div>
