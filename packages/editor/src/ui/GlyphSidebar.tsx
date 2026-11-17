@@ -114,7 +114,9 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
   const leftSidebearing = sidebearings.lsb === null ? null : Math.round(sidebearings.lsb);
   const rightSidebearing = sidebearings.rsb === null ? null : Math.round(sidebearings.rsb);
   const sidebearingsEditable = editable && leftSidebearing !== null && rightSidebearing !== null;
-  const pageName = useSignalState(editor.scene.shownPageCell)?.name ?? null;
+  const page = useSignalState(editor.scene.shownPageCell);
+  // A glyph opened in its own tab sits on an unnamed glyph page; the glyph names it.
+  const title = page?.role === "glyph" ? (glyph?.name ?? page.name) : (page?.name ?? "Untitled");
 
   return (
     <aside
@@ -122,9 +124,7 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
       className="flex h-full w-full min-w-0 flex-col overflow-hidden border-l border-line-subtle bg-surface"
     >
       <div className="flex items-center justify-between gap-2 px-3 py-2">
-        <span className="min-w-0 truncate text-ui font-medium text-primary">
-          {pageName ?? "Untitled"}
-        </span>
+        <span className="min-w-0 truncate text-ui font-medium text-primary">{title}</span>
         {host.headerActions ?? (
           <Button
             variant="ghost"
@@ -143,7 +143,7 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-3 py-3">
           <section className="flex flex-col gap-2">
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center justify-between">
               <h3 className="text-ui font-medium text-primary">Glyph</h3>
               {host.glyphHeading}
             </div>
