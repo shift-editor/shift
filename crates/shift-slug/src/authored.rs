@@ -842,7 +842,7 @@ pub fn authored_glyph_requirements(projection: &GlyphProjection) -> AuthoredGlyp
 
 /// Adds one projection without ever comparing independently resolved pen streams.
 ///
-/// `source_weight_indices` must follow `interpolation.basis().source_ids()`.
+/// `source_weight_indices` must follow `interpolation.basis().samples()`.
 /// Static glyphs use `constant_weight_index`, whose uploaded value must be one.
 ///
 /// # Errors

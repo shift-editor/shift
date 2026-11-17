@@ -1337,7 +1337,7 @@ mod exports {
         let location = DesignLocation::from_untyped(to_location(axes, location));
         basis
             .weights_at(&location, axes)
-            .unwrap_or_else(|_| vec![0.0; basis.source_ids().len()])
+            .unwrap_or_else(|_| vec![0.0; basis.samples().len()])
     }
 
     /// An external location's design location, both as numbers in `axes`
