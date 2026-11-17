@@ -218,7 +218,7 @@ test.describe("SVG glyph catalog fallback", () => {
     await sidebar.getByRole("button", { name: "Colour, red, yellow" }).click();
     await expect(picker.getByText("Mixed")).toBeVisible();
 
-    await picker.getByRole("button", { name: "Clear colour" }).click();
+    await picker.getByRole("button", { name: "No colour" }).click();
     await expect(svg.locator("[data-mark-color]:not([data-mark-color=none])")).toHaveCount(0);
     await expect(sidebar.getByRole("button", { name: "Colour", exact: true })).toBeVisible();
   });
