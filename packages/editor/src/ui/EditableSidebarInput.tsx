@@ -22,7 +22,7 @@ export interface EditableSidebarInputProps {
   className?: string;
   value?: number | null;
   icon?: ReactNode;
-  iconPosition?: "left" | "right";
+  iconPosition?: "left" | "right" | "center";
   onValueChange?: (value: number) => void;
   disabled?: boolean;
   suffix?: string;

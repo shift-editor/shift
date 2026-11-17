@@ -78,7 +78,7 @@ function metricKeyProps(
   return {
     keyText: link.key,
     onKeyCommit,
-    iconPosition: side === "right" ? "left" : "right",
+    iconPosition: keyChipPosition(side),
     icon: (
       <Tooltip content={problem ?? chipTooltip(source, value)}>
         <button
@@ -215,4 +215,19 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
       </ScrollArea>
     </aside>
   );
+}
+
+/**
+ * Where a linked field's key chip sits: a sidebearing's on the edge nearest
+ * the glyph, the advance's in the middle, as the advance spans the glyph.
+ */
+function keyChipPosition(side: MetricsKeySide): "left" | "right" | "center" {
+  switch (side) {
+    case "left":
+      return "right";
+    case "right":
+      return "left";
+    case "width":
+      return "center";
+  }
 }
