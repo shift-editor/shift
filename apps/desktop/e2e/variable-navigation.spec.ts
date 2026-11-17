@@ -154,7 +154,7 @@ test("keeps variable preview and exact-source editability coherent across Grid n
   await expect(glyphCatalogRenderer(page)).toHaveAttribute("data-grid-readiness", "Complete", {
     timeout: 30_000,
   });
-  await fontNavigation(page).getByRole("button", { name: "Axes", exact: true }).click();
+  await fontNavigation(page).getByRole("button", { name: "Font axes", exact: true }).click();
   const axisInput = page.getByLabel("Navigation Weight value", { exact: true });
   await axisInput.click();
   await axisInput.fill("650");
