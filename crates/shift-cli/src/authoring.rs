@@ -114,13 +114,14 @@ fn font_structure(path: &Path) -> Result<Font> {
 /// Returns an error when the document cannot be loaded, the axis is invalid or
 /// conflicts with existing authoring data, or the destination cannot be saved.
 pub(crate) fn add_axis(args: AddAxisArgs) -> Result<AuthoringReport> {
-    let axis = Axis::new(
+    let mut axis = Axis::new(
         args.tag,
         args.name,
         args.minimum,
         args.default,
         args.maximum,
     );
+    axis.set_hidden(args.hidden);
     let set = FontIntentSet::from(CreateAxis { axis });
 
     apply_mutation(&args.path, &args.mutation, &set)

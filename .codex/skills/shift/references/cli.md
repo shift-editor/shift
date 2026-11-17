@@ -36,6 +36,8 @@ shift-cli font create Lab.shift
 shift-cli font create Lab.shift --from Family.glyphspackage   # names, UPM, metrics, axes, masters; no glyphs
 shift-cli import Family.glyphspackage --output Family.shift    # the whole font: glyphs, kerning, features, instances
 shift-cli axis add Lab.shift --tag wght --name Weight --min 100 --default 400 --max 900
+shift-cli axis add Lab.shift --tag opsz --name "Optical size" --min 8 --default 12 --max 72 --hidden
+shift-cli axis set Lab.shift opsz --visible                  # or --hidden; the fvar hidden flag
 shift-cli source add Lab.shift --name Black --location wght=900
 shift-cli glyph add Lab.shift A --unicode U+0041
 shift-cli layer set Lab.shift --glyph A --source Regular --input A.json

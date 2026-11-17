@@ -155,6 +155,91 @@ fn expanded_unmapped_range_survives_compilation_without_changing_glyphs_or_maste
     assert_eq!(axes[0].max_value().to_f64(), 1000.0);
 }
 
+/// `fvar` axis flag that tells user interfaces not to show the axis.
+const HIDDEN_AXIS: u16 = 0x0001;
+
+type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
+
+/// The command's output, or its stderr as the error when it failed.
+fn succeeded(output: std::process::Output) -> Fallible<std::process::Output> {
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).into());
+    }
+
+    Ok(output)
+}
+
+/// A variable document with one drawn glyph, so it compiles.
+fn compilable_document(path: &str) -> Fallible<()> {
+    drop(ShiftStore::create_document(path, &sample_variable_font())?);
+    succeeded(shift_with_stdin(
+        &["glyph", "set", path, "--input", "-"],
+        r#"{"glyphs":[{"name":"B","layer":{"advance":600,"svgPath":"M0 0 L300 700 L600 0 Z"}}]}"#,
+    ))?;
+    Ok(())
+}
+
+fn set_wght(path: &str, flag: &str) {
+    let output = shift(&["axis", "set", path, "wght", flag]);
+    assert!(output.status.success(), "{:?}", output.stderr);
+}
+
+fn compiled_wght_hidden(path: &str, ttf: &str) -> Fallible<bool> {
+    succeeded(shift(&["compile", path, "--output", ttf]))?;
+    let bytes = std::fs::read(ttf)?;
+    let font = FontRef::new(&bytes)?;
+    let axes = font.fvar()?.axes()?;
+    let wght = axes.first().ok_or("compiled fvar has no axes")?;
+    Ok(wght.flags() & HIDDEN_AXIS != 0)
+}
+
+fn inspected_wght_hidden(path: &str) -> Fallible<Value> {
+    let output = succeeded(shift(&["inspect", path, "--view", "axes", "--json"]))?;
+    let report: Value = serde_json::from_slice(&output.stdout)?;
+    let hidden = report.pointer("/axes/0/hidden").ok_or("no axes reported")?;
+    Ok(hidden.clone())
+}
+
+#[test]
+fn hidden_and_visible_round_trip_through_inspect_and_the_compiled_fvar() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("Visibility.shift");
+    let path = path.to_str().unwrap();
+    let ttf = temp.path().join("Lab.ttf");
+    let ttf = ttf.to_str().unwrap();
+    compilable_document(path).unwrap();
+    let before = load_font(path);
+    assert_eq!(inspected_wght_hidden(path).unwrap(), false);
+    assert!(!compiled_wght_hidden(path, ttf).unwrap());
+
+    set_wght(path, "--hidden");
+    let after = load_font(path);
+    let mut expected = before.axes()[0].clone();
+    expected.set_hidden(true);
+    assert_eq!(after.axes()[0], expected);
+    assert_eq!(after.sources(), before.sources());
+    assert_eq!(after.axis_mappings(), before.axis_mappings());
+    assert_eq!(inspected_wght_hidden(path).unwrap(), true);
+    assert!(compiled_wght_hidden(path, ttf).unwrap());
+
+    set_wght(path, "--visible");
+    assert_eq!(load_font(path).axes()[0], before.axes()[0]);
+    assert_eq!(inspected_wght_hidden(path).unwrap(), false);
+    assert!(!compiled_wght_hidden(path, ttf).unwrap());
+}
+
+#[test]
+fn hidden_and_visible_together_are_rejected_without_writing() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("Variant.shift");
+    let path = path.to_str().unwrap();
+    compilable_document(path).unwrap();
+    let bytes = std::fs::read(path).unwrap();
+    let output = shift(&["axis", "set", path, "wght", "--hidden", "--visible"]);
+    assert!(!output.status.success());
+    assert_eq!(std::fs::read(path).unwrap(), bytes);
+}
+
 #[test]
 fn invalid_axis_edits_leave_the_complete_input_unchanged_and_report_json_errors() {
     let temp = tempfile::tempdir().unwrap();

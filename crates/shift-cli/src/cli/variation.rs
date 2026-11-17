@@ -33,6 +33,14 @@ pub(crate) struct SetAxisArgs {
     #[arg(long = "max", allow_hyphen_values = true)]
     pub maximum: Option<f64>,
 
+    /// Hide the axis from user interfaces (the OpenType `fvar` hidden flag).
+    #[arg(long, conflicts_with = "visible")]
+    pub hidden: bool,
+
+    /// Show the axis in user interfaces again, clearing the hidden flag.
+    #[arg(long)]
+    pub visible: bool,
+
     #[command(flatten)]
     pub mutation: MutationArgs,
 }

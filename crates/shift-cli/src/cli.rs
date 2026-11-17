@@ -146,7 +146,7 @@ pub(crate) enum AxisCommand {
     /// Add a continuous axis.
     Add(AddAxisArgs),
 
-    /// Edit axis naming or range without relocating masters or product presets.
+    /// Edit axis naming, range, or visibility without relocating masters or product presets.
     Set(SetAxisArgs),
 }
 
@@ -229,6 +229,10 @@ pub(crate) struct AddAxisArgs {
     /// Maximum external/design value.
     #[arg(long = "max")]
     pub maximum: f64,
+
+    /// Create the axis hidden from user interfaces (the OpenType `fvar` hidden flag).
+    #[arg(long)]
+    pub hidden: bool,
 
     #[command(flatten)]
     pub mutation: MutationArgs,

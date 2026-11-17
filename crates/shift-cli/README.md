@@ -371,6 +371,8 @@ name glyphs it leaves out. With none, the whole font is packed as it is.
 ```sh
 shift axis set Lab.shift wght --name Mass --tag WGHT
 shift axis set Lab.shift wght --min 100 --max 1000
+shift axis set Lab.shift opsz --hidden
+shift axis set Lab.shift opsz --visible
 ```
 
 Select an axis by its current tag or full stable ID. `axis set` preserves identity,
@@ -381,6 +383,11 @@ default master must remain at the replacement default. Labels and named instance
 must also remain valid. Mapped axes allow naming edits only when their kind/range
 is unchanged; changing mapped bounds/defaults requires explicit mapping authoring.
 Discrete axes permit name/tag edits only. Empty edits and duplicate tags fail.
+`--hidden` sets the axis's hidden flag, which compiles to the OpenType `fvar`
+`HIDDEN_AXIS` flag so user interfaces do not show the axis; `--visible` clears
+it. It is the same flag as the Hidden checkbox in Settings → Axes. `axis add
+--hidden` creates the axis hidden, and `inspect --view axes` reports the flag
+in its `hidden` column and JSON field.
 
 ### Named instances
 

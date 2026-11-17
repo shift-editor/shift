@@ -8,7 +8,25 @@ use crate::cli::SetAxisArgs;
 
 use super::{AuthoringReport, apply_mutation, glyph::load_font, resolve_axis_id};
 
-/// Edits axis naming or continuous range through domain validation.
+/// Whether `axis set` hides or shows the axis in user interfaces.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Visibility {
+    Hidden,
+    Visible,
+}
+
+impl Visibility {
+    /// Reads `--hidden` / `--visible`; clap rejects both together.
+    fn from_flags(hidden: bool, visible: bool) -> Option<Self> {
+        if hidden {
+            return Some(Self::Hidden);
+        }
+
+        visible.then_some(Self::Visible)
+    }
+}
+
+/// Edits axis naming, continuous range, or visibility through domain validation.
 ///
 /// No source, label, instance coordinate, or mapping point is moved to make an
 /// edit fit. Discrete axes permit naming edits only.
@@ -24,8 +42,9 @@ pub(crate) fn set_axis(args: SetAxisArgs) -> Result<AuthoringReport> {
         .axis(axis_id)
         .ok_or_else(|| miette!("axis {:?} does not exist", args.axis))?;
     let changes_range = args.minimum.is_some() || args.default.is_some() || args.maximum.is_some();
-    if args.tag.is_none() && args.name.is_none() && !changes_range {
-        bail!("axis set requires a name, tag, or range edit");
+    let visibility = Visibility::from_flags(args.hidden, args.visible);
+    if args.tag.is_none() && args.name.is_none() && !changes_range && visibility.is_none() {
+        bail!("axis set requires a name, tag, range, or visibility edit");
     }
 
     let mut axis = current.clone();
@@ -34,6 +53,9 @@ pub(crate) fn set_axis(args: SetAxisArgs) -> Result<AuthoringReport> {
     }
     if let Some(name) = args.name {
         axis.set_name(name);
+    }
+    if let Some(visibility) = visibility {
+        axis.set_hidden(visibility == Visibility::Hidden);
     }
     if changes_range {
         match current.kind() {

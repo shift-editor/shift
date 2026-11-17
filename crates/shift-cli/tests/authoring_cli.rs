@@ -77,6 +77,47 @@ fn authors_axis_and_source_through_the_cli() {
     );
 }
 
+/// Adds a 10–100 axis named after its tag, passing `extra` flags through.
+fn add_axis(path: &str, tag: &str, extra: &[&str]) {
+    let mut args = vec![
+        "axis",
+        "add",
+        path,
+        "--tag",
+        tag,
+        "--name",
+        tag,
+        "--min",
+        "10",
+        "--default",
+        "10",
+        "--max",
+        "100",
+    ];
+    args.extend_from_slice(extra);
+    let output = shift(&args);
+    assert!(output.status.success(), "{:?}", output.stderr);
+}
+
+#[test]
+fn hidden_flag_creates_a_hidden_axis() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("Hidden.shift");
+    let path = path.to_str().unwrap();
+    assert!(shift(&["font", "create", path]).status.success());
+
+    add_axis(path, "wght", &[]);
+    add_axis(path, "opsz", &["--hidden"]);
+
+    let font = load_font(path);
+    let hidden: Vec<_> = font
+        .axes()
+        .iter()
+        .map(shift_font::Axis::is_hidden)
+        .collect();
+    assert_eq!(hidden, [false, true]);
+}
+
 #[test]
 fn dry_run_reports_a_valid_change_without_writing() {
     let temp = tempfile::tempdir().unwrap();
