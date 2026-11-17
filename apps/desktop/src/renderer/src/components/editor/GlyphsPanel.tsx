@@ -151,7 +151,7 @@ export const GlyphsPanel = () => {
               </MenuTrigger>
             </Tooltip>
             <MenuPortal>
-              <MenuPositioner side="bottom" align="end" sideOffset={4}>
+              <MenuPositioner side="right" align="start" sideOffset={8}>
                 <MenuPopup aria-label="Filter glyphs" className="max-h-80 min-w-44 overflow-y-auto">
                   {categories.map(({ category }) => (
                     <MenuCheckboxItem
