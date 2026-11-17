@@ -58,7 +58,7 @@ const MAX_DOTS = 3;
 /**
  * The glyphs' tag colour beside the Glyph heading, as a dot for each colour
  * they have (a faint grey one when they have none). Clicking it opens the colour
- * picker, which says Mixed when the glyphs differ.
+ * picker, which highlights every colour the glyphs have.
  */
 export function GlyphTagButton() {
   const session = useFontSession();
@@ -125,13 +125,12 @@ export function GlyphTagButton() {
                 </PopoverClose>
               </Tooltip>
             </div>
-            <div className="flex flex-col gap-1 p-2">
+            <div className="p-2">
               <MarkColorPicker
                 layout="grid"
                 current={colors}
                 onPick={(color) => session.editor.setMarkColor(glyphIds, color)}
               />
-              {colors.size > 1 ? <span className="px-1 text-ui text-secondary">Mixed</span> : null}
             </div>
           </PopoverPopup>
         </PopoverPositioner>

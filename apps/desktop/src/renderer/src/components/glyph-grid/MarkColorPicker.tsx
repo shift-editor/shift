@@ -30,8 +30,9 @@ interface MarkColorPickerProps {
 /**
  * The tag colours to give glyphs: the twelve named ones, a swatch for each
  * colour outside the twelve that the glyphs already have, and in a row a
- * swatch for no colour. A swatch is pressed when every glyph has its colour,
- * and pressing it again clears the colour.
+ * swatch for no colour. Every colour the glyphs have is highlighted: pressed
+ * when all of them have it, which pressing again clears, and mixed when only
+ * some do, which pressing gives to all of them.
  */
 export function MarkColorPicker({ current, onPick, layout = "row" }: MarkColorPickerProps) {
   const [more, setMore] = useState(false);
@@ -40,12 +41,17 @@ export function MarkColorPicker({ current, onPick, layout = "row" }: MarkColorPi
     .filter((color) => color?.kind === "custom")
     .toArray();
   const [only] = current.size === 1 ? current.keys() : [];
+  /** Pressed when every glyph has the colour, `mixed` when some of a mixed selection do. */
+  const swatchPressed = (key: MarkColorKey): boolean | "mixed" => {
+    if (only === key) return true;
+    return current.has(key) ? "mixed" : false;
+  };
   const swatch = (color: MarkColor | null) => (
     <MarkColorSwatch
       key={markColorKey(color)}
       color={color}
       label={color ? capitalized(markColorLabel(color)) : "Clear colour"}
-      pressed={only === markColorKey(color)}
+      pressed={swatchPressed(markColorKey(color))}
       // Clicking the colour every glyph already has takes it off again.
       onPress={() => onPick(only === markColorKey(color) ? null : color)}
     />
