@@ -3,7 +3,7 @@ import type { GlyphId } from "@shift/types";
 import { Canvas2DSurface } from "@shift/editor/rendering";
 import { fitCanvasText } from "@/lib/graphics/canvasText";
 import type { GlyphSelection } from "@/lib/glyph-grid/GlyphSelection";
-import { resolvedMarkColor } from "@/lib/glyph-grid/markColor";
+import { markColorInk, resolvedMarkColor } from "@/lib/glyph-grid/markColor";
 import type { GlyphCatalogCell, GlyphCatalogFrame } from "@/types/glyphCatalog";
 
 const LABEL_HORIZONTAL_INSET = 8;
@@ -19,6 +19,8 @@ const NAME_FIELD_INSET_X = 4;
 const EMPTY_GLYPH_FONT_RATIO = 0.43;
 /** How wide the selection ring is; it sits inside the cell's edge. */
 const SELECTION_RING_WIDTH = 2;
+/** The surface-coloured hairline inside the ring, so the ring stands out on a band of any colour. */
+const SELECTION_GAP_WIDTH = 1;
 /** How opaque the fill of the box dragged to select glyphs is. */
 const SELECTION_BOX_FILL_ALPHA = 0.12;
 
@@ -83,8 +85,8 @@ export class GlyphCatalogOverlay {
     const bandColor = token("--color-tile-band");
     const hoverColor = token("--color-hover");
     const inkColor = token("--color-tile-ink");
-    const primaryColor = token("--color-primary");
     const accentColor = style.getPropertyValue("--color-accent").trim() || style.color;
+    const surfaceColor = token("--color-surface");
     const fontFamily = style.fontFamily;
     context.clearRect(0, 0, frame.layout.viewportWidth, frame.layout.viewportHeight);
 
@@ -117,7 +119,8 @@ export class GlyphCatalogOverlay {
       }
       context.restore();
 
-      // The ring sits on the cell's own edge, so it never reaches into the gap.
+      // The ring sits on the cell's own edge, so it never reaches into the gap, with a hairline of
+      // surface inside it so it reads on a band of its own colour.
       if (selected) {
         const inset = SELECTION_RING_WIDTH / 2;
         context.strokeStyle = accentColor;
@@ -129,6 +132,19 @@ export class GlyphCatalogOverlay {
           box.width - 2 * inset,
           box.height - 2 * inset,
           CELL_RADIUS - inset,
+        );
+        context.stroke();
+
+        const gapInset = SELECTION_RING_WIDTH + SELECTION_GAP_WIDTH / 2;
+        context.strokeStyle = surfaceColor;
+        context.lineWidth = SELECTION_GAP_WIDTH;
+        context.beginPath();
+        context.roundRect(
+          box.x + gapInset,
+          box.y + gapInset,
+          box.width - 2 * gapInset,
+          box.height - 2 * gapInset,
+          CELL_RADIUS - gapInset,
         );
         context.stroke();
       }
@@ -149,8 +165,8 @@ export class GlyphCatalogOverlay {
       // The input shows the name of the glyph being renamed.
       if (cell.glyph.id === editingGlyphId) continue;
 
-      // On a band the name reads in the primary text colour.
-      context.fillStyle = tagColor ? primaryColor : mutedColor;
+      // On a tag colour the name reads in whichever ink that colour carries.
+      context.fillStyle = markColor ? markColorInk(markColor) : mutedColor;
       context.font = `400 10px ${fontFamily}`;
       context.textAlign = "center";
       context.textBaseline = "middle";

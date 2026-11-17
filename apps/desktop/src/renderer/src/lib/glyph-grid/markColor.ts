@@ -20,21 +20,35 @@ export const MORE_MARK_COLORS = [
   "charcoal",
 ] as const satisfies readonly NamedMarkColor[];
 
-/** Each named colour's theme token and the name people read. */
-const NAMED: Record<NamedMarkColor, { readonly token: string; readonly label: string }> = {
-  red: { token: "--color-tag-red", label: "red" },
-  orange: { token: "--color-tag-orange", label: "orange" },
-  brown: { token: "--color-tag-brown", label: "brown" },
-  yellow: { token: "--color-tag-yellow", label: "yellow" },
-  lightGreen: { token: "--color-tag-light-green", label: "light green" },
-  darkGreen: { token: "--color-tag-green", label: "green" },
-  lightBlue: { token: "--color-tag-light-blue", label: "light blue" },
-  darkBlue: { token: "--color-tag-blue", label: "blue" },
-  purple: { token: "--color-tag-purple", label: "purple" },
-  magenta: { token: "--color-tag-pink", label: "pink" },
-  lightGray: { token: "--color-tag-light-gray", label: "light gray" },
-  charcoal: { token: "--color-tag-charcoal", label: "charcoal" },
+/**
+ * Each named colour's theme token, the name people read, and whether its name
+ * reads in light or dark ink. The palette is laid out in OKLCH: the main hues
+ * are spaced evenly round the wheel at one lightness, dark enough that white
+ * ink clears 4.5:1, while yellow, orange and the light tints take dark ink.
+ */
+const NAMED: Record<
+  NamedMarkColor,
+  { readonly token: string; readonly label: string; readonly lightInk: boolean }
+> = {
+  red: { token: "--color-tag-red", label: "red", lightInk: true },
+  orange: { token: "--color-tag-orange", label: "orange", lightInk: false },
+  brown: { token: "--color-tag-brown", label: "brown", lightInk: true },
+  yellow: { token: "--color-tag-yellow", label: "yellow", lightInk: false },
+  lightGreen: { token: "--color-tag-light-green", label: "light green", lightInk: false },
+  darkGreen: { token: "--color-tag-green", label: "green", lightInk: true },
+  lightBlue: { token: "--color-tag-light-blue", label: "light blue", lightInk: false },
+  darkBlue: { token: "--color-tag-blue", label: "blue", lightInk: true },
+  purple: { token: "--color-tag-purple", label: "purple", lightInk: true },
+  magenta: { token: "--color-tag-pink", label: "pink", lightInk: true },
+  lightGray: { token: "--color-tag-light-gray", label: "light gray", lightInk: false },
+  charcoal: { token: "--color-tag-charcoal", label: "charcoal", lightInk: true },
 };
+
+/** The ink a name reads in on a tag colour; tag colours are the same in every theme, so is it. */
+const LIGHT_INK = "#ffffff";
+const DARK_INK = "#1c1c1e";
+/** The luminance where white and near-black ink contrast equally with a colour. */
+const INK_LUMINANCE_SPLIT = 0.179;
 
 /**
  * What a glyph is filed under by colour: a named colour's name, a custom
@@ -84,4 +98,19 @@ export function resolvedMarkColor(color: MarkColor, style: CSSStyleDeclaration):
   if (color.kind === "custom") return markColorCss(color);
 
   return style.getPropertyValue(NAMED[color.named].token).trim();
+}
+
+/** The ink a glyph's name reads in on a band of this colour: white on a dark colour, near-black on a light one. */
+export function markColorInk(color: MarkColor): string {
+  if (color.kind === "named") return NAMED[color.named].lightInk ? LIGHT_INK : DARK_INK;
+
+  const { red, green, blue } = color.custom;
+  return relativeLuminance(red, green, blue) < INK_LUMINANCE_SPLIT ? LIGHT_INK : DARK_INK;
+}
+
+/** WCAG relative luminance of an sRGB colour whose channels run from 0 to 1. */
+function relativeLuminance(red: number, green: number, blue: number): number {
+  const linear = (channel: number) =>
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue);
 }

@@ -487,18 +487,18 @@ function colorName(variable: string): string {
  * follow the palette.
  */
 const TAG_COLORS: Record<string, string> = {
-  "--color-tag-red": "#cf584a",
-  "--color-tag-orange": "#e07f45",
-  "--color-tag-brown": "#a8805a",
-  "--color-tag-yellow": "#e3c55b",
-  "--color-tag-light-green": "#a3c96a",
-  "--color-tag-green": "#66ad6b",
-  "--color-tag-light-blue": "#6fb9d6",
-  "--color-tag-blue": "#5d6fd6",
-  "--color-tag-purple": "#8a78d6",
-  "--color-tag-pink": "#d36fa6",
-  "--color-tag-light-gray": "#b9b9b9",
-  "--color-tag-charcoal": "#5c5c5c",
+  "--color-tag-red": "#c44039",
+  "--color-tag-orange": "#e1791b",
+  "--color-tag-brown": "#936b4a",
+  "--color-tag-yellow": "#eec743",
+  "--color-tag-light-green": "#b4da83",
+  "--color-tag-green": "#2f8543",
+  "--color-tag-light-blue": "#7acae9",
+  "--color-tag-blue": "#296ec3",
+  "--color-tag-purple": "#864ebc",
+  "--color-tag-pink": "#ba3f7f",
+  "--color-tag-light-gray": "#c4c4c4",
+  "--color-tag-charcoal": "#4d4d4d",
 };
 
 function colorThemeVariables(theme: ColorTheme): Record<string, string> {
