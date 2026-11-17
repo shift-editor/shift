@@ -4,6 +4,8 @@ import { startEmptyMemorySession } from "../../../testing/emptyMemorySession";
 import type { MemoryFontSession } from "../../../types/fontSession";
 import type { GlyphNode } from "../../../types/node";
 import type { Editor } from "../Editor";
+import type { HistoryReplay } from "../../../types/history";
+import { effect } from "../../signals";
 
 describe("EditorHistory", () => {
   let session: MemoryFontSession;
@@ -36,6 +38,26 @@ describe("EditorHistory", () => {
     expect(result).toBe(firstId);
     await editor.history.undo();
     expect(editor.selection.ids).toEqual([]);
+  });
+
+  it("announces each step undo and redo replay, by the name its action gave it", async () => {
+    editor.history.capture("Select", () => editor.selection.select([firstId]));
+    const seen: (HistoryReplay | null)[] = [];
+    const subscription = effect(() => {
+      seen.push(editor.history.replayedCell.value);
+    });
+
+    await editor.history.undo();
+    await editor.history.redo();
+    await editor.history.undo();
+    subscription.dispose();
+
+    expect(seen).toEqual([
+      null,
+      { direction: "undo", label: "Select" },
+      { direction: "redo", label: "Select" },
+      { direction: "undo", label: "Select" },
+    ]);
   });
 
   it("cancels a synchronous action that throws", () => {

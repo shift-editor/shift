@@ -23,7 +23,12 @@ import {
   type ScreenPoint,
   type ScreenVector,
 } from "@shift/editor/spaces";
-import { Editor, type GridSettings, type GridSettingsChange } from "@shift/editor";
+import {
+  Editor,
+  type GridSettings,
+  type GridSettingsChange,
+  type HistoryReplay,
+} from "@shift/editor";
 import { featureReadMessage } from "@shift/editor/text";
 import { externalAxisLocationFromRecord } from "@shift/editor/variation";
 import { effect } from "@shift/editor/signals";
@@ -1264,9 +1269,14 @@ export class TestEditor extends Editor implements EditorTestSurface {
     await this.#actions.duplicateGlyphs(names);
   }
 
-  async decomposeGlyphs(names: readonly string[]): Promise<void> {
-    this.#actions.decomposeGlyphs(names);
+  async replayedStep(): Promise<HistoryReplay | null> {
+    return this.history.replayedCell.peek();
+  }
+
+  async decomposeGlyphs(names: readonly string[]): Promise<number> {
+    const decomposed = this.#actions.decomposeGlyphs(names);
     await this.settle();
+    return decomposed;
   }
 
   async setSidebearings(

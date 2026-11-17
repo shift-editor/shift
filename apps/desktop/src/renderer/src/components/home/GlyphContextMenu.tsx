@@ -8,6 +8,7 @@ import {
   ContextMenuPositioner,
   ContextMenuSeparator,
   ContextMenuTrigger,
+  useToastManager,
 } from "@shift/ui";
 import { MarkColorPicker } from "../glyph-grid/MarkColorPicker";
 import { SetSidebearingsDialog } from "./SetSidebearingsDialog";
@@ -54,6 +55,7 @@ export const GlyphContextMenu = ({
   const { editor } = useFontSession();
   const { showPage } = useWindowTabs();
   const actions = useMemo(() => new GridActions(editor), [editor]);
+  const toasts = useToastManager();
   const [open, setOpen] = useState(false);
   const [glyph, setGlyph] = useState<GlyphCatalogItem | null>(null);
   const [sidebearingGlyphIds, setSidebearingGlyphIds] = useState<readonly GlyphId[]>([]);
@@ -140,7 +142,14 @@ export const GlyphContextMenu = ({
                   <ContextMenuItem onClick={() => run(duplicate)}>Duplicate</ContextMenuItem>
                   <ContextMenuItem
                     disabled={!actions.canDecompose(glyphIds)}
-                    onClick={() => actions.decompose(glyphIds)}
+                    onClick={() => {
+                      // Decomposing changes no tile's look, so say which glyphs it changed.
+                      const decomposed = new Set(actions.decompose(glyphIds));
+                      const names = targets
+                        .filter((target) => decomposed.has(target.id))
+                        .map((target) => target.displayName);
+                      toasts.add({ title: `Decomposed ${glyphNameList(names)}` });
+                    }}
                   >
                     Decompose Components
                   </ContextMenuItem>
@@ -162,3 +171,17 @@ export const GlyphContextMenu = ({
     </>
   );
 };
+
+/** The most glyph names a toast lists before counting the rest. */
+const LISTED_NAMES = 3;
+
+/** Names for a sentence: `n, m and o`, or `n, m, o and 4 more`. */
+function glyphNameList(names: readonly string[]): string {
+  if (names.length <= 1) return names.join("");
+
+  const listed = names.slice(0, LISTED_NAMES);
+  const rest = names.length - listed.length;
+  if (rest === 0) return `${listed.slice(0, -1).join(", ")} and ${listed.at(-1)}`;
+
+  return `${listed.join(", ")} and ${rest} more`;
+}

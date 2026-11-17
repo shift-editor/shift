@@ -44,11 +44,20 @@ export class GridActions {
     return glyphIds.some((glyphId) => this.#editor.font.hasComponents(glyphId));
   }
 
-  /** Turns the glyphs' components into contours in every master, nested ones too. */
-  decompose(glyphIds: readonly GlyphId[]): void {
+  /**
+   * Turns the glyphs' components into contours in every master, nested ones
+   * too.
+   *
+   * @returns The glyphs that had components to decompose, in the order given.
+   */
+  decompose(glyphIds: readonly GlyphId[]): GlyphId[] {
+    const decomposed = glyphIds.filter((glyphId) => this.#editor.font.hasComponents(glyphId));
+    if (decomposed.length === 0) return [];
+
     this.#editor.transaction("Decompose Components", () =>
-      this.#editor.font.decomposeGlyphs(glyphIds),
+      this.#editor.font.decomposeGlyphs(decomposed),
     );
+    return decomposed;
   }
 
   /** Edits the glyphs' left and right sidebearings in one source or in every master. */

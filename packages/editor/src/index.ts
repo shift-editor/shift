@@ -44,6 +44,7 @@ export type { FontOptions, FontStoreOptions, WorkspaceEditCoordinator } from "./
 export type {
   HistoryEffect,
   HistoryEntry,
+  HistoryReplay,
   RecordChange,
   WorkspaceEditEvent,
   WorkspaceEffect,

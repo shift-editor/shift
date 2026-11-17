@@ -126,9 +126,12 @@ export class SurfaceActions {
     await new GridActions(this.#editor).duplicate(this.#glyphsNamed(names));
   }
 
-  /** Decomposes the components of the glyphs named `names` in every master, as the grid's Decompose Components does. */
-  decomposeGlyphs(names: readonly string[]): void {
-    new GridActions(this.#editor).decompose(this.#glyphsNamed(names));
+  /**
+   * Decomposes the components of the glyphs named `names` in every master, as
+   * the grid's Decompose Components does, and returns how many had any.
+   */
+  decomposeGlyphs(names: readonly string[]): number {
+    return new GridActions(this.#editor).decompose(this.#glyphsNamed(names)).length;
   }
 
   /**

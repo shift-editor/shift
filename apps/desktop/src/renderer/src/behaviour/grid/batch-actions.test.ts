@@ -32,7 +32,8 @@ describe("acting on several glyphs from the glyph grid", () => {
   });
 
   it("decomposes a glyph's components into its own contours, as one undo step", async () => {
-    await editor.decomposeGlyphs(["no", "n"]);
+    // `n` has no components, so only `no` counts as decomposed.
+    expect(await editor.decomposeGlyphs(["no", "n"])).toBe(1);
     await editor.openGlyph("no");
 
     expect(await editor.drawnGlyph()).toMatchObject({
@@ -42,6 +43,11 @@ describe("acting on several glyphs from the glyph grid", () => {
     expect(await editor.outline()).toHaveLength(2);
 
     await editor.undo();
+    // The grid's toast says which step undo reversed, by the name the action gave it.
+    expect(await editor.replayedStep()).toEqual({
+      direction: "undo",
+      label: "Decompose Components",
+    });
     await editor.openGlyph("no");
     expect((await editor.drawnGlyph()).components).toHaveLength(2);
   });

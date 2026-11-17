@@ -3,6 +3,7 @@ import { useSignalState } from "@shift/editor/signals";
 import { useLocation } from "react-router";
 import { GlyphCatalogBackendGate } from "./GlyphCatalogBackendGate";
 import { GlyphGridFooter } from "./GlyphGridFooter";
+import { GridToasts } from "./GridToasts";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { getShiftHost } from "@/host/shiftHost";
 import { colorsInUse, filterByColor } from "@/lib/glyph-grid/colorFilter";
@@ -73,43 +74,45 @@ export const GlyphGrid = memo(function GlyphGrid() {
   }, [showMeasuredWorkspace]);
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col">
-      <section
-        aria-label="Glyph catalog surface"
-        data-filtered-glyph-count={shownGlyphs.length}
-        data-first-glyph-id={shownGlyphs[0]?.id}
-        className="relative min-h-0 w-full flex-1 overflow-hidden font-ui text-primary"
-      >
-        <GlyphCatalogBackendGate
-          glyphs={shownGlyphs}
-          location={location}
-          metrics={metrics}
-          sourceId={sourceId}
-          active={catalogActive}
-          atlasSource={atlasSource}
-          observeAtlasInvalidation={observeAtlasInvalidation}
-          glyphPreviews={glyphPreviews}
-          canAuthor={canAuthor}
-          openGlyph={openGlyph}
-          selection={selection}
-          selectGlyphs={selectGlyphs}
+    <GridToasts active={catalogActive}>
+      <div className="flex h-full min-h-0 w-full flex-col">
+        <section
+          aria-label="Glyph catalog surface"
+          data-filtered-glyph-count={shownGlyphs.length}
+          data-first-glyph-id={shownGlyphs[0]?.id}
+          className="relative min-h-0 w-full flex-1 overflow-hidden font-ui text-primary"
+        >
+          <GlyphCatalogBackendGate
+            glyphs={shownGlyphs}
+            location={location}
+            metrics={metrics}
+            sourceId={sourceId}
+            active={catalogActive}
+            atlasSource={atlasSource}
+            observeAtlasInvalidation={observeAtlasInvalidation}
+            glyphPreviews={glyphPreviews}
+            canAuthor={canAuthor}
+            openGlyph={openGlyph}
+            selection={selection}
+            selectGlyphs={selectGlyphs}
+            tileSize={tileSize}
+            onFirstFrame={handleCatalogReady}
+            onUnavailable={handleCatalogUnavailable}
+          />
+          {shownGlyphs.length === 0 ? (
+            <div className="pointer-events-none absolute inset-0 z-4 flex items-center justify-center px-4 text-sm text-muted">
+              No glyphs match this filter.
+            </div>
+          ) : null}
+        </section>
+        <GlyphGridFooter
+          colors={colors}
+          colorFilter={colorFilter}
+          filterColor={(color, add) => gridView.filterColor(color, add)}
           tileSize={tileSize}
-          onFirstFrame={handleCatalogReady}
-          onUnavailable={handleCatalogUnavailable}
+          setTileSize={(size) => gridView.setTileSize(size)}
         />
-        {shownGlyphs.length === 0 ? (
-          <div className="pointer-events-none absolute inset-0 z-4 flex items-center justify-center px-4 text-sm text-muted">
-            No glyphs match this filter.
-          </div>
-        ) : null}
-      </section>
-      <GlyphGridFooter
-        colors={colors}
-        colorFilter={colorFilter}
-        filterColor={(color, add) => gridView.filterColor(color, add)}
-        tileSize={tileSize}
-        setTileSize={(size) => gridView.setTileSize(size)}
-      />
-    </div>
+      </div>
+    </GridToasts>
   );
 });

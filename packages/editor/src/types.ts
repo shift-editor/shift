@@ -28,6 +28,7 @@ export type { DeleteMode, GlyphReader } from "./types/glyph";
 export type {
   HistoryEffect,
   HistoryEntry,
+  HistoryReplay,
   RecordChange,
   WorkspaceEditEvent,
   WorkspaceEditListener,

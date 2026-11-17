@@ -18,7 +18,13 @@
  * `Editor`.
  */
 import type { ControlOperation } from "@/agent/AgentControl";
-import type { DeleteMode, Editor, GridSettings, GridSettingsChange } from "@shift/editor";
+import type {
+  DeleteMode,
+  Editor,
+  GridSettings,
+  GridSettingsChange,
+  HistoryReplay,
+} from "@shift/editor";
 import type {
   GlyphOutlineTarget,
   NewGlyph,
@@ -481,8 +487,10 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   tagGlyphs(names: readonly string[], color: MarkColor | null): Promise<void>;
   /** Duplicates the glyphs named `names`, as the grid's Duplicate does. */
   duplicateGlyphs(names: readonly string[]): Promise<void>;
-  /** Decomposes the components of the glyphs named `names` in every master, as the grid's Decompose Components does. */
-  decomposeGlyphs(names: readonly string[]): Promise<void>;
+  /** The step undo or redo last replayed, as the grid's toast names it; null before either has run. */
+  replayedStep(): Promise<HistoryReplay | null>;
+  /** Decomposes the components of the glyphs named `names` in every master, as the grid's Decompose Components does; resolves to how many had any. */
+  decomposeGlyphs(names: readonly string[]): Promise<number>;
   /** Sets the sidebearings of the glyphs named `names`, as the grid's Set Sidebearings dialog does; in every master with `allMasters`. */
   setSidebearings(
     names: readonly string[],
