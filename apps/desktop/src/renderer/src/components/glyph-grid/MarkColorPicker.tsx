@@ -20,7 +20,8 @@ interface MarkColorPickerProps {
   /** Tags the glyphs with a colour, or clears their colour with null. */
   readonly onPick: (color: MarkColor | null) => void;
   /**
-   * `row`: the seven main colours, the rest under More, for a menu.
+   * `row`: the seven main colours, the rest under More (which stays open until
+   * the menu closes), for a menu.
    * `grid`: all twelve, four to a row, for a panel with room for them; the
    * colour is cleared by clicking it again.
    */
@@ -78,19 +79,22 @@ export function MarkColorPicker({ current, onPick, layout = "row" }: MarkColorPi
   return (
     <div role="group" aria-label="Colour" className="flex flex-wrap items-center gap-0.5">
       {colors.map(swatch)}
-      <Button
-        variant="muted"
-        size="sm"
-        className="text-ui"
-        aria-expanded={more}
-        onClick={(event) => {
-          // Shows more colours in place; a menu holding the row stays open.
-          event.stopPropagation();
-          setMore((shown) => !shown);
-        }}
-      >
-        {more ? "Less" : "More"}
-      </Button>
+      {/* More shows the rest in place; closing the menu that holds the row folds them again. */}
+      {more ? null : (
+        <Button
+          variant="muted"
+          size="sm"
+          className="text-ui"
+          aria-expanded={false}
+          onClick={(event) => {
+            // A menu holding the row stays open.
+            event.stopPropagation();
+            setMore(true);
+          }}
+        >
+          More
+        </Button>
+      )}
     </div>
   );
 }
