@@ -145,7 +145,7 @@ describe("FontStore record index", () => {
     expect(index.entries.map(({ name }) => name)).toEqual(["A", "acute", "Aacute"]);
     expect(index.unicodes).toEqual([65, 180, 193]);
     expect(index.nameByUnicode.get(65 as Unicode)).toBe("A");
-    expect(index.layerByGlyphSource.size).toBe(2);
+    expect(index.layerBySource.size).toBe(2);
     expect(font.recordForName("Aacute" as GlyphName)?.id).toBe(aacute.id);
     expect(font.componentBaseNamesForName("Aacute" as GlyphName)).toEqual(["A", "acute"]);
     expect(font.dependentNamesForName("acute" as GlyphName)).toEqual(["Aacute"]);
@@ -380,6 +380,7 @@ function snapshot(workspaceId: string, layerId: LayerId): WorkspaceSnapshot {
     axisMappingBases: [],
     namedInstances: [],
     languageIds: null,
+    grid: null,
     kerning: { groups: [], sources: [] },
   };
 }

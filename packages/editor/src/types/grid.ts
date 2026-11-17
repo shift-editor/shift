@@ -1,29 +1,38 @@
+import type { Grid as FontGrid } from "@shift/types";
+import type { Signal } from "../lib/signals/index";
+
 /**
- * How the canvas grid is laid out and whether it draws and snaps.
+ * The cells of the canvas grid: line spacing on each axis and how many
+ * divisions each cell takes, as the font stores them.
  *
  * @remarks
- * The grid is in font units and anchored at the edited glyph's origin: lines
- * fall on every multiple of the spacing, counted from (0, 0) at the baseline
- * and left sidebearing. Session state for now; it is not saved in the font.
+ * In font units and anchored at the edited glyph's origin: lines fall on
+ * every multiple of the spacing, counted from (0, 0) at the baseline and left
+ * sidebearing. Subdivision lines draw lighter than grid lines, and snapping
+ * lands on them too, so 2 subdivisions put a snap target at every half step.
  */
-export interface GridSettings {
-  /** Distance between vertical grid lines, in font units. */
-  readonly spacingX: number;
-  /** Distance between horizontal grid lines, in font units. */
-  readonly spacingY: number;
-  /**
-   * Divisions of each grid cell along each axis; 1 has none.
-   *
-   * @remarks
-   * Subdivision lines draw lighter than grid lines, and snapping lands on
-   * them too, so 2 puts a snap target at every half step.
-   */
-  readonly subdivisions: number;
+export type GridCells = FontGrid;
+
+/** Whether the canvas grid draws and snaps: a choice of the window, never saved. */
+export interface GridView {
   /** Whether the grid draws behind the edited glyph. */
   readonly visible: boolean;
   /** Whether dragged and placed positions snap to grid intersections. */
   readonly snap: boolean;
 }
 
+/** How the canvas grid is laid out and whether it draws and snaps. */
+export type GridSettings = Readonly<GridCells> & GridView;
+
 /** Settings to change on the grid; fields left out keep their value. */
 export type GridSettingsChange = Partial<GridSettings>;
+
+/** Where the font keeps its grid, and how to change it. */
+export interface GridStorage {
+  /** The font's stored grid; null when it stores none. */
+  readonly gridCell: Signal<GridCells | null>;
+  /** Moves on every change to the stored grid, an undo back to an earlier grid included. */
+  readonly revisionCell: Signal<number>;
+  /** Writes `cells` as the font's grid, as one undoable edit. */
+  write(cells: GridCells): void;
+}

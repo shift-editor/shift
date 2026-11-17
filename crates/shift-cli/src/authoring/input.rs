@@ -1,7 +1,9 @@
 //! Identity-free JSON contracts for CLI authoring.
 
 use serde::Deserialize;
-use shift_font::{DecomposedTransform, PointType};
+use std::collections::BTreeMap;
+
+use shift_font::{ComponentInheritance, DecomposedTransform, MetricsKeySide, PointType};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -16,6 +18,38 @@ pub(super) struct LayerInput {
     pub anchors: Vec<AnchorInput>,
     #[serde(default)]
     pub components: Vec<ComponentInput>,
+    /// Metrics keys for this layer's source only, overriding the glyph's.
+    #[serde(default)]
+    pub metrics_keys: Option<MetricsKeysInput>,
+}
+
+/// Metrics keys such as `=space` or `=n+10`, by side (`left`, `right`,
+/// `width`). An omitted side keeps its key; empty or blank text clears it.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Deserialize)]
+#[serde(try_from = "BTreeMap<String, String>")]
+pub(super) struct MetricsKeysInput(pub BTreeMap<MetricsKeySide, String>);
+
+impl TryFrom<BTreeMap<String, String>> for MetricsKeysInput {
+    type Error = String;
+
+    fn try_from(keys: BTreeMap<String, String>) -> Result<Self, Self::Error> {
+        keys.into_iter()
+            .map(|(name, text)| {
+                let side = match name.as_str() {
+                    "left" => MetricsKeySide::Left,
+                    "right" => MetricsKeySide::Right,
+                    "width" => MetricsKeySide::Width,
+                    _ => {
+                        return Err(format!(
+                            "unknown metrics key side `{name}`, expected `left`, `right` or `width`"
+                        ));
+                    }
+                };
+                Ok((side, text))
+            })
+            .collect::<Result<_, _>>()
+            .map(Self)
+    }
 }
 
 /// A reference to another glyph, by name, placed with an optional transform.
@@ -25,6 +59,14 @@ pub(super) struct ComponentInput {
     pub base: String,
     #[serde(default)]
     pub transform: Option<TransformInput>,
+    /// The axes this component sets for its base glyph, by axis tag, in
+    /// design units: `{"BLED": 100}`.
+    #[serde(default)]
+    pub location: BTreeMap<String, f64>,
+    /// Where the base glyph takes the axes `location` doesn't set:
+    /// `parent` (the default) or `font`.
+    #[serde(default)]
+    pub inheritance: ComponentInheritance,
 }
 
 /// A component transform: Shift's decomposed form, or an affine
@@ -80,6 +122,9 @@ pub(super) struct GlyphEntryInput {
     pub unicodes: Option<Vec<String>>,
     #[serde(default)]
     pub source: Option<String>,
+    /// Metrics keys that apply in every source the glyph's layers do not override.
+    #[serde(default)]
+    pub metrics_keys: Option<MetricsKeysInput>,
     #[serde(default)]
     pub layer: Option<LayerInput>,
 }

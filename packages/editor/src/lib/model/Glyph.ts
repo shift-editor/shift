@@ -25,6 +25,7 @@ import type {
   SourceId,
   Unicode,
   SetComponentAlignment,
+  SetComponentLocations,
 } from "@shift/types";
 import { mintAnchorId, mintComponentId, mintContourId, mintPointId, EntityMap } from "@shift/types";
 import {
@@ -48,7 +49,11 @@ import { anchors as anchorRules } from "@shift/wasm";
 import type { PropagatedAnchors, PropagationAnchor } from "@shift/wasm/protocol";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import type { WeightedSource } from "../../types/glyphRender";
-import { designAxisLocationFromLocation, designAxisLocationsEqual } from "../variation/location";
+import {
+  designAxisLocationFromLocation,
+  designAxisLocationsEqual,
+  externalAxisLocationsEqual,
+} from "../variation/location";
 import type { Designspace } from "../variation/Designspace";
 import { interpolateSourceValues } from "../interpolation/InterpolationBasis";
 import { Transform } from "../transform/Transform";
@@ -72,6 +77,7 @@ import {
   type Segment,
   GlyphGeometry,
   IdIndex,
+  componentLocationsValueOffset,
   decomposedTransformValues,
   filledContoursContain,
   type GeometryAnchorHit,
@@ -553,6 +559,20 @@ class GlyphLayerWriter {
     if (componentIds.length === 0) return;
     // Applied by the workspace: anchoring moves the component, which the echo carries.
     this.#workspaceIntents.setComponentAlignment({ componentIds: [...componentIds], alignment });
+  }
+
+  setComponentLocations(
+    componentIds: readonly ComponentId[],
+    locations: SetComponentLocations["locations"],
+    inheritances: SetComponentLocations["inheritances"],
+  ): void {
+    if (componentIds.length === 0) return;
+
+    this.#workspaceIntents.setComponentLocations({
+      componentIds: [...componentIds],
+      locations: [...locations],
+      inheritances: [...inheritances],
+    });
   }
 
   setComponentTransforms(
@@ -1355,6 +1375,26 @@ export class GlyphLayer {
     this.#writer.setComponentAlignment(componentIds, alignment);
   }
 
+  /**
+   * Sets where components draw their base glyphs: the axes each one sets, in
+   * design units, and where it takes the rest from.
+   *
+   * @remarks
+   * Each location replaces the component's own, so an empty one removes every
+   * override. The axes a component sets are part of the layer's structure:
+   * masters that set different axes stop interpolating together.
+   *
+   * @param locations - One per component.
+   * @param inheritances - One per component.
+   */
+  setComponentLocations(
+    componentIds: readonly ComponentId[],
+    locations: SetComponentLocations["locations"],
+    inheritances: SetComponentLocations["inheritances"],
+  ): void {
+    this.#writer.setComponentLocations(componentIds, locations, inheritances);
+  }
+
   /** @internal Commits direct component transforms through the workspace path. */
   setComponentTransforms(
     componentIds: readonly ComponentId[],
@@ -1574,6 +1614,8 @@ export class GlyphRenderModel {
   readonly #contoursCell: Signal<readonly GlyphContour[]>;
   readonly #boundsCell: Signal<BoundsType | null>;
   readonly #drawPathCell: Signal<Path2D>;
+  readonly #outlinePathCell: Signal<Path2D>;
+  readonly #openCornerContoursPathCell: Signal<Path2D>;
   readonly #rootClosedContoursPathCell: Signal<Path2D>;
   readonly #closedContoursPathCell: Signal<Path2D>;
   readonly #openContoursPathCell: Signal<Path2D>;
@@ -1588,6 +1630,10 @@ export class GlyphRenderModel {
   readonly #propagatedAnchorsCell: Signal<readonly PropagationAnchor[]>;
   readonly #placementsCache: KeyedCache<GlyphId, GlyphId, ComputedSignal<readonly MatModel[]>>;
   readonly #anchorsByNameCell: Signal<ReadonlyEntityMap<string, PropagationAnchor>>;
+  readonly #baseLocation: (
+    parent: ExternalAxisLocation,
+    component: Component,
+  ) => ExternalAxisLocation;
 
   /**
    * Creates a Glyph render model tied to a live external location and optional exact source.
@@ -1604,6 +1650,9 @@ export class GlyphRenderModel {
    * @param anchorCategory - Reads a root or component glyph's propagation category.
    * @param decompositionWeightsAt - The root glyph's decomposition masters and
    * their weights at a location, or `null` when it stays composite.
+   * @param baseLocation - Where a component draws its base glyph when the
+   * glyph it sits in is drawn at `parent`; `parent` itself when the
+   * component sets no axis and follows its glyph.
    */
   constructor(
     glyphId: GlyphId,
@@ -1625,8 +1674,10 @@ export class GlyphRenderModel {
     ) => GlyphGeometry,
     anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory,
     decompositionWeightsAt: (location: ExternalAxisLocation) => readonly WeightedSource[] | null,
+    baseLocation: (parent: ExternalAxisLocation, component: Component) => ExternalAxisLocation,
   ) {
     this.#glyphId = glyphId;
+    this.#baseLocation = baseLocation;
     this.#anchorCategory = anchorCategory;
     this.#propagatedCache = keyedCache<GlyphId, GlyphId, ComputedSignal<PropagatedAnchors>>({
       name: "glyph.renderModel.propagatedAnchors",
@@ -1711,11 +1762,27 @@ export class GlyphRenderModel {
       }
       return path;
     });
+    this.#outlinePathCell = computed(() => {
+      const path = new Path2D();
+      for (const contour of this.#contoursCell.value) {
+        contour.trackShape();
+        path.addPath(contour.fillPath);
+      }
+      return path;
+    });
+    this.#openCornerContoursPathCell = computed(() => {
+      const path = new Path2D();
+      for (const contour of this.#contoursCell.value) {
+        contour.trackShape();
+        if (contour.hasOpenCorners) path.addPath(contour.path);
+      }
+      return path;
+    });
     this.#rootClosedContoursPathCell = computed(() => {
       const path = new Path2D();
       for (const contour of this.#rootContoursCell.value) {
         contour.trackShape();
-        if (contour.contour.closed) path.addPath(contour.path);
+        if (contour.contour.closed) path.addPath(contour.fillPath);
       }
       return path;
     });
@@ -1723,7 +1790,7 @@ export class GlyphRenderModel {
       const path = new Path2D();
       for (const contour of this.#contoursCell.value) {
         contour.trackShape();
-        if (contour.contour.closed) path.addPath(contour.path);
+        if (contour.contour.closed) path.addPath(contour.fillPath);
       }
       return path;
     });
@@ -1894,6 +1961,27 @@ export class GlyphRenderModel {
     return this.#geometryAt(glyphId, location, sourceId);
   }
 
+  /**
+   * @internal Resolves a glyph's geometry where one component occurrence
+   * draws it: as {@link geometryAt} at this model's location, or by location
+   * alone, whatever source is active, where a component moved its base.
+   */
+  geometryWhere(glyphId: GlyphId, location: ExternalAxisLocation): GlyphGeometry {
+    track(this.#externalLocation);
+    if (location === this.#externalLocation.peek()) return this.geometryAt(glyphId, location);
+
+    return this.#geometryAt(glyphId, location, null);
+  }
+
+  /**
+   * @internal Where `component` draws its base glyph when the glyph it sits
+   * in is drawn at `parent`: `parent` itself, the same object, unless the
+   * component sets an axis or uses the font's location.
+   */
+  baseLocation(parent: ExternalAxisLocation, component: Component): ExternalAxisLocation {
+    return this.#baseLocation(parent, component);
+  }
+
   /** @internal Resolves a root or component glyph's geometry as one master draws it. */
   geometryForSource(glyphId: GlyphId, sourceId: SourceId): GlyphGeometry {
     return this.#geometryAt(glyphId, this.#externalLocation.peek(), sourceId);
@@ -1929,6 +2017,7 @@ export class GlyphRenderModel {
     matrixCell: Signal<MatModel>,
     component: ComponentGlyph | null,
     placedCell: Signal<readonly RenderContour[] | null> = NO_PLACED_CONTOURS_CELL,
+    locationCell: Signal<ExternalAxisLocation> = this.#externalLocation,
   ): Signal<readonly GlyphContour[]> {
     const contourCache = keyedCache<RenderContour, string, GlyphContour>({
       name: "glyph.renderModel.contours",
@@ -1936,9 +2025,19 @@ export class GlyphRenderModel {
       create: (contourCell) => new GlyphContour(contourCell, matrixCell, component),
     });
 
-    return computed(() =>
-      contourCache.map(placedCell.value ?? this.#contoursForGlyph(glyphIdCell.value).value),
-    );
+    return computed(() => {
+      const placed = placedCell.value;
+      if (placed) return contourCache.map(placed);
+
+      const glyphId = glyphIdCell.value;
+      const location = locationCell.value;
+      // A component that moved its base draws it there, not from the shared stream.
+      if (location !== this.#externalLocation.value) {
+        return contourCache.map(geometryRenderContours(this.#geometryAt(glyphId, location, null)));
+      }
+
+      return contourCache.map(this.#contoursForGlyph(glyphId).value);
+    });
   }
 
   #decomposedContours(): ReadonlyMap<ComponentGlyph, readonly RenderContour[]> | null {
@@ -2075,6 +2174,16 @@ export class GlyphRenderModel {
 
   get drawPath(): Path2D {
     return this.#drawPathCell.peek();
+  }
+
+  /** Every contour, components' included, as it fills: with its open corners erased. */
+  get outlinePathCell(): Signal<Path2D> {
+    return this.#outlinePathCell;
+  }
+
+  /** The own paths of every contour, components' included, that has an open corner. */
+  get openCornerContoursPathCell(): Signal<Path2D> {
+    return this.#openCornerContoursPathCell;
   }
 
   get rootClosedContoursPathCell(): Signal<Path2D> {
@@ -2615,13 +2724,13 @@ export class Glyph {
       if (!weights) return projectionGeometry(projection.fallback);
 
       const values = interpolateSourceValues(interpolation.basis, weights, (sourceId) => {
+        const resolved =
+          interpolation.sources.find((source) => source.sourceId === sourceId)?.values ?? null;
         const sourceLayer = this.#layersBySourceIdCell.peek().get(sourceId);
-        if (sourceLayer) {
-          track(sourceLayer.geometryCell);
-          return sourceLayer.state.values;
-        }
+        if (!sourceLayer) return resolved;
 
-        return interpolation.sources.find((source) => source.sourceId === sourceId)?.values ?? null;
+        track(sourceLayer.geometryCell);
+        return withResolvedComponentLocations(sourceLayer.state, resolved);
       });
       if (!values) return projectionGeometry(projection.fallback);
 
@@ -2706,9 +2815,30 @@ export class Glyph {
       },
       this.#anchorCategory,
       (location) => this.#decompositionWeightsAt(location),
+      (parent, component) => this.#baseLocation(parent, component),
     );
     renderModels.set(activeSourceIdCell, renderModel);
     return renderModel;
+  }
+
+  /**
+   * Where `component` draws its base glyph when this glyph is drawn at
+   * `parent`: the axes the component sets, in design units, laid over
+   * `parent` or, for a component that uses the font's location, over the
+   * font's default location.
+   *
+   * @returns `parent` itself when the component sets no axis and follows this glyph.
+   */
+  #baseLocation(parent: ExternalAxisLocation, component: Component): ExternalAxisLocation {
+    // A component that sets nothing and follows this glyph has nothing to ask.
+    if (component.location.size === 0 && component.inheritance === "parent") return parent;
+
+    const moved = this.#designspace.componentBaseLocation(
+      parent,
+      component.location,
+      component.inheritance,
+    );
+    return externalAxisLocationsEqual(moved, parent) ? parent : moved;
   }
 
   replaceEntry(entry: GlyphEntry): void {
@@ -2823,4 +2953,30 @@ function rootContoursPath(geometry: GlyphGeometry): Path2D {
     path.addPath(ContourPath.fromContour(contour, identity).path);
   }
   return path;
+}
+
+/**
+ * A source layer's live values with its component locations as Rust's
+ * interpolation reads them.
+ *
+ * @remarks
+ * A master stores only the axes its components set, and Rust fills in the
+ * ones another master's set with what this one inherits, so all masters
+ * blend axis by axis (shift-font's `filled_locations`). Positions and
+ * transforms come from the live layer, drag previews included; the
+ * location values, which no drag changes, come from `resolved` when the
+ * live layer carries fewer of them.
+ */
+function withResolvedComponentLocations(
+  state: GlyphState,
+  resolved: Float64Array | null,
+): Float64Array {
+  const live = state.values;
+  if (!resolved || resolved.length === live.length) return live;
+
+  const offset = componentLocationsValueOffset(state.structure, "decomposed");
+  const values = new Float64Array(resolved.length);
+  values.set(live.subarray(0, offset));
+  values.set(resolved.subarray(offset), offset);
+  return values;
 }

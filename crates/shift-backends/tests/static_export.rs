@@ -9,7 +9,7 @@ use std::str::FromStr;
 
 use harfrust::{Feature, ShapeOptions, ShaperData, ShaperInstance, Tag, UnicodeBuffer, Variation};
 use kurbo::{BezPath, ParamCurve, ParamCurveNearest, PathSeg};
-use shift_backends::{ExportError, FontExporter, StaticInstanceFile};
+use shift_backends::{BinaryEncodings, ExportError, FontExporter, StaticInstanceFile};
 use shift_font::test_support::sample_variable_font;
 use shift_font::{Font, NamedInstance};
 use skrifa::outline::{DrawSettings, OutlinePen};
@@ -217,7 +217,8 @@ fn differences(
 fn compare_every_instance(font: &Font, directory: &Path) -> Fixture<usize> {
     let exporter = FontExporter::new();
     let variable = exporter.compile_ttf(font)?;
-    let written = exporter.export_static_instances(font, directory)?;
+    let written =
+        exporter.export_static_instances_with(font, directory, &BinaryEncodings::ttf())?;
     let mut failures = Vec::new();
     for (instance, result) in font.named_instances().iter().zip(&written) {
         let static_bytes = std::fs::read(&result.path)?;
@@ -285,7 +286,11 @@ fn a_variable_font_without_instances_has_nothing_to_export() {
     font.set_named_instances(Vec::new()).unwrap();
     let temp = tempfile::tempdir().unwrap();
 
-    let result = FontExporter::new().export_static_instances(&font, temp.path());
+    let result = FontExporter::new().export_static_instances_with(
+        &font,
+        temp.path(),
+        &BinaryEncodings::ttf(),
+    );
 
     assert!(matches!(result, Err(ExportError::NoNamedInstances)));
 }

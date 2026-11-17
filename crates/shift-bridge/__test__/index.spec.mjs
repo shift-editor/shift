@@ -147,17 +147,33 @@ describe("Bridge", () => {
     expect(glyphs[0].layers).toEqual([{ id: layerId, sourceId: defaultSourceId() }]);
   });
 
-  it("exports the live workspace font through an explicit export path", async () => {
+  it("exports the live workspace font into a folder, naming the file itself", async () => {
     createGlyphLayer(".notdef", []);
     const layerId = createGlyphLayer();
     const contourId = addContour(layerId);
     addPoint(layerId, contourId, 10, 20);
 
-    const outputPath = join(tempDir, "output.ttf");
-    const result = await bridge.napi.exportWorkspace({ path: outputPath, format: "ttf" });
+    const result = await bridge.napi.exportWorkspace({ directory: tempDir, format: "ttf" });
 
-    expect(result).toMatchObject({ path: outputPath, format: "ttf" });
-    expect(existsSync(outputPath)).toBe(true);
+    expect(result).toMatchObject({ format: "ttf", files: [result.path] });
+    expect(result.path.startsWith(tempDir)).toBe(true);
+    expect(result.path.endsWith(".ttf")).toBe(true);
+    expect(existsSync(result.path)).toBe(true);
+  });
+
+  it("plans an export's files without writing them", async () => {
+    createGlyphLayer(".notdef", []);
+    const outputDirectory = join(tempDir, "planned");
+
+    const planned = await bridge.napi.exportWorkspace({
+      directory: outputDirectory,
+      format: "designspace",
+      mode: "plan",
+    });
+
+    expect(planned.files[0]).toBe(planned.path);
+    expect(planned.files.slice(1).every((file) => file.endsWith(".ufo"))).toBe(true);
+    expect(existsSync(outputDirectory)).toBe(false);
   });
 
   function openMutatorWorkspace() {

@@ -68,6 +68,8 @@ describe("glyph structure equality preserves every ordered metadata field", () =
           baseGlyphId: asGlyphId("base"),
           baseGlyphName: "A",
           alignment: "unset",
+          locationAxes: [],
+          inheritance: "parent",
         },
       ],
     };

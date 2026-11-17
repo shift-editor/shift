@@ -4,12 +4,12 @@ use fontdrasil::coords::NormalizedLocation;
 use fontdrasil::orchestration::{Access, AccessBuilder, Work};
 use fontdrasil::types::GlyphName;
 use fontir::error::Error;
-use fontir::ir::{AnchorBuilder, Component, GlyphBuilder, GlyphInstance};
+use fontir::ir::{AnchorBuilder, Component, ComponentTransform, GlyphBuilder, GlyphInstance};
 use fontir::orchestration::{Context, WorkId};
 use kurbo::{Affine, BezPath};
-use shift_font::{Glyph, GlyphLayer};
+use shift_font::{Glyph, GlyphLayer, open_corners};
 
-use super::source::ShiftSnapshot;
+use super::source::{ShiftSnapshot, located_master_layers};
 
 /// Emits the authored master instances and anchors for one Shift glyph.
 ///
@@ -75,22 +75,40 @@ impl Work<Context, WorkId, Error> for GlyphWork {
             .extend(self.glyph.unicodes().iter().copied());
         let mut anchors = AnchorBuilder::new(self.glyph_name.clone());
 
-        for (source, location) in self.snapshot.glyph_masters(&metadata)? {
-            let Some(layer) = self.glyph.layer_for_source(source.id()) else {
-                continue;
-            };
+        let masters = self.snapshot.glyph_masters(&metadata)?;
+        let mut sources = Vec::new();
+        for (located, location) in located_master_layers(&self.glyph, &masters) {
+            let layer = located.layer.as_ref();
             let mut instance = to_glyph_instance(layer);
             if self.snapshot.nonspacing_marks.contains(self.glyph.name()) {
                 // Glyphs exports nonspacing marks with no advance.
                 instance.width = 0.0;
             }
-            builder.try_add_source(&location, instance)?;
-            add_anchors(&mut anchors, layer, &location)?;
+            add_anchors(&mut anchors, layer, location)?;
+            sources.push((location, instance));
+        }
+        erase_open_corners(&mut sources);
+        for (location, instance) in sources {
+            builder.try_add_source(location, instance)?;
         }
 
         context.anchors.set(anchors.build()?);
         context.glyphs.set(builder.build()?);
         Ok(())
+    }
+}
+
+/// Erases open corners in the glyph's masters, as fontc erases them for a
+/// Glyphs source, keeping a contour as authored in every master when erasing
+/// would leave the masters different: `shift_font::open_corners`.
+fn erase_open_corners(sources: &mut [(&NormalizedLocation, GlyphInstance)]) {
+    let mut contours: Vec<Vec<BezPath>> = sources
+        .iter_mut()
+        .map(|(_, instance)| std::mem::take(&mut instance.contours))
+        .collect();
+    open_corners::erase_open_corners_in_masters(&mut contours);
+    for ((_, instance), erased) in sources.iter_mut().zip(contours) {
+        instance.contours = erased;
     }
 }
 
@@ -106,15 +124,19 @@ fn to_glyph_instance(layer: &GlyphLayer) -> GlyphInstance {
                 let transform = component.matrix();
                 Component {
                     base: component.base_glyph_name().as_str().into(),
-                    transform: Affine::new([
+                    transform: ComponentTransform::Affine(Affine::new([
                         transform.xx,
                         transform.xy,
                         transform.yx,
                         transform.yy,
                         transform.dx,
                         transform.dy,
-                    ]),
+                    ])),
                     anchor: None,
+                    // Component locations export through VARC in a later change;
+                    // until then a component draws at its glyph's location.
+                    location: NormalizedLocation::new(),
+                    reset_unspecified_axes: false,
                 }
             })
             .collect(),

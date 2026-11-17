@@ -73,7 +73,7 @@ describe("application command menu items", () => {
       "file.openFolder",
       "file.save",
       "file.saveAs",
-      "file.exportTtf",
+      "file.export",
     ]);
   });
 

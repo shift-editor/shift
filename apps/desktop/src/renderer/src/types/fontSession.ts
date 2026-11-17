@@ -29,6 +29,8 @@ export interface MemoryFontSession extends FontSessionBase {
 export interface PreviewFontSession extends FontSessionBase {
   readonly mode: "preview";
   readonly canConvert: boolean;
+  /** The previewed file, such as a .ttf or .ufo, or null when it has no path. */
+  readonly sourcePath: string | null;
   readonly workspace: null;
 }
 

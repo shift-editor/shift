@@ -6,9 +6,10 @@ use std::path::Path;
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use serde_json::{Map, Value, json};
 use shift_backends::font_loader::FontLoader;
-use shift_font::{Font, Glyph, GlyphLayer, PointType, SourceId};
+use shift_font::{ComponentInheritance, Font, Glyph, GlyphLayer, MetricsKeys, PointType, SourceId};
 
 use super::glyph_batch::GLYPH_BATCH_FORMAT;
+use super::metrics_keys::side_name;
 
 /// Which of a font's sources to read layers from.
 pub(crate) enum ExportSources {
@@ -22,8 +23,8 @@ pub(crate) enum ExportSources {
 }
 
 /// Reads `names` and every glyph their components use from the font at `path`, as a
-/// glyph batch: names, Unicode values, and each layer's advance, outlines, anchors,
-/// and components.
+/// glyph batch: names, Unicode values, glyph metrics keys, and each layer's advance,
+/// outlines, anchors, components, and own metrics keys.
 ///
 /// # Errors
 ///
@@ -71,11 +72,11 @@ pub(crate) fn export_glyphs(
                         .map(|source| source.name().to_string())
                 })
                 .flatten();
-            entries.push(glyph_entry(glyph, Some(layer), source_name));
+            entries.push(glyph_entry(glyph, Some(layer), source_name, &font));
             wrote_layer = true;
         }
         if !wrote_layer {
-            entries.push(glyph_entry(glyph, None, None));
+            entries.push(glyph_entry(glyph, None, None, &font));
         }
     }
     entries.reverse();
@@ -99,7 +100,12 @@ fn selected_sources(font: &Font, sources: &ExportSources) -> Result<Vec<SourceId
     }
 }
 
-fn glyph_entry(glyph: &Glyph, layer: Option<&GlyphLayer>, source: Option<String>) -> Value {
+fn glyph_entry(
+    glyph: &Glyph,
+    layer: Option<&GlyphLayer>,
+    source: Option<String>,
+    font: &Font,
+) -> Value {
     let mut entry = Map::new();
     entry.insert("name".into(), json!(glyph.name()));
     if !glyph.unicodes().is_empty() {
@@ -113,13 +119,16 @@ fn glyph_entry(glyph: &Glyph, layer: Option<&GlyphLayer>, source: Option<String>
     if let Some(source) = source {
         entry.insert("source".into(), json!(source));
     }
+    if let Some(keys) = metrics_keys_value(glyph.metrics_keys()) {
+        entry.insert("metricsKeys".into(), keys);
+    }
     if let Some(layer) = layer {
-        entry.insert("layer".into(), layer_value(layer));
+        entry.insert("layer".into(), layer_value(layer, font));
     }
     Value::Object(entry)
 }
 
-fn layer_value(layer: &GlyphLayer) -> Value {
+fn layer_value(layer: &GlyphLayer, font: &Font) -> Value {
     let contours: Vec<Value> = layer
         .contours()
         .iter()
@@ -169,11 +178,42 @@ fn layer_value(layer: &GlyphLayer) -> Value {
             if !component.transform().is_identity() {
                 value.insert("transform".into(), json!(component.transform()));
             }
+            if !component.location().is_empty() {
+                let location: Map<String, Value> = component
+                    .location()
+                    .iter()
+                    .map(|(axis_id, coordinate)| {
+                        let tag = font
+                            .axis(*axis_id)
+                            .map_or_else(|| axis_id.to_string(), |axis| axis.tag().to_string());
+                        (tag, json!(coordinate))
+                    })
+                    .collect();
+                value.insert("location".into(), Value::Object(location));
+            }
+            if component.inheritance() == ComponentInheritance::Font {
+                value.insert("inheritance".into(), json!("font"));
+            }
             Value::Object(value)
         })
         .collect();
     if !components.is_empty() {
         value.insert("components".into(), json!(components));
     }
+    if let Some(keys) = metrics_keys_value(layer.metrics_keys()) {
+        value.insert("metricsKeys".into(), keys);
+    }
     Value::Object(value)
+}
+
+/// The keys as `glyph set` reads them, or `None` when there are none.
+fn metrics_keys_value(keys: &MetricsKeys) -> Option<Value> {
+    if keys.is_empty() {
+        return None;
+    }
+    let mut value = Map::new();
+    for (side, key) in keys.iter() {
+        value.insert(side_name(side).into(), json!(key.as_str()));
+    }
+    Some(Value::Object(value))
 }

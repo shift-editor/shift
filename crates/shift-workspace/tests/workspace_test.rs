@@ -3,7 +3,7 @@ use shift_font::{
     AddAnchors, AddContour, AddPoints, ApplyBooleanOp, CreateAxis, CreateGlyph, CreateGlyphLayer,
     CreateNamedInstance, CreateSource, DeleteAxis, DeleteNamedInstance, DeleteSource, MoveAnchors,
     MovePoints, RemoveAnchors, RemovePoints, RenameAnchors, ReverseContour, SetContourClosed,
-    SetContourStart, SetLanguages, SetPointSmooth, SetXAdvance, TranslatePoints,
+    SetContourStart, SetGrid, SetLanguages, SetPointSmooth, SetXAdvance, TranslatePoints,
     UpdateFontMetadata, UpdateGlyph, UpdateNamedInstance,
 };
 use std::{fs, path::PathBuf};
@@ -11,9 +11,9 @@ use std::{fs, path::PathBuf};
 use shift_engine::scene::SceneIntent;
 use shift_font::{
     AnchorId, AnchorSeed, Axis, AxisId, BooleanOp, ContourId, DesignLocation, EntityChange,
-    ExternalLocation, Font, FontChange, FontEntityChange, FontIntent, FontIntentSet, Glyph,
-    GlyphId, GlyphLayer, GlyphName, LANGUAGES_LIB_KEY, LayerId, NamedInstance, NamedInstanceId,
-    PointId, PointSeed, PointType, Source, SourceId, error::CoreError,
+    ExternalLocation, Font, FontChange, FontEntityChange, FontIntent, FontIntentSet, GRID_LIB_KEY,
+    Glyph, GlyphId, GlyphLayer, GlyphName, Grid, LANGUAGES_LIB_KEY, LayerId, NamedInstance,
+    NamedInstanceId, PointId, PointSeed, PointType, Source, SourceId, error::CoreError,
 };
 use shift_store::ShiftStore;
 use shift_workspace::{AcquireScope, FontWorkspace, NewWorkspace, WorkspaceError, WorkspaceSource};
@@ -1102,9 +1102,7 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
 
     assert_eq!(applied.layers.len(), 1);
     assert_eq!(
-        workspace
-            .font()
-            .layer_id_for_glyph_source(glyph_id, source_id),
+        workspace.font().layer_id_for_source(glyph_id, source_id),
         Some(layer_id)
     );
 
@@ -1126,9 +1124,7 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
             ))
     );
     assert_eq!(
-        workspace
-            .font()
-            .layer_id_for_glyph_source(glyph_id, source_id),
+        workspace.font().layer_id_for_source(glyph_id, source_id),
         None
     );
 
@@ -1138,9 +1134,7 @@ fn create_glyph_layer_undo_redo_removes_and_restores_sparse_layer() {
         .expect("createGlyphLayer should redo");
     assert_eq!(redone.layers.len(), 1);
     assert_eq!(
-        workspace
-            .font()
-            .layer_id_for_glyph_source(glyph_id, source_id),
+        workspace.font().layer_id_for_source(glyph_id, source_id),
         Some(layer_id)
     );
 }
@@ -1185,9 +1179,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
         .apply(&set_x_advance_intents(layer_id, 640.0), None)
         .unwrap();
     assert_eq!(
-        workspace
-            .font()
-            .layer_id_for_glyph_source(glyph_b, source_id),
+        workspace.font().layer_id_for_source(glyph_b, source_id),
         None
     );
 
@@ -1227,9 +1219,7 @@ fn delete_source_undo_redo_removes_and_restores_existing_sparse_layers() {
     );
     assert_eq!(workspace.font().layer(layer_id).unwrap().width(), 640.0);
     assert_eq!(
-        workspace
-            .font()
-            .layer_id_for_glyph_source(glyph_b, source_id),
+        workspace.font().layer_id_for_source(glyph_b, source_id),
         None
     );
     assert_persisted_font_matches_workspace(&mut workspace);
@@ -2224,6 +2214,80 @@ fn tracked_languages_persist_across_resume_and_undo_restores_absence() {
 
     let workspace = FontWorkspace::resume(&store_path).unwrap();
     assert_eq!(workspace.font().language_ids(), Some(language_ids(&[])));
+}
+
+/// A new untitled workspace in a temporary directory, with its store path.
+fn untitled_workspace()
+-> Result<(tempfile::TempDir, PathBuf, FontWorkspace), Box<dyn std::error::Error>> {
+    let temp = tempfile::tempdir()?;
+    let store_path = temp.path().join("working.sqlite");
+    let workspace = FontWorkspace::create_untitled(&store_path, NewWorkspace::new())?;
+    Ok((temp, store_path, workspace))
+}
+
+fn set_grid(workspace: &mut FontWorkspace, grid: Option<Grid>) -> Result<(), WorkspaceError> {
+    workspace
+        .apply(
+            &FontIntentSet::from(SetGrid { grid }),
+            Some("Set Grid".to_string()),
+        )
+        .map(|_| ())
+}
+
+#[test]
+fn the_font_grid_persists_across_resume_and_undo_restores_the_previous_grid() {
+    let (_temp, store_path, mut workspace) = untitled_workspace().unwrap();
+    assert_eq!(workspace.font().grid(), None);
+    let fine = Grid {
+        spacing_x: 50.0,
+        spacing_y: 25.0,
+        subdivisions: 2,
+    };
+    let coarse = Grid {
+        spacing_x: 100.0,
+        spacing_y: 100.0,
+        subdivisions: 1,
+    };
+
+    set_grid(&mut workspace, Some(fine)).unwrap();
+    drop(workspace);
+
+    let mut workspace = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(workspace.font().grid(), Some(fine));
+
+    set_grid(&mut workspace, Some(coarse)).unwrap();
+    assert_eq!(workspace.font().grid(), Some(coarse));
+    let undone = workspace.undo().unwrap().expect("setGrid should undo");
+    assert!(undone.changes.changes.iter().any(|change| matches!(
+        change,
+        FontChange::LibValue { key, .. } if key == GRID_LIB_KEY
+    )));
+    assert_eq!(workspace.font().grid(), Some(fine));
+
+    set_grid(&mut workspace, None).unwrap();
+    assert_eq!(workspace.font().grid(), None);
+    drop(workspace);
+
+    let workspace = FontWorkspace::resume(&store_path).unwrap();
+    assert_eq!(workspace.font().grid(), None);
+}
+
+#[test]
+fn an_invalid_grid_is_refused_and_leaves_the_font_unchanged() {
+    let (_temp, _, mut workspace) = untitled_workspace().unwrap();
+    let invalid = Grid {
+        spacing_x: 0.0,
+        spacing_y: 100.0,
+        subdivisions: 1,
+    };
+
+    let refused = set_grid(&mut workspace, Some(invalid));
+
+    assert!(matches!(
+        refused,
+        Err(WorkspaceError::Font(CoreError::InvalidGrid(_)))
+    ));
+    assert_eq!(workspace.font().grid(), None);
 }
 
 #[test]

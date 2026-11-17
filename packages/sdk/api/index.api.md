@@ -182,6 +182,7 @@ export class Designspace {
     // (undocumented)
     axis(axisId: AxisId): Axis | null;
     axisTagged(tag: string): Axis | null;
+    componentBaseLocation(parent: ExternalAxisLocation, set: ReadonlyMap<AxisId, number>, inheritance: ComponentInheritance): ExternalAxisLocation;
     coordinates(location: ExternalAxisLocation | DesignAxisLocation): {
         axisId: AxisId;
         value: number;
@@ -388,6 +389,8 @@ export class Editor {
     setRenderTheme(theme: EditorRenderTheme): void;
     setRightSidebearing(value: number): void;
     setSelectedComponentsAnchored(anchored: boolean): Promise<boolean>;
+    setSelectedComponentsAxis(axisId: AxisId, value: number | null): Promise<boolean>;
+    setSelectedComponentsInheritance(inheritance: ComponentInheritance): Promise<boolean>;
     setSourceToDefault(): void;
     // (undocumented)
     setToolState(scope: ToolStateScope, toolId: string, key: string, value: unknown): void;
@@ -621,6 +624,8 @@ export class Font {
     glyphRecords(): readonly GlyphRecord[];
     get glyphRecordsCell(): Signal<readonly GlyphRecord[]>;
     glyphsAfter(after: GlyphId | null, limit: number): GlyphDirectoryPage | null;
+    get gridCell(): Signal<Grid$1 | null>;
+    get gridRevisionCell(): Signal<number>;
     hasComponents(glyphId: GlyphId): boolean;
     hasGlyph(glyphId: GlyphId): boolean;
     get invalidGlyphsCell(): Signal<GlyphInvalidation>;
@@ -681,6 +686,7 @@ export class Font {
     renameKerningGroup(groupId: KerningGroupId, name: string): Promise<void>;
     resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]>;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
+    setGrid(grid: Grid$1 | null): void;
     setIndependentAxisMapping(axis: Axis$1, mapping: AxisMapping): Promise<void>;
     setKerningException(sourceId: SourceId, first: GlyphId, second: GlyphId, position: KerningPairPosition, exception: boolean): boolean;
     setKerningValues(edits: readonly KerningValueEdit[], label: string): void;
@@ -741,6 +747,7 @@ export interface FontSnapshot {
     readonly axisMappings: readonly AxisMapping[];
     // (undocumented)
     readonly glyphs: readonly GlyphEntry[];
+    readonly grid?: Grid$1 | null;
     // (undocumented)
     readonly kerning: KerningSnapshot;
     readonly languageIds?: readonly string[] | null;

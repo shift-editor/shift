@@ -5,6 +5,8 @@ import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 
 import type { WorkspaceDocumentState } from "@shared/workspace/lanes";
 import type { WorkspaceApplyStatus } from "@/lib/workspace/WorkspaceEditCoordinator";
+import { pathName } from "@/lib/export/exportPaths";
+import type { FontSession } from "@/types/fontSession";
 
 export type DocumentActivity = "clean" | "editing" | "committing" | "dirty";
 
@@ -50,7 +52,7 @@ export function useDocumentChromeState(): DocumentChromeState {
     if (!workspace) {
       return {
         documentState: null,
-        filename: metadata.styleName ?? "Preview",
+        filename: previewFilename(session) ?? metadata.styleName ?? "Preview",
         activity: "clean",
         dirty: false,
       };
@@ -64,7 +66,7 @@ export function useDocumentChromeState(): DocumentChromeState {
       activity,
       dirty: activity !== "clean",
     };
-  }, [workspace, metadata.styleName, documentState, isEditing, applyStatus]);
+  }, [session, workspace, metadata.styleName, documentState, isEditing, applyStatus]);
 }
 
 function activityForDocument(
@@ -83,4 +85,10 @@ function filenameForDocument(state: WorkspaceDocumentState | null): string {
   if (!saveTarget) return "Untitled";
 
   return saveTarget.split(/[\\/]/).filter(Boolean).at(-1) ?? "Untitled";
+}
+
+/** The previewed file's name, such as `CrimsonText-BoldItalic.ttf`, for the title bar. */
+function previewFilename(session: FontSession): string | null {
+  if (session.mode !== "preview" || session.sourcePath === null) return null;
+  return pathName(session.sourcePath);
 }

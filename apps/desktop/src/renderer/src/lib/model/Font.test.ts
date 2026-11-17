@@ -51,6 +51,7 @@ const SNAPSHOT: WorkspaceSnapshot = {
   axisMappingBases: [],
   namedInstances: [],
   languageIds: null,
+  grid: null,
   kerning: { groups: [], sources: [] },
 };
 

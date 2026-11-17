@@ -6,6 +6,8 @@ import { runRendererCommand } from "@/lib/commands/rendererCommands";
 import type { SettingsTarget } from "@/types/settings";
 import { useFontSession } from "@/workspace/WorkspaceContext";
 import { useWindowTabs } from "@/hooks/useWindowTabs";
+import { useExport } from "./ExportContext";
+import { usePreviewNotice } from "./PreviewNoticeProvider";
 import { SettingsNavigationContext, type SettingsNavigation } from "./SettingsNavigationContext";
 
 export const SettingsNavigationProvider = ({ children }: { children: ReactNode }) => {
@@ -13,6 +15,8 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
   const { closeShown } = useWindowTabs();
   const [target, setTarget] = useState<SettingsTarget | null>(null);
   const [componentPickerOpen, setComponentPickerOpen] = useState(false);
+  const { setOpen: setExportOpen, setPopoverOpen: setExportPopoverOpen } = useExport();
+  const showPreviewNotice = usePreviewNotice();
   const open = useCallback((next: SettingsTarget) => setTarget(next), []);
   const navigation = useMemo<SettingsNavigation>(() => ({ open, target }), [open, target]);
 
@@ -21,6 +25,15 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
       getShiftHost().commands.onRunRendererCommand(async (id) => {
         if (id === "app.showSettings") {
           setTarget({ category: "font" });
+          return;
+        }
+        if (id === "file.export") {
+          // The Export popover opens from the section's Export button, so the section opens too.
+          // A preview exports once it is saved as .shift, which the notice offers.
+          if (session.mode === "workspace") {
+            setExportOpen(true);
+            setExportPopoverOpen(true);
+          } else showPreviewNotice();
           return;
         }
         if (id === "tab.close") {
@@ -41,7 +54,14 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
           console.error("renderer command failed", id, error);
         }
       }),
-    [closeShown, session.editor, session.mode],
+    [
+      closeShown,
+      session.editor,
+      session.mode,
+      setExportOpen,
+      setExportPopoverOpen,
+      showPreviewNotice,
+    ],
   );
 
   return (

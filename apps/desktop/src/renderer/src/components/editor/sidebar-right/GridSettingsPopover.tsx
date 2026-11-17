@@ -25,8 +25,8 @@ interface GridSettingsPopoverProps {
  *
  * @remarks
  * Showing the grid and snapping to it are toggled in the zoom menu itself.
- * Spacing is in font units from the glyph origin. The settings last for the
- * session; they are not saved with the font.
+ * Spacing is in font units from the glyph origin. Spacing and subdivisions
+ * are saved with the font, and each change is one undo step.
  */
 export const GridSettingsPopover = ({ open, onOpenChange, trigger }: GridSettingsPopoverProps) => {
   const editor = useEditor();

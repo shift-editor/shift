@@ -1,6 +1,7 @@
 import type { SceneDocument, SceneIntent } from "./sceneDocument";
 import type {
   AppliedChange,
+  ComponentInheritance,
   FontIntent,
   FontSnapshot,
   GlyphEntry,
@@ -47,8 +48,8 @@ import type { PendingEditId } from "./editing";
 import type { WorkspaceEditListener } from "./history";
 import type { GlyphReader } from "./glyph";
 
-/** `FontStore` lookup key for the layer a glyph authors in one source. */
-export type GlyphSourceKey = string & { readonly __glyphSourceKey: unique symbol };
+/** `FontStore` lookup key for the layer a glyph authors on one source. */
+export type SourceLayerKey = string & { readonly __sourceLayerKey: unique symbol };
 
 /**
  * Every committed glyph relation, derived once by `FontStore` from one workspace or font snapshot.
@@ -74,7 +75,7 @@ export interface FontRecordIndex {
   /** Glyphs that reference each base glyph as a component. */
   readonly dependentsById: ReadonlyMap<GlyphId, ReadonlySet<GlyphId>>;
   /** At most one layer per glyph and source, as Rust enforces. */
-  readonly layerByGlyphSource: ReadonlyEntityMap<GlyphSourceKey, LayerId>;
+  readonly layerBySource: ReadonlyEntityMap<SourceLayerKey, LayerId>;
   readonly glyphByLayer: ReadonlyEntityMap<LayerId, GlyphId>;
 }
 
@@ -320,6 +321,17 @@ export interface EngineVariation {
   designLocation(external: readonly number[]): readonly number[];
   /** The external location a design location's mapping came from; NaN on internal axes. */
   externalLocation(design: readonly number[]): readonly number[];
+  /**
+   * Where a component's base glyph draws, as an external location, when the
+   * glyph it sits in draws at the external location `parent` and the
+   * component sets `set` (design units, NaN on an axis it doesn't set); NaN
+   * on internal axes.
+   */
+  componentBaseLocation(
+    parent: readonly number[],
+    set: readonly number[],
+    inheritance: ComponentInheritance,
+  ): readonly number[];
   /**
    * The number the session interned the compiled variation `basis` as, a
    * compiled font's glyph deltas; intern each basis once, when its glyph loads.

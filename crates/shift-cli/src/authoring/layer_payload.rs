@@ -1,6 +1,7 @@
 //! Layer payload parsing and lowering to semantic replacement intents.
 
 use shift_font::ReplaceGlyphLayerContent;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, Read};
 use std::path::Path;
 
@@ -8,12 +9,28 @@ use miette::{IntoDiagnostic, Result, WrapErr, bail};
 use serde::de::DeserializeOwned;
 use shift_font::svg_path;
 use shift_font::{
-    Anchor, Component, Contour, DecomposedTransform, FontIntent, GlyphId, LayerId, Transform,
+    Anchor, Component, Contour, DecomposedTransform, DesignLocation, Font, FontIntent, GlyphId,
+    LayerId, Transform,
 };
 use svgtypes::{PathParser, PathSegment};
 
 use super::input::{LayerInput, TransformInput};
+use super::metrics_keys::WrittenKey;
 use super::require_finite;
+
+/// A component location keyed by axis tag, as design coordinates on `font`'s axes.
+fn component_location(values: &BTreeMap<String, f64>, font: &Font) -> Result<DesignLocation> {
+    values
+        .iter()
+        .map(|(tag, value)| {
+            require_finite(*value, "component location")?;
+            let axis_id = font
+                .axis_id_by_tag(tag)
+                .ok_or_else(|| miette::miette!("the font has no axis tagged {tag:?}"))?;
+            Ok((axis_id, *value))
+        })
+        .collect()
+}
 
 pub(super) fn read_json_input<T: DeserializeOwned>(path: &Path, label: &str) -> Result<T> {
     let json = if path == Path::new("-") {
@@ -35,20 +52,26 @@ pub(super) fn read_json_input<T: DeserializeOwned>(path: &Path, label: &str) -> 
 }
 
 impl LayerInput {
-    /// Lowers a complete drawing payload, minting every internal identity.
+    /// Lowers a complete drawing payload, minting every internal identity, then the
+    /// layer's own metrics keys, recording each in `written`.
     ///
     /// Outlines use font units with Y up; explicit contours and SVG are mutually exclusive.
-    /// Components name their base glyph, which `base_glyph` resolves to its identity.
+    /// Components name their base glyph, which `base_glyph` resolves to its identity,
+    /// and the axes of their location by tag, which `font` resolves.
     ///
     /// # Errors
     ///
     /// Rejects non-finite coordinates, mixed outline formats, malformed SVG, SVG arcs,
-    /// and components whose base `base_glyph` cannot resolve.
-    pub(super) fn into_intent(
+    /// components whose base `base_glyph` cannot resolve, and component locations on
+    /// axes the font lacks.
+    pub(super) fn into_intents(
         self,
+        glyph_id: GlyphId,
         layer_id: LayerId,
         base_glyph: &dyn Fn(&str) -> Result<GlyphId>,
-    ) -> Result<FontIntent> {
+        font: &Font,
+        written: &mut BTreeSet<WrittenKey>,
+    ) -> Result<Vec<FontIntent>> {
         require_finite(self.advance, "layer advance")?;
         let contours = match (self.contours, self.svg_path) {
             (Some(_), Some(_)) => bail!("use contours or svgPath, not both"),
@@ -101,21 +124,28 @@ impl LayerInput {
                     })
                 }
             };
-            components.push(Component::with_transform(
-                base_glyph_id,
-                input.base,
-                transform,
-            ));
+            let location = component_location(&input.location, font)
+                .wrap_err_with(|| format!("component {:?} location", input.base))?;
+            let mut component = Component::with_transform(base_glyph_id, input.base, transform);
+            component.set_location(location);
+            component.set_inheritance(input.inheritance);
+            components.push(component);
         }
 
-        Ok(ReplaceGlyphLayerContent {
-            layer_id,
-            width: self.advance,
-            contours,
-            anchors,
-            components,
+        let mut intents = vec![
+            ReplaceGlyphLayerContent {
+                layer_id,
+                width: self.advance,
+                contours,
+                anchors,
+                components,
+            }
+            .into(),
+        ];
+        if let Some(keys) = &self.metrics_keys {
+            intents.extend(keys.layer_intents(glyph_id, layer_id, written));
         }
-        .into())
+        Ok(intents)
     }
 }
 

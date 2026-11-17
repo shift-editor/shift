@@ -1,7 +1,7 @@
 //! Batch planning over directory facts; geometry is acquired by the workspace only when needed.
 
 use shift_font::{CreateGlyph, CreateGlyphLayer, UpdateGlyph};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use shift_font::{FontIntentSet, GlyphId, GlyphName, LayerId};
@@ -9,9 +9,10 @@ use shift_font::{FontIntentSet, GlyphId, GlyphName, LayerId};
 use crate::cli::SetGlyphsArgs;
 
 use super::glyph::{load_font, parse_unicodes};
-use super::input::{GlyphBatchInput, GlyphEntryInput};
+use super::input::{GlyphBatchInput, GlyphEntryInput, MetricsKeysInput};
 use super::layer_payload::read_json_input;
-use super::{AuthoringReport, apply_mutation};
+use super::metrics_keys::check_written_keys;
+use super::{AuthoringReport, apply_checked_mutation};
 use crate::selector::FontSelectors;
 
 /// The glyph batch format `glyph export` writes and `glyph set` reads.
@@ -20,13 +21,16 @@ pub(crate) const GLYPH_BATCH_FORMAT: u32 = 1;
 /// Creates or updates glyph identities and drawings with one atomic workspace application.
 ///
 /// Omitted Unicode assignments remain unchanged; an empty list clears them. Repeated
-/// glyph names may target distinct sources but must agree on any supplied Unicode list.
+/// glyph names may target distinct sources but must agree on any supplied Unicode list
+/// and glyph metrics keys. Metrics keys are applied as the app applies them: the sides
+/// they link follow in the same edit.
 /// Input errors name the glyph and one-based entry; syntax errors retain JSON locations.
 ///
 /// # Errors
 ///
-/// Rejects invalid payloads, selectors, repeated glyph/source pairs, and conflicting
-/// Unicode assignments without writing. Also reports document and persistence failures.
+/// Rejects invalid payloads, selectors, repeated glyph/source pairs, conflicting
+/// Unicode assignments or glyph keys, and metrics keys that cannot be evaluated,
+/// without writing. Also reports document and persistence failures.
 pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let batch = read_json_input::<GlyphBatchInput>(&args.input, "glyph batch")?;
@@ -43,6 +47,7 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
 
     let mut glyphs = HashMap::<String, (GlyphId, Vec<u32>)>::new();
     let mut unicodes = HashMap::<String, Vec<u32>>::new();
+    let mut glyph_keys = BTreeMap::<String, MetricsKeysInput>::new();
     let mut seen = HashSet::new();
     let mut intents = Vec::new();
     let mut layers = Vec::new();
@@ -85,6 +90,18 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
                 );
             }
             unicodes.insert(name.clone(), values.clone());
+        }
+
+        if let Some(keys) = entry.metrics_keys {
+            if let Some(previous) = glyph_keys.get(&name)
+                && *previous != keys
+            {
+                bail!(
+                    "{}: conflicting glyph metrics keys for this glyph",
+                    context()
+                );
+            }
+            glyph_keys.insert(name.clone(), keys);
         }
 
         if !glyphs.contains_key(&name) {
@@ -132,8 +149,9 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
         Some((glyph_id, _)) => Ok(*glyph_id),
         None => font.glyph_id_for(name),
     };
+    let mut written = BTreeSet::new();
     for (glyph_id, source_id, input, context) in layers {
-        let existing = font.layer_id_for_glyph_source(glyph_id, source_id);
+        let existing = font.layer_id_for_source(glyph_id, source_id);
         let layer_id = existing.unwrap_or_else(LayerId::new);
         if existing.is_none() {
             intents.push(
@@ -145,12 +163,25 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
                 .into(),
             );
         }
-        intents.push(
+        intents.extend(
             input
-                .into_intent(layer_id, &base_glyph)
+                .into_intents(glyph_id, layer_id, &base_glyph, &font, &mut written)
                 .wrap_err_with(|| context)?,
         );
     }
 
-    apply_mutation(&args.path, &args.mutation, &FontIntentSet { intents })
+    // Glyph keys come last, so the glyphs and layers they read already exist.
+    for (name, keys) in &glyph_keys {
+        let Some(&(glyph_id, _)) = glyphs.get(name) else {
+            bail!("metrics keys name glyph `{name}`, which the batch did not create");
+        };
+        intents.extend(keys.glyph_intents(glyph_id, &mut written));
+    }
+
+    apply_checked_mutation(
+        &args.path,
+        &args.mutation,
+        &FontIntentSet { intents },
+        |font| check_written_keys(font, &written),
+    )
 }

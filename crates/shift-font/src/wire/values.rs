@@ -4,8 +4,9 @@
 use std::str::FromStr;
 
 use crate::{
-    AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentAlignment, ComponentId, ContourId,
-    GlyphId, GuidelineId, KerningGroupId, LayerId, MetricId, NamedInstanceId, PointId, SourceId,
+    AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentAlignment, ComponentId,
+    ComponentInheritance, ContourId, GlyphId, GuidelineId, KerningGroupId, LayerId, MetricId,
+    NamedInstanceId, PointId, SourceId,
 };
 
 crate::string_enum! {
@@ -45,6 +46,15 @@ pub fn parse_alignment(name: Option<&str>) -> ComponentAlignment {
         Some("anchored") => ComponentAlignment::Anchored,
         Some("free") => ComponentAlignment::Free,
         _ => ComponentAlignment::Unset,
+    }
+}
+
+/// Where a component takes the axes it doesn't set, from its wire name;
+/// `parent`, the default, for any other name.
+pub fn parse_inheritance(name: &str) -> ComponentInheritance {
+    match name {
+        "font" => ComponentInheritance::Font,
+        _ => ComponentInheritance::Parent,
     }
 }
 

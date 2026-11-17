@@ -17,7 +17,8 @@ export type ShiftFixtures = {
   saveShiftPath: string;
   saveAsShiftPath: string;
   copyShiftPath: string;
-  exportTtfPath: string;
+  /** The folder the scripted Export folder chooser returns; empty to cancel. */
+  exportDirectory: string;
 };
 
 /** A workspace app launched once per worker and shared by the tests that opt in. */

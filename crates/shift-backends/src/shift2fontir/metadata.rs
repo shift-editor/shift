@@ -6,8 +6,8 @@ use fontdrasil::orchestration::{Access, Work};
 use fontdrasil::types::Axes;
 use fontir::error::Error;
 use fontir::ir::{
-    DEFAULT_VENDOR_ID, FeaturesSource, GlobalMetric, GlobalMetricsBuilder, GlyphOrder, NameBuilder,
-    PreliminaryGdefCategories, StaticMetadata,
+    DEFAULT_VENDOR_ID, FeatureSources, FeaturesSource, GlobalMetric, GlobalMetricsBuilder,
+    GlyphOrder, NameBuilder, PreliminaryGdefCategories, StaticMetadata,
 };
 use fontir::orchestration::{Context, WorkId};
 use shift_font::{Source, SourceList, StandardMetrics};
@@ -105,6 +105,8 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
                 // Classes are already final: marks by category, bases and
                 // ligatures inferred from anchors in `gdef_classes`.
                 infer_from_anchors: false,
+                // Shift excludes no glyphs from GDEF classes.
+                excluded: Default::default(),
                 mark_category_glyphs: self
                     .snapshot
                     .mark_category_glyphs
@@ -293,7 +295,7 @@ impl Work<Context, WorkId, Error> for FeatureWork {
             None if authored.trim().is_empty() => FeaturesSource::empty(),
             None => FeaturesSource::from_string(authored.to_string()),
         };
-        context.features.set(features);
+        context.features.set(FeatureSources::single(features));
         Ok(())
     }
 }

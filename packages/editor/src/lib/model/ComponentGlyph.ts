@@ -1,5 +1,5 @@
 import { Bounds, Mat, type Bounds as BoundsType, type MatModel } from "@shift/geo";
-import { Point, Segment, segmentContour } from "@shift/glyph-state";
+import { Point, Segment, erasedOutline, segmentContour } from "@shift/glyph-state";
 import type {
   ComponentGlyph as ComponentGlyphDefinition,
   ComponentId,
@@ -27,12 +27,19 @@ const IDENTITY = Mat.Identity();
  * Between masters of a glyph whose components change scale, rotation, or
  * skew, the occurrence draws its outline as each master places it, blended,
  * the way compiled fonts interpolate it. It stays this component occurrence.
+ *
+ * A component that sets axes for its base glyph, or uses the font's
+ * location, draws its base there: {@link locationCell} is where this
+ * occurrence's base is drawn, and its own components start from it.
  */
 export class ComponentGlyph {
   readonly #definitionCell: Signal<ComponentGlyphDefinition>;
   readonly #glyphIdCell: Signal<GlyphId>;
-  readonly #locationCell: Signal<ExternalAxisLocation>;
+  readonly #parentLocationCell: Signal<ExternalAxisLocation>;
   readonly #renderModel: GlyphRenderModel;
+
+  /** Where this occurrence draws its base glyph. */
+  readonly locationCell: Signal<ExternalAxisLocation>;
 
   readonly transformCell: Signal<MatModel>;
   readonly resolvedTransformCell: Signal<MatModel>;
@@ -46,7 +53,8 @@ export class ComponentGlyph {
    * Creates a reactive component occurrence from a Rust projection node.
    *
    * @param definitionCell - Rust-owned occurrence definition selected for the current location.
-   * @param locationCell - External location shared with the root Glyph render model.
+   * @param locationCell - External location shared with the root Glyph render model:
+   * where the root glyph is drawn.
    * @param renderModel - Complete Glyph render model that owns this occurrence.
    */
   constructor(
@@ -56,17 +64,29 @@ export class ComponentGlyph {
   ) {
     this.#definitionCell = definitionCell;
     this.#glyphIdCell = computed(() => this.#definitionCell.value.baseGlyphId);
-    this.#locationCell = locationCell;
     this.#renderModel = renderModel;
+    // The glyph this occurrence sits in is drawn where its own occurrence is.
+    this.#parentLocationCell = computed(
+      () => this.#parent()?.locationCell.value ?? locationCell.value,
+    );
+    this.locationCell = computed(() => {
+      const definition = this.#definitionCell.value;
+      const parent = this.#parentLocationCell.value;
+      const component = this.#renderModel.geometryWhere(definition.parentGlyphId, parent)
+        .components[definition.componentIndex];
+      if (component?.baseGlyphId !== definition.baseGlyphId) return parent;
+
+      return this.#renderModel.baseLocation(parent, component);
+    });
     this.transformCell = computed(() => {
       const definition = this.#definitionCell.value;
-      const geometry = this.#renderModel.geometryAt(
-        definition.parentGlyphId,
-        this.#locationCell.value,
-      );
+      const parentLocation = this.#parentLocationCell.value;
+      const geometry = this.#renderModel.geometryWhere(definition.parentGlyphId, parentLocation);
 
       const component = geometry.components[definition.componentIndex];
       if (component?.baseGlyphId !== definition.baseGlyphId) return Mat.Identity();
+      // Inside a moved base, nothing is being edited: the authored placement there.
+      if (parentLocation !== locationCell.value) return component.matrix;
 
       // Follows the anchors it sits on while they are being edited.
       return (
@@ -90,12 +110,13 @@ export class ComponentGlyph {
       placementCell,
       this,
       this.#placedContoursCell,
+      this.locationCell,
     );
     this.closedContoursPathCell = computed(() => {
       const path = new Path2D();
       for (const contour of this.contoursCell.value) {
         contour.trackShape();
-        if (contour.contour.closed) path.addPath(contour.path);
+        if (contour.contour.closed) path.addPath(contour.fillPath);
       }
       return path;
     });
@@ -215,6 +236,7 @@ export class GlyphContour {
   readonly #matrixCell: Signal<MatModel>;
   readonly #component: ComponentGlyph | null;
   readonly #contourPathCell: Signal<ContourPath>;
+  readonly #erasedPathCell: Signal<ContourPath | null>;
   readonly #boundsCell: Signal<BoundsType | null>;
 
   /**
@@ -236,6 +258,13 @@ export class GlyphContour {
       const contour = this.#contourCell.value;
       contour.trackShape();
       return ContourPath.fromContour(contour, this.#matrixCell.value);
+    });
+    // Erased in the contour's own coordinates, as export erases the base glyph, then placed.
+    this.#erasedPathCell = computed(() => {
+      const contour = this.#contourCell.value;
+      contour.trackShape();
+      const outline = erasedOutline(contour);
+      return outline ? ContourPath.fromOutline(outline, this.#matrixCell.value) : null;
     });
     this.#boundsCell = computed(() => {
       const contour = this.#contourCell.value;
@@ -292,6 +321,16 @@ export class GlyphContour {
     return this.contourPath.svgPath;
   }
 
+  /** The outline to fill: the contour with its open corners erased, or its own path. */
+  get fillPath(): Path2D {
+    return this.#erasedPathCell.peek()?.path ?? this.path;
+  }
+
+  /** Whether the contour has an open corner, so its fill outline differs from its points. */
+  get hasOpenCorners(): boolean {
+    return this.#erasedPathCell.peek() !== null;
+  }
+
   get bounds(): BoundsType | null {
     return this.#boundsCell.peek();
   }
@@ -306,5 +345,6 @@ export class GlyphContour {
 
   trackShape(): void {
     track(this.#contourPathCell);
+    track(this.#erasedPathCell);
   }
 }

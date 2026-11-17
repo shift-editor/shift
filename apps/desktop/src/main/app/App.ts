@@ -591,6 +591,13 @@ export class App {
     ipc.handle(ipcMain, "commands.run", async (event, id) => {
       await this.#runWindowCommand(this.#requireWindowForWebContents(event.sender), id);
     });
+    ipc.handle(ipcMain, "exports.chooseFolder", async (event, defaultPath) => {
+      const window = this.#requireWindowForWebContents(event.sender);
+      return this.#nativeDialogs.chooseExportFolder(window, defaultPath);
+    });
+    ipc.handle(ipcMain, "exports.reveal", (_event, exportedPath) => {
+      shell.showItemInFolder(exportedPath);
+    });
     ipc.handle(ipcMain, "clipboard.readText", () => {
       return clipboard.readText();
     });
@@ -834,9 +841,6 @@ export class App {
           } else if (window && session?.mode === "preview") {
             await this.#savePreviewAsDocument(window, session);
           }
-        },
-        exportTtf: async () => {
-          await document?.exportTtf();
         },
       },
       windows: {
@@ -1119,6 +1123,8 @@ export class App {
   }
 
   #closeReplacedLauncher(launcher: Window): void {
+    // A second open of the same font, such as a double-click, reaches here after the first closed it.
+    if (launcher.window.isDestroyed() || this.#replacedLaunchers.has(launcher)) return;
     this.#replacedLaunchers.add(launcher);
     launcher.close();
   }

@@ -2,6 +2,7 @@ import type {
   EngineFontHeader,
   EngineFontRecords,
   EngineStorelessRecords,
+  ComponentInheritance,
   FontIntent,
   FontReplacement,
   GlyphId,
@@ -462,6 +463,21 @@ export class EngineSession {
   }
 
   /**
+   * Where a component's base glyph draws, as an external location in the
+   * font's axis order, when the glyph it sits in draws at the external
+   * location `parent` and the component sets `set` (design units, NaN on an
+   * axis it doesn't set): shift-font's `ComponentInheritance::base_location`
+   * between the font's axis mappings. NaN on internal axes.
+   */
+  componentBaseLocation(
+    parent: readonly number[],
+    set: readonly number[],
+    inheritance: ComponentInheritance,
+  ): readonly number[] {
+    return this.#reads.componentBaseLocation(parent, set, inheritance);
+  }
+
+  /**
    * Interpolates the session's font's source metrics at a design location.
    *
    * @param location - Design coordinates in the font's axis order, NaN for an axis default.
@@ -552,6 +568,7 @@ export class EngineSession {
       ...header,
       sourceMetricsInterpolation: header.sourceMetricsInterpolation ?? null,
       languageIds: header.languageIds ?? null,
+      grid: header.grid ?? null,
     };
   }
 

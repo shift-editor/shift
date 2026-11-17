@@ -128,7 +128,9 @@ export interface EditorView {
  * The canvas grid of one window, as the zoom menu's grid items and Grid settings show it.
  *
  * @remarks
- * Session view state: it is not saved with the font. Lines are counted from
+ * The cells (`spacingX`, `spacingY`, `subdivisions`) belong to the font and
+ * are saved with it; `visible` and `snap` belong to the window and are not.
+ * A font that stores no grid is drawn on 100-unit cells. Lines are counted from
  * the open glyph's origin in font units, and each fades out as the view zooms
  * out; snapping follows the finest lines still on screen and stops once the
  * grid has faded away.
@@ -240,7 +242,10 @@ export type EditorOpenGlyphInput = ShiftTarget & { glyph: GlyphSelector };
  * `zoom` is clamped to the editor's range, 0.01 to 32. `center` is in the
  * units {@link EditorViewport.center} reports. `grid` changes only the
  * settings it names; spacing must be positive, and `subdivisions` a whole
- * number, clamped to 16.
+ * number, clamped to 16. Changing the cells is a font edit, the one `setView`
+ * makes: one undo step that marks the document unsaved and moves
+ * `fontRevision`, refused in a read-only preview's font (where the cells
+ * last for the session instead). `visible` and `snap` stay view state.
  */
 export interface EditorSetViewInput extends ShiftTarget {
   zoom?: number;

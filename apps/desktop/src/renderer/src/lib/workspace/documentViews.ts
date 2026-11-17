@@ -7,6 +7,7 @@ import {
   type WorkspaceDocumentState,
 } from "@shift/types";
 import { parseEach } from "@shared/parseEach";
+import { EXPORT_OUTPUTS, EXPORT_TARGETS } from "@/types/export";
 
 const glyphIdSchema = z.string().startsWith("glyph_").transform(asGlyphId);
 const nodeIdSchema = z.string().startsWith("node_").transform(asNodeId);
@@ -37,6 +38,14 @@ const documentViewSchema = z
     selectionPageId: nodeIdSchema.optional(),
     /** Each page's pan and zoom as last left, by page id. */
     cameras: z.record(nodeIdSchema, storedCameraSchema).optional(),
+    /** The folder each Export target last wrote into. */
+    exportFolders: z.partialRecord(z.enum(EXPORT_TARGETS), z.string()).optional(),
+    /** The Export section's rows, in order. */
+    exportRows: z
+      .array(z.object({ target: z.enum(EXPORT_TARGETS), output: z.enum(EXPORT_OUTPUTS) }).strict())
+      .optional(),
+    /** Whether the Export section was left open. */
+    exportOpen: z.boolean().optional(),
   })
   .strict();
 

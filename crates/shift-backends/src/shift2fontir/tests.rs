@@ -110,7 +110,7 @@ fn compile_ir(source: &ShiftIrSource) -> Compilation {
         units_per_em: metadata.units_per_em,
         axes: metadata.all_source_axes.iter().cloned().collect(),
         named_instances: metadata.named_instances.clone(),
-        features: context.features.get().as_ref().clone(),
+        features: context.features.get().default_source().clone(),
         glyph: context.get_glyph("A").as_ref().clone(),
         metrics: Metrics {
             ascender: global_metrics.get(GlobalMetric::Ascender, &default_location),

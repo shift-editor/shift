@@ -34,6 +34,7 @@ Authoring commands work on `.shift` documents and change them atomically: an inv
 ```sh
 shift-cli font create Lab.shift
 shift-cli font create Lab.shift --from Family.glyphspackage   # names, UPM, metrics, axes, masters; no glyphs
+shift-cli import Family.glyphspackage --output Family.shift    # the whole font: glyphs, kerning, features, instances
 shift-cli axis add Lab.shift --tag wght --name Weight --min 100 --default 400 --max 900
 shift-cli source add Lab.shift --name Black --location wght=900
 shift-cli glyph add Lab.shift A --unicode U+0041
@@ -49,9 +50,10 @@ shift-cli kerning group create Lab.shift O O Q --position first
 ```
 
 - **Shift assigns all identities.** Read the IDs a command returns and use them as selectors; never invent IDs.
-- **Layer payloads** are JSON with `advance`, and either `contours` (points with optional `pointType`: `onCurve`, `offCurve`, `qCurve`) or `svgPath`, plus optional `anchors` and `components` (`{"base": "A", "transform": [xx, xy, yx, yy, dx, dy]}`, transform optional). `svgPath` uses font units with **Y up**; an SVG drawn in Y-down screen coordinates must be flipped first. Arc commands are rejected.
+- **Layer payloads** are JSON with `advance`, and either `contours` (points with optional `pointType`: `onCurve`, `offCurve`, `qCurve`) or `svgPath`, plus optional `anchors` and `components` (`{"base": "A", "transform": [xx, xy, yx, yy, dx, dy]}`, transform optional). `svgPath` uses font units with **Y up**; an SVG drawn in Y-down screen coordinates must be flipped first. Arc commands are rejected. A layer's optional `metricsKeys` (`{"left", "right", "width"}`, such as `{"width": "=space"}`) link its sidebearings or width for its source only.
 - **`layer set` replaces a drawing**, components included: the payload's components replace the layer's. Use `layer copy` to duplicate a layer into another source.
 - **`glyph set` applies a batch atomically** and supports `--dry-run`. A component's base may be another glyph in the same batch.
+- **Metrics keys** (`=n`, `=n+10`, `=|H`) go in `metricsKeys` on a glyph entry (every source) or on a layer (its source only, winning over the glyph's). They apply in the same edit, as in the app, and keep applying when a glyph they read changes later. A key that cannot be evaluated fails the command without writing. `""` removes a side's key.
 - **`glyph export` copies real glyphs**: it reads named glyphs from any source (`.shift`, UFO, Designspace, Glyphs, TTF, OTF) as the batch `glyph set` reads, adding every glyph their components use. `--source NAME` or `--source all` picks masters (default: the default source). Small exported files are good scratch fixtures: edit them, then `glyph set` them into a document.
 - Instances are presets, not masters: instance commands never create sources or drawings.
 - **Kerning sides**: `first` is the left glyph, and its first-position group kerns its right edge; `second` is the right glyph. A side is a glyph name or `@GROUP` for a group at that position. Values are per master and default to the default source; set every master you mean to change.
@@ -72,10 +74,17 @@ shift-cli proof Lab.shift --output grid.png --grid
 - **Look before you claim a glyph is right.** `proof` compiles the source in memory and draws real shaped text; read the PNG. `--masters`, `--instances`, and repeated `--at TAG=VALUE` stack the same text at several locations, which is how interpolation problems show. `/name` in `--text` sets a glyph by name (`--text "H/a.ss01H"`).
 - Missing characters are drawn red and listed in `missingCharacters` in `--json`, so an agent can check coverage without reading pixels.
 
-## Compile
+## Compile and export
 
 ```sh
 shift-cli compile Family.shift --output Family.ttf
+shift-cli compile Family.shift --static --output fonts/           # one static .ttf per named instance
+shift-cli compile Family.shift --woff2 --output Family.ttf        # also Family.woff2, for the web
+shift-cli export Family.shift --output out/Family.designspace   # designspace plus one UFO per master
+shift-cli export Family.shift --output Family.ufo               # a font with one master
+shift-cli import Family.designspace --output Family.shift       # the reverse: any source into a new document
 ```
+
+`compile --static` writes each named instance as its own static font, named after its PostScript name; it needs named instances (add them with `instance add`). `export` writes editable sources for other tools and build pipelines; the output's extension picks the format. Masters made in Shift are written as `<name>-<master>.ufo` beside the designspace. A UFO holds one master, so a font with several exports as a designspace. Neither command changes the document. `import` reads a UFO, Designspace, Glyphs, TTF, or OTF font the way the app opens one and writes it as a new `.shift`; it refuses an existing output and lists what the import dropped (`--json` for scripts).
 
 Compile after authoring to confirm the font builds. A compile error usually names the glyph and source; incompatible masters are the most common cause in variable fonts (see [variable-fonts.md](variable-fonts.md)).

@@ -1,4 +1,5 @@
 use crate::GlyphName;
+use crate::axis::DesignLocation;
 use crate::collection::Identified;
 use crate::entity::{ComponentId, GlyphId};
 use crate::point::Canonical;
@@ -19,6 +20,39 @@ pub enum ComponentAlignment {
     Free,
 }
 
+/// Where a component's base glyph takes the axes its
+/// [location](Component::location) doesn't set.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+#[serde(rename_all = "camelCase")]
+pub enum ComponentInheritance {
+    /// From the glyph it is placed in, at that glyph's current location.
+    #[default]
+    Parent,
+    /// From the font's default location, as a variable component with
+    /// `RESET_UNSPECIFIED_AXES` draws.
+    Font,
+}
+
+impl ComponentInheritance {
+    /// The location a base glyph draws at when its component sets `set` and
+    /// the glyph the component is placed in draws at `parent`: `parent`, or
+    /// `font_default` for [`Self::Font`], with `set` laid over it.
+    pub fn base_location(
+        self,
+        set: &DesignLocation,
+        parent: &DesignLocation,
+        font_default: &DesignLocation,
+    ) -> DesignLocation {
+        let mut location = match self {
+            Self::Parent => parent.clone(),
+            Self::Font => font_default.clone(),
+        };
+        location.extend(set.iter().map(|(axis, value)| (*axis, *value)));
+        location
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Component {
@@ -28,6 +62,12 @@ pub struct Component {
     transform: DecomposedTransform,
     #[serde(default)]
     alignment: ComponentAlignment,
+    /// The axes this component sets for its base glyph, in design units.
+    /// Empty when it sets none.
+    #[serde(default)]
+    location: DesignLocation,
+    #[serde(default)]
+    inheritance: ComponentInheritance,
 }
 
 impl Identified for Component {
@@ -376,6 +416,8 @@ impl Component {
             base_glyph_name: base_glyph_name.into(),
             transform: DecomposedTransform::identity(),
             alignment: ComponentAlignment::Unset,
+            location: DesignLocation::new(),
+            inheritance: ComponentInheritance::Parent,
         }
     }
 
@@ -390,6 +432,8 @@ impl Component {
             base_glyph_name: base_glyph_name.into(),
             transform: transform.canonical(),
             alignment: ComponentAlignment::Unset,
+            location: DesignLocation::new(),
+            inheritance: ComponentInheritance::Parent,
         }
     }
 
@@ -405,6 +449,8 @@ impl Component {
             base_glyph_name: base_glyph_name.into(),
             transform: transform.canonical(),
             alignment: ComponentAlignment::Unset,
+            location: DesignLocation::new(),
+            inheritance: ComponentInheritance::Parent,
         }
     }
 
@@ -419,6 +465,8 @@ impl Component {
             base_glyph_name: base_glyph_name.into(),
             transform: DecomposedTransform::from_matrix(matrix).canonical(),
             alignment: ComponentAlignment::Unset,
+            location: DesignLocation::new(),
+            inheritance: ComponentInheritance::Parent,
         }
     }
 
@@ -452,6 +500,43 @@ impl Component {
 
     pub fn set_alignment(&mut self, alignment: ComponentAlignment) {
         self.alignment = alignment;
+    }
+
+    /// The axes this component sets for its base glyph, in design units.
+    pub fn location(&self) -> &DesignLocation {
+        &self.location
+    }
+
+    pub fn set_location(&mut self, location: DesignLocation) {
+        self.location = location;
+    }
+
+    /// Where the base glyph takes the axes [`Self::location`] doesn't set.
+    pub fn inheritance(&self) -> ComponentInheritance {
+        self.inheritance
+    }
+
+    pub fn set_inheritance(&mut self, inheritance: ComponentInheritance) {
+        self.inheritance = inheritance;
+    }
+
+    /// Whether the base glyph draws somewhere other than where its parent
+    /// glyph is: the component sets an axis or resets to the font's location.
+    pub fn moves_base(&self) -> bool {
+        !self.location.is_empty() || self.inheritance == ComponentInheritance::Font
+    }
+
+    /// The location the base glyph draws at when the glyph this component
+    /// is placed in draws at `parent`: `parent`, or `font_default` when the
+    /// component [inherits from the font](ComponentInheritance::Font), with
+    /// [`Self::location`] laid over it.
+    pub fn base_location(
+        &self,
+        parent: &DesignLocation,
+        font_default: &DesignLocation,
+    ) -> DesignLocation {
+        self.inheritance
+            .base_location(&self.location, parent, font_default)
     }
 
     pub fn translate(&mut self, dx: f64, dy: f64) {

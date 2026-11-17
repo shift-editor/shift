@@ -24,6 +24,7 @@ import type {
   DistributePoints,
   ShiftSidebearing,
   SetContourClosed,
+  SetComponentLocations,
   SetComponentTransforms,
   SetContourStart,
   SetPointSmooth,
@@ -236,6 +237,13 @@ export class LayerIntents<TResult = PendingEditId> {
     return this.#sink({
       kind: "setComponentTransforms",
       setComponentTransforms: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  setComponentLocations(payload: Payload<SetComponentLocations>): TResult {
+    return this.#sink({
+      kind: "setComponentLocations",
+      setComponentLocations: { layerId: this.#layerId, ...payload },
     });
   }
 

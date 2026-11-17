@@ -147,10 +147,16 @@ pub(super) fn add_authored_glyph_with_weight_sets_cached(
             projection,
             source_id,
         )?;
-        let topology = CurveTopology::from_contours(resolved.contours());
+        // An exact source's shape stands alone, so it erases on its own.
+        let erased = super::open_corners::erased_masters(&[resolved.contours()]);
+        let contours = erased
+            .as_ref()
+            .and_then(|masters| masters.first())
+            .map_or_else(|| resolved.contours(), Vec::as_slice);
+        let topology = CurveTopology::from_contours(contours);
         let advance = authored_advance(resolved.x_advance(), 0)?;
         let glyph_index = builder.add_outline_glyph(
-            topology.outline_from_contours(resolved.contours())?,
+            topology.outline_from_contours(contours)?,
             compilation.constant_weight_index,
             [],
         )?;

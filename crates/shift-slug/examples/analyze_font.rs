@@ -60,7 +60,7 @@ fn main() -> Result<()> {
     let read_elapsed = read_started.elapsed();
     let font = FontRef::new(&bytes)?;
     let metrics = font.metrics(Size::unscaled(), LocationRef::default());
-    let glyph_count = u32::from(metrics.glyph_count);
+    let glyph_count = metrics.glyph_count;
     let location = font.axes().location(arguments.settings.iter().copied());
     let outlines = font.outline_glyphs();
     let mut builder = AtlasBuilder::new(arguments.band_count)?;

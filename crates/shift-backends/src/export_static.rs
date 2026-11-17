@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 
 use shift_font::{CoreError, Font, NamedInstance};
 
-use crate::export::{ExportError, ExportFormat, FontExportResult, FontExporter};
+use crate::binary_encoding::BinaryEncodings;
+use crate::export::{ExportError, ExportFormat, FontExportResult, FontExporter, postscript_safe};
 
 /// One binary a static export writes.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -18,7 +19,7 @@ pub struct StaticInstanceFile {
 }
 
 impl FontExporter {
-    /// Names the files [`Self::export_static_instances`] writes for `font`,
+    /// Names the files [`Self::export_static_instances_with`] writes for `font`,
     /// in named-instance order.
     ///
     /// Each file is named after the instance's PostScript name, or else
@@ -81,20 +82,22 @@ impl FontExporter {
     /// cannot be created, [`ExportError::StaticInstance`] when an instance
     /// cannot be evaluated, and the compile and write errors of TrueType
     /// export.
-    pub fn export_static_instances(
+    ///
+    /// Each instance's binary is written in every one of `encodings`, from
+    /// one compile; [`ExportError::EncodeWoff2`] when a binary cannot be
+    /// WOFF2 encoded.
+    pub fn export_static_instances_with(
         &self,
         font: &Font,
         directory: &Path,
+        encodings: &BinaryEncodings,
     ) -> Result<Vec<FontExportResult>, ExportError> {
         let files = Self::static_instance_files(font)?;
-        std::fs::create_dir_all(directory).map_err(|source| ExportError::CreateDirectory {
-            path: directory.to_path_buf(),
-            source,
-        })?;
+        crate::export::create_directory(directory)?;
 
         if !font.is_variable() {
             let file = files.first().ok_or(ExportError::NoNamedInstances)?;
-            return Ok(vec![self.write_static(font, directory, file)?]);
+            return Ok(vec![self.write_static(font, directory, file, encodings)?]);
         }
 
         font.named_instances()
@@ -102,7 +105,7 @@ impl FontExporter {
             .zip(&files)
             .map(|(instance, file)| {
                 let static_font = static_font(font, instance)?;
-                self.write_static(&static_font, directory, file)
+                self.write_static(&static_font, directory, file, encodings)
             })
             .collect()
     }
@@ -112,10 +115,12 @@ impl FontExporter {
         font: &Font,
         directory: &Path,
         file: &StaticInstanceFile,
+        encodings: &BinaryEncodings,
     ) -> Result<FontExportResult, ExportError> {
         let path: PathBuf = directory.join(&file.file_name);
-        self.export_ttf(font, &path)?;
+        let files = self.export_binary(font, &path, encodings)?;
         Ok(FontExportResult {
+            files,
             path,
             format: ExportFormat::Ttf,
         })
@@ -128,12 +133,4 @@ fn static_font(font: &Font, instance: &NamedInstance) -> Result<Font, ExportErro
             instance: instance.name().to_string(),
             source,
         })
-}
-
-/// `name` with only the printable ASCII PostScript names allow, without
-/// spaces or `[](){}<>/%`.
-fn postscript_safe(name: &str) -> String {
-    name.chars()
-        .filter(|character| character.is_ascii_graphic() && !"[](){}<>/%".contains(*character))
-        .collect()
 }

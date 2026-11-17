@@ -47,9 +47,6 @@ describe("DocumentSession shared close transition", () => {
         saveCount++;
         return documentState(false);
       },
-      async export() {
-        throw new Error("unused");
-      },
     };
     const session = new DocumentSession({
       document,
@@ -99,9 +96,6 @@ describe("DocumentSession shared close transition", () => {
         async save() {
           throw new Error("save must not run for discard");
         },
-        async export() {
-          throw new Error("unused");
-        },
       },
       closeDocument: async (discard) => {
         expect(discard).toBe(true);
@@ -136,9 +130,6 @@ describe("DocumentSession shared close transition", () => {
         async save() {
           throw new Error("save must not run");
         },
-        async export() {
-          throw new Error("unused");
-        },
       },
       closeDocument: async () => {},
       dialogWindow: () => null,
@@ -172,9 +163,6 @@ describe("DocumentSession shared close transition", () => {
         },
         async save() {
           throw new Error("save must not run");
-        },
-        async export() {
-          throw new Error("unused");
         },
       },
       closeDocument: () => {

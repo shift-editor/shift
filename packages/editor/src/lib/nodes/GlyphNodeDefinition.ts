@@ -448,17 +448,26 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
     this.#drawEditGhost(node, ctx);
 
-    this.#outline.draw(ctx.canvas, view, {
-      stroke: {
-        color: ctx.canvas.theme.glyph.stroke,
-        widthPx: ctx.canvas.theme.glyph.widthPx,
-      },
-    });
+    // Open corners as Glyphs draws them: the authored path in grey, the erased outline over it,
+    // so what stays grey is what export erases.
+    track(view.openCornerContoursPathCell);
+    const openCorner = ctx.canvas.theme.openCorner;
+    ctx.canvas.strokePath(
+      view.openCornerContoursPathCell.peek(),
+      openCorner.color,
+      openCorner.widthPx,
+    );
+    track(view.outlinePathCell);
+    ctx.canvas.strokePath(
+      view.outlinePathCell.peek(),
+      ctx.canvas.theme.glyph.stroke,
+      ctx.canvas.theme.glyph.widthPx,
+    );
 
     for (const component of view.components) {
       for (const contour of component.contours) {
         ctx.canvas.strokePath(
-          contour.path,
+          contour.fillPath,
           ctx.canvas.theme.glyph.stroke,
           ctx.canvas.theme.component.widthPx,
         );

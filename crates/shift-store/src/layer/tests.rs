@@ -842,3 +842,30 @@ fn components_stored_before_alignment_was_recorded_decode_as_unset() {
 
     assert_eq!(component.alignment(), font::ComponentAlignment::Unset);
 }
+
+#[test]
+fn components_stored_before_locations_were_recorded_set_no_axes_and_follow_their_glyph() {
+    // The five fields a component had before it could set its base glyph's location.
+    #[derive(serde::Serialize)]
+    struct StoredComponent {
+        id: font::ComponentId,
+        base_glyph_id: font::GlyphId,
+        base_glyph_name: font::GlyphName,
+        transform: font::DecomposedTransform,
+        alignment: font::ComponentAlignment,
+    }
+    let bytes = rmp_serde::to_vec(&StoredComponent {
+        id: font::ComponentId::new(),
+        base_glyph_id: font::GlyphId::from_raw("dot"),
+        base_glyph_name: "dot".into(),
+        transform: font::DecomposedTransform::default(),
+        alignment: font::ComponentAlignment::Free,
+    })
+    .unwrap();
+
+    let component: font::Component = rmp_serde::from_slice(&bytes).unwrap();
+
+    assert!(component.location().is_empty());
+    assert_eq!(component.inheritance(), font::ComponentInheritance::Parent);
+    assert_eq!(component.alignment(), font::ComponentAlignment::Free);
+}

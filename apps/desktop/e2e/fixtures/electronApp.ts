@@ -146,8 +146,8 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
     await use(path.join(testRoot, "copied.shift"));
   },
 
-  exportTtfPath: async ({ testRoot }, use) => {
-    await use(path.join(testRoot, "exported.ttf"));
+  exportDirectory: async ({ testRoot }, use) => {
+    await use(path.join(testRoot, "exported"));
   },
 
   electronProcesses: async ({ testRoot: _testRoot }, use, testInfo) => {
@@ -180,7 +180,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
       documentCrashChoice,
       testRoot,
       saveShiftPath,
-      exportTtfPath,
+      exportDirectory,
       sharedWorkspace,
       sharedWorkspaceApp,
     },
@@ -220,7 +220,7 @@ export const test = base.extend<ShiftFixtures & ShiftOptions, ShiftWorkerFixture
       if (saveShiftPaths) {
         environment.SHIFT_E2E_SAVE_SHIFT_PATHS = JSON.stringify(saveShiftPaths);
       }
-      environment.SHIFT_E2E_EXPORT_TTF_PATH = exportTtfPath;
+      environment.SHIFT_E2E_EXPORT_DIRECTORY = exportDirectory;
       environment.SHIFT_E2E_DIRTY_DOCUMENT_CHOICE = dirtyDocumentChoice;
       if (dirtyDocumentChoices) {
         environment.SHIFT_E2E_DIRTY_DOCUMENT_CHOICES = dirtyDocumentChoices.join(",");

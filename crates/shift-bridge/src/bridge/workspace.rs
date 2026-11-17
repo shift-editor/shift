@@ -245,6 +245,14 @@ pub(crate) trait NativeWorkspace {
   /// Fails when no workspace is open.
   fn get_language_ids(&self) -> Result<Option<Vec<String>>, NativeWorkspaceError>;
 
+  /// The grid the font is drawn on; `None` when the font stores none, so the
+  /// editor uses its default grid.
+  ///
+  /// # Errors
+  ///
+  /// Fails when no workspace is open.
+  fn grid(&self) -> Result<Option<shift_font::Grid>, NativeWorkspaceError>;
+
   /// The font's named instances, in order.
   ///
   /// # Errors
@@ -612,6 +620,10 @@ impl NativeWorkspace for Bridge {
 
   fn get_language_ids(&self) -> Result<Option<Vec<String>>, NativeWorkspaceError> {
     Ok(self.font()?.language_ids())
+  }
+
+  fn grid(&self) -> Result<Option<shift_font::Grid>, NativeWorkspaceError> {
+    Ok(self.font()?.grid())
   }
 
   fn get_named_instances(&self) -> Result<Vec<NamedInstance>, NativeWorkspaceError> {

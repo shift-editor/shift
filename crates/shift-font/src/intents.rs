@@ -14,10 +14,10 @@ use crate::error::{CoreError, CoreResult};
 use crate::interpolation::GlyphInterpolationValues;
 use crate::ir::{
     Anchor, AnchorId, Axis, AxisId, AxisMapping, BooleanOp, Component, ComponentAlignment,
-    ComponentId, Contour, ContourId, DecomposedTransform, DesignLocation, Font, FontMetadata,
-    Glyph, GlyphId, GlyphLayer, GlyphName, LANGUAGES_LIB_KEY, LayerId, LibValue, MarkColor,
-    MetricDefinition, MetricId, MetricValue, NamedInstance, NamedInstanceId, PointId, PointType,
-    Source, SourceId, Transform,
+    ComponentId, ComponentInheritance, Contour, ContourId, DecomposedTransform, DesignLocation,
+    Font, FontMetadata, GRID_LIB_KEY, Glyph, GlyphId, GlyphLayer, GlyphName, Grid,
+    LANGUAGES_LIB_KEY, LayerId, LibValue, MarkColor, MetricDefinition, MetricId, MetricValue,
+    NamedInstance, NamedInstanceId, PointId, PointType, Source, SourceId, Transform,
 };
 use crate::layer_edit::BulkNodePositionUpdates;
 use crate::linked_metrics::ChangedGlyphs;
@@ -141,6 +141,7 @@ font_intents! {
         AddComponent,
         SetComponentTransforms,
         SetComponentAlignment,
+        SetComponentLocations,
         RemoveComponents,
         DecomposeComponents,
         ReverseContour,
@@ -165,6 +166,7 @@ font_intents! {
         UpdateGlyph,
         UpdateFontMetadata,
         SetLanguages,
+        SetGrid,
         CreateAxis,
         UpdateAxis,
         DeleteAxis,
@@ -224,6 +226,7 @@ enum Coordinates {
     AnchorPositions,
     AdvanceWidth,
     ComponentTransforms,
+    ComponentLocations,
     LayerTransform,
     PointTransform,
     SidebearingDelta,
@@ -239,6 +242,7 @@ impl Coordinates {
             Self::AnchorPositions => "anchor positions",
             Self::AdvanceWidth => "advance width",
             Self::ComponentTransforms => "component transforms",
+            Self::ComponentLocations => "component locations",
             Self::LayerTransform => "layer transform",
             Self::PointTransform => "point transform",
             Self::SidebearingDelta => "sidebearing delta",
@@ -773,6 +777,19 @@ impl Font {
         self.lib_mut().set(LANGUAGES_LIB_KEY.to_string(), value);
     }
 
+    fn apply_set_grid(&mut self, grid: Option<Grid>) -> CoreResult<()> {
+        match grid {
+            Some(grid) => {
+                let grid = grid.validate()?;
+                self.lib_mut().set(GRID_LIB_KEY.to_string(), grid.to_lib());
+            }
+            None => {
+                self.lib_mut().remove(GRID_LIB_KEY);
+            }
+        }
+        Ok(())
+    }
+
     fn apply_create_axis(&mut self, axis: &Axis) -> CoreResult<()> {
         self.add_axis(axis.clone())
     }
@@ -871,10 +888,7 @@ impl Font {
         if self.glyph_id_by_layer(layer_id).is_some() {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
-        if self
-            .layer_id_for_glyph_source(glyph_id, source_id)
-            .is_some()
-        {
+        if self.layer_id_for_source(glyph_id, source_id).is_some() {
             return Err(CoreError::DuplicateGlyphLayer {
                 glyph_id,
                 source_id,
@@ -924,10 +938,7 @@ impl Font {
         if self.glyph_id_by_layer(layer_id).is_some() {
             return Err(CoreError::DuplicateLayerId(layer_id));
         }
-        if self
-            .layer_id_for_glyph_source(glyph_id, source_id)
-            .is_some()
-        {
+        if self.layer_id_for_source(glyph_id, source_id).is_some() {
             return Err(CoreError::DuplicateGlyphLayer {
                 glyph_id,
                 source_id,

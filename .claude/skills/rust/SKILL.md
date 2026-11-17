@@ -147,6 +147,12 @@ An edit should cost what the edited thing costs, not what the font costs. A `Fon
 
 **One owner per rule.** Before writing a numeric or domain rule (normalization, interpolation, metrics, geometry), search shift-font and its libraries for it and call that; never write a second copy with different edge handling. Axis normalization once had five copies across shift-font, shift-backends and shift-slug, each clamping and comparing differently. Reported by `pnpm scan:rust --kind duplicate-body`.
 
+**Wrap the library's rule; don't copy it.** When a font library Shift builds on (fontc, fontir, fontbe, fontdrasil, fea-rs, glyphs-reader, norad, skrifa, read-fonts, write-fonts, HarfRust, kurbo) exposes the rule as a public function, call it, wrapped once in shift-font beside the type it serves, so the editor and export answer alike: axis normalization goes through fontdrasil's `CoordConverter`, open corners through `fontdrasil::open_corners`. A copy drifts on the library's next release without failing anything; fontdrasil 2.0 changed how decreasing axis mappings normalize, and Shift's copy then disagreed with every compiled font.
+
+- Keep only what the library doesn't decide, and say why beside it (Shift snaps a normalized `1e-15` to exactly `0` because its variation model only recognises an exact default).
+- Build the library's value once where a hot path would otherwise rebuild it per call, and measure: `DesignNormalization` holds its converter because region evaluation normalizes for every support.
+- When the library keeps the rule private, ask upstream to expose it before copying. A copy that must stay meanwhile gets a test that runs the library on the same inputs and compares, as `variation_oracle.rs` does for normalization.
+
 When the editor needs a shift-font rule synchronously, write it as a plain-data function in shift-font that native callers use, and export that function from `crates/shift-wasm`. Don't write a second Rust version for WebAssembly, and don't re-declare its types there: a `FontFeature` or `FeatureGroup` copied into `shift-wasm` beside `shift-text`'s is two enums to keep in sync. Derive the wire format on the original type, or convert with one `From`. The export only converts numbers to and from shift-font types; "Choosing a route" in `crates/shift-wasm/docs/DOCS.md` says what belongs there and what may stay in TypeScript.
 
 ## The scan ratchet
@@ -172,7 +178,7 @@ To lower one, fix hits and run `pnpm lint:rust-ratchet --update`; a lint at 0 ev
 - [ ] No `unwrap_or_default()`, `unwrap_or(…)` or `.ok()` that turns an error into an empty answer.
 - [ ] No signature nesting three or more generic layers; no `filter_map` closure doing two `?`s into a tuple.
 - [ ] No `Option`/`bool` fields standing in for phases; no derived `PartialEq` deciding what a change costs; events and change kinds are enums or flag sets.
-- [ ] No rule (normalization, interpolation, geometry) written again beside the one shift-font owns; no `duplicate-body` hit the branch added.
+- [ ] No rule (normalization, interpolation, geometry) written again beside the one shift-font owns or a font library exposes publicly; a library rule is called through one wrapper; no `duplicate-body` hit the branch added.
 - [ ] Conversions collect straight into the field's type; no turbofish where the field, argument or return type fixes it.
 - [ ] No type re-declared in `shift-wasm` that `shift-font` or `shift-text` already defines.
 - [ ] No scan of the whole font for a query an edit repeats; indexes that must agree are declared on one type and updated through a copy; no `imbl` outside `ir/persistent.rs`.

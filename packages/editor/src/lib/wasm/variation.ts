@@ -2,6 +2,7 @@ import type {
   Axis,
   AxisId,
   AxisMappingBasis,
+  ComponentInheritance,
   InterpolationBasis,
   SlugWeightSet,
   Source,
@@ -101,6 +102,25 @@ export class FontVariation {
   toExternal(location: DesignAxisLocation): ExternalAxisLocation {
     const axes = this.#axesCell.peek();
     const external = this.#variation.externalLocation(locationValues(axes, location));
+    return asExternalAxisLocation(locationFromValues(axes, onEveryAxis(axes, external)));
+  }
+
+  /**
+   * Where a component's base glyph draws when the glyph it sits in draws at
+   * `parent`: the axes the component sets, in design units, laid over
+   * `parent` or, for `font` inheritance, over the font's default location.
+   */
+  componentBaseLocation(
+    parent: ExternalAxisLocation,
+    set: ReadonlyMap<AxisId, number>,
+    inheritance: ComponentInheritance,
+  ): ExternalAxisLocation {
+    const axes = this.#axesCell.peek();
+    const external = this.#variation.componentBaseLocation(
+      locationValues(axes, parent),
+      locationValues(axes, set),
+      inheritance,
+    );
     return asExternalAxisLocation(locationFromValues(axes, onEveryAxis(axes, external)));
   }
 

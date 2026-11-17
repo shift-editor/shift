@@ -62,6 +62,9 @@ fn validate_layer(layer: &font::GlyphLayer) -> Result<(), String> {
         ] {
             validate_finite(value, field)?;
         }
+        for (_, value) in component.location().iter() {
+            validate_finite(*value, "component location")?;
+        }
     }
 
     for anchor in layer.anchors_iter() {

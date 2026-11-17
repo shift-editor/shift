@@ -27,6 +27,7 @@ pub struct FontReplacement {
     pub source_metrics_interpolation: Option<SourceMetricsInterpolationReplacement>,
     pub named_instances: Option<Vec<NamedInstance>>,
     pub languages: Option<LanguagesReplacement>,
+    pub grid: Option<GridReplacement>,
     pub sources: Option<Vec<crate::Source>>,
     pub kerning: Option<KerningSnapshot>,
     /// The glyph records the edit changed, which a session with a store adds;
@@ -51,6 +52,15 @@ pub struct SourceMetricsInterpolationReplacement {
 #[serde(rename_all = "camelCase")]
 pub struct LanguagesReplacement {
     pub language_ids: Option<Vec<String>>,
+}
+
+/// The font's grid after an edit that changed it; `None` inside when it
+/// stores none.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+#[serde(rename_all = "camelCase")]
+pub struct GridReplacement {
+    pub grid: Option<crate::Grid>,
 }
 
 impl FontReplacement {
@@ -95,6 +105,9 @@ impl FontReplacement {
                     .collect()
             }),
             languages: changed.read(FontChangeImpact::LANGUAGES, LanguagesReplacement::of),
+            grid: changed.read(FontChangeImpact::GRID, |font| GridReplacement {
+                grid: font.grid(),
+            }),
             sources: changed.read(FontChangeImpact::SOURCES, |font| {
                 font.masters().cloned().collect()
             }),

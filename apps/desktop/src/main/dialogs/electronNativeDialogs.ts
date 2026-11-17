@@ -88,21 +88,13 @@ export const electronNativeDialogs: NativeDialogs = {
     return result.canceled ? null : (result.filePath ?? null);
   },
 
-  async exportTrueTypeFont(window, state) {
-    const defaultPath = state.saveTarget
-      ? path.join(path.dirname(state.saveTarget), `${path.parse(state.saveTarget).name}.ttf`)
-      : message("file.exportTrueType.untitledFilename");
-    const options: SaveDialogOptions = {
-      title: message("file.exportTrueType.title"),
-      defaultPath,
-      filters: [{ name: message("file.exportTrueType.filter"), extensions: ["ttf"] }],
-      properties: ["createDirectory", "showOverwriteConfirmation"],
-    };
-    const result = window
-      ? await dialog.showSaveDialog(window.window, options)
-      : await dialog.showSaveDialog(options);
-
-    return result.canceled ? null : (result.filePath ?? null);
+  async chooseExportFolder(window, defaultPath) {
+    return showOpenPath(window, {
+      title: message("export.chooseFolder.title"),
+      buttonLabel: message("export.chooseFolder.button"),
+      defaultPath: defaultPath ?? undefined,
+      properties: ["openDirectory", "createDirectory"],
+    });
   },
 
   async confirmDirtyDocument(window, state, _reason, applicationName) {
@@ -166,15 +158,6 @@ export const electronNativeDialogs: NativeDialogs = {
       applicationName,
       message("document.saveFailed.message"),
       message("document.saveFailed.detail"),
-    );
-  },
-
-  async showExportFailure(window, applicationName) {
-    await showFailure(
-      window,
-      applicationName,
-      message("document.exportFailed.message"),
-      message("document.exportFailed.detail"),
     );
   },
 };

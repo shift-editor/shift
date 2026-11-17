@@ -1,5 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
-use std::path::Path;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use fontdrasil::coords::NormalizedLocation;
@@ -8,7 +7,7 @@ use fontir::ir::StaticMetadata;
 use fontir::orchestration::{Flags, IrWork};
 use fontir::source::Source;
 use shift_font::{
-    Axis, FeatureData, FontMetadata, Glyph, Kerning, MetricDefinition, NamedInstance,
+    Axis, FeatureData, FontMetadata, Glyph, Kerning, LocatedLayer, MetricDefinition, NamedInstance,
     Source as ShiftSource, SourceId,
 };
 
@@ -104,6 +103,25 @@ impl ShiftSnapshot {
     }
 }
 
+/// `glyph`'s drawings among `masters` (as [`ShiftSnapshot::glyph_masters`]
+/// returns them), each with its master's normalized location, in source order.
+/// A master the glyph has no drawing on is skipped.
+pub(super) fn located_master_layers<'a>(
+    glyph: &'a Glyph,
+    masters: &'a [(&'a ShiftSource, NormalizedLocation)],
+) -> impl Iterator<Item = (LocatedLayer<'a>, &'a NormalizedLocation)> {
+    let locations = masters
+        .iter()
+        .map(|(source, location)| (source.id(), location))
+        .collect::<HashMap<_, _>>();
+    glyph
+        .located_layers_on(masters.iter().map(|(source, _)| *source))
+        .filter_map(move |located| {
+            let location = *locations.get(&located.location.base_source_id()?)?;
+            Some((located, location))
+        })
+}
+
 impl ShiftIrSource {
     pub(super) fn snapshot(&self) -> &ShiftSnapshot {
         &self.snapshot
@@ -183,15 +201,6 @@ impl ShiftIrSource {
 }
 
 impl Source for ShiftIrSource {
-    fn new(_root: &Path) -> Result<Self, Error>
-    where
-        Self: Sized,
-    {
-        Err(Error::UnsupportedConstruct(
-            "ShiftIrSource is created from an in-memory Shift font".to_string(),
-        ))
-    }
-
     fn create_static_metadata_work(&self) -> Result<Box<IrWork>, Error> {
         Ok(Box::new(StaticMetadataWork::new(Arc::clone(
             &self.snapshot,
@@ -240,8 +249,10 @@ impl Source for ShiftIrSource {
         Ok(Box::new(ColorGlyphsWork))
     }
 
-    /// Propagates component anchors into composites, as fontc does for Glyphs sources.
+    /// Propagates component anchors into composites and erases open corners,
+    /// as fontc does for Glyphs sources. fontc's frontends erase in their own
+    /// path building, so `GlyphWork` erases; the flag records that it did.
     fn compilation_flags(&self) -> Flags {
-        Flags::PROPAGATE_ANCHORS
+        Flags::PROPAGATE_ANCHORS | Flags::ERASE_OPEN_CORNERS
     }
 }

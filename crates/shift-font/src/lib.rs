@@ -53,6 +53,7 @@ pub mod ir;
 pub mod layer_edit;
 pub mod linked_metrics;
 pub mod naming;
+pub mod open_corners;
 pub mod placed_blend;
 pub mod point_arrange;
 pub mod positioning;

@@ -1,7 +1,7 @@
 {
   "allow_attributes": {
     "fontsrc": { "src": 0, "tests": 1 },
-    "shift-backends": { "src": 7, "tests": 2 },
+    "shift-backends": { "src": 6, "tests": 2 },
     "shift-bridge": { "src": 5, "tests": 0 },
     "shift-cli": { "src": 4, "tests": 2 },
     "shift-font": { "src": 3, "tests": 0 },
@@ -9,7 +9,6 @@
     "shift-text": { "src": 3, "tests": 0 }
   },
   "allow_attributes_without_reason": {
-    "shift-backends": { "src": 1, "tests": 0 },
     "shift-cli": { "src": 0, "tests": 3 },
     "shift-font": { "src": 1, "tests": 0 }
   },

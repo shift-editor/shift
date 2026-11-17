@@ -5,6 +5,7 @@ import {
   type SegmentedContour,
   type SegmentPoints,
 } from "@shift/glyph-state";
+import type { Outline } from "@shift/wasm/protocol";
 import type { PathCommand } from "../../types/graphics";
 import { formatDecimal } from "../utils/number";
 
@@ -23,58 +24,7 @@ export class ContourPath {
   #path: Path2D | null = null;
   #svgPath: string | null = null;
 
-  private constructor(
-    segments: readonly SegmentPoints<NewPoint>[],
-    closed: boolean,
-    transform: MatModel,
-  ) {
-    const first = segments[0];
-    if (!first) {
-      this.commands = [];
-      return;
-    }
-
-    const start = Mat.applyToPoint(transform, first.start);
-    const commands: PathCommand[] = [{ type: "moveTo", x: start.x, y: start.y }];
-
-    for (const points of segments) {
-      switch (points.type) {
-        case "line": {
-          const end = Mat.applyToPoint(transform, points.end);
-          commands.push({ type: "lineTo", x: end.x, y: end.y });
-          break;
-        }
-        case "quad": {
-          const control = Mat.applyToPoint(transform, points.control);
-          const end = Mat.applyToPoint(transform, points.end);
-          commands.push({
-            type: "quadTo",
-            cp1x: control.x,
-            cp1y: control.y,
-            x: end.x,
-            y: end.y,
-          });
-          break;
-        }
-        case "cubic": {
-          const controlStart = Mat.applyToPoint(transform, points.controlStart);
-          const controlEnd = Mat.applyToPoint(transform, points.controlEnd);
-          const end = Mat.applyToPoint(transform, points.end);
-          commands.push({
-            type: "cubicTo",
-            cp1x: controlStart.x,
-            cp1y: controlStart.y,
-            cp2x: controlEnd.x,
-            cp2y: controlEnd.y,
-            x: end.x,
-            y: end.y,
-          });
-          break;
-        }
-      }
-    }
-
-    if (closed) commands.push({ type: "close" });
+  private constructor(commands: readonly PathCommand[]) {
     this.commands = commands;
   }
 
@@ -87,9 +37,11 @@ export class ContourPath {
    */
   static fromContour(contour: SegmentedContour, transform: MatModel): ContourPath {
     return new ContourPath(
-      contour.segments().map((segment) => segment.points),
-      contour.closed,
-      transform,
+      segmentCommands(
+        contour.segments().map((segment) => segment.points),
+        contour.closed,
+        transform,
+      ),
     );
   }
 
@@ -102,10 +54,73 @@ export class ContourPath {
    */
   static fromPoints(points: readonly NewPoint[], closed: boolean): ContourPath {
     return new ContourPath(
-      segmentContour({ points, closed }).segments.map((segment) => segment.points),
-      closed,
-      Mat.Identity(),
+      segmentCommands(
+        segmentContour({ points, closed }).segments.map((segment) => segment.points),
+        closed,
+        Mat.Identity(),
+      ),
     );
+  }
+
+  /**
+   * Creates path output from an outline shift-font derived from a contour,
+   * such as the contour with its open corners erased (`erasedOutline`).
+   *
+   * @param outline - Verbs and their end coordinates in contour coordinates.
+   * @param transform - Matrix from contour coordinates into destination coordinates.
+   */
+  static fromOutline(outline: Outline, transform: MatModel): ContourPath {
+    const commands: PathCommand[] = [];
+    let at = 0;
+    const next = () => {
+      const point = Mat.applyToPoint(transform, {
+        x: outline.coordinates[at]!,
+        y: outline.coordinates[at + 1]!,
+      });
+      at += 2;
+      return point;
+    };
+
+    for (const verb of outline.verbs) {
+      switch (verb) {
+        case "moveTo": {
+          const end = next();
+          commands.push({ type: "moveTo", x: end.x, y: end.y });
+          break;
+        }
+        case "lineTo": {
+          const end = next();
+          commands.push({ type: "lineTo", x: end.x, y: end.y });
+          break;
+        }
+        case "quadTo": {
+          const control = next();
+          const end = next();
+          commands.push({ type: "quadTo", cp1x: control.x, cp1y: control.y, x: end.x, y: end.y });
+          break;
+        }
+        case "cubicTo": {
+          const first = next();
+          const second = next();
+          const end = next();
+          commands.push({
+            type: "cubicTo",
+            cp1x: first.x,
+            cp1y: first.y,
+            cp2x: second.x,
+            cp2y: second.y,
+            x: end.x,
+            y: end.y,
+          });
+          break;
+        }
+        case "close":
+          commands.push({ type: "close" });
+          break;
+      }
+    }
+
+    return new ContourPath(commands);
   }
 
   /** Returns a cached Canvas path for this contour. */
@@ -151,6 +166,60 @@ export class ContourPath {
     this.#svgPath = this.commands.map(svgCommand).join(" ");
     return this.#svgPath;
   }
+}
+
+function segmentCommands(
+  segments: readonly SegmentPoints<NewPoint>[],
+  closed: boolean,
+  transform: MatModel,
+): PathCommand[] {
+  const first = segments[0];
+  if (!first) {
+    return [];
+  }
+
+  const start = Mat.applyToPoint(transform, first.start);
+  const commands: PathCommand[] = [{ type: "moveTo", x: start.x, y: start.y }];
+
+  for (const points of segments) {
+    switch (points.type) {
+      case "line": {
+        const end = Mat.applyToPoint(transform, points.end);
+        commands.push({ type: "lineTo", x: end.x, y: end.y });
+        break;
+      }
+      case "quad": {
+        const control = Mat.applyToPoint(transform, points.control);
+        const end = Mat.applyToPoint(transform, points.end);
+        commands.push({
+          type: "quadTo",
+          cp1x: control.x,
+          cp1y: control.y,
+          x: end.x,
+          y: end.y,
+        });
+        break;
+      }
+      case "cubic": {
+        const controlStart = Mat.applyToPoint(transform, points.controlStart);
+        const controlEnd = Mat.applyToPoint(transform, points.controlEnd);
+        const end = Mat.applyToPoint(transform, points.end);
+        commands.push({
+          type: "cubicTo",
+          cp1x: controlStart.x,
+          cp1y: controlStart.y,
+          cp2x: controlEnd.x,
+          cp2y: controlEnd.y,
+          x: end.x,
+          y: end.y,
+        });
+        break;
+      }
+    }
+  }
+
+  if (closed) commands.push({ type: "close" });
+  return commands;
 }
 
 function svgCommand(command: PathCommand): string {

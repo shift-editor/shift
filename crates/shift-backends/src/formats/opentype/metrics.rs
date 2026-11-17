@@ -225,13 +225,7 @@ fn metrics_glyph(
                     .flags
                     .contains(CompositeGlyphFlags::USE_MY_METRICS)
                 {
-                    metrics = Some(metrics_glyph(
-                        path,
-                        loca,
-                        glyf,
-                        component.glyph.into(),
-                        ancestry,
-                    )?);
+                    metrics = Some(metrics_glyph(path, loca, glyf, component.glyph, ancestry)?);
                 }
             }
             metrics.unwrap_or((glyph, components.len()))

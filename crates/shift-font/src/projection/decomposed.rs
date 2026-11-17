@@ -19,8 +19,8 @@ use std::sync::Arc;
 
 use crate::composite::ResolvedContour;
 use crate::{
-    CoreError, CoreResult, DesignLocation, Font, Glyph, GlyphId, GlyphInterpolation, GlyphLayer,
-    InterpolationBasis, Point, SourceId, Transform,
+    Component, CoreError, CoreResult, DesignLocation, Font, Glyph, GlyphId, GlyphInterpolation,
+    GlyphLayer, InterpolationBasis, Point, SourceId, Transform,
 };
 
 use super::FontProjection;
@@ -76,6 +76,15 @@ impl FontProjection<'_> {
         self.composed_parts(glyph_id, visiting, placement)
     }
 
+    /// The exact layer's outline parts as its composite draws them: no
+    /// decomposed blending, since the projection sits on the layer's own
+    /// source. The root layer must already be prepared.
+    pub(super) fn composed_layer_parts(&mut self, glyph_id: GlyphId) -> CoreResult<OutlineParts> {
+        Ok(self
+            .composed_parts(glyph_id, &mut HashSet::new(), Placement::Composed)?
+            .unwrap_or_default())
+    }
+
     /// Places each component's base by this location's component transforms.
     fn composed_parts(
         &mut self,
@@ -107,7 +116,7 @@ impl FontProjection<'_> {
                 continue;
             }
             let base = self
-                .outline_parts(base_glyph_id, visiting, placement)?
+                .base_parts(component, visiting, placement)?
                 .ok_or_else(|| CoreError::UnresolvableComponentGlyph {
                     component_id: component.id(),
                     base_glyph_id,
@@ -122,6 +131,32 @@ impl FontProjection<'_> {
         visiting.remove(&glyph_id);
 
         Ok(Some(parts))
+    }
+
+    /// The outline parts of `component`'s base glyph, drawn where the
+    /// component puts it: at this projection's location, or at the location
+    /// the component sets, through a projection there.
+    fn base_parts(
+        &mut self,
+        component: &Component,
+        visiting: &mut HashSet<GlyphId>,
+        placement: Placement,
+    ) -> CoreResult<Option<OutlineParts>> {
+        let base_glyph_id = component.base_glyph_id();
+        if !component.moves_base() {
+            return self.outline_parts(base_glyph_id, visiting, placement);
+        }
+        // An empty location is the font's default location.
+        let location = component.base_location(&self.location, &DesignLocation::new());
+        if location.is_equivalent_to(&self.location, self.font.axes()) {
+            return self.outline_parts(base_glyph_id, visiting, placement);
+        }
+
+        let mut moved = self.font.projection(&location);
+        moved.interpolation_bases = std::mem::take(&mut self.interpolation_bases);
+        let parts = moved.outline_parts(base_glyph_id, visiting, placement);
+        self.interpolation_bases = moved.interpolation_bases;
+        parts
     }
 
     /// Blends the glyph's outline parts at its decomposition masters when this
@@ -245,12 +280,19 @@ impl Font {
         if source_ids.len() < 2 {
             return Ok(None);
         }
+        let layers_by_source: HashMap<SourceId, &GlyphLayer> = glyph
+            .located_layers(self)
+            .filter_map(|located| {
+                let source_id = located.location.base_source_id()?;
+                Some((source_id, located.layer.as_ref()))
+            })
+            .collect();
         let mut layers = Vec::with_capacity(source_ids.len());
         for source_id in source_ids {
-            let Some(layer) = glyph.layer_for_source(*source_id) else {
+            let Some(layer) = layers_by_source.get(source_id) else {
                 return Ok(None);
             };
-            layers.push(layer);
+            layers.push(*layer);
         }
         if !linear_parts_vary(layers.into_iter()) {
             return Ok(None);

@@ -28,6 +28,7 @@ import {
   type WorkspaceDocumentIdentity,
   type WorkspaceDocumentSourceKind,
   type WorkspaceDocumentState,
+  type WorkspaceExportRequest,
   type WorkspaceExportResult,
   type WorkspaceGlyphSnapshotRequest,
   type WorkspaceRecovery,
@@ -262,8 +263,8 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     return this.#serialize(() => this.#releaseRetiredStores());
   }
 
-  export(path: string): Promise<WorkspaceExportResult> {
-    return this.#export(path);
+  export(request: WorkspaceExportRequest): Promise<WorkspaceExportResult> {
+    return this.#export(request);
   }
 
   glyphSnapshots(requests: WorkspaceGlyphSnapshotRequest[]): Promise<GlyphSnapshot[]> {
@@ -773,6 +774,7 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
       axisMappingBases: this.#bridge.workspace.getAxisMappingBases(),
       namedInstances: this.#bridge.workspace.getNamedInstances(),
       languageIds: this.#bridge.workspace.getLanguageIds(),
+      grid: this.#bridge.workspace.grid(),
     };
   }
 
@@ -883,17 +885,17 @@ export class WorkspaceHost implements WorkspaceShell, WorkspaceSync {
     return null;
   }
 
-  async #export(outputPath: string): Promise<WorkspaceExportResult> {
+  async #export(request: WorkspaceExportRequest): Promise<WorkspaceExportResult> {
     const { completion } = await this.#serialize(() => ({
       // exportWorkspace captures its immutable native snapshot synchronously.
       // Wrapping the completion releases the workspace queue while fontc runs.
       completion: this.#bridge.napi.exportWorkspace({
-        path: outputPath,
-        format: "ttf",
+        ...request,
+        encodings: [...request.encodings],
       }),
     }));
     const result = await completion;
-    return { path: result.path, format: "ttf" };
+    return { path: result.path, format: request.format, files: result.files };
   }
 
   async #specimen(path: string): Promise<Specimen | null> {

@@ -62,8 +62,10 @@
   --color-tag-light-gray: #b9b9b9;
   --color-tag-charcoal: #5c5c5c;
 
-  /* A glyph tile: its grey fill, and the ink that darkens its name band under the pointer. */
+  /* A glyph tile: its grey fill, the shade over an untagged name band, and the ink that darkens
+     its name band under the pointer. */
   --color-tile: #ededed;
+  --color-tile-band: rgba(0, 0, 0, 0.035);
   --color-tile-ink: rgba(0, 0, 0, 0.5);
 
   /* Low-emphasis icon and control colors */
@@ -134,6 +136,7 @@
   --editor-preview-color: #1886d7;
   --editor-variation-outline-color: rgba(12, 146, 244, 0.45);
   --editor-edit-ghost-color: rgba(0, 0, 0, 0.12);
+  --editor-open-corner-color: rgba(0, 0, 0, 0.3);
   --editor-read-only-lock-color: #171717;
   --editor-pen-ready-fill: #ffffff;
   --editor-pen-ready-stroke: #3b82f6;

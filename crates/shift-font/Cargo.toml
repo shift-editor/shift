@@ -19,7 +19,8 @@ pack = ["dep:pack"]
 pack = { workspace = true, optional = true }
 bitflags = "2"
 rusqlite = { version = "0.41", optional = true }
-fontdrasil = "1.0.0"
+fontdrasil = "2.0"
+fontir = "2.0"
 indexmap = { version = "2", features = ["serde"] }
 kurbo = "0.13.0"
 svgtypes = "0.16"

@@ -4,15 +4,16 @@ use crate::Require;
 use std::collections::{HashMap, HashSet};
 
 mod anchors;
+#[cfg(test)]
+mod component_location_tests;
 mod decomposed;
 
 pub use decomposed::{Decomposition, OutlineParts};
 use std::sync::Arc;
 
 use crate::composite::{
-    GlyphComponents, ResolvedContour, ResolvedLayerGeometry,
-    flatten_selected_component_contours_from_layers, resolved_contours_from_layers,
-    resolved_layer_geometry_from_layers,
+    GlyphComponents, ResolvedContour, ResolvedLayerGeometry, resolved_contours_from_layers,
+    resolved_layer_geometry_from_parts,
 };
 use crate::{
     Axis, ComponentId, CoreError, CoreResult, DesignLocation, Font, GlyphId, GlyphInterpolation,
@@ -264,33 +265,34 @@ impl Font {
             return Ok(None);
         };
         let interpolation = self.glyph_interpolation_with_bases(glyph_id, interpolation_bases)?;
+        // The interpolation's reference, with its components' locations
+        // filled in as interpolation reads them.
         let fallback = interpolation
             .as_ref()
-            .and_then(|interpolation| glyph.layers().get(&interpolation.reference_layer().id()))
-            .cloned()
+            .map(|interpolation| Arc::clone(interpolation.shared_reference_layer()))
             .or_else(|| self.fallback_layer(glyph).cloned());
         let Some(fallback) = fallback else {
             return Ok(None);
         };
-        let exact_source_shapes = self
-            .masters()
-            .filter_map(|source| {
-                let layer = Arc::clone(glyph.shared_layer_for_source(source.id())?);
-                if layer.id() == fallback.id() {
+        let exact_source_shapes = glyph
+            .located_layers(self)
+            .filter_map(|located| {
+                let source_id = located.location.base_source_id()?;
+                if located.layer.id() == fallback.id() {
                     return None;
                 }
 
                 let represented_by_interpolation =
                     interpolation.as_ref().is_some_and(|interpolation| {
-                        interpolation.basis().source_ids().contains(&source.id())
+                        interpolation.basis().source_ids().contains(&source_id)
                     });
                 if represented_by_interpolation {
                     return None;
                 }
 
                 Some(GlyphSourceShape {
-                    source_id: source.id(),
-                    layer,
+                    source_id,
+                    layer: Arc::clone(located.layer),
                 })
             })
             .collect();
@@ -726,8 +728,9 @@ impl Font {
     /// resolvable shape, or an interpolation error for incompatible
     /// referenced geometry.
     pub fn resolve_layer(&self, layer_id: LayerId) -> CoreResult<ResolvedLayerGeometry> {
-        let (glyph_id, projection) = self.layer_tree_projection(layer_id)?;
-        resolved_layer_geometry_from_layers(glyph_id, &projection.layers)
+        let (glyph_id, mut projection) = self.layer_tree_projection(layer_id)?;
+        let parts = projection.composed_layer_parts(glyph_id)?;
+        resolved_layer_geometry_from_parts(glyph_id, &projection.layers, parts)
     }
 
     /// The outlines `component_ids` of one exact authored layer draw, at that
@@ -744,8 +747,15 @@ impl Font {
         layer_id: LayerId,
         component_ids: &HashSet<ComponentId>,
     ) -> CoreResult<Vec<ResolvedContour>> {
-        let (glyph_id, projection) = self.layer_tree_projection(layer_id)?;
-        flatten_selected_component_contours_from_layers(glyph_id, &projection.layers, component_ids)
+        let (glyph_id, mut projection) = self.layer_tree_projection(layer_id)?;
+        let parts = projection.composed_layer_parts(glyph_id)?;
+        let resolved = resolved_layer_geometry_from_parts(glyph_id, &projection.layers, parts)?;
+        Ok(resolved
+            .components()
+            .iter()
+            .filter(|component| component_ids.contains(&component.component_id()))
+            .flat_map(|component| component.outline().iter().cloned())
+            .collect())
     }
 
     /// A projection at one authored layer's source, with that layer as its
@@ -1018,10 +1028,10 @@ mod tests {
             .unwrap()
             .clone();
         let reference_layer_id = font
-            .layer_id_for_glyph_source(glyph_id, reference_source_id)
+            .layer_id_for_source(glyph_id, reference_source_id)
             .unwrap();
         let bold_layer_id = font
-            .layer_id_for_glyph_source(glyph_id, bold_source.id())
+            .layer_id_for_source(glyph_id, bold_source.id())
             .unwrap();
         let c_id = GlyphId::from_raw("C");
         let caron_id = GlyphId::from_raw("caron.cap");
