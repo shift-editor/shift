@@ -57,7 +57,7 @@ const MAX_DOTS = 3;
 
 /**
  * The glyphs' tag colour beside the Glyph heading, as a dot for each colour
- * they have (a slashed circle when they have none). Clicking it opens the colour
+ * they have (a faint grey one when they have none). Clicking it opens the colour
  * picker, which says Mixed when the glyphs differ.
  */
 export function GlyphTagButton() {
@@ -86,11 +86,8 @@ export function GlyphTagButton() {
         ))}
       </span>
     ) : (
-      // No colour: the slashed circle design tools use for no fill.
-      <svg aria-hidden viewBox="0 0 10 10" className="block h-2.5 w-2.5 text-muted">
-        <circle cx="5" cy="5" r="4.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
-        <line x1="2" y1="8" x2="8" y2="2" stroke="currentColor" strokeWidth="1.5" />
-      </svg>
+      // No colour: a faint grey dot, well lighter than the light-gray tag.
+      <span className="block h-2.5 w-2.5 rounded-full bg-hover" />
     );
   // A preview session reads tags but cannot write them.
   if (session.mode !== "workspace") {
