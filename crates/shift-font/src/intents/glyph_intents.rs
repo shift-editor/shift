@@ -127,8 +127,8 @@ impl SetSidebearings {
                 .map(GlyphLayer::id)
                 .collect(),
             LayerScope::EveryMaster => glyphs
-                .flat_map(|glyph| font.master_layers(glyph))
-                .map(|layer| layer.id())
+                .flat_map(|glyph| glyph.located_layers(font))
+                .map(|located| located.layer.id())
                 .collect(),
         }
     }
