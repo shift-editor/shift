@@ -202,14 +202,14 @@ test.describe("SVG glyph catalog fallback", () => {
     await page.keyboard.press("Control+3");
     await expect(svg.locator('[data-mark-color="yellow"]')).toHaveCount(2);
     await expect(sidebar.getByRole("img", { name: "Tagged yellow" })).toBeVisible();
-    await expect(sidebar.getByRole("button", { name: "Tag yellow" })).toHaveAttribute(
+    await expect(sidebar.getByRole("button", { name: "Yellow", exact: true })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
 
     // Tagging one of the two differently leaves the selection mixed.
     await tiles.nth(0).click();
-    await sidebar.getByRole("button", { name: "Tag red" }).click();
+    await sidebar.getByRole("button", { name: "Red", exact: true }).click();
     await tiles.nth(1).click({ modifiers: ["Shift"] });
     await expect(sidebar.getByRole("img", { name: "Tagged red, yellow" })).toBeVisible();
     await expect(sidebar.getByText("Mixed")).toBeVisible();
