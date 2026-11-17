@@ -1,4 +1,6 @@
 import {
+  Layers,
+  LayoutGrid,
   ScrollArea,
   Separator,
   Tabs,
@@ -6,8 +8,10 @@ import {
   TabsList,
   TabsPanel,
   TabsTab,
+  Tooltip,
 } from "@shift/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType, type SVGProps } from "react";
+import VariableIcon from "@assets/export/target-variable.svg";
 import { SidebarBrand } from "@/components/chrome/SidebarBrand";
 import { ExportSection } from "@/components/export/ExportSection";
 import { PagesSection } from "@/components/pages/PagesSection";
@@ -17,8 +21,23 @@ import { ObjectSectionRow } from "./object-tree/ObjectSectionRow";
 import { ObjectsPanel } from "./ObjectsPanel";
 import { VariationPanel } from "./VariationPanel";
 
+/** A view the sidebar switches to: the open one shows its icon and name, the others their icon. */
+const VIEWS: readonly {
+  readonly value: string;
+  readonly label: string;
+  /** The accessible name, where the label alone would clash with another control. */
+  readonly ariaLabel?: string;
+  readonly Icon: ComponentType<SVGProps<SVGSVGElement>>;
+}[] = [
+  { value: "layers", label: "Layers", Icon: Layers },
+  // The export panel's variable-font mark: the designspace is the font's masters and the space between.
+  { value: "designspace", label: "Designspace", Icon: VariableIcon },
+  // Named apart from the window's own Glyphs tab, which shows the font overview.
+  { value: "glyphs", label: "Glyphs", ariaLabel: "Glyphs list", Icon: LayoutGrid },
+];
+
 const TAB_CLASS =
-  "h-5 flex-1 rounded-sm px-2 text-ui data-[active]:bg-surface data-[active]:font-medium data-[active]:shadow-sm";
+  "flex h-5 w-8 flex-none items-center justify-center rounded-sm px-2 text-ui data-[active]:w-auto data-[active]:flex-1 data-[active]:bg-surface data-[active]:font-medium data-[active]:shadow-sm";
 
 /**
  * The document's lists: its pages and what the canvas holds, its sources,
@@ -44,16 +63,30 @@ export const LeftSidebar = () => {
         className="flex min-h-0 flex-1 flex-col"
       >
         <TabsList className="mx-2 mt-2 h-6 shrink-0 gap-0 rounded-md border-0 bg-input p-0.5">
-          <TabsTab value="layers" className={TAB_CLASS}>
-            Layers
-          </TabsTab>
-          <TabsTab value="designspace" className={TAB_CLASS}>
-            Designspace
-          </TabsTab>
-          {/* Named apart from the window's own Glyphs tab, which shows the font overview. */}
-          <TabsTab value="glyphs" aria-label="Glyphs list" className={TAB_CLASS}>
-            Glyphs
-          </TabsTab>
+          {VIEWS.map(({ value, label, ariaLabel, Icon }) => {
+            const open = value === tab;
+            const viewTab = (
+              <TabsTab
+                key={value}
+                value={value}
+                aria-label={ariaLabel ?? label}
+                className={TAB_CLASS}
+              >
+                <span className="flex items-center gap-1.5">
+                  <Icon aria-hidden className="h-3.5 w-3.5 shrink-0" />
+                  {open ? <span>{label}</span> : null}
+                </span>
+              </TabsTab>
+            );
+            // A view showing only its icon names itself in a tooltip.
+            return open ? (
+              viewTab
+            ) : (
+              <Tooltip key={value} content={label}>
+                {viewTab}
+              </Tooltip>
+            );
+          })}
           <TabsIndicator className="hidden" />
         </TabsList>
         <Separator className="mt-2 shrink-0" />

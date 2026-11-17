@@ -231,6 +231,7 @@ export {
   CircleHelp,
   Copy,
   FileIcon,
+  Layers,
   LayoutGrid,
   List,
   ListFilter,
