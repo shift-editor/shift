@@ -3,12 +3,14 @@ use crate::collection::{EntityList, Identified};
 use crate::component::Component;
 use crate::contour::Contour;
 use crate::entity::{
-    AnchorId, ComponentId, ContourId, GlyphEntityId, GlyphId, GuidelineId, LayerId, PointId,
-    SourceId,
+    AnchorId, AxisId, ComponentId, ContourId, GlyphEntityId, GlyphId, GuidelineId, LayerId,
+    PointId, SourceId,
 };
+use crate::glyph_axis::GlyphAxis;
 use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
+use crate::located_layer::LayerLocation;
 use crate::mark_color::MarkColor;
 use crate::metrics_keys::{MetricsKey, MetricsKeySide, MetricsKeys};
 use crate::point::{Canonical, Point};
@@ -36,6 +38,10 @@ pub struct Glyph {
     /// The colour the glyph is tagged with, in every source.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     mark_color: Option<MarkColor>,
+    /// Axes only this glyph varies along. Not serialized yet: storage for
+    /// glyph axes is a separate schema change.
+    #[serde(skip)]
+    axes: Vec<GlyphAxis>,
 }
 
 impl Identified for Glyph {
@@ -64,6 +70,11 @@ pub struct GlyphLayer {
     /// same bytes.
     #[serde(default, skip_serializing_if = "MetricsKeys::is_empty")]
     metrics_keys: MetricsKeys,
+    /// Where the layer draws when that is not exactly on `source_id`; see
+    /// [`Self::location`]. Not serialized yet: storage for layer locations
+    /// is a separate schema change.
+    #[serde(skip)]
+    location: Option<LayerLocation>,
 }
 
 impl GlyphLayer {
@@ -100,7 +111,64 @@ impl GlyphLayer {
             guidelines: Vec::new(),
             lib: LibData::new(),
             metrics_keys: MetricsKeys::new(),
+            location: None,
         }
+    }
+
+    /// A layer that draws at `location` in its glyph's design space rather
+    /// than exactly on a source: a glyph source on the glyph's own axes, an
+    /// intermediate on the font's axes, or both.
+    ///
+    /// `source_id` is the source that holds the layer in storage. It says
+    /// nothing about where the layer draws, and is `location`'s base when it
+    /// has one.
+    pub fn located(id: LayerId, source_id: SourceId, location: LayerLocation) -> Self {
+        let mut layer = Self::new(id, source_id);
+        layer.relocate(location);
+        layer
+    }
+
+    /// Where this layer draws: exactly on its source, or at its own
+    /// [`LayerLocation`].
+    pub fn location(&self) -> LayerLocation {
+        self.location
+            .clone()
+            .unwrap_or_else(|| LayerLocation::at_source(self.source_id))
+    }
+
+    /// Whether the layer draws exactly on `source_id`, with no coordinates of
+    /// its own: the layer a per-source lookup means.
+    pub fn is_at_source(&self, source_id: SourceId) -> bool {
+        self.location.is_none() && self.source_id == source_id
+    }
+
+    /// Whether the layer draws at a location of its own rather than exactly
+    /// on its source.
+    pub fn is_located(&self) -> bool {
+        self.location.is_some()
+    }
+
+    /// Moves the layer to `location`. A location that is exactly a source
+    /// puts the layer on that source.
+    pub(crate) fn relocate(&mut self, location: LayerLocation) {
+        match location.exact_source_id() {
+            Some(source_id) => {
+                self.source_id = source_id;
+                self.location = None;
+            }
+            None => {
+                if let Some(base) = location.base_source_id() {
+                    self.source_id = base;
+                }
+                self.location = Some(location);
+            }
+        }
+    }
+
+    /// The layer's own coordinates, for an edit that rewrites values stored
+    /// on an axis; `None` for a layer exactly on its source.
+    pub(crate) fn own_location_mut(&mut self) -> Option<&mut LayerLocation> {
+        self.location.as_mut()
     }
 
     pub fn with_width(id: LayerId, source_id: SourceId, width: f64) -> Self {
@@ -133,6 +201,7 @@ impl GlyphLayer {
             height: self.height,
             lib: self.lib.clone(),
             metrics_keys: self.metrics_keys.clone(),
+            location: self.location.clone(),
             ..Self::with_width(id, source_id, self.width)
         }
     }
@@ -516,6 +585,7 @@ impl Glyph {
             lib: LibData::new(),
             metrics_keys: MetricsKeys::new(),
             mark_color: None,
+            axes: Vec::new(),
         }
     }
 
@@ -664,6 +734,20 @@ impl Glyph {
             .flat_map(|layer| layer.component_glyph_ids())
     }
 
+    /// The axes only this glyph varies along, in the order they were added.
+    pub fn axes(&self) -> &[GlyphAxis] {
+        &self.axes
+    }
+
+    /// The glyph's own axis with `axis_id`.
+    pub fn axis(&self, axis_id: AxisId) -> Option<&GlyphAxis> {
+        self.axes.iter().find(|axis| axis.id() == axis_id)
+    }
+
+    pub(crate) fn axes_mut(&mut self) -> &mut Vec<GlyphAxis> {
+        &mut self.axes
+    }
+
     pub fn layer(&self, id: LayerId) -> Option<&GlyphLayer> {
         self.layers.get(&id).map(Arc::as_ref)
     }
@@ -676,7 +760,7 @@ impl Glyph {
         if let Some(layer_id) = self
             .layers
             .values()
-            .find(|layer| layer.source_id() == source_id)
+            .find(|layer| layer.is_at_source(source_id))
             .map(Identified::id)
         {
             return self.layer_mut(layer_id).expect("layer id came from glyph");
@@ -704,14 +788,7 @@ impl Glyph {
     pub fn shared_layer_for_source(&self, source_id: SourceId) -> Option<&Arc<GlyphLayer>> {
         self.layers
             .values()
-            .find(|layer| layer.source_id() == source_id)
-    }
-
-    pub fn layer_for_source_mut(&mut self, source_id: SourceId) -> Option<&mut GlyphLayer> {
-        self.layers
-            .values_mut()
-            .find(|layer| layer.source_id() == source_id)
-            .map(Arc::make_mut)
+            .find(|layer| layer.is_at_source(source_id))
     }
 
     pub fn remove_layer(&mut self, id: LayerId) -> Option<GlyphLayer> {

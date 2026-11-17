@@ -930,7 +930,7 @@ impl Font {
                 layer.apply_read_values(
                     interpolation.reference_layer(),
                     values,
-                    self.axes(),
+                    self,
                     &location,
                 )?;
             }

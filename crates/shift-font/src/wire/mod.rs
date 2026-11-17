@@ -464,10 +464,21 @@ pub struct InterpolationBasis {
     pub design_normalization: Vec<DesignNormalization>,
 }
 
+/// A font-wide basis, such as metrics' or kerning's, whose samples are all
+/// font sources. A glyph's basis may have samples off the sources; send it
+/// with [`InterpolationBasis::over_sources`].
 impl From<&IrInterpolationBasis> for InterpolationBasis {
     fn from(basis: &IrInterpolationBasis) -> Self {
+        debug_assert!(
+            basis.source_ids().is_some(),
+            "a font-wide basis samples only font sources"
+        );
         Self {
-            source_ids: basis.source_ids().to_vec(),
+            source_ids: basis
+                .samples()
+                .iter()
+                .filter_map(|sample| sample.source_id())
+                .collect(),
             basis: basis.variation_basis().into(),
             design_normalization: basis
                 .design_normalization()
@@ -475,6 +486,23 @@ impl From<&IrInterpolationBasis> for InterpolationBasis {
                 .map(Into::into)
                 .collect(),
         }
+    }
+}
+
+impl InterpolationBasis {
+    /// `basis` as the editor receives it, which weighs its samples by font
+    /// source. `None` when a sample is a drawing located off the font's
+    /// sources, which has no source to send.
+    pub fn over_sources(basis: &IrInterpolationBasis) -> Option<Self> {
+        Some(Self {
+            source_ids: basis.source_ids()?,
+            basis: basis.variation_basis().into(),
+            design_normalization: basis
+                .design_normalization()
+                .iter()
+                .map(Into::into)
+                .collect(),
+        })
     }
 }
 
@@ -505,19 +533,25 @@ pub struct GlyphVariation {
     pub basis: VariationBasis,
 }
 
-impl From<&IrGlyphInterpolation> for GlyphInterpolation {
-    fn from(interpolation: &IrGlyphInterpolation) -> Self {
-        Self {
-            basis: interpolation.basis().into(),
+impl GlyphInterpolation {
+    /// `interpolation` as the editor receives it; `None` when a sample is a
+    /// drawing located off the font's sources (see
+    /// [`InterpolationBasis::over_sources`]). The editor then draws the glyph
+    /// from its fallback and exact source shapes.
+    pub fn over_sources(interpolation: &IrGlyphInterpolation) -> Option<Self> {
+        Some(Self {
+            basis: InterpolationBasis::over_sources(interpolation.basis())?,
             sources: interpolation
                 .sources()
                 .iter()
-                .map(|source| GlyphSourceValues {
-                    source_id: source.source_id(),
-                    values: source.values().as_slice().to_vec(),
+                .map(|source| {
+                    Some(GlyphSourceValues {
+                        source_id: source.source_id()?,
+                        values: source.values().as_slice().to_vec(),
+                    })
                 })
-                .collect(),
-        }
+                .collect::<Option<_>>()?,
+        })
     }
 }
 
@@ -615,8 +649,12 @@ impl From<&IrGlyphProjection> for GlyphProjection {
         Self {
             glyph_id: projection.glyph_id(),
             fallback: GlyphLayerShape::from(projection.fallback()),
-            interpolation: projection.interpolation().map(Into::into),
-            decomposition: projection.decomposition().map(Into::into),
+            interpolation: projection
+                .interpolation()
+                .and_then(GlyphInterpolation::over_sources),
+            decomposition: projection
+                .decomposition()
+                .and_then(InterpolationBasis::over_sources),
             variation: None,
             exact_source_shapes: projection
                 .exact_source_shapes()

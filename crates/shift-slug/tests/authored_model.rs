@@ -213,7 +213,7 @@ fn mutatorsans_designspace_matches_authored_projection_at_random_locations() {
         {
             indexes.clone()
         } else {
-            let end = next_weight_index + interpolation.basis().source_ids().len() as u32;
+            let end = next_weight_index + interpolation.basis().samples().len() as u32;
             let indexes = (next_weight_index..end).collect::<Vec<_>>();
             next_weight_index = end;
             bases.push((interpolation.basis().clone(), indexes.clone()));
@@ -603,7 +603,7 @@ fn component_model_accepts_a_component_specific_interpolation_basis() {
     ]
     .into_iter()
     .map(|basis| {
-        let end = next_weight_index + basis.source_ids().len() as u32;
+        let end = next_weight_index + basis.samples().len() as u32;
         let indexes = (next_weight_index..end).collect::<Vec<_>>();
         next_weight_index = end;
         AuthoredWeightSet::new(basis.clone(), indexes).unwrap()
@@ -705,16 +705,10 @@ fn decomposed_root_keeps_its_components_extra_master() {
     let projection = font.glyph_projection(root_id).unwrap().unwrap();
     let basis = projection.decomposition().unwrap().clone();
     assert_eq!(
-        basis.source_ids().len(),
-        projection
-            .interpolation()
-            .unwrap()
-            .basis()
-            .source_ids()
-            .len()
-            + 1
+        basis.samples().len(),
+        projection.interpolation().unwrap().basis().samples().len() + 1
     );
-    let weight_indices = (1..=basis.source_ids().len() as u32).collect::<Vec<_>>();
+    let weight_indices = (1..=basis.samples().len() as u32).collect::<Vec<_>>();
     let weight_set = AuthoredWeightSet::new(basis.clone(), weight_indices.clone()).unwrap();
     let mut builder = VariableAtlasBuilder::default();
     let authored =

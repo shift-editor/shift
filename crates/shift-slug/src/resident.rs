@@ -234,7 +234,7 @@ fn collect_weight_sets(
             continue;
         }
 
-        let count = u32::try_from(basis.source_ids().len()).or_overflow()?;
+        let count = u32::try_from(basis.samples().len()).or_overflow()?;
         let end = next_weight_index.checked_add(count).or_overflow()?;
         sets.push(AuthoredWeightSet::new(
             basis.clone(),

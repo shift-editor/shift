@@ -185,9 +185,9 @@ impl Font {
             name: glyph.glyph_name().clone(),
             unicodes: glyph.unicodes().to_vec(),
             component_base_glyph_ids,
-            layers: glyph
-                .located_layers(self)
-                .map(|located| GlyphLayerRecord::from(located.layer.as_ref()))
+            layers: self
+                .masters_with_layers(glyph)
+                .map(|(_, layer)| GlyphLayerRecord::from(layer))
                 .collect(),
             mark: category.mark,
             nonspacing_mark: category.nonspacing_mark,

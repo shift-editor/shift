@@ -28,6 +28,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 mod change_set;
+mod glyph_axes;
 mod index;
 
 use index::{EntityIdTransfer, FontIndex, IndexEntries};
@@ -394,6 +395,7 @@ impl Font {
         {
             return Err(CoreError::DuplicateAxisTag(axis.tag().to_string()));
         }
+        self.check_font_axis_against_glyph_axes(axis.id(), axis.tag())?;
 
         let axis_id = axis.id();
         let axis_default = axis.default();
@@ -451,6 +453,7 @@ impl Font {
         {
             return Err(CoreError::DuplicateAxisTag(axis.tag().to_string()));
         }
+        self.check_font_axis_against_glyph_axes(axis.id(), axis.tag())?;
         let mapped = self.axis_mappings().iter().any(|mapping| {
             mapping.inputs().contains(&axis.id()) || mapping.outputs().contains(&axis.id())
         });
@@ -748,6 +751,7 @@ impl Font {
         glyph: &'a Glyph,
     ) -> impl Iterator<Item = (&'a Source, &'a GlyphLayer)> {
         glyph.located_layers(self).filter_map(|located| {
+            located.location.exact_source_id()?;
             let source = located.location.base_source(self)?;
             Some((source, located.layer.as_ref()))
         })
@@ -1504,14 +1508,20 @@ impl Font {
     ///
     /// Returns [`CoreError::SourceNotFound`] or [`CoreError::GlyphNotFound`] when the layer's
     /// source or the glyph is missing, and [`CoreError::DuplicateLayerId`] or
-    /// [`CoreError::DuplicateGlyphLayer`] when the layer's id or source is already used.
+    /// [`CoreError::DuplicateGlyphLayer`] when the layer's id or source is already used. A
+    /// [located](GlyphLayer::located) layer is also refused with
+    /// [`CoreError::LayerLocationOffSpace`] when it names an axis that is neither a font axis nor
+    /// one of the glyph's, [`CoreError::AxisValuesOutsideRange`] when a glyph-axis value is
+    /// outside its range, and [`CoreError::DuplicateLayerLocation`] when another drawing of the
+    /// glyph already sits there.
     pub fn insert_glyph_layer(&mut self, glyph_id: GlyphId, layer: GlyphLayer) -> CoreResult<()> {
         if self.source(layer.source_id()).is_none() {
             return Err(CoreError::SourceNotFound(layer.source_id()));
         }
 
-        if self.glyph(glyph_id).is_none() {
-            return Err(CoreError::GlyphNotFound(glyph_id));
+        let glyph = self.require_glyph(glyph_id)?;
+        if layer.is_located() {
+            self.check_layer_location(glyph, layer.id(), &layer.location())?;
         }
         let mut index = self.index().clone();
         index.try_insert(IndexEntries::of_layer(glyph_id, &layer))?;

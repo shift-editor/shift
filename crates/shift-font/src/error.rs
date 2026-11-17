@@ -153,6 +153,33 @@ pub enum CoreError {
     #[error("axis {0} not found")]
     AxisNotFound(AxisId),
 
+    #[error("axis id {0} already exists")]
+    DuplicateAxisId(AxisId),
+
+    #[error("{} stored values would fall outside the range of axis {axis_id}", uses.len())]
+    AxisValuesOutsideRange {
+        axis_id: AxisId,
+        uses: Vec<crate::AxisValueUse>,
+    },
+
+    #[error("glyph axis {axis_id} still has {} stored values", uses.len())]
+    GlyphAxisInUse {
+        axis_id: AxisId,
+        uses: Vec<crate::AxisValueUse>,
+    },
+
+    #[error(
+        "layer {layer_id} is located on axis {axis_id}, which is not in its glyph's design space"
+    )]
+    LayerLocationOffSpace { layer_id: LayerId, axis_id: AxisId },
+
+    #[error("layers {first} and {second} of glyph {glyph_id} sit at the same location")]
+    DuplicateLayerLocation {
+        glyph_id: GlyphId,
+        first: LayerId,
+        second: LayerId,
+    },
+
     #[error("invalid {kind} order: expected {expected} identities, got {actual}")]
     OrderLengthMismatch {
         kind: EntityKind,

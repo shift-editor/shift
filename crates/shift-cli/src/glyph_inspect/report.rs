@@ -360,16 +360,23 @@ fn inspect_variation(
             Ok::<_, miette::Report>(
                 interpolation
                     .basis()
-                    .source_ids()
+                    .samples()
                     .iter()
                     .zip(weights)
-                    .map(|(source_id, weight)| SourceWeight {
-                        source_id: source_id.to_string(),
-                        source_name: font.source(*source_id).map_or_else(
-                            || source_id.to_string(),
-                            |source| source.name().to_string(),
-                        ),
-                        weight,
+                    .map(|(sample, weight)| match sample {
+                        shift_font::InterpolationSample::Source(source_id) => SourceWeight {
+                            source_id: source_id.to_string(),
+                            source_name: font.source(*source_id).map_or_else(
+                                || source_id.to_string(),
+                                |source| source.name().to_string(),
+                            ),
+                            weight,
+                        },
+                        shift_font::InterpolationSample::Layer(layer_id) => SourceWeight {
+                            source_id: layer_id.to_string(),
+                            source_name: format!("layer {layer_id}"),
+                            weight,
+                        },
                     })
                     .collect(),
             )

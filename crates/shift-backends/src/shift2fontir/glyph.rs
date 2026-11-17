@@ -97,7 +97,7 @@ impl Work<Context, WorkId, Error> for GlyphWork {
                 .and_then(|source_id| self.snapshot.sources.source(source_id))
                 .map(|source| source.location().clone())
                 .unwrap_or_default();
-            let filled = fill.fill(&self.snapshot.axes, layer, &design_location);
+            let filled = fill.fill(self.snapshot.axes.as_slice(), layer, &design_location);
             let mut instance = to_glyph_instance(
                 filled.as_ref().unwrap_or(layer),
                 &self.snapshot.axes,
