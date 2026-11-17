@@ -12,7 +12,7 @@ const RECENT: usize = 64;
 
 /// Gives each layout a placement key ([`TextLayout::placement`]) that two
 /// layouts share only when they place every line, run, glyph, unit and
-/// caret alike, glyph bounds aside: a hash finds a recent layout that may
+/// caret alike: a hash finds a recent layout that may
 /// match, and a full comparison confirms it, so a hash collision never
 /// passes for a match.
 ///
@@ -20,7 +20,7 @@ const RECENT: usize = 64;
 /// past every key given before, even when it matches one long forgotten.
 pub struct PlacementKeys {
     hash: fn(&TextLayout) -> u64,
-    /// Recent distinct layouts, bounds cleared, with their hash and key;
+    /// Recent distinct layouts, keys cleared, with their hash and key;
     /// oldest first.
     recent: VecDeque<KeyedLayout>,
     next: u64,
@@ -53,7 +53,7 @@ impl PlacementKeys {
     /// everything alike, else a new one.
     pub fn assign(&mut self, layout: &mut TextLayout) {
         let hash = (self.hash)(layout);
-        let bare = layout.without_bounds();
+        let bare = layout.without_key();
         if let Some(known) = self
             .recent
             .iter()
@@ -78,7 +78,7 @@ impl PlacementKeys {
 
 impl TextLayout {
     /// A hash of where the layout places every line, run, glyph, unit and
-    /// caret, glyph bounds and its key aside; numbers by their bits.
+    /// caret, its key aside; numbers by their bits.
     pub(crate) fn placement_hash(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         for line in &self.lines {
@@ -99,13 +99,10 @@ impl TextLayout {
         hasher.finish()
     }
 
-    /// The layout with no glyph bounds and no key: what placement compares.
-    fn without_bounds(&self) -> Self {
+    /// The layout with no key: what placement compares.
+    fn without_key(&self) -> Self {
         let mut bare = self.clone();
         bare.placement.clear();
-        for glyph in &mut bare.glyphs {
-            glyph.bounds = None;
-        }
         bare
     }
 }

@@ -192,7 +192,6 @@ impl<'o> Placement<'o> {
                     kern: glyph.kern,
                     direction: segment.direction,
                     is_mark: glyph.is_mark,
-                    bounds: glyph.bounds,
                 });
                 pen += glyph.x_advance + glyph.kern;
             }
