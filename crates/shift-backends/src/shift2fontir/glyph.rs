@@ -9,7 +9,8 @@ use fontir::ir::{AnchorBuilder, Component, ComponentTransform, GlyphBuilder, Gly
 use fontir::orchestration::{Context, WorkId};
 use kurbo::{Affine, BezPath};
 use shift_font::{
-    Axis, AxisList, ComponentInheritance, ComponentLocationFill, Glyph, GlyphLayer, open_corners,
+    Axis, AxisList, ComponentInheritance, ComponentLocationFill, Glyph, GlyphLayer, SourceList,
+    open_corners,
 };
 
 use super::source::{ShiftSnapshot, located_master_layers};
@@ -90,10 +91,11 @@ impl Work<Context, WorkId, Error> for GlyphWork {
         let mut sources = Vec::new();
         for (located, location) in located {
             let layer = located.layer.as_ref();
-            let design_location = masters
-                .iter()
-                .find(|(source, _)| Some(source.id()) == located.location.base_source_id())
-                .map(|(source, _)| source.location().clone())
+            let design_location = located
+                .location
+                .base_source_id()
+                .and_then(|source_id| self.snapshot.sources.source(source_id))
+                .map(|source| source.location().clone())
                 .unwrap_or_default();
             let filled = fill.fill(&self.snapshot.axes, layer, &design_location);
             let mut instance = to_glyph_instance(

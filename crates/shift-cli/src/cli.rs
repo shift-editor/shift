@@ -428,6 +428,12 @@ pub(crate) struct CompileArgs {
     /// Also write each compiled font as WOFF2, beside its .ttf.
     #[arg(long)]
     pub woff2: bool,
+
+    /// Keep components that set their own location as variable components
+    /// in a VARC table, instead of decomposing them into outlines. Only
+    /// renderers that read VARC draw them.
+    #[arg(long)]
+    pub varc: bool,
 }
 
 #[derive(Debug, Parser)]

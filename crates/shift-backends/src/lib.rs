@@ -25,7 +25,10 @@ mod traits;
 
 pub use binary_encoding::{BinaryEncoding, BinaryEncodings};
 pub use errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
-pub use export::{ExportError, ExportFormat, FontExportRequest, FontExportResult, FontExporter};
+pub use export::{
+    ExportError, ExportFormat, FontExportRequest, FontExportResult, FontExporter,
+    VariableComponents,
+};
 pub use export_static::StaticInstanceFile;
 pub use font_source::{
     AuthoredReadError, AuthoredSource, AxisIndex, ContourError, DesignspaceFont, DirectoryGlyph,
