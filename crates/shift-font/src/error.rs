@@ -177,6 +177,49 @@ pub enum CoreError {
         axis_id: AxisId,
     },
 
+    /// A component condition reads an axis that is neither a font axis nor
+    /// one of the base glyph's own axes.
+    #[error(
+        "component {component_id} has a condition on axis {axis_id}, which is neither a font axis nor an axis of its base glyph"
+    )]
+    ComponentConditionOffSpace {
+        component_id: ComponentId,
+        axis_id: AxisId,
+    },
+
+    #[error("alternate id {0} already exists")]
+    DuplicateAlternateId(crate::AlternateId),
+
+    /// A glyph's alternate draws the glyph itself.
+    #[error("alternate {alternate_id} of glyph {glyph_id} is the glyph itself")]
+    AlternateIsItself {
+        alternate_id: crate::AlternateId,
+        glyph_id: GlyphId,
+    },
+
+    /// An alternate's condition reads an axis that is not a font axis:
+    /// alternates are chosen where text is drawn, on the font's axes alone.
+    #[error("alternate {alternate_id} has a condition on axis {axis_id}, which is not a font axis")]
+    AlternateConditionOffFontAxes {
+        alternate_id: crate::AlternateId,
+        axis_id: AxisId,
+    },
+
+    /// A glyph can't be removed while it is another glyph's alternate.
+    #[error("glyph {glyph_id} is an alternate of glyph {alternate_of}")]
+    GlyphIsAlternate {
+        glyph_id: GlyphId,
+        alternate_of: GlyphId,
+    },
+
+    /// A condition range whose minimum is above its maximum.
+    #[error("condition range on axis {axis_id} runs from {min} down to {max}")]
+    ConditionRangeReversed { axis_id: AxisId, min: f64, max: f64 },
+
+    /// A condition range with an end that is not a finite number.
+    #[error("condition range on axis {axis_id} has an end that is not finite")]
+    ConditionValueNotFinite { axis_id: AxisId },
+
     #[error("layers {first} and {second} of glyph {glyph_id} sit at the same location")]
     DuplicateLayerLocation {
         glyph_id: GlyphId,

@@ -59,6 +59,11 @@ impl FontProjection<'_> {
         let mut components = Vec::with_capacity(placements.len());
         for (component, transform) in layer.components_iter().zip(placements) {
             let base = component.base_glyph_id();
+            // A component that doesn't draw here propagates no anchors.
+            if !self.draws(component) {
+                components.push((None, transform));
+                continue;
+            }
             let anchors = match self.moved_location(component) {
                 Some(location) => self.at(&location, |moved| {
                     moved.compiled_anchors_within(base, class, visiting)

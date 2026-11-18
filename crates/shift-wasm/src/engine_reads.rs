@@ -338,9 +338,16 @@ pub trait EngineReads {
     /// [`FontRecordsError::Unprojectable`] when a projection cannot be built.
     fn glyph_snapshots(&self, glyphs: Vec<GlyphId>)
     -> Result<Vec<GlyphSnapshot>, FontRecordsError>;
+    /// The glyph drawn for `glyph_id` at the design location `location`, in
+    /// the font's axis order with NaN for an axis default: the glyph of its
+    /// first alternate that holds there, else `glyph_id` itself
+    /// (`Font::drawn_glyph_at`). What the canvas draws, and edits, for the
+    /// glyph open at that location; a glyph the font lacks is itself.
+    fn drawn_glyph(&self, glyph_id: GlyphId, location: Vec<f64>) -> GlyphId;
     /// Each of `glyphs` drawn at `location`, in the font's axis order with
-    /// NaN for an axis default: its outline, components placed, as one SVG
-    /// path in font units, and its advance, as `FontProjection::glyphs`
+    /// NaN for an axis default, as the glyph drawn for it there
+    /// (`Self::drawn_glyph`): its outline, components placed, as one SVG
+    /// path in font units, and its advance, as `FontProjection::drawn_glyphs`
     /// resolves them and the native workspace's glyph previews give them. A
     /// glyph the font lacks is left out; a glyph without ink has an empty
     /// path.
@@ -1305,6 +1312,11 @@ mod exports {
                 .collect()
         }
 
+        fn drawn_glyph(&self, glyph_id: GlyphId, location: Vec<f64>) -> GlyphId {
+            let font = self.session.font();
+            font.drawn_glyph_at(glyph_id, &design_location(font, &location))
+        }
+
         fn glyph_previews(
             &self,
             glyphs: Vec<GlyphId>,
@@ -1312,7 +1324,11 @@ mod exports {
         ) -> Result<Vec<GlyphPreview>, FontRecordsError> {
             let font = self.session.font();
             let residency = self.session.residency();
-            for glyph_id in self.component_closure(glyphs.clone()) {
+            // A tile draws each glyph as text does, as the alternate picked at
+            // this location, so the alternate glyphs must be loaded too.
+            let mut drawn = glyphs.clone();
+            drawn.extend(font.alternate_glyphs_of(&glyphs));
+            for glyph_id in self.component_closure(drawn) {
                 let Some(glyph) = font.glyph(glyph_id) else {
                     continue;
                 };
@@ -1329,7 +1345,7 @@ mod exports {
                 .into_iter()
                 .filter_map(|glyph_id| {
                     projection
-                        .glyph(glyph_id)
+                        .drawn_glyph(glyph_id)
                         .map_err(|error| FontRecordsError::Unprojectable {
                             glyph: glyph_id,
                             detail: error.to_string(),
@@ -1737,6 +1753,27 @@ mod exports {
                     "{actual} against {expected}"
                 );
             }
+        }
+
+        #[test]
+        fn the_glyph_open_at_a_location_draws_its_alternate_there() {
+            let font = shift_font::test_support::conditions_font();
+            let id = |name: &str| font.glyph_id_by_name(name).unwrap();
+            let session = Session::over(&font);
+            // Weight and Width, in the font's axis order.
+            let drawn = |weight: f64, width: f64| {
+                session.read(|engine| engine.drawn_glyph(id("dollar"), vec![weight, width]))
+            };
+
+            assert_eq!(
+                [drawn(400.0, 100.0), drawn(700.0, 100.0), drawn(800.0, 50.0)],
+                [id("dollar"), id("dollar.heavy"), id("dollar.compact-heavy")]
+            );
+            assert_eq!(
+                session.read(|engine| engine.drawn_glyph(id("dollarcomp"), vec![800.0, 50.0])),
+                id("dollarcomp"),
+                "a glyph with a component of dollar is not swapped"
+            );
         }
 
         #[test]

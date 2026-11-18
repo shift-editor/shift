@@ -585,6 +585,13 @@ impl FontChangeSet {
     }
 
     /// Whether this changeset replaces the font's sources.
+    /// Whether the changeset replaces the font's axes.
+    pub fn replaces_axes(&self) -> bool {
+        self.changes
+            .iter()
+            .any(|change| matches!(change, FontChange::Axes(_)))
+    }
+
     pub fn replaces_sources(&self) -> bool {
         self.changes
             .iter()

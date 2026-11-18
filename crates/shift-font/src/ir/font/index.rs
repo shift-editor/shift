@@ -15,7 +15,7 @@ use std::sync::Arc;
 use indexmap::IndexSet;
 
 use crate::collection::PersistentEntityList;
-use crate::entity::{AxisId, GlyphEntityId, GlyphId, LayerId, SourceId};
+use crate::entity::{AlternateId, AxisId, GlyphEntityId, GlyphId, LayerId, SourceId};
 use crate::glyph_axis::GlyphAxis;
 use crate::persistent::{PersistentListMultiMap, PersistentMultiMap, PersistentSet, UniqueIndex};
 use crate::{CoreError, CoreResult, Glyph, GlyphLayer, GlyphName};
@@ -42,6 +42,11 @@ pub(super) struct FontIndex {
     /// Each glyph axis's tag. Font axis tags are checked against these, and
     /// these against them, by [`Font`](super::Font).
     glyph_axis_tags: UniqueIndex<AxisTag, AxisId>,
+    /// The glyph that owns each alternate.
+    alternates: UniqueIndex<AlternateId, GlyphId>,
+    /// The glyphs each glyph is an alternate of, so removing a glyph finds
+    /// the alternates that draw it without scanning every glyph.
+    alternate_owners: PersistentMultiMap<GlyphId, GlyphId>,
 }
 
 impl FontIndex {
@@ -89,6 +94,14 @@ impl FontIndex {
         self.glyph_axis_tags.get(tag)
     }
 
+    /// The glyphs `glyph_id` is an alternate of.
+    pub(super) fn glyphs_with_alternate(
+        &self,
+        glyph_id: &GlyphId,
+    ) -> impl Iterator<Item = &GlyphId> {
+        self.alternate_owners.get(glyph_id)
+    }
+
     /// Layers with at least one component of `base_glyph_id`.
     pub(super) fn composites_of(&self, base_glyph_id: &GlyphId) -> impl Iterator<Item = &LayerId> {
         self.by_component_base.get(base_glyph_id)
@@ -133,6 +146,10 @@ impl FontIndex {
         self.glyph_axis_tags
             .try_extend(entries.glyph_axis_tags)
             .or_duplicate()?;
+        self.alternates
+            .try_extend(entries.alternates)
+            .or_duplicate()?;
+        self.alternate_owners.extend(entries.alternate_owners);
         self.by_unicode.extend(entries.unicodes);
         self.by_component_base.extend(entries.component_bases);
         self.metrics_keyed.extend(entries.metrics_keyed);
@@ -149,6 +166,8 @@ impl FontIndex {
         self.entity_ids.remove_all(&entries.entity_ids);
         self.glyph_axes.remove_all(&entries.glyph_axes);
         self.glyph_axis_tags.remove_all(&entries.glyph_axis_tags);
+        self.alternates.remove_all(&entries.alternates);
+        self.alternate_owners.remove_all(&entries.alternate_owners);
     }
 
     /// Indexes the touched glyphs again after a change set replaced them.
@@ -220,6 +239,8 @@ pub(super) struct IndexEntries {
     entity_ids: Vec<GlyphEntityId>,
     glyph_axes: Vec<(AxisId, GlyphId)>,
     glyph_axis_tags: Vec<(AxisTag, AxisId)>,
+    alternates: Vec<(AlternateId, GlyphId)>,
+    alternate_owners: Vec<(GlyphId, GlyphId)>,
 }
 
 impl IndexEntries {
@@ -251,6 +272,10 @@ impl IndexEntries {
         }
         for axis in glyph.axes() {
             entries.add_glyph_axis(glyph_id, axis);
+        }
+        for alternate in glyph.alternates() {
+            entries.alternates.push((alternate.id(), glyph_id));
+            entries.alternate_owners.push((alternate.glyph(), glyph_id));
         }
         entries
     }
@@ -327,6 +352,12 @@ impl std::borrow::Borrow<str> for AxisTag {
 impl DuplicateKey for AxisTag {
     fn duplicate_error(&self) -> CoreError {
         CoreError::DuplicateAxisTag(self.0.clone())
+    }
+}
+
+impl DuplicateKey for AlternateId {
+    fn duplicate_error(&self) -> CoreError {
+        CoreError::DuplicateAlternateId(*self)
     }
 }
 

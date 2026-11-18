@@ -368,6 +368,7 @@ interned_id!(AxisMappingId, "axisMapping");
 interned_id!(NamedInstanceId, "namedInstance");
 interned_id!(KerningGroupId, "kerningGroup");
 interned_id!(MetricId, "metric");
+interned_id!(AlternateId, "alternate");
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum GlyphEntityId {

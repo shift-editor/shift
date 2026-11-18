@@ -42,6 +42,31 @@ impl FontProjection<'_> {
         (!same_place).then_some(location)
     }
 
+    /// Whether `component` draws here: its condition holds at the
+    /// component's own coordinates, where it draws its base glyph. Those
+    /// are this location on the font axes the component inherits, with the
+    /// axes it sets laid over them, and its base glyph's own axes at what
+    /// it sets, else their defaults ([`Self::moved_location`]).
+    ///
+    /// skrifa's VARC reader evaluates a component's condition at the
+    /// coordinates its parent glyph is drawn at, before the component's own
+    /// axis values apply; Shift reads the component's own coordinates.
+    /// This is the one place that choice is made.
+    pub(super) fn draws(&self, component: &Component) -> bool {
+        let condition = component.condition();
+        if condition.is_always() {
+            return true;
+        }
+        let location = self
+            .moved_location(component)
+            .unwrap_or_else(|| self.location.clone());
+        let axes = match self.font.glyph(component.base_glyph_id()) {
+            Some(base) => self.font.glyph_space_axes(base),
+            None => self.font.axes().to_vec(),
+        };
+        condition.holds_at(&location, &axes)
+    }
+
     /// Runs `read` on a projection at `location` that shares this one's
     /// interpolation bases.
     pub(super) fn at<T>(
@@ -83,6 +108,11 @@ impl FontProjection<'_> {
 
         let mut anchors = Vec::new();
         for component in layer.components_iter() {
+            // A component that doesn't draw here has no anchors to align to.
+            if !self.draws(component) {
+                anchors.push(Vec::new());
+                continue;
+            }
             let base_glyph_id = component.base_glyph_id();
             let own = match self.moved_location(component) {
                 Some(location) => self.at(&location, |moved| moved.own_anchors(base_glyph_id))?,

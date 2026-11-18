@@ -1,6 +1,7 @@
 use crate::GlyphName;
 use crate::axis::{Axis, AxisList, DesignLocation};
 use crate::collection::Identified;
+use crate::condition::Condition;
 use crate::entity::{ComponentId, GlyphId};
 use crate::point::Canonical;
 use serde::{Deserialize, Serialize};
@@ -88,6 +89,12 @@ pub struct Component {
     location: DesignLocation,
     #[serde(default)]
     inheritance: ComponentInheritance,
+    /// Where the component draws: nowhere its condition fails, evaluated
+    /// where it draws its base glyph ([`Self::base_location`]). Last and
+    /// skipped when it always holds, so components without one keep their
+    /// bytes in positional encodings.
+    #[serde(default, skip_serializing_if = "Condition::is_always")]
+    condition: Condition,
 }
 
 impl Identified for Component {
@@ -430,15 +437,11 @@ impl From<kurbo::Affine> for Transform {
 
 impl Component {
     pub fn new(base_glyph_id: GlyphId, base_glyph_name: impl Into<GlyphName>) -> Self {
-        Self {
-            id: ComponentId::new(),
+        Self::with_transform(
             base_glyph_id,
-            base_glyph_name: base_glyph_name.into(),
-            transform: DecomposedTransform::identity(),
-            alignment: ComponentAlignment::Unset,
-            location: DesignLocation::new(),
-            inheritance: ComponentInheritance::Parent,
-        }
+            base_glyph_name,
+            DecomposedTransform::identity(),
+        )
     }
 
     pub fn with_transform(
@@ -446,17 +449,16 @@ impl Component {
         base_glyph_name: impl Into<GlyphName>,
         transform: DecomposedTransform,
     ) -> Self {
-        Self {
-            id: ComponentId::new(),
+        Self::with_id(
+            ComponentId::new(),
             base_glyph_id,
-            base_glyph_name: base_glyph_name.into(),
-            transform: transform.canonical(),
-            alignment: ComponentAlignment::Unset,
-            location: DesignLocation::new(),
-            inheritance: ComponentInheritance::Parent,
-        }
+            base_glyph_name,
+            transform,
+        )
     }
 
+    /// A component of `base_glyph_id` placed by `transform`, unanchored, at
+    /// its parent's location, drawn everywhere.
     pub fn with_id(
         id: ComponentId,
         base_glyph_id: GlyphId,
@@ -471,6 +473,7 @@ impl Component {
             alignment: ComponentAlignment::Unset,
             location: DesignLocation::new(),
             inheritance: ComponentInheritance::Parent,
+            condition: Condition::always(),
         }
     }
 
@@ -479,15 +482,11 @@ impl Component {
         base_glyph_name: impl Into<GlyphName>,
         matrix: &Transform,
     ) -> Self {
-        Self {
-            id: ComponentId::new(),
+        Self::with_transform(
             base_glyph_id,
-            base_glyph_name: base_glyph_name.into(),
-            transform: DecomposedTransform::from_matrix(matrix).canonical(),
-            alignment: ComponentAlignment::Unset,
-            location: DesignLocation::new(),
-            inheritance: ComponentInheritance::Parent,
-        }
+            base_glyph_name,
+            DecomposedTransform::from_matrix(matrix),
+        )
     }
 
     pub fn id(&self) -> ComponentId {
@@ -538,6 +537,16 @@ impl Component {
 
     pub fn set_inheritance(&mut self, inheritance: ComponentInheritance) {
         self.inheritance = inheritance;
+    }
+
+    /// Where the component draws; it always does when the condition has no
+    /// ranges.
+    pub fn condition(&self) -> &Condition {
+        &self.condition
+    }
+
+    pub fn set_condition(&mut self, condition: Condition) {
+        self.condition = condition;
     }
 
     /// Whether the base glyph draws somewhere other than where its parent

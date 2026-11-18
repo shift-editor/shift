@@ -122,6 +122,12 @@ impl FontProjection<'_> {
                     component_id: component.id(),
                     base_glyph_id,
                 })?;
+            // A component whose condition fails here draws nothing, but
+            // keeps its parts so they still line up with its occurrences.
+            if !self.draws(component) {
+                parts.extend(base.iter().map(|_| Vec::new()));
+                continue;
+            }
             parts.extend(base.iter().map(|part| {
                 part.iter()
                     .map(|contour| contour.placed(transform, placement))

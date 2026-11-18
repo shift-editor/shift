@@ -21,7 +21,10 @@ impl Fixture {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../fixtures/fonts")
             .join(name);
-        let font = FontLoader::new().read_font(path.to_str().unwrap()).unwrap();
+        Self::of(FontLoader::new().read_font(path.to_str().unwrap()).unwrap())
+    }
+
+    fn of(font: Font) -> Self {
         let glyph_classes = GlyphCategories::new().classes(font.glyphs(), font.lib());
         let classes = font
             .glyphs()
@@ -39,7 +42,11 @@ impl Fixture {
     }
 
     fn lay_out(&self, text: &str, options: TextOptions) -> TextLayout {
-        let design = DesignLocation::new();
+        self.lay_out_at(&DesignLocation::new(), text, options)
+    }
+
+    fn lay_out_at(&self, design: &DesignLocation, text: &str, options: TextOptions) -> TextLayout {
+        let design = design.clone();
         let class = |glyph: GlyphId| self.classes.get(&glyph).copied();
         let font = LayoutFont::new(
             &self.font,
@@ -284,6 +291,23 @@ fn a_direction_boundary_has_a_second_caret() {
         (0..u32::try_from(places.len()).unwrap()).collect::<Vec<_>>()
     );
     assert!(places.windows(2).all(|pair| pair[0].1 <= pair[1].1));
+}
+
+#[test]
+fn text_draws_and_advances_the_alternate_glyph() {
+    let fixture = Fixture::of(shift_font::test_support::conditions_font());
+    let weight = fixture.font.axis_id_by_tag("wght").unwrap();
+    let heavy = DesignLocation::from([(weight, 800.0)]);
+
+    for options in [shaped(), TextOptions::default()] {
+        let regular = fixture.lay_out("$$", options.clone());
+        let swapped = fixture.lay_out_at(&heavy, "$$", options);
+
+        assert_eq!(fixture.names(&regular), ["dollar", "dollar"]);
+        assert_eq!(regular.glyphs[1].left, 500.0);
+        assert_eq!(fixture.names(&swapped), ["dollar.heavy", "dollar.heavy"]);
+        assert_eq!(swapped.glyphs[1].left, 600.0);
+    }
 }
 
 #[test]
