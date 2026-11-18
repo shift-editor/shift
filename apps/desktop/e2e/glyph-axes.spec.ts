@@ -35,19 +35,17 @@ test.describe("glyph sources and glyph axes in the Designspace tab", () => {
     const controls = await openVariationControls(page);
 
     await editor.commitInputValue(controls.getByLabel("Spread value"), 60);
-    await controls.getByLabel("Add glyph source or axis").click();
-    await page.getByRole("menuitem", { name: "Glyph source", exact: true }).click();
+    await controls.getByLabel("Add glyph source").click();
 
     await expect(glyphSourceRow(controls, "Spread 60")).toBeVisible();
   });
 
-  test("adds a glyph's first axis from Glyph sources", async ({ page, editor }) => {
+  test("adds a glyph's first axis from Glyph axes", async ({ page, editor }) => {
     await editor.openGlyphByName("H");
     const controls = await openVariationControls(page);
 
     await expect(controls.getByRole("slider", { name: "Gap", exact: true })).toHaveCount(0);
-    await controls.getByLabel("Add glyph source or axis").click();
-    await page.getByRole("menuitem", { name: "Glyph axis…" }).click();
+    await controls.getByLabel("Add glyph axis").click();
     await page.getByLabel("Name", { exact: true }).fill("Gap");
     await page.getByRole("button", { name: "Add", exact: true }).click();
 

@@ -11,6 +11,7 @@ export interface GlyphAxisRow {
 /** What the Designspace tab's Glyph axes section shows for the glyph being edited. */
 export interface GlyphAxesSection {
   readonly glyphName: string;
+  /** Empty for a glyph with no axes of its own: the section says "None". */
   readonly rows: readonly GlyphAxisRow[];
 }
 

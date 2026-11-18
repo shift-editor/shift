@@ -18,7 +18,6 @@ import {
   SidebarActionRow,
   type CollapsibleSectionProps,
 } from "@/components/sidebar";
-import { useSidebarPanelAnchor } from "@/hooks/useSidebarPanelAnchor";
 import {
   addGlyphSourceHere,
   canAddGlyphSourceCell,
@@ -30,16 +29,14 @@ import type { GlyphSourceRow } from "@/types/glyphAxes";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 import PlusIcon from "@/assets/general/plus.svg";
 import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
-import { GlyphAxisPopover, type GlyphAxisPopoverTarget } from "./GlyphAxisPopover";
 
 /**
  * The Designspace tab's Glyph sources section, after Instances, shown while
  * a glyph is edited: the glyph's own sources, its drawings off the font's
  * sources (brace drawings included), each named by where it sits. A glyph
  * with none says "None". Selecting one moves the sliders there and edits it;
- * its ⋮ deletes it. **+** opens a menu: Glyph source, added where the
- * sliders sit (disabled where the glyph has a source or glyph source there),
- * and Glyph axis….
+ * its ⋮ deletes it. **+** adds a glyph source where the sliders sit; it is
+ * disabled, saying why, where the glyph already has a source or glyph source.
  */
 export const GlyphSourcesSection = ({
   section: Section = CollapsibleSection,
@@ -52,8 +49,6 @@ export const GlyphSourcesSection = ({
   const rowsCell = useMemo(() => glyphSourcesCell(editor), [editor]);
   const rows = useSignalState(rowsCell);
   const [open, setOpen] = useState(true);
-  const [axisForm, setAxisForm] = useState<GlyphAxisPopoverTarget | null>(null);
-  const anchor = useSidebarPanelAnchor();
 
   if (!rows) return null;
 
@@ -62,17 +57,9 @@ export const GlyphSourcesSection = ({
       <Separator className="-mx-1 w-auto" />
       <Section
         title="Glyph sources"
-        open={open || axisForm !== null}
+        open={open}
         onOpenChange={setOpen}
-        isActive={axisForm !== null}
-        actions={
-          <GlyphSourcesAddMenu
-            editor={editor}
-            triggerRef={anchor.triggerRef}
-            disabled={!canAuthor}
-            onAddAxis={() => setAxisForm({ kind: "add" })}
-          />
-        }
+        actions={<AddGlyphSourceButton editor={editor} canAuthor={canAuthor} />}
       >
         {rows.length === 0 ? (
           <p className="pl-2 text-ui text-muted">None</p>
@@ -94,74 +81,39 @@ export const GlyphSourcesSection = ({
           </div>
         )}
       </Section>
-      <GlyphAxisPopover
-        target={axisForm}
-        axes={[]}
-        positioner={anchor.positioner}
-        onClose={() => setAxisForm(null)}
-      />
     </>
   );
 };
 
 /**
- * The section's **+**: a menu to add a glyph source where the sliders sit
- * or a glyph axis. Whether a glyph source can be added is read when the
- * menu opens, so a slider scrub re-renders nothing.
+ * The section's **+**: adds a glyph source where the sliders sit, starting
+ * from the outline shown. It follows a boolean, so a slider scrub that keeps
+ * it re-renders nothing.
  */
-const GlyphSourcesAddMenu = ({
-  editor,
-  triggerRef,
-  disabled,
-  onAddAxis,
-}: {
-  editor: Editor;
-  triggerRef: React.Ref<HTMLButtonElement>;
-  disabled: boolean;
-  onAddAxis: () => void;
-}) => {
+const AddGlyphSourceButton = ({ editor, canAuthor }: { editor: Editor; canAuthor: boolean }) => {
   const canAddCell = useMemo(() => canAddGlyphSourceCell(editor), [editor]);
-  const [canAdd, setCanAdd] = useState(false);
-
-  if (disabled) {
-    return (
-      <Tooltip content="Add">
-        <SidebarActionButton label="Add glyph source or axis" aria-disabled>
-          <PlusIcon className="h-3 w-3" />
-        </SidebarActionButton>
-      </Tooltip>
-    );
-  }
-
-  const onOpenChange = (open: boolean) => {
-    if (open) setCanAdd(canAddCell.peek());
-  };
+  const canAdd = useSignalState(canAddCell);
+  const enabled = canAuthor && canAdd;
 
   return (
-    <Menu modal={false} onOpenChange={onOpenChange}>
-      <Tooltip content="Add">
-        <MenuTrigger
-          ref={triggerRef}
-          render={
-            <SidebarActionButton label="Add glyph source or axis">
-              <PlusIcon className="h-3 w-3" />
-            </SidebarActionButton>
-          }
-        />
-      </Tooltip>
-      <MenuPortal>
-        <MenuPositioner side="right" sideOffset={4} align="start">
-          <MenuPopup>
-            <MenuItem disabled={!canAdd} onClick={() => void addGlyphSourceHere(editor)}>
-              Glyph source
-            </MenuItem>
-            <MenuItem onClick={onAddAxis}>Glyph axis…</MenuItem>
-          </MenuPopup>
-        </MenuPositioner>
-      </MenuPortal>
-    </Menu>
+    <Tooltip content={addGlyphSourceTooltip(canAuthor, canAdd)}>
+      <SidebarActionButton
+        label="Add glyph source"
+        aria-disabled={enabled ? undefined : true}
+        onClick={enabled ? () => void addGlyphSourceHere(editor) : undefined}
+      >
+        <PlusIcon className="h-3 w-3" />
+      </SidebarActionButton>
+    </Tooltip>
   );
 };
+
+/** What **+** says: its action, or why it is unavailable. */
+function addGlyphSourceTooltip(canAuthor: boolean, canAdd: boolean): string {
+  if (!canAuthor) return "Add glyph source";
+  if (!canAdd) return "A source or glyph source is already here";
+  return "Add glyph source";
+}
 
 /** One glyph source: its location's name, selected while it is the one edited. */
 const GlyphSourceRowView = ({

@@ -25,11 +25,12 @@ import PlusIcon from "@/assets/general/plus.svg";
 import { GlyphAxisPopover, refusalMessage, type GlyphAxisPopoverTarget } from "./GlyphAxisPopover";
 
 /**
- * The Designspace tab's Glyph axes section, under Font axes, shown while the
- * glyph being edited has axes of its own: one slider per axis (a `dot`'s
+ * The Designspace tab's Glyph axes section, under Font axes, shown while a
+ * glyph is edited: one slider per axis of its own (a `dot`'s
  * Spread and Strike), which moves where the canvas draws it as the font
- * axis sliders do. **+** adds another; a glyph's first comes from Glyph
- * sources' ⋯ menu. Each row's ⋮ edits the range, renames or removes the axis.
+ * axis sliders do. A glyph with none says "None". **+** adds an axis, in a
+ * panel beside the sidebar. Each row's ⋮ edits the range, renames or
+ * removes the axis.
  */
 export const GlyphAxesSection = () => {
   const editor = useEditor();
@@ -73,6 +74,7 @@ export const GlyphAxesSection = () => {
           </Tooltip>
         }
       >
+        {state.rows.length === 0 && <p className="pl-2 text-ui text-muted">None</p>}
         <div className="flex flex-col gap-1">
           {state.rows.map(({ axis, value }) => (
             <GlyphAxisRow

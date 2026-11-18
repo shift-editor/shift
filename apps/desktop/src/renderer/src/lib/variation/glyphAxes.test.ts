@@ -90,10 +90,10 @@ describe("the Glyph axes section", () => {
     });
   });
 
-  it("hides for a glyph without axes of its own", async () => {
+  it("shows a glyph without axes of its own, with none listed", async () => {
     await editor.openGlyph("H");
 
-    expect(glyphAxes()).toBeNull();
+    expect(glyphAxes()).toEqual({ glyph: "H", rows: [] });
   });
 
   it("adds an axis to a glyph that has none", async () => {

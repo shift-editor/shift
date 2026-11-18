@@ -17,9 +17,8 @@ function editedGlyph(editor: Editor): Glyph | null {
  * The Designspace tab's Glyph axes section: one row per axis of the glyph
  * being edited, at the value the canvas draws it at.
  *
- * @returns null while no single glyph is edited, or the glyph has no axes of
- * its own: the section then hides, and its first axis comes from Glyph
- * sources' ⋯ menu.
+ * @returns null while no single glyph is edited; empty rows for a glyph with
+ * no axes of its own, which the section shows as "None".
  */
 export function glyphAxesCell(editor: Editor): Signal<GlyphAxesSection | null> {
   return computed(() => {
@@ -28,10 +27,7 @@ export function glyphAxesCell(editor: Editor): Signal<GlyphAxesSection | null> {
 
     track(glyph.entryCell);
     const location = editor.glyphLocationCell.value;
-    const axes = glyph.axesCell.value;
-    if (axes.length === 0) return null;
-
-    const rows = axes.map((axis) => ({ axis, value: axisValue(location, axis) }));
+    const rows = glyph.axesCell.value.map((axis) => ({ axis, value: axisValue(location, axis) }));
     return { glyphName: glyph.name, rows };
   });
 }
