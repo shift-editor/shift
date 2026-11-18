@@ -1,5 +1,4 @@
 import type { AxisId, LayerPlacement, Source } from "@shift/types";
-import { asAxisId } from "@shift/types";
 import { track, type Signal } from "../signals";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import type { Designspace } from "../variation/Designspace";
@@ -7,8 +6,8 @@ import type { Axis } from "./Axis";
 import {
   asDesignAxisLocation,
   axisValue,
-  designAxisLocationFromLocation,
   designAxisLocationsEqual,
+  locationFromDesignAxisLocation,
 } from "../variation/location";
 
 /**
@@ -78,31 +77,48 @@ export class GlyphSpace {
     return this.axes.every((axis) => axisValue(location, axis) === axis.kind.default);
   }
 
-  /**
-   * Where a drawing sits in the glyph's design space: its source's location
-   * when it is on one, or its base source's location (none: every axis at
-   * its default) with its own coordinates laid over it.
-   *
-   * @returns null when the base names a source the font lacks.
-   */
-  drawingLocation(source: Source, placement: LayerPlacement | null): DesignAxisLocation | null {
-    if (!placement) return designAxisLocationFromLocation(source.location);
-
-    const baseId = placement.baseSourceId ?? null;
-    const base = baseId ? this.#designspace.source(baseId) : null;
-    if (baseId && !base) return null;
-
-    const values = new Map<AxisId, number>(
-      base ? designAxisLocationFromLocation(base.location) : [],
-    );
-    for (const [axisId, value] of Object.entries(placement.coordinates.values)) {
-      values.set(asAxisId(axisId), value);
-    }
-    return asDesignAxisLocation(values);
-  }
-
   /** Whether two design locations are the same place in the glyph's space. */
   same(left: DesignAxisLocation, right: DesignAxisLocation): boolean {
     return designAxisLocationsEqual(left, right, this.spaceAxes);
+  }
+
+  /**
+   * Where a new drawing drawn at `location` sits: on `source`, the font
+   * source at the font location when there is one, plus the glyph's own axes
+   * away from their defaults ("Regular + Spread 60"); between font sources,
+   * at every axis away from its default, with no base ("Bleed 50").
+   */
+  placementAt(location: ExternalAxisLocation, source: Source | null): LayerPlacement {
+    const design = this.toDesign(location);
+    const axes = source ? this.axes : this.spaceAxes;
+    const origin = this.toDesign(this.#designspace.defaultLocation());
+    const coordinates = asDesignAxisLocation(
+      new Map(
+        axes
+          .filter((axis) => axisValue(design, axis) !== axisValue(origin, axis))
+          .map((axis) => [axis.id, axisValue(design, axis)] as const),
+      ),
+    );
+    return {
+      baseSourceId: source?.id ?? null,
+      coordinates: locationFromDesignAxisLocation(coordinates),
+    };
+  }
+
+  /**
+   * A place's name, as a glyph source's: each axis away from its default
+   * with its value, "Spread 100" or "Bleed 50, Spread 60"; font axes in user
+   * units, as the sliders show them.
+   */
+  locationName(location: DesignAxisLocation): string {
+    const origin = this.toDesign(this.#designspace.defaultLocation());
+    const external = this.#designspace.toExternal(location);
+    const parts = this.spaceAxes
+      .filter((axis) => axisValue(location, axis) !== axisValue(origin, axis))
+      .map((axis) => {
+        const value = this.hasAxis(axis.id) ? axisValue(location, axis) : axisValue(external, axis);
+        return `${axis.name} ${Math.round(value * 100) / 100}`;
+      });
+    return parts.length === 0 ? "Default" : parts.join(", ");
   }
 }

@@ -67,8 +67,8 @@ import {
   cloneExternalAxisLocation,
   emptyExternalAxisLocation,
   externalAxisLocationsEqual,
+  withGlyphLocation,
 } from "../variation/location";
-import { drawingPlacement, withGlyphLocation } from "./glyphDrawings";
 import type { Axis } from "../model/Axis";
 import type {
   ActiveTool,
@@ -911,9 +911,7 @@ export class Editor {
     const from = glyph.layerForSource(this.font.defaultSource.id) ?? glyph.layers[0] ?? null;
     if (!from) return null;
 
-    const placement = drawingPlacement(
-      this.font.designspace,
-      glyph,
+    const placement = glyph.space.placementAt(
       location,
       this.font.sourceAt(this.#externalLocation.peek()),
     );

@@ -10,6 +10,7 @@ import type {
   GlyphSnapshot,
   InterpolationBasis,
   KerningGroupId,
+  Location,
   KerningSide,
   LayerId,
   NodeId,
@@ -505,18 +506,23 @@ export class EngineSession {
   }
 
   /**
-   * Where a component's base glyph draws, as an external location in the
-   * font's axis order, when the glyph it sits in draws at the external
-   * location `parent` and the component sets `set` (design units, NaN on an
-   * axis it doesn't set): shift-font's `ComponentInheritance::base_location`
-   * between the font's axis mappings. NaN on internal axes.
+   * Where a component's base glyph draws, by axis, when the glyph it sits in
+   * draws at the external location `parent` (the font's axis order) and the
+   * component sets `set` (font axes in design units, its base glyph's own in
+   * theirs): shift-font's `ComponentInheritance::base_location` between the
+   * font's axis mappings. Glyph axes are never inherited.
    */
   componentBaseLocation(
     parent: readonly number[],
-    set: readonly number[],
+    set: Location,
     inheritance: ComponentInheritance,
-  ): readonly number[] {
+  ): Location {
     return this.#reads.componentBaseLocation(parent, set, inheritance);
+  }
+
+  /** Where the drawing `layer` sits in its glyph's design space: `Font::layer_design_location`. */
+  layerDesignLocation(layer: LayerId): Location | null {
+    return this.#reads.layerDesignLocation(layer) ?? null;
   }
 
   /**

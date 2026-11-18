@@ -1,4 +1,5 @@
 import type {
+  AxisId,
   FontIntent,
   AnchorId,
   AnchorSeed,
@@ -52,7 +53,6 @@ import type { PropagatedAnchors, PropagationAnchor } from "@shift/wasm/protocol"
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import type { WeightedSource } from "../../types/glyphRender";
 import {
-  asExternalAxisLocation,
   designAxisLocationFromLocation,
   externalAxisLocationsEqual,
   layerPlacementsEqual,
@@ -2647,6 +2647,14 @@ export class Glyph {
       ),
     { name: "glyph.layersBySourceId" },
   );
+  readonly #axesByIdCell = computed(
+    () =>
+      new EntityMap(
+        "glyph axis",
+        this.#space.axesCell.value.map((axis) => [axis.id, axis] as const),
+      ),
+    { name: "glyph.axesById" },
+  );
   readonly #locatedLayersCell = computed(
     () => this.#layersCell.value.filter((layer) => layer.placementCell.value !== null),
     { name: "glyph.locatedLayers" },
@@ -2740,7 +2748,31 @@ export class Glyph {
    */
   drawingLocation(layer: GlyphLayer): DesignAxisLocation | null {
     track(layer.placementCell);
-    return this.#space.drawingLocation(layer.source, layer.placement);
+    // On a source: that source's location. Off them: where the engine places it.
+    if (!layer.placement) return designAxisLocationFromLocation(layer.source.location);
+
+    return this.#designspace.drawingLocation(layer.id);
+  }
+
+  /** The glyph's own axis `axisId`; null for another glyph's or a font axis. */
+  axis(axisId: AxisId): Axis | null {
+    track(this.#axesByIdCell);
+    return this.#axesByIdCell.peek().get(axisId);
+  }
+
+  /**
+   * What the glyph has exactly at `location`, by name: a glyph source by
+   * where it sits ("Spread 100"), a source by its own name; null for none.
+   */
+  sourceNameAt(location: ExternalAxisLocation): string | null {
+    const layer = this.layerAt(location);
+    if (layer?.isLocated) {
+      const drawnAt = this.drawingLocation(layer);
+      return drawnAt ? this.#space.locationName(drawnAt) : null;
+    }
+    if (layer) return layer.source.name;
+
+    return this.sourceAt(location)?.name ?? null;
   }
 
   layerForSource(sourceId: SourceId): GlyphLayer | null {
@@ -2996,14 +3028,13 @@ export class Glyph {
     // A component that sets nothing and follows this glyph has nothing to ask.
     if (component.location.size === 0 && component.inheritance === "parent") return parent;
 
-    const onFontAxes = this.#designspace.componentBaseLocation(
+    // The engine lays the base glyph's own axes the component sets over the
+    // font's; the rest stay at their defaults, never inherited.
+    const moved = this.#designspace.componentBaseLocation(
       parent,
       component.location,
       component.inheritance,
     );
-    // The base glyph's own axes are never inherited: the ones the component
-    // sets are in their own units, and the rest stay at their defaults.
-    const moved = withComponentGlyphAxes(onFontAxes, component, this.#designspace);
     return externalAxisLocationsEqual(moved, parent) ? parent : moved;
   }
 
@@ -3145,19 +3176,4 @@ function withResolvedComponentLocations(
   values.set(live.subarray(0, offset));
   values.set(resolved.subarray(offset), offset);
   return values;
-}
-
-/**
- * `location`, on the font's axes, with the values `component` sets on its
- * base glyph's own axes: every axis it sets that is not one of the font's.
- */
-function withComponentGlyphAxes(
-  location: ExternalAxisLocation,
-  component: Component,
-  designspace: Designspace,
-): ExternalAxisLocation {
-  const glyphAxes = [...component.location].filter(([axisId]) => !designspace.axis(axisId));
-  if (glyphAxes.length === 0) return location;
-
-  return asExternalAxisLocation(new Map([...location, ...glyphAxes]));
 }

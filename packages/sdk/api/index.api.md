@@ -188,6 +188,7 @@ export class Designspace {
         value: number;
     }[];
     defaultLocation(): ExternalAxisLocation;
+    drawingLocation(layerId: LayerId): DesignAxisLocation | null;
     glyphWeights(basis: InterpolationBasis, location: DesignAxisLocation): Float64Array | null;
     interpolationWeights(basis: InterpolationBasis, location: DesignAxisLocation): Float64Array | null;
     location(coordinates: readonly {
@@ -797,6 +798,7 @@ export class Glyph {
     get axes(): readonly Axis[];
     // (undocumented)
     get axesCell(): Signal<readonly Axis[]>;
+    axis(axisId: AxisId): Axis | null;
     // (undocumented)
     get bounds(): Bounds | null;
     get components(): readonly Component[];
@@ -842,6 +844,7 @@ export class Glyph {
     }>;
     get sidebearings(): GlyphSidebearings;
     sourceAt(location: ExternalAxisLocation): Source | null;
+    sourceNameAt(location: ExternalAxisLocation): string | null;
     get space(): GlyphSpace;
     // (undocumented)
     toState(): GlyphState;

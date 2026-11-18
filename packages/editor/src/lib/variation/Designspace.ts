@@ -4,6 +4,7 @@ import type {
   Axis as AxisRecord,
   ComponentInheritance,
   InterpolationBasis,
+  LayerId,
   Source,
   SourceId,
   VariationBasis,
@@ -153,8 +154,22 @@ export class Designspace {
     set: ReadonlyMap<AxisId, number>,
     inheritance: ComponentInheritance,
   ): ExternalAxisLocation {
-    if (this.axes.length === 0) return emptyExternalAxisLocation();
+    if (this.axes.length === 0 && set.size === 0) return emptyExternalAxisLocation();
     return this.#mapping().componentBaseLocation(parent, set, inheritance);
+  }
+
+  /**
+   * Where the drawing `layerId` sits in its glyph's design space, as the
+   * engine places it (`Font::layer_design_location`): subscribed to the
+   * sources, whose locations a drawing's base gives it.
+   *
+   * @returns null for a layer the engine lacks.
+   * @throws When the font's engine is not open.
+   */
+  drawingLocation(layerId: LayerId): DesignAxisLocation | null {
+    track(this.#axesCell);
+    track(this.#sourcesCell);
+    return this.#variation().drawingLocation(layerId);
   }
 
   /**

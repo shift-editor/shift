@@ -4,6 +4,7 @@ import type {
   AxisMappingBasis,
   ComponentInheritance,
   InterpolationBasis,
+  LayerId,
   SlugWeightSet,
   Source,
   VariationBasis,
@@ -12,7 +13,12 @@ import type { Signal } from "../signals";
 import type { EngineVariation, FontEngine } from "../../types/font";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import type { SourceSetWeights } from "./engine";
-import { asDesignAxisLocation, asExternalAxisLocation } from "../variation/location";
+import {
+  asDesignAxisLocation,
+  asExternalAxisLocation,
+  designAxisLocationFromLocation,
+  externalAxisLocationFromLocation,
+} from "../variation/location";
 
 /** A location as numbers in `axes` order; NaN where it has no coordinate, read as the default. */
 export function locationValues(
@@ -118,12 +124,22 @@ export class FontVariation {
     inheritance: ComponentInheritance,
   ): ExternalAxisLocation {
     const axes = this.#axesCell.peek();
-    const external = this.#variation.componentBaseLocation(
+    const base = this.#variation.componentBaseLocation(
       locationValues(axes, parent),
-      locationValues(axes, set),
+      { values: Object.fromEntries(set) },
       inheritance,
     );
-    return asExternalAxisLocation(locationFromValues(axes, onEveryAxis(axes, external)));
+    return externalAxisLocationFromLocation(base);
+  }
+
+  /**
+   * Where the drawing `layerId` sits in its glyph's design space, as the
+   * session's font places it: its base source's location with its own
+   * coordinates laid over it. Null for a layer the session lacks.
+   */
+  drawingLocation(layerId: LayerId): DesignAxisLocation | null {
+    const location = this.#variation.layerDesignLocation(layerId);
+    return location ? designAxisLocationFromLocation(location) : null;
   }
 
   /**

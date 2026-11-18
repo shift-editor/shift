@@ -38,7 +38,7 @@ use shift_text::layout::{LayoutError, TextLayout};
 pub use crate::page_layout::{NodeBox, PageLayout, PageLayoutError, PageLayoutRequest, RunLines};
 use shift_font::wire::{
     AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphSnapshot, InterpolationBasis,
-    KerningSnapshot, MetricDefinition, NamedInstance, SourceMetricsInterpolationSnapshot,
+    KerningSnapshot, Location, MetricDefinition, NamedInstance, SourceMetricsInterpolationSnapshot,
     VariationBasis,
 };
 pub use shift_text::shape::{FeatureDefault, FeatureGroup, FontFeature};
@@ -277,17 +277,25 @@ pub trait EngineReads {
     /// The external location a design location's mapping came from, NaN on
     /// internal axes: `unmap_location_with_bases`.
     fn external_location(&self, design: Vec<f64>) -> Vec<f64>;
-    /// Where a component's base glyph draws, as an external location, when
-    /// the glyph it is placed in draws at the external location `parent` and
-    /// the component sets `set` (design units, NaN on an axis it doesn't
-    /// set): `ComponentInheritance::base_location` between the font's axis
-    /// mappings; NaN on internal axes.
+    /// Where a component's base glyph draws, when the glyph it is placed in
+    /// draws at the external location `parent` (the font's axis order, NaN
+    /// for a default) and the component sets `set` (by axis: font axes in
+    /// design units, its base glyph's own axes in theirs):
+    /// `ComponentInheritance::base_location` between the font's axis
+    /// mappings. The font's external axes come back in user units, internal
+    /// ones left out, and the base glyph's own axes the component sets as
+    /// set; the rest of its own axes are at their defaults, never inherited.
     fn component_base_location(
         &self,
         parent: Vec<f64>,
-        set: Vec<f64>,
+        set: Location,
         inheritance: ComponentInheritance,
-    ) -> Vec<f64>;
+    ) -> Location;
+    /// Where the drawing `layer_id` sits in its glyph's design space, by axis:
+    /// `Font::layer_design_location`, its base source's location with its
+    /// own coordinates laid over it. Null for a layer the session's font
+    /// lacks, or whose base is a source it lacks.
+    fn layer_design_location(&self, layer_id: LayerId) -> Option<Location>;
     /// The `target` layer's ids for `points`, `anchors` and `components` in
     /// `reference`, each in the order given, as `Font::counterparts` pairs
     /// them, unsaved edits included; null when the layers don't match
@@ -1146,21 +1154,36 @@ mod exports {
         fn component_base_location(
             &self,
             parent: Vec<f64>,
-            set: Vec<f64>,
+            set: super::Location,
             inheritance: ComponentInheritance,
-        ) -> Vec<f64> {
+        ) -> super::Location {
             let font = self.session.font();
             let axes = font.axes();
             let mappings = &self.variation().mappings;
             let parent = design_location(font, &design_values(axes, mappings, &parent));
+            let set = DesignLocation::from_untyped(set.values.into_iter().collect());
             // An empty location is the font's default location, as native projection reads it.
-            let base = inheritance.base_location(
-                &design_location(font, &set),
-                &parent,
-                &DesignLocation::new(),
-                axes,
-            );
-            external_values(axes, mappings, &base.as_untyped().values_in(axes))
+            let base = inheritance.base_location(&set, &parent, &DesignLocation::new(), axes);
+            let external = external_values(axes, mappings, &base.as_untyped().values_in(axes));
+            let on_font_axes = axes
+                .iter()
+                .zip(external)
+                .filter(|(_, value)| !value.is_nan())
+                .map(|(axis, value)| (axis.id(), value));
+            // The base glyph's own axes have no mapping: they stay as set.
+            let own = base
+                .iter()
+                .filter(|(axis_id, _)| !shift_font::axis::AxisList::contains_axis(axes, **axis_id))
+                .map(|(axis_id, value)| (*axis_id, *value));
+            super::Location {
+                values: on_font_axes.chain(own).collect(),
+            }
+        }
+
+        fn layer_design_location(&self, layer_id: LayerId) -> Option<super::Location> {
+            let font = self.session.font();
+            let location = font.layer_design_location(font.layer(layer_id)?).ok()?;
+            Some(super::Location::from(location.as_untyped()))
         }
 
         fn glyph_basis_number(&self, basis: super::InterpolationBasis) -> usize {
@@ -1818,8 +1841,20 @@ mod exports {
             let session = Session::mapped(vec![weight_curve()]);
             // External weight 900 is design 800; width is unmapped.
             let parent = values(&axes, &[("axis_weight", 900.0), ("axis_width", 125.0)]);
-            let sets_weight = values(&axes, &[("axis_weight", 400.0)]);
-            let sets_nothing = values(&axes, &[]);
+            let by_axis = |pairs: &[(&str, f64)]| wire::Location {
+                values: pairs
+                    .iter()
+                    .map(|(axis, value)| (AxisId::from_raw(*axis), *value))
+                    .collect(),
+            };
+            let sets_weight = by_axis(&[("axis_weight", 400.0)]);
+            let sets_nothing = by_axis(&[]);
+            // In the font's axis order, as the editor reads a location.
+            let ordered = |location: wire::Location| -> Vec<f64> {
+                axes.iter()
+                    .map(|axis| location.values.get(&axis.id()).copied().unwrap_or(f64::NAN))
+                    .collect()
+            };
 
             let [follows, overrides, resets, resets_and_sets] = session.read(|engine| {
                 [
@@ -1829,7 +1864,7 @@ mod exports {
                     (sets_weight.clone(), ComponentInheritance::Font),
                 ]
                 .map(|(set, inheritance)| {
-                    engine.component_base_location(parent.clone(), set, inheritance)
+                    ordered(engine.component_base_location(parent.clone(), set, inheritance))
                 })
             });
 
@@ -1837,6 +1872,24 @@ mod exports {
             assert_close(&overrides[..2], &[400.0, 125.0]);
             assert_close(&resets[..2], &[400.0, 100.0]);
             assert_close(&resets_and_sets[..2], &[400.0, 100.0]);
+        }
+
+        #[test]
+        fn keeps_the_base_glyphs_own_axes_a_component_sets_and_never_inherits_them() {
+            let axes = axes();
+            let session = Session::mapped(vec![weight_curve()]);
+            let parent = values(&axes, &[("axis_weight", 900.0)]);
+            let spread = AxisId::from_raw("axis_spread");
+            let set = wire::Location {
+                values: [(spread, 60.0)].into_iter().collect(),
+            };
+
+            let base = session.read(|engine| {
+                engine.component_base_location(parent.clone(), set, ComponentInheritance::Parent)
+            });
+
+            assert_eq!(base.values.get(&spread), Some(&60.0));
+            assert_close(&[base.values[&AxisId::from_raw("axis_weight")]], &[900.0]);
         }
 
         #[test]

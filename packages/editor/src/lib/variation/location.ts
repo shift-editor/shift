@@ -144,3 +144,16 @@ export function layerPlacementsEqual(
   if (leftValues.size !== rightValues.size) return false;
   return leftValues.entries().every(([axisId, value]) => rightValues.get(axisId) === value);
 }
+
+/**
+ * The font location with the edited glyph's values on its own axes laid
+ * over it: where the editor draws that glyph.
+ */
+export function withGlyphLocation(
+  external: ExternalAxisLocation,
+  glyphLocation: ExternalAxisLocation,
+): ExternalAxisLocation {
+  if (glyphLocation.size === 0) return external;
+
+  return asExternalAxisLocation(new Map([...external, ...glyphLocation]));
+}
