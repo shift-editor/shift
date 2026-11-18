@@ -127,7 +127,39 @@ pub(crate) fn store_stored_layer_in_tx(
         stored.decoded_blake3.as_slice(),
     ])?;
     write_layer_location(tx, layer, mode)?;
+    write_component_conditions(tx, layer, mode)?;
     write_component_index(tx, layer, mode)
+}
+
+/// Writes the ranges of each of `layer`'s component conditions, which the
+/// payload leaves out.
+fn write_component_conditions(
+    tx: &Transaction<'_>,
+    layer: &font::GlyphLayer,
+    mode: WriteMode,
+) -> Result<(), StoreError> {
+    if mode == WriteMode::Upsert {
+        tx.prepare_cached("DELETE FROM glyph_component_conditions WHERE layer_id = ?1")?
+            .execute([layer.id()])?;
+    }
+    for component in layer.components_iter() {
+        for (order_index, range) in component.condition().ranges().iter().enumerate() {
+            tx.prepare_cached(
+                "INSERT INTO glyph_component_conditions (
+                    component_id, layer_id, order_index, axis_id, min_value, max_value
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            )?
+            .execute(params![
+                component.id().as_str(),
+                layer.id(),
+                i64::try_from(order_index)?,
+                range.axis_id,
+                range.min,
+                range.max,
+            ])?;
+        }
+    }
+    Ok(())
 }
 
 /// Writes the coordinates of `layer`'s location, which with its

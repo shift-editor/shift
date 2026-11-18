@@ -8,9 +8,10 @@ use shift_font as font;
 use super::{
     RecoveryOverlay, RecoveryState,
     catalog::{
-        AXES, AXIS_MAPPINGS, FONT_LIB, GLYPH_AXES, GLYPH_COMPONENTS, GLYPH_LAYER_LOCATIONS,
-        GLYPH_LAYERS, GLYPH_LIB, GLYPH_UNICODES, GLYPHS, KERNING_GROUP_MEMBERS, KERNING_GROUPS,
-        KERNING_PAIRS, METRIC_DEFINITIONS, NAMED_INSTANCES, RecoveryTable, SCENE_NODES, SOURCE_LIB,
+        AXES, AXIS_MAPPINGS, FONT_LIB, GLYPH_ALTERNATE_CONDITIONS, GLYPH_ALTERNATES, GLYPH_AXES,
+        GLYPH_COMPONENT_CONDITIONS, GLYPH_COMPONENTS, GLYPH_LAYER_LOCATIONS, GLYPH_LAYERS,
+        GLYPH_LIB, GLYPH_UNICODES, GLYPHS, KERNING_GROUP_MEMBERS, KERNING_GROUPS, KERNING_PAIRS,
+        METRIC_DEFINITIONS, NAMED_INSTANCES, RecoveryTable, SCENE_NODES, SOURCE_LIB,
         SOURCE_LOCATIONS, SOURCE_METRIC_VALUES, SOURCES,
     },
 };
@@ -187,6 +188,8 @@ impl RecoveryOverlay {
                 mark_replaced(&tx, GLYPH_UNICODES, glyph_id.as_str())?;
                 mark_replaced(&tx, GLYPH_LIB, glyph_id.as_str())?;
                 mark_replaced(&tx, GLYPH_AXES, glyph_id.as_str())?;
+                mark_replaced(&tx, GLYPH_ALTERNATES, glyph_id.as_str())?;
+                mark_replaced(&tx, GLYPH_ALTERNATE_CONDITIONS, glyph_id.as_str())?;
             } else {
                 delete_glyph_override(&tx, glyph_id)?;
                 mark_tombstone(&tx, GLYPHS, glyph_id.as_str())?;
@@ -203,6 +206,7 @@ impl RecoveryOverlay {
                 write_layer_in_tx(&tx, glyph_id, layer)?;
                 mark_replaced(&tx, GLYPH_COMPONENTS, layer_id.as_str())?;
                 mark_replaced(&tx, GLYPH_LAYER_LOCATIONS, layer_id.as_str())?;
+                mark_replaced(&tx, GLYPH_COMPONENT_CONDITIONS, layer_id.as_str())?;
             } else {
                 delete_layer_override(&tx, layer_id)?;
                 mark_tombstone(&tx, GLYPH_LAYERS, layer_id.as_str())?;
@@ -252,6 +256,7 @@ impl RecoveryOverlay {
         write_layer_in_tx(&tx, glyph_id, layer)?;
         mark_replaced(&tx, GLYPH_COMPONENTS, layer.id().as_str())?;
         mark_replaced(&tx, GLYPH_LAYER_LOCATIONS, layer.id().as_str())?;
+        mark_replaced(&tx, GLYPH_COMPONENT_CONDITIONS, layer.id().as_str())?;
         mark_dirty(&tx, Revision::Advance)?;
         tx.commit()?;
         Ok(())
@@ -337,6 +342,14 @@ fn delete_glyph_override(tx: &Transaction<'_>, glyph_id: font::GlyphId) -> Resul
     tx.execute("DELETE FROM glyph_unicodes WHERE glyph_id = ?1", [glyph_id])?;
     tx.execute("DELETE FROM glyph_lib WHERE glyph_id = ?1", [glyph_id])?;
     tx.execute("DELETE FROM glyph_axes WHERE glyph_id = ?1", [glyph_id])?;
+    tx.execute(
+        "DELETE FROM glyph_alternate_conditions WHERE glyph_id = ?1",
+        [glyph_id],
+    )?;
+    tx.execute(
+        "DELETE FROM glyph_alternates WHERE glyph_id = ?1",
+        [glyph_id],
+    )?;
     tx.execute("DELETE FROM glyphs WHERE id = ?1", [glyph_id])?;
     Ok(())
 }
@@ -352,6 +365,10 @@ fn delete_layer_override(tx: &Transaction<'_>, layer_id: font::LayerId) -> Resul
     )?;
     tx.execute(
         "DELETE FROM glyph_layer_locations WHERE layer_id = ?1",
+        [layer_id],
+    )?;
+    tx.execute(
+        "DELETE FROM glyph_component_conditions WHERE layer_id = ?1",
         [layer_id],
     )?;
     tx.execute("DELETE FROM glyph_layers WHERE id = ?1", [layer_id])?;

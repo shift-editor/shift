@@ -232,3 +232,44 @@ pub(super) fn layer_coordinates(
     }
     Ok(coordinates)
 }
+
+/// The conditions of the components of those of `layer_ids` that have
+/// any, by component id, each with its ranges in order.
+pub(super) fn component_conditions(
+    conn: &rusqlite::Connection,
+    layer_ids: &[String],
+) -> Result<HashMap<String, font::Condition>, StoreError> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT component_id, axis_id, min_value, max_value FROM glyph_component_conditions
+         WHERE layer_id IN (SELECT value FROM json_each(?1))
+         ORDER BY component_id, order_index",
+    )?;
+    let rows = stmt.query_map([serde_json::to_string(layer_ids)?], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            font::ConditionRange::new(row.get(1)?, row.get(2)?, row.get(3)?),
+        ))
+    })?;
+    let mut ranges: HashMap<String, Vec<font::ConditionRange>> = HashMap::new();
+    for row in rows {
+        let (component_id, range) = row?;
+        ranges.entry(component_id).or_default().push(range);
+    }
+    Ok(ranges
+        .into_iter()
+        .map(|(component_id, ranges)| (component_id, font::Condition::all(ranges)))
+        .collect())
+}
+
+/// Gives each of `layer`'s components its condition from `conditions`,
+/// which a payload leaves out.
+pub(super) fn attach_component_conditions(
+    layer: &mut font::GlyphLayer,
+    conditions: &HashMap<String, font::Condition>,
+) {
+    for component in layer.components_iter_mut() {
+        if let Some(condition) = conditions.get(component.id().as_str()) {
+            component.set_condition(condition.clone());
+        }
+    }
+}
