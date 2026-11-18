@@ -609,12 +609,7 @@ mod tests {
         }
     }
 
-    const HOST_GROTESK_VARIABLE: &str =
-        "apps/desktop/src/renderer/src/assets/fonts/HostGrotesk-VariableFont_wght.ttf";
-
-    fn host_grotesk() -> OpenTypeFont {
-        OpenTypeFont::open(&fixtures::repository_root().join(HOST_GROTESK_VARIABLE)).unwrap()
-    }
+    use super::super::test_fonts::host_grotesk;
 
     #[test]
     fn direct_page_matches_variable_simple_and_composite_outlines() {

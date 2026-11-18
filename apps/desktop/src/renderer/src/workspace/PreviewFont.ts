@@ -20,7 +20,7 @@ export interface PreviewFont {
 
 /** What a preview's font opens with. */
 export interface PreviewFontOptions {
-  /** The connected preview's utility client: its source's path, glyph previews and atlas. */
+  /** The connected preview's utility client: its source's path, a compiled font's glyphs and previews, and the atlas. */
   readonly client: FontSessionClient;
   /** The preload's readers, which open the previewed file glyph by glyph. */
   readonly layers: LayerReaderHost;
@@ -86,7 +86,7 @@ export async function openPreviewFont(options: PreviewFontOptions): Promise<Prev
     },
     engine,
   });
-  return previewFont(store, options, engineGlyphReader(engine, client), () => {
+  return previewFont(store, options, engineGlyphReader(engine), () => {
     engine.dispose();
     layers.close(reader);
   });
@@ -112,19 +112,22 @@ function previewFont(
   };
 }
 
-/** Glyphs read from the preview's engine, which loads them from the file. */
-function engineGlyphReader(engine: SessionEngine, client: FontSessionClient): GlyphReader {
+/** Glyphs read and drawn by the preview's engine, which loads them from the file. */
+function engineGlyphReader(engine: SessionEngine): GlyphReader {
   return {
     async read(glyphIds: readonly GlyphId[]) {
       return engine.glyphSnapshots(glyphIds);
     },
-    glyphPreviews(glyphIds, location) {
-      return client.glyphPreviews(glyphIds, locationFromDesignAxisLocation(location));
+    async glyphPreviews(glyphIds, location) {
+      return engine.glyphPreviews(glyphIds, location);
     },
   };
 }
 
-/** Glyphs of a compiled font, projected by the utility, each with its component closure. */
+/**
+ * Glyphs of a compiled font, projected by the utility, each with its
+ * component closure, and drawn there for glyph tiles.
+ */
 function utilityGlyphReader(client: FontSessionClient): GlyphReader {
   return {
     async read(glyphIds: readonly GlyphId[]) {
@@ -136,7 +139,7 @@ function utilityGlyphReader(client: FontSessionClient): GlyphReader {
       return [...snapshots.values()];
     },
     glyphPreviews(glyphIds, location) {
-      return client.glyphPreviews(glyphIds, locationFromDesignAxisLocation(location));
+      return client.sourceGlyphPreviews(glyphIds, locationFromDesignAxisLocation(location));
     },
   };
 }

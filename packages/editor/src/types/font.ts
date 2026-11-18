@@ -408,7 +408,10 @@ export interface WorkspaceEditCoordinator {
   openEdit(): OpenEdit;
   apply(intents: FontIntent[], label?: string): Promise<AppliedChange>;
   readGlyphSnapshots(requests: readonly GlyphSnapshotRequest[]): Promise<GlyphSnapshot[]>;
-  readGlyphPreviews(glyphIds: readonly GlyphId[], location: Location): Promise<GlyphPreview[]>;
+  readGlyphPreviews(
+    glyphIds: readonly GlyphId[],
+    location: Location,
+  ): Promise<readonly GlyphPreview[]>;
   readLayers(layerIds: readonly LayerId[]): Promise<readonly GlyphLayerSnapshot[]>;
   resolveLayers(layerIds: readonly LayerId[]): Promise<LayerRead[]>;
   mapLocation(location: Location): Promise<Location>;

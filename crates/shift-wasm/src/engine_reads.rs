@@ -30,8 +30,8 @@ use shift_font::glyph_identity::GlyphIdentityChange;
 use shift_font::linked_metrics::SideLink;
 use shift_font::{
     AnchorId, Axis, ComponentId, ComponentInheritance, Counterparts, CounterpartsError,
-    FontChangeFlag, GlyphId, GlyphRecords, LayerId, MetricValue, MissingKerningOrigin, NodeId,
-    PointId, ResolvedKerning, Source, SourceId,
+    FontChangeFlag, GlyphId, GlyphPreview, GlyphRecords, LayerId, MetricValue,
+    MissingKerningOrigin, NodeId, PointId, ResolvedKerning, Source, SourceId,
 };
 use shift_text::layout::{LayoutError, TextLayout};
 
@@ -296,6 +296,24 @@ pub trait EngineReads {
     /// [`FontRecordsError::Unprojectable`] when a projection cannot be built.
     fn glyph_snapshots(&self, glyphs: Vec<GlyphId>)
     -> Result<Vec<GlyphSnapshot>, FontRecordsError>;
+    /// Each of `glyphs` drawn at `location`, in the font's axis order with
+    /// NaN for an axis default: its outline, components placed, as one SVG
+    /// path in font units, and its advance, as `FontProjection::glyphs`
+    /// resolves them and the native workspace's glyph previews give them. A
+    /// glyph the font lacks is left out; a glyph without ink has an empty
+    /// path.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FontRecordsError::NotLoaded`] for a glyph, or a glyph its
+    /// components use, whose layers the session has not loaded (load its
+    /// closure first), and [`FontRecordsError::Unprojectable`] when a glyph
+    /// cannot be resolved there.
+    fn glyph_previews(
+        &self,
+        glyphs: Vec<GlyphId>,
+        location: Vec<f64>,
+    ) -> Result<Vec<GlyphPreview>, FontRecordsError>;
 }
 
 /// The records [`EngineReads::font_header`] reads: what a font's store
@@ -463,6 +481,7 @@ mod exports {
     use std::rc::Rc;
 
     use shift_engine::StoreReadError;
+    use shift_font::GlyphPreview;
     use shift_font::ir::variation::{map_location_with_bases, unmap_location_with_bases};
     use shift_font::linked_metrics::SideLink;
     use shift_font::naming::new_anchor_name;
@@ -1139,6 +1158,41 @@ mod exports {
                     let glyph = self.session.font().glyph(glyph_id)?;
                     Some(self.glyph_snapshot(glyph))
                 })
+                .collect()
+        }
+
+        fn glyph_previews(
+            &self,
+            glyphs: Vec<GlyphId>,
+            location: Vec<f64>,
+        ) -> Result<Vec<GlyphPreview>, FontRecordsError> {
+            let font = self.session.font();
+            let residency = self.session.residency();
+            for glyph_id in self.component_closure(glyphs.clone()) {
+                let Some(glyph) = font.glyph(glyph_id) else {
+                    continue;
+                };
+                if glyph
+                    .layers()
+                    .keys()
+                    .any(|layer_id| residency.is_unloaded(*layer_id))
+                {
+                    return Err(FontRecordsError::NotLoaded { glyph: glyph_id });
+                }
+            }
+            let mut projection = font.projection(&design_location(font, &location));
+            glyphs
+                .into_iter()
+                .filter_map(|glyph_id| {
+                    projection
+                        .glyph(glyph_id)
+                        .map_err(|error| FontRecordsError::Unprojectable {
+                            glyph: glyph_id,
+                            detail: error.to_string(),
+                        })
+                        .transpose()
+                })
+                .map(|glyph| glyph.map(|glyph| GlyphPreview::from(&glyph)))
                 .collect()
         }
     }

@@ -251,6 +251,28 @@ pub struct ResolvedGlyph {
     x_advance: f64,
 }
 
+/// A glyph drawn at one location, for a tile or a thumbnail: its outline as
+/// one SVG path in font units, y up, and its advance. No editable structure.
+///
+/// A blank glyph, such as a space, has an empty path.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct GlyphPreview {
+    pub glyph_id: GlyphId,
+    pub svg_path: String,
+    pub x_advance: f64,
+}
+
+impl From<&ResolvedGlyph> for GlyphPreview {
+    fn from(glyph: &ResolvedGlyph) -> Self {
+        Self {
+            glyph_id: glyph.glyph_id,
+            svg_path: crate::composite::resolved_contours_to_svg_path(&glyph.contours),
+            x_advance: glyph.x_advance,
+        }
+    }
+}
+
 impl ResolvedGlyph {
     /// Returns the stable identity of the resolved glyph.
     pub fn glyph_id(&self) -> GlyphId {

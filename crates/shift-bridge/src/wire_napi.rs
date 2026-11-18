@@ -571,16 +571,6 @@ impl From<NapiComponentData> for ComponentData {
   }
 }
 
-/// Location-resolved drawable preview: one svg path and advance per glyph,
-/// with no editable structure crossing the boundary.
-#[napi(object)]
-pub struct NapiGlyphPreview {
-  #[napi(ts_type = "GlyphId")]
-  pub glyph_id: String,
-  pub svg_path: String,
-  pub x_advance: f64,
-}
-
 /// One corner of outline bounds in font units.
 #[napi(object)]
 pub struct NapiBoundsCorner {

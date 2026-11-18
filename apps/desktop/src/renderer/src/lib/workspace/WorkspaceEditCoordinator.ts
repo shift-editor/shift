@@ -486,7 +486,7 @@ export class WorkspaceEditCoordinator {
   async readGlyphPreviews(
     glyphIds: readonly GlyphId[],
     location: Location,
-  ): Promise<GlyphPreview[]> {
+  ): Promise<readonly GlyphPreview[]> {
     if (glyphIds.length === 0) return [];
 
     return this.#withFlush(() => this.#session.glyphPreviews(glyphIds, location));

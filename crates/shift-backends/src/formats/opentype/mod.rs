@@ -1,12 +1,14 @@
 mod geometry;
 mod inputs;
 mod metrics;
+mod preview;
 mod reader;
 mod source;
 mod tables;
 mod variable;
 
 pub use inputs::build_binary_atlas_page;
+pub use preview::DrawnGlyph;
 pub use source::OpenTypeFont;
 
 use crate::ImportReport;
@@ -38,5 +40,23 @@ impl FontAdaptor for BytesFontAdaptor {
     fn stream(&self, path: &str) -> FormatBackendResult<Option<PreparedImport>> {
         let (header, stream) = reader::stream_font_file(path)?;
         Ok(Some((header, Box::new(stream), ImportReport::default())))
+    }
+}
+
+/// Compiled fonts the format's tests open.
+#[cfg(test)]
+mod test_fonts {
+    use super::OpenTypeFont;
+    use shift_font::test_support::fixtures;
+
+    /// Host Grotesk's variable TrueType font: a weight axis with `avar`,
+    /// `gvar` deltas, and composite glyphs.
+    pub(super) fn host_grotesk() -> OpenTypeFont {
+        OpenTypeFont::open(
+            &fixtures::repository_root().join(
+                "apps/desktop/src/renderer/src/assets/fonts/HostGrotesk-VariableFont_wght.ttf",
+            ),
+        )
+        .unwrap()
     }
 }

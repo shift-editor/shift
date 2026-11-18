@@ -32,14 +32,15 @@ pub use export::{
 pub use export_static::StaticInstanceFile;
 pub use font_source::{
     AuthoredReadError, AuthoredSource, AxisIndex, ContourError, DesignspaceFont, DirectoryGlyph,
-    DirectoryInstance, DirectoryMapping, DirectoryMappingPoint, DirectorySource, FontDirectory,
-    FontImporter, FontMetrics, FontReadError, FontSource, GlyphAnchor, GlyphComponent, GlyphDelta,
-    GlyphIndex, GlyphMetrics, GlyphPoint, GlyphPointKind, GlyphProjection, GlyphShape,
-    GlyphShapeContour, GlyphShapePoint, GlyphSourceShape, GlyphVariation, GlyphsFont, OpenTypeFont,
-    OpenedAuthoredSource, OpenedFont, PointProvenance, ProjectedGlyph, SourceAtlasDescriptor,
-    SourceAtlasError, SourceAtlasPage, SourceIndex, TrueTypePointIndex, UfoFont, VariationAxis,
-    VariationAxisKind, VariationCoordinate, VariationLocation, VariationRegion, VariationSupport,
-    build_binary_atlas_page, variable_glyph_inputs,
+    DirectoryInstance, DirectoryMapping, DirectoryMappingPoint, DirectorySource, DrawnGlyph,
+    FontDirectory, FontImporter, FontMetrics, FontReadError, FontSource, GlyphAnchor,
+    GlyphComponent, GlyphDelta, GlyphIndex, GlyphMetrics, GlyphPoint, GlyphPointKind,
+    GlyphProjection, GlyphShape, GlyphShapeContour, GlyphShapePoint, GlyphSourceShape,
+    GlyphVariation, GlyphsFont, OpenTypeFont, OpenedAuthoredSource, OpenedFont, PointProvenance,
+    ProjectedGlyph, SourceAtlasDescriptor, SourceAtlasError, SourceAtlasPage, SourceIndex,
+    TrueTypePointIndex, UfoFont, VariationAxis, VariationAxisKind, VariationCoordinate,
+    VariationLocation, VariationRegion, VariationSupport, build_binary_atlas_page,
+    variable_glyph_inputs,
 };
 pub use format::FontFormat;
 pub use glyph_category::GlyphCategories;

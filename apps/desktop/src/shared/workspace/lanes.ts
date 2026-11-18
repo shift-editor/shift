@@ -359,6 +359,18 @@ export interface WorkspaceSync {
   sourceGlyph(glyphId: GlyphId): Promise<readonly GlyphSnapshot[]>;
 
   /**
+   * Draws glyphs of a compiled font's preview (TrueType, OpenType) at one
+   * design location, as the font's own scaler draws them, for glyph tiles: a
+   * preview has no workspace to resolve them. Other previews draw glyphs in
+   * their engine.
+   *
+   * @param glyphIds - Glyphs in the open preview.
+   * @param location - Design location; axis mappings must already be evaluated.
+   * @returns One svg path and advance per glyph; a glyph without ink has an empty path.
+   */
+  sourceGlyphPreviews(glyphIds: GlyphId[], location: Location): Promise<readonly GlyphPreview[]>;
+
+  /**
    * Prepares one preview atlas page at dense source coordinates, for streaming.
    *
    * @param request - The page's glyphs, coordinates and alignment.
@@ -499,7 +511,7 @@ export interface WorkspaceSync {
    * @param location - Internal location; axis mappings must already be evaluated.
    * @returns One preview per resolvable glyph; missing ids are omitted.
    */
-  glyphPreviews(glyphIds: GlyphId[], location: Location): Promise<GlyphPreview[]>;
+  glyphPreviews(glyphIds: GlyphId[], location: Location): Promise<readonly GlyphPreview[]>;
 
   /**
    * Builds one native, location-independent authored Slug generation, for streaming.
@@ -553,6 +565,7 @@ export const workspaceSyncMethods: LaneMethods<WorkspaceSync> = {
   sourceHeader: true,
   sourceBinary: true,
   sourceGlyph: true,
+  sourceGlyphPreviews: true,
   prepareSourceAtlasPage: true,
   discardSourceAtlasPage: true,
   sourceAtlasWeights: true,

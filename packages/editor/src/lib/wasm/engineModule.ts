@@ -62,6 +62,7 @@ import type {
   FeatureSubstitution,
   FontChangeFlag,
   FontFeature,
+  GlyphPreview,
   TextRun,
   RevisedNode,
   SceneIntent,
@@ -74,6 +75,8 @@ export type { ContourPoints } from "@shift/wasm/protocol";
 import type { EngineStore } from "../../types/engine";
 import type { KerningPlace } from "../../types/font";
 import { unkerned } from "../model/Kerning";
+import type { DesignAxisLocation } from "../../types/variation";
+import { locationValues } from "./variation";
 
 const released = new FinalizationRegistry<number>(engineRelease);
 
@@ -581,6 +584,21 @@ export class EngineSession {
    */
   glyphSnapshots(glyphIds: readonly GlyphId[]): readonly GlyphSnapshot[] {
     return this.#reads.glyphSnapshots(glyphIds);
+  }
+
+  /**
+   * Each of `glyphIds` drawn at a design location, components placed: one
+   * SVG path in font units and its advance, as the native workspace's glyph
+   * previews give them. Load the glyphs first ({@link preload}).
+   *
+   * @returns One preview per glyph the font has; a glyph without ink has an empty path.
+   * @throws When a glyph's layers are not loaded, or it cannot be resolved there.
+   */
+  glyphPreviews(
+    glyphIds: readonly GlyphId[],
+    location: DesignAxisLocation,
+  ): readonly GlyphPreview[] {
+    return this.#reads.glyphPreviews(glyphIds, locationValues(this.#reads.axes(), location));
   }
 
   /**

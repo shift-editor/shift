@@ -875,11 +875,11 @@ export interface GlyphPage {
 // @public
 export interface GlyphPreview {
     // (undocumented)
-    glyphId: GlyphId;
+    readonly glyphId: GlyphId;
     // (undocumented)
-    svgPath: string;
+    readonly svgPath: string;
     // (undocumented)
-    xAdvance: number;
+    readonly xAdvance: number;
 }
 
 // @public
