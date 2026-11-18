@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 use fontdrasil::coords::NormalizedLocation;
@@ -7,8 +7,9 @@ use fontir::ir::StaticMetadata;
 use fontir::orchestration::{Flags, IrWork};
 use fontir::source::Source;
 use shift_font::{
-    Axis, FeatureData, FontMetadata, Glyph, Kerning, LocatedLayer, MetricDefinition, NamedInstance,
-    Source as ShiftSource, SourceId,
+    Axis, AxisList, DesignLocation, FeatureData, FontMetadata, Glyph, GlyphLayer, Kerning,
+    LayerLocation, LocatedLayer, MetricDefinition, NamedInstance, Source as ShiftSource, SourceId,
+    SourceList,
 };
 
 use crate::glyph_category::GlyphCategories;
@@ -17,7 +18,7 @@ use write_fonts::tables::gdef::GlyphClassDef;
 
 use shift_text::shaper_font::{AxisConversionError, ToGlyphClassDef, UnitsPerEm, to_ir_axes};
 
-use super::axes::normalized_source_location;
+use super::axes::{normalized_design_location, normalized_source_location};
 use super::glyph::GlyphWork;
 use super::kerning::{KerningInstanceWork, KerningLocationsWork};
 use super::metadata::{
@@ -106,23 +107,89 @@ impl ShiftSnapshot {
     }
 }
 
-/// `glyph`'s drawings among `masters` (as [`ShiftSnapshot::glyph_masters`]
-/// returns them), each with its master's normalized location, in source order.
-/// A master the glyph has no drawing on is skipped.
-pub(super) fn located_master_layers<'a>(
-    glyph: &'a Glyph,
-    masters: &'a [(&'a ShiftSource, NormalizedLocation)],
-) -> impl Iterator<Item = (LocatedLayer<'a>, &'a NormalizedLocation)> {
-    let locations = masters
-        .iter()
-        .map(|(source, location)| (source.id(), location))
-        .collect::<HashMap<_, _>>();
-    glyph
-        .located_layers_on(masters.iter().map(|(source, _)| *source))
-        .filter_map(move |located| {
-            let location = *locations.get(&located.location.base_source_id()?)?;
-            Some((located, location))
+/// One of a glyph's drawings as a glyph source: the drawing and where it sits.
+#[derive(Debug)]
+pub(super) struct DrawingSource<'a> {
+    pub located: LocatedLayer<'a>,
+    /// Its base source's location with the drawing's own coordinates laid
+    /// over it, in design units.
+    pub design_location: DesignLocation,
+    /// [`Self::design_location`] normalized over the compiled axes.
+    pub location: NormalizedLocation,
+}
+
+impl DrawingSource<'_> {
+    /// The drawing.
+    pub(super) fn drawing(&self) -> &GlyphLayer {
+        self.located.layer
+    }
+}
+
+impl ShiftSnapshot {
+    /// `glyph`'s drawings among the masters [`Self::glyph_masters`]
+    /// returns, as [`Glyph::located_layers_on`] orders them, each at its
+    /// own location: one exactly on a master at the master's location, and
+    /// one located off the masters (a brace drawing, with or without a base
+    /// source) wherever its coordinates put it. A master the glyph has no
+    /// drawing on is skipped, and so is a drawing off the default of one of
+    /// the glyph's own axes, which compiles to no font axis.
+    ///
+    /// # Errors
+    ///
+    /// Returns the conversion error when a location cannot be normalized.
+    pub(super) fn drawing_sources<'a>(
+        &self,
+        glyph: &'a Glyph,
+        masters: &'a [(&'a ShiftSource, NormalizedLocation)],
+        metadata: &StaticMetadata,
+    ) -> Result<Vec<DrawingSource<'a>>, Error> {
+        glyph
+            .located_layers_on(masters.iter().map(|(source, _)| *source))
+            .filter(|located| !self.is_off_glyph_axis_defaults(glyph, &located.location))
+            .filter_map(|located| {
+                let design_location = self.layer_design_location(&located.location)?;
+                Some(
+                    normalized_design_location(
+                        &design_location,
+                        &self.axes,
+                        &metadata.all_source_axes,
+                    )
+                    .map(|location| DrawingSource {
+                        located,
+                        design_location,
+                        location,
+                    }),
+                )
+            })
+            .collect()
+    }
+
+    /// Whether `location` sets one of `glyph`'s own axes off its default.
+    fn is_off_glyph_axis_defaults(&self, glyph: &Glyph, location: &LayerLocation) -> bool {
+        location.coordinates().iter().any(|(axis_id, value)| {
+            !self.axes.contains_axis(*axis_id)
+                && glyph
+                    .axis(*axis_id)
+                    .is_some_and(|axis| axis.as_axis().default() != *value)
         })
+    }
+
+    /// `location`'s base source location with its own coordinates laid
+    /// over it: [`LayerLocation::design_location`] over the snapshot's
+    /// sources. `None` when the base is a source the snapshot lacks.
+    fn layer_design_location(&self, location: &LayerLocation) -> Option<DesignLocation> {
+        let mut design = match location.base_source_id() {
+            Some(base) => self.sources.source(base)?.location().clone(),
+            None => DesignLocation::new(),
+        };
+        design.extend(
+            location
+                .coordinates()
+                .iter()
+                .map(|(axis_id, value)| (*axis_id, *value)),
+        );
+        Some(design)
+    }
 }
 
 impl ShiftIrSource {

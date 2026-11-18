@@ -9,6 +9,7 @@
 //! glyph-specific intermediate on a font axis (an `a` at Weight 550, a
 //! Glyphs "brace layer") are the same thing: a drawing at a location.
 
+use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
 
@@ -198,45 +199,49 @@ impl Glyph {
     /// layer id order. A master the glyph has no layer on is skipped, and so
     /// is a located layer whose base is not a master.
     pub fn located_layers<'a>(&'a self, font: &'a Font) -> impl Iterator<Item = LocatedLayer<'a>> {
-        let on_masters = self.located_layers_on(font.masters());
-        let off_masters = self
-            .layers()
-            .values()
-            .filter(|layer| layer.is_located())
-            .filter_map(move |layer| {
-                let location = layer.location().clone();
-                if let Some(base) = location.base_source_id()
-                    && !font.source(base).is_some_and(Source::is_master)
-                {
-                    return None;
-                }
-                Some(LocatedLayer { layer, location })
-            });
-        on_masters.chain(off_masters)
+        self.located_layers_on(font.masters())
     }
 
-    /// The layers that sit exactly on `masters`, the font's master sources in
-    /// source order, for a reader that holds them without the font, such as
-    /// a compiler snapshot. Layers located off the masters are left out:
-    /// placing them needs the font's axes, through [`Self::located_layers`].
+    /// [`Self::located_layers`] with `masters`, the font's master sources in
+    /// source order, given directly, for a reader that holds them without
+    /// the font, such as a compiler snapshot: the layers exactly on
+    /// `masters`, then the layers located off them whose base is one of
+    /// `masters` or no source at all.
     pub fn located_layers_on<'a>(
         &'a self,
         masters: impl IntoIterator<Item = &'a Source> + 'a,
     ) -> impl Iterator<Item = LocatedLayer<'a>> {
-        masters.into_iter().filter_map(move |source| {
+        let masters: Vec<&Source> = masters.into_iter().collect();
+        let master_ids: HashSet<SourceId> = masters.iter().map(|source| source.id()).collect();
+        let on_masters = masters.into_iter().filter_map(move |source| {
             let layer = self.shared_layer_for_source(source.id())?;
             Some(LocatedLayer {
                 layer,
                 location: LayerLocation::at_source(source.id()),
             })
-        })
+        });
+        let off_masters = self
+            .layers()
+            .values()
+            .filter(|layer| layer.is_located())
+            .filter(move |layer| {
+                layer
+                    .location()
+                    .base_source_id()
+                    .is_none_or(|base| master_ids.contains(&base))
+            })
+            .map(|layer| LocatedLayer {
+                layer,
+                location: layer.location().clone(),
+            });
+        on_masters.chain(off_masters)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entity::AxisId;
+    use crate::entity::{AxisId, LayerId};
 
     #[test]
     fn located_layers_follow_source_order_and_skip_undrawn_masters() {
@@ -260,6 +265,24 @@ mod tests {
             "the Medium master has no layer for A: {names:?}"
         );
         assert_eq!(located.len(), 2);
+    }
+
+    #[test]
+    fn a_drawing_off_the_masters_follows_the_master_drawings() {
+        let mut font = crate::test_support::sample_variable_font();
+        let glyph_id = font.glyph_by_name("A").unwrap().id();
+        let weight = font.axes().first().unwrap().id();
+        let brace = LayerLocation::at(DesignLocation::from([(weight, 700.0)]));
+        let layer_id = LayerId::new();
+        font.insert_glyph_layer(glyph_id, GlyphLayer::located(layer_id, brace.clone()))
+            .unwrap();
+        let glyph = font.glyph(glyph_id).unwrap();
+
+        let located = glyph.located_layers_on(font.masters()).collect::<Vec<_>>();
+
+        let last = located.last().unwrap();
+        assert_eq!((last.layer.id(), &last.location), (layer_id, &brace));
+        assert_eq!(located.len(), 3);
     }
 
     #[test]

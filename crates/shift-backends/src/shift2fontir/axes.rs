@@ -79,6 +79,27 @@ pub(super) fn normalized_source_location(
         ));
     }
 
+    normalized_design_location(source.location(), shift_axes, ir_axes)
+}
+
+/// Converts a design location on the font's axes to normalized space.
+///
+/// An axis the location omits resolves to its mapped design-space default,
+/// and coordinates on axes outside `shift_axes` are ignored.
+///
+/// # Errors
+///
+/// Returns the conversion error when a coordinate cannot be normalized.
+///
+/// # Panics
+///
+/// Panics when `shift_axes` was not validated or `ir_axes` was not derived from
+/// the same Shift axes.
+pub(super) fn normalized_design_location(
+    location: &shift_font::DesignLocation,
+    shift_axes: &[Axis],
+    ir_axes: &Axes,
+) -> Result<NormalizedLocation, Error> {
     let design_location: DesignLocation = shift_axes
         .iter()
         .map(|axis| {
@@ -86,8 +107,7 @@ pub(super) fn normalized_source_location(
             let ir_axis = ir_axes
                 .get(&tag)
                 .expect("Shift and fontir axes were created together");
-            let value = source
-                .location()
+            let value = location
                 .get(&axis.id())
                 .unwrap_or_else(|| ir_axis.default.to_design(&ir_axis.converter).to_f64());
             (tag, DesignCoord::new(value))

@@ -31,6 +31,17 @@ impl OutlinePen for OnCurvePoints {
 /// The on-curve points the glyph mapped to `character` draws at the
 /// compiled font's default location, through skrifa (which reads `VARC`).
 pub(crate) fn on_curve_points(binary: &[u8], character: char) -> Fixture<Vec<(f32, f32)>> {
+    on_curve_points_at(binary, character, &[])
+}
+
+/// The on-curve points the glyph mapped to `character` draws at `user`,
+/// user-space coordinates by axis tag (the font's `avar` applied), through
+/// skrifa. An axis `user` omits is at its default.
+pub(crate) fn on_curve_points_at(
+    binary: &[u8],
+    character: char,
+    user: &[(&str, f32)],
+) -> Fixture<Vec<(f32, f32)>> {
     let compiled = FontRef::new(binary)?;
     let glyph_id = compiled
         .charmap()
@@ -40,9 +51,10 @@ pub(crate) fn on_curve_points(binary: &[u8], character: char) -> Fixture<Vec<(f3
         .outline_glyphs()
         .get(glyph_id)
         .ok_or("the glyph has no outline")?;
+    let location = compiled.axes().location(user.iter().copied());
     let mut pen = OnCurvePoints::default();
     outline.draw(
-        DrawSettings::unhinted(Size::unscaled(), LocationRef::default()),
+        DrawSettings::unhinted(Size::unscaled(), LocationRef::from(&location)),
         &mut pen,
     )?;
     Ok(pen.0)
