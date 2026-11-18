@@ -74,6 +74,8 @@ export class FontVariation {
   readonly #sets = new WeakMap<InterpolationBasis, number>();
   // non-reactive: each compiled basis's number in this session; a number never changes
   readonly #compiled = new WeakMap<VariationBasis, number>();
+  // non-reactive: each located glyph basis's number in this session; a number never changes
+  readonly #glyphBases = new WeakMap<InterpolationBasis, number>();
   // non-reactive: one read of pure results, checked against everything it was read at
   #weights: ReadWeights | null = null;
 
@@ -183,6 +185,26 @@ export class FontVariation {
     return Float64Array.from(
       this.#variation.variationAt(variation, locationValues(axes, location)),
     );
+  }
+
+  /**
+   * One weight per sample of a glyph's basis whose samples include drawings
+   * located off the font's sources, at a design location on the font's axes
+   * and the glyph's own: shift-font's `InterpolationBasis::weights_at` over
+   * the basis as sent. The basis crosses to the session once.
+   *
+   * @throws When the session cannot evaluate the basis.
+   */
+  glyphBasisWeights(basis: InterpolationBasis, location: DesignAxisLocation): Float64Array {
+    let number = this.#glyphBases.get(basis);
+    if (number === undefined) {
+      number = this.#variation.glyphBasisNumber(basis);
+      this.#glyphBases.set(basis, number);
+    }
+    const values = basis.designNormalization.map(
+      ({ axisId }) => location.get(axisId) ?? Number.NaN,
+    );
+    return Float64Array.from(this.#variation.glyphBasisWeights(number, values));
   }
 
   /** Whether `read` was read at `values` against the font's current inputs. */

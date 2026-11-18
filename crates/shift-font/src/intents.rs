@@ -199,6 +199,7 @@ font_intents! {
         CreateGlyphAxis,
         EditGlyphAxis,
         CreateLocatedGlyphLayer,
+        MaterializeLocatedGlyphLayer,
         SetGlyphLayerLocation,
         DeleteGlyphLayer,
     }
@@ -937,7 +938,18 @@ impl Font {
         source_id: SourceId,
         from_layer_id: LayerId,
     ) -> CoreResult<Vec<LayerId>> {
-        let layer = self.cloned_glyph_layer(layer_id, glyph_id, source_id, from_layer_id)?;
+        if self.layer_id_for_source(glyph_id, source_id).is_some() {
+            return Err(CoreError::DuplicateGlyphLayer {
+                glyph_id,
+                source_id,
+            });
+        }
+        let layer = self.cloned_glyph_layer(
+            layer_id,
+            glyph_id,
+            LayerLocation::at_source(source_id),
+            from_layer_id,
+        )?;
 
         self.insert_glyph_layer(glyph_id, layer)?;
         Ok(vec![layer_id])
@@ -951,18 +963,37 @@ impl Font {
         from_layer_id: LayerId,
         values: &GlyphInterpolationValues,
     ) -> CoreResult<Vec<LayerId>> {
-        let mut layer = self.cloned_glyph_layer(layer_id, glyph_id, source_id, from_layer_id)?;
+        if self.layer_id_for_source(glyph_id, source_id).is_some() {
+            return Err(CoreError::DuplicateGlyphLayer {
+                glyph_id,
+                source_id,
+            });
+        }
+        let layer = self.cloned_glyph_layer(
+            layer_id,
+            glyph_id,
+            LayerLocation::at_source(source_id),
+            from_layer_id,
+        )?;
+        let location = self.require_source(source_id)?.location().clone();
+        self.insert_materialized_layer(glyph_id, layer, &location, values)
+    }
+
+    /// Inserts `layer`, a clone of one of `glyph_id`'s layers drawn at
+    /// `location`, with `values` from the glyph's interpolation there.
+    pub(crate) fn insert_materialized_layer(
+        &mut self,
+        glyph_id: GlyphId,
+        mut layer: GlyphLayer,
+        location: &DesignLocation,
+        values: &GlyphInterpolationValues,
+    ) -> CoreResult<Vec<LayerId>> {
+        let layer_id = layer.id();
         // `values` come from interpolation, which reads the masters with
         // their component locations filled in.
         match self.glyph_interpolation(glyph_id)? {
             Some(interpolation) => {
-                let location = self.require_source(source_id)?.location().clone();
-                layer.apply_read_values(
-                    interpolation.reference_layer(),
-                    values,
-                    self,
-                    &location,
-                )?;
+                layer.apply_read_values(interpolation.reference_layer(), values, self, location)?;
             }
             None => layer.apply_interpolation_values(values)?,
         }
@@ -971,21 +1002,17 @@ impl Font {
         Ok(vec![layer_id])
     }
 
-    fn cloned_glyph_layer(
+    /// A copy of `from_layer_id`, one of `glyph_id`'s layers, with fresh ids,
+    /// placed at `location`.
+    pub(crate) fn cloned_glyph_layer(
         &self,
         layer_id: LayerId,
         glyph_id: GlyphId,
-        source_id: SourceId,
+        location: LayerLocation,
         from_layer_id: LayerId,
     ) -> CoreResult<GlyphLayer> {
         if self.glyph_id_by_layer(layer_id).is_some() {
             return Err(CoreError::DuplicateLayerId(layer_id));
-        }
-        if self.layer_id_for_source(glyph_id, source_id).is_some() {
-            return Err(CoreError::DuplicateGlyphLayer {
-                glyph_id,
-                source_id,
-            });
         }
 
         let from_glyph_id = self.require_layer_owner(from_layer_id)?;
@@ -998,10 +1025,7 @@ impl Font {
         }
 
         let source_layer = self.require_layer(from_layer_id)?;
-        let layer =
-            source_layer.clone_with_fresh_ids(layer_id, LayerLocation::at_source(source_id));
-
-        Ok(layer)
+        Ok(source_layer.clone_with_fresh_ids(layer_id, location))
     }
 
     fn apply_update_glyph(

@@ -15,11 +15,11 @@ use crate::{
     Font as IrFont, FontMetadata as IrFontMetadata, FontMetrics as IrFontMetrics, GlyphId,
     GlyphInterpolation as IrGlyphInterpolation, GlyphLayer, GlyphName,
     GlyphProjection as IrGlyphProjection, GlyphSourceComponents as IrGlyphSourceComponents,
-    GuidelineId, InterpolationBasis as IrInterpolationBasis, KerningPosition as IrKerningPosition,
-    LayerId, Location as IrLocation, MetricDefinition as IrMetricDefinition, MetricId,
-    MetricKind as IrMetricKind, NamedInstance as IrNamedInstance, NamedInstanceId,
-    Point as IrPoint, PointId, PointType as IrPointType, SourceId,
-    SourceMetricField as IrSourceMetricField,
+    GuidelineId, InterpolationBasis as IrInterpolationBasis, InterpolationSample,
+    KerningPosition as IrKerningPosition, LayerId, Location as IrLocation,
+    MetricDefinition as IrMetricDefinition, MetricId, MetricKind as IrMetricKind,
+    NamedInstance as IrNamedInstance, NamedInstanceId, Point as IrPoint, PointId,
+    PointType as IrPointType, SourceId, SourceMetricField as IrSourceMetricField,
     SourceMetricInterpolation as IrSourceMetricInterpolation, VariationBasis as IrVariationBasis,
 };
 use serde::{Deserialize, Serialize};
@@ -268,8 +268,35 @@ impl GlyphState {
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphLayerSnapshot {
     pub glyph_id: GlyphId,
+    /// The source the drawing sits on or, for one located off the sources,
+    /// the source a per-source read of it uses (`Font::reading_source_id`).
     pub source_id: SourceId,
+    /// For a drawing located off the font's sources, the source its
+    /// coordinates are laid over; `None` without one, or on a source.
+    pub base_source_id: Option<SourceId>,
+    /// For a drawing located off the font's sources, its coordinates on font
+    /// axes and the glyph's own, each in its axis's units; `None` exactly on
+    /// `source_id`.
+    pub coordinates: Option<Location>,
     pub state: GlyphState,
+}
+
+impl GlyphLayerSnapshot {
+    /// `layer` of `glyph_id` as the editor reads it, by the source a
+    /// per-source read of it uses.
+    pub fn new(glyph_id: GlyphId, source_id: SourceId, layer: &GlyphLayer) -> Self {
+        let location = layer.location();
+        let coordinates = location
+            .off_source_coordinates()
+            .map(|coordinates| Location::from(coordinates.as_untyped()));
+        Self {
+            glyph_id,
+            source_id,
+            base_source_id: location.off_source_base_id(),
+            coordinates,
+            state: GlyphState::from_layer(layer),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -454,11 +481,29 @@ impl From<&crate::DesignNormalization> for DesignNormalization {
     }
 }
 
+impl From<&DesignNormalization> for crate::DesignNormalization {
+    fn from(normalization: &DesignNormalization) -> Self {
+        Self::new(
+            normalization.axis_id,
+            crate::AxisRange {
+                minimum: normalization.minimum,
+                default: normalization.default,
+                maximum: normalization.maximum,
+            },
+        )
+    }
+}
+
 /// Coordinate-independent interpolation weights for an ordered source set.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct InterpolationBasis {
+    /// The font source of each sample, in sample order. Empty for a glyph's
+    /// basis whose samples include drawings located off the font's sources:
+    /// the editor evaluates such a basis as sent, over its
+    /// `design_normalization` axes (the glyph's own included), and its
+    /// [`GlyphInterpolation::sources`] name each sample.
     pub source_ids: Vec<SourceId>,
     pub basis: VariationBasis,
     pub design_normalization: Vec<DesignNormalization>,
@@ -504,6 +549,23 @@ impl InterpolationBasis {
                 .collect(),
         })
     }
+
+    /// A glyph's `basis` as the editor receives it: over its font sources,
+    /// or, when a sample is a drawing located off them, with no source ids.
+    pub fn of_glyph(basis: &IrInterpolationBasis) -> Self {
+        if let Some(basis) = Self::over_sources(basis) {
+            return basis;
+        }
+        Self {
+            source_ids: Vec::new(),
+            basis: basis.variation_basis().into(),
+            design_normalization: basis
+                .design_normalization()
+                .iter()
+                .map(Into::into)
+                .collect(),
+        }
+    }
 }
 
 /// Initial numeric values for one compatible glyph source.
@@ -511,7 +573,11 @@ impl InterpolationBasis {
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct GlyphSourceValues {
-    pub source_id: SourceId,
+    /// The font source these values are drawn on; `None` for a drawing
+    /// located off the sources, which `layer_id` names.
+    pub source_id: Option<SourceId>,
+    /// The located drawing these values are drawn at; `None` on a source.
+    pub layer_id: Option<LayerId>,
     #[cfg_attr(feature = "pack", pack(numbers))]
     pub values: Vec<f64>,
 }
@@ -533,25 +599,28 @@ pub struct GlyphVariation {
     pub basis: VariationBasis,
 }
 
-impl GlyphInterpolation {
-    /// `interpolation` as the editor receives it; `None` when a sample is a
-    /// drawing located off the font's sources (see
-    /// [`InterpolationBasis::over_sources`]). The editor then draws the glyph
-    /// from its fallback and exact source shapes.
-    pub fn over_sources(interpolation: &IrGlyphInterpolation) -> Option<Self> {
-        Some(Self {
-            basis: InterpolationBasis::over_sources(interpolation.basis())?,
+impl From<&IrGlyphInterpolation> for GlyphInterpolation {
+    /// `interpolation` as the editor receives it: each sample named by its
+    /// source, or by its layer when it is a drawing located off the sources.
+    fn from(interpolation: &IrGlyphInterpolation) -> Self {
+        Self {
+            basis: InterpolationBasis::of_glyph(interpolation.basis()),
             sources: interpolation
                 .sources()
                 .iter()
                 .map(|source| {
-                    Some(GlyphSourceValues {
-                        source_id: source.source_id()?,
+                    let (source_id, layer_id) = match source.sample() {
+                        InterpolationSample::Source(source_id) => (Some(source_id), None),
+                        InterpolationSample::Layer(layer_id) => (None, Some(layer_id)),
+                    };
+                    GlyphSourceValues {
+                        source_id,
+                        layer_id,
                         values: source.values().as_slice().to_vec(),
-                    })
+                    }
                 })
-                .collect::<Option<_>>()?,
-        })
+                .collect(),
+        }
     }
 }
 
@@ -649,9 +718,7 @@ impl From<&IrGlyphProjection> for GlyphProjection {
         Self {
             glyph_id: projection.glyph_id(),
             fallback: GlyphLayerShape::from(projection.fallback()),
-            interpolation: projection
-                .interpolation()
-                .and_then(GlyphInterpolation::over_sources),
+            interpolation: projection.interpolation().map(Into::into),
             decomposition: projection
                 .decomposition()
                 .and_then(InterpolationBasis::over_sources),
@@ -881,7 +948,7 @@ impl GlyphChangedEntities {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Location {

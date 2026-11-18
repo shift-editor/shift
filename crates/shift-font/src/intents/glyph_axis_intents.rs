@@ -142,6 +142,49 @@ impl FontLevelIntent for CreateLocatedGlyphLayer {
     }
 }
 
+/// Creates one drawing of a glyph at a location with what the glyph draws
+/// there: a copy of `from_layer_id`, one of its drawings, with fresh ids and
+/// `values`, the glyph as interpolated at that location. The editor's "Add
+/// drawing here" makes a drawing this way, so it starts from the outline
+/// shown.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct MaterializeLocatedGlyphLayer {
+    /// The drawing and where it sits.
+    pub layer: CreateLocatedGlyphLayer,
+    pub from_layer_id: LayerId,
+    pub values: GlyphInterpolationValues,
+}
+
+impl FontLevelIntent for MaterializeLocatedGlyphLayer {
+    fn required_layer_ids(&self, _font: &Font) -> Vec<LayerId> {
+        vec![self.from_layer_id]
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)> {
+        let Self {
+            layer:
+                CreateLocatedGlyphLayer {
+                    layer_id,
+                    glyph_id,
+                    base_source_id,
+                    coordinates,
+                },
+            from_layer_id,
+            values,
+        } = self;
+        coordinates
+            .iter()
+            .map(|(_, value)| *value)
+            .require_finite(Coordinates::LayerLocation)?;
+        let location = LayerLocation::new(*base_source_id, coordinates.clone());
+        let layer = font.cloned_glyph_layer(*layer_id, *glyph_id, location, *from_layer_id)?;
+        let design = font.layer_design_location(&layer)?;
+        let layer_ids = font.insert_materialized_layer(*glyph_id, layer, &design, values)?;
+        Ok((layer_ids, Vec::new()))
+    }
+}
+
 /// Moves one drawing to a new location, keeping its content and identity.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]

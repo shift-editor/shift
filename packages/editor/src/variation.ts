@@ -14,3 +14,5 @@ export {
 export { Designspace } from "./lib/variation/Designspace";
 export { independentMappingFor, withIndependentMapping } from "./lib/variation/independentMapping";
 export type { DesignAxisLocation, ExternalAxisLocation } from "./types/variation";
+export { drawingName, drawingPlacement, withGlyphLocation } from "./lib/editor/glyphDrawings";
+export { GlyphSpace } from "./lib/model/GlyphSpace";

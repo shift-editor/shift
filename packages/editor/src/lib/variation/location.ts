@@ -1,4 +1,11 @@
-import { asAxisId, type Axis, type AxisId, type Location } from "@shift/types";
+import {
+  asAxisId,
+  type Axis,
+  type AxisId,
+  type GlyphLayerRecord,
+  type LayerPlacement,
+  type Location,
+} from "@shift/types";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 
 type AnyAxisLocation = ExternalAxisLocation | DesignAxisLocation;
@@ -112,4 +119,28 @@ export function designAxisLocationDistanceSquared(
     total += delta * delta;
   }
   return total;
+}
+
+/**
+ * Where the drawing a layer record names sits off the font's sources; null
+ * for one exactly on its source.
+ */
+export function layerPlacementOf(record: GlyphLayerRecord): LayerPlacement | null {
+  const coordinates = record.coordinates ?? null;
+  return coordinates ? { baseSourceId: record.baseSourceId ?? null, coordinates } : null;
+}
+
+/** Whether two drawings' placements name the same base source and coordinates; null is on a source. */
+export function layerPlacementsEqual(
+  left: LayerPlacement | null,
+  right: LayerPlacement | null,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  if ((left.baseSourceId ?? null) !== (right.baseSourceId ?? null)) return false;
+
+  const leftValues = designAxisLocationFromLocation(left.coordinates);
+  const rightValues = designAxisLocationFromLocation(right.coordinates);
+  if (leftValues.size !== rightValues.size) return false;
+  return leftValues.entries().every(([axisId, value]) => rightValues.get(axisId) === value);
 }

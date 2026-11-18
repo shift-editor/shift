@@ -41,7 +41,7 @@ export const ObjectsPanel = () => {
     const cache = new ObjectTreeCache();
     return computed((): GlyphObjects | null => {
       const node = editor.scene.cell.value.nodes.find((candidate) => candidate.kind === "glyph");
-      const externalLocation = editor.externalLocationCell.value;
+      const editLocation = editor.editLocationCell.value;
       const activeSourceId = editor.activeSourceIdCell.value;
       if (!node) return NO_OBJECTS;
 
@@ -50,10 +50,10 @@ export const ObjectsPanel = () => {
 
       const layer = activeSourceId
         ? glyph.layerForSource(activeSourceId)
-        : glyph.layerAt(externalLocation);
+        : glyph.layerAt(editLocation);
       if (layer) track(layer.geometryCell);
 
-      const tree = createObjectTree(layer?.geometry ?? glyph.geometryAt(externalLocation), cache);
+      const tree = createObjectTree(layer?.geometry ?? glyph.geometryAt(editLocation), cache);
 
       return {
         name: glyph.name,
@@ -70,7 +70,7 @@ export const ObjectsPanel = () => {
         const glyph = node ? editor.glyphForId(node.glyphId) : null;
         if (!glyph) return undefined;
 
-        const view = glyph.renderModelAt(editor.externalLocationCell, editor.activeSourceIdCell);
+        const view = glyph.renderModelAt(editor.editLocationCell, editor.activeSourceIdCell);
         const placed = view.contoursCell.value;
         for (const contour of placed) contour.trackShape();
         const metrics = editor.font.defaultSourceMetricsCell.value;

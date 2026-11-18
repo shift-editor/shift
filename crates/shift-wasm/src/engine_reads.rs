@@ -37,8 +37,9 @@ use shift_text::layout::{LayoutError, TextLayout};
 
 pub use crate::page_layout::{NodeBox, PageLayout, PageLayoutError, PageLayoutRequest, RunLines};
 use shift_font::wire::{
-    AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphSnapshot, KerningSnapshot,
-    MetricDefinition, NamedInstance, SourceMetricsInterpolationSnapshot, VariationBasis,
+    AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphSnapshot, InterpolationBasis,
+    KerningSnapshot, MetricDefinition, NamedInstance, SourceMetricsInterpolationSnapshot,
+    VariationBasis,
 };
 pub use shift_text::shape::{FeatureDefault, FeatureGroup, FontFeature};
 
@@ -225,6 +226,39 @@ pub trait EngineReads {
         &self,
         variation: usize,
         location: Vec<f64>,
+    ) -> Result<Vec<f64>, CompiledVariationError>;
+    /// Interns a glyph's interpolation basis whose samples include drawings
+    /// located off the font's sources (one sent with `samples`), for
+    /// [`Self::glyph_basis_weights`], and returns its number. A number stays
+    /// the basis's for the session's life.
+    fn glyph_basis_number(&self, basis: InterpolationBasis) -> usize;
+    /// One weight per sample of the glyph basis interned as `basis`, at a
+    /// design location given as numbers in the order of the basis's design
+    /// normalization (the font's axes, then the glyph's own), NaN for an
+    /// axis at its default: `InterpolationBasis::weights_at`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CompiledVariationError::NotInterned`] for a number the
+    /// session never gave, and [`CompiledVariationError::Unevaluable`] when
+    /// a region names an axis the basis's normalization lacks.
+    fn glyph_basis_weights(
+        &self,
+        basis: usize,
+        location: Vec<f64>,
+    ) -> Result<Vec<f64>, CompiledVariationError>;
+    /// The weights of the glyph basis interned as `basis` at an external
+    /// location in the font's axis order, mapped once through the font's axis
+    /// mappings, with the glyph's own axes at their defaults: a Slug atlas's
+    /// weight set for a glyph with drawings off the font's sources.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::glyph_basis_weights`].
+    fn glyph_basis_weights_at_external(
+        &self,
+        basis: usize,
+        external: Vec<f64>,
     ) -> Result<Vec<f64>, CompiledVariationError>;
     /// The document's pages, in list order.
     fn scene_pages(&self) -> Vec<SceneNode>;
@@ -471,7 +505,7 @@ pub struct SourceSetWeights {
 }
 
 #[cfg(feature = "engine")]
-pub(crate) use exports::{CompiledVariations, FontVariation, InternedIds};
+pub(crate) use exports::{CompiledVariations, FontVariation, GlyphBases, InternedIds};
 
 #[cfg(feature = "engine")]
 mod exports {
@@ -486,11 +520,12 @@ mod exports {
     use shift_font::linked_metrics::SideLink;
     use shift_font::naming::new_anchor_name;
     use shift_font::wire::values::{self, WireParse};
-    use shift_font::wire::{self as wire, GlyphLayerSnapshot, GlyphState};
+    use shift_font::wire::{self as wire, GlyphLayerSnapshot};
     use shift_font::{
-        AxisMapping, AxisMappingBasis, AxisRole, DesignLocation, ExternalLocation, Font,
-        FontChangeImpact, FontCopyId, Glyph, GlyphId, GlyphRecords, InterpolationBasis, Kerning,
-        KerningSide, Location, MissingKerningOrigin, ResolvedKerning, SourceId, VariationBasis,
+        AxisMapping, AxisMappingBasis, AxisRole, DesignLocation, DesignNormalization,
+        ExternalLocation, Font, FontChangeImpact, FontCopyId, Glyph, GlyphId, GlyphRecords,
+        InterpolationBasis, Kerning, KerningSide, Location, MissingKerningOrigin, ResolvedKerning,
+        SourceId, VariationBasis,
     };
     use shift_text::layout::FeatureSetting;
     use wasm_bindgen::prelude::*;
@@ -529,6 +564,69 @@ mod exports {
     /// loads and evaluated by number every frame after.
     #[derive(Default)]
     pub(crate) struct CompiledVariations(RefCell<Vec<VariationBasis>>);
+
+    /// The glyph bases with located samples a session interned, by number,
+    /// each with the design normalization it is evaluated over.
+    #[derive(Default)]
+    pub(crate) struct GlyphBases(RefCell<Vec<(VariationBasis, Vec<DesignNormalization>)>>);
+
+    impl GlyphBases {
+        /// Keeps `basis` and returns its number.
+        fn intern(&self, basis: &super::InterpolationBasis) -> usize {
+            let mut bases = self.0.borrow_mut();
+            bases.push((
+                basis.basis.clone().into(),
+                basis.design_normalization.iter().map(Into::into).collect(),
+            ));
+            bases.len() - 1
+        }
+
+        /// The weights of the basis numbered `number` at `location`, as
+        /// numbers in its normalization's axis order.
+        ///
+        /// # Errors
+        ///
+        /// As [`EngineReads::glyph_basis_weights`].
+        fn weights(
+            &self,
+            number: usize,
+            location: &[f64],
+        ) -> Result<Vec<f64>, CompiledVariationError> {
+            let bases = self.0.borrow();
+            let (_, normalization) = bases
+                .get(number)
+                .ok_or(CompiledVariationError::NotInterned { variation: number })?;
+            let location: Location = normalization
+                .iter()
+                .zip(location)
+                .filter(|(_, value)| !value.is_nan())
+                .map(|(normalization, value)| (normalization.axis_id(), *value))
+                .collect();
+            drop(bases);
+            self.weights_at(number, &location)
+        }
+
+        /// The weights of the basis numbered `number` at `location`, by axis id.
+        ///
+        /// # Errors
+        ///
+        /// As [`EngineReads::glyph_basis_weights`].
+        fn weights_at(
+            &self,
+            number: usize,
+            location: &Location,
+        ) -> Result<Vec<f64>, CompiledVariationError> {
+            let bases = self.0.borrow();
+            let (basis, normalization) = bases
+                .get(number)
+                .ok_or(CompiledVariationError::NotInterned { variation: number })?;
+            basis
+                .evaluate(location, &[], Some(normalization))
+                .map_err(|error| CompiledVariationError::Unevaluable {
+                    detail: error.to_string(),
+                })
+        }
+    }
 
     impl CompiledVariations {
         /// Keeps `basis` and returns its number.
@@ -1065,6 +1163,29 @@ mod exports {
             external_values(axes, mappings, &base.as_untyped().values_in(axes))
         }
 
+        fn glyph_basis_number(&self, basis: super::InterpolationBasis) -> usize {
+            self.glyph_bases.intern(&basis)
+        }
+
+        fn glyph_basis_weights(
+            &self,
+            basis: usize,
+            location: Vec<f64>,
+        ) -> Result<Vec<f64>, CompiledVariationError> {
+            self.glyph_bases.weights(basis, &location)
+        }
+
+        fn glyph_basis_weights_at_external(
+            &self,
+            basis: usize,
+            external: Vec<f64>,
+        ) -> Result<Vec<f64>, CompiledVariationError> {
+            let font = self.session.font();
+            let design = design_values(font.axes(), &self.variation().mappings, &external);
+            self.glyph_bases
+                .weights_at(basis, &to_location(font.axes(), &design))
+        }
+
         fn scene_pages(&self) -> Vec<SceneNode> {
             self.session.scene().pages().cloned().collect()
         }
@@ -1238,13 +1359,9 @@ mod exports {
                     detail: error.to_string(),
                 }
             })?;
-            let layers = font
-                .masters_with_layers(glyph)
-                .map(|(source, layer)| GlyphLayerSnapshot {
-                    glyph_id,
-                    source_id: source.id(),
-                    state: GlyphState::from_layer(layer),
-                })
+            let layers = glyph
+                .editor_drawings(font)
+                .map(|(source_id, layer)| GlyphLayerSnapshot::new(glyph_id, source_id, layer))
                 .collect();
             Ok(GlyphSnapshot {
                 glyph_id,

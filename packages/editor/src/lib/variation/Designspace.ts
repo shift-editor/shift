@@ -177,6 +177,22 @@ export class Designspace {
   }
 
   /**
+   * One weight per sample of `basis` at a design location, for any glyph
+   * basis: over the font's sources through {@link interpolationWeights}, or,
+   * for one whose samples include drawings located off them, the basis as
+   * sent evaluated at `location`'s values on the font's axes and the glyph's
+   * own.
+   *
+   * @returns null when the font's sources give a source-only basis no model.
+   */
+  glyphWeights(basis: InterpolationBasis, location: DesignAxisLocation): Float64Array | null {
+    if (basis.sourceIds.length > 0) return this.interpolationWeights(basis, location);
+
+    track(this.#axesCell);
+    return this.#variation().glyphBasisWeights(basis, location);
+  }
+
+  /**
    * A compiled variation basis's values at a design location, as a compiled
    * font's glyph carries its deltas.
    *

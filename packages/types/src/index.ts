@@ -95,6 +95,7 @@ export {
 export type {
   AxisDefinition,
   AxisKindName,
+  LayerPlacement,
   NamedInstanceDefinition,
   SourceMetrics,
 } from "./domain";
@@ -248,6 +249,9 @@ export type {
   KerningSide,
   KerningSnapshot,
   KerningValueEdit,
+  AxisRange,
+  GlyphAxisEdit,
+  MaterializeLocatedGlyphLayer,
   LayerReplaced,
   Location,
   NamedInstance,

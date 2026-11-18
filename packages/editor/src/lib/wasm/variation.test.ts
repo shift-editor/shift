@@ -34,6 +34,8 @@ const released: EngineVariation = {
   componentBaseLocation: () => [],
   variationNumber: () => 0,
   variationAt: () => [],
+  glyphBasisNumber: () => 0,
+  glyphBasisWeights: () => [],
 };
 
 describe("the engine's variation reader on a released session", () => {

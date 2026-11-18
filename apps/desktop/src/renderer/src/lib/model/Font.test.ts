@@ -32,6 +32,7 @@ const SNAPSHOT: WorkspaceSnapshot = {
       name: "A" as GlyphName,
       unicodes: [65 as Unicode],
       componentBaseGlyphIds: [],
+      axes: [],
       layers: [],
       mark: false,
       nonspacingMark: false,
@@ -147,6 +148,7 @@ describe("Font answers directory and source queries", () => {
     name: name as GlyphName,
     unicodes: [],
     componentBaseGlyphIds: [],
+    axes: [],
     layers: [],
     mark: false,
     nonspacingMark: false,
@@ -311,8 +313,12 @@ describe("font-level intents make the font variable", () => {
       },
     ]);
 
-    expect(applied.next?.glyphChanges?.updated[0]?.layers).toEqual([{ id: layerId, sourceId }]);
-    expect(stack.font.recordForId(glyphId)?.layers).toEqual([{ id: layerId, sourceId }]);
+    expect(applied.next?.glyphChanges?.updated[0]?.layers).toEqual([
+      { id: layerId, sourceId, baseSourceId: null, coordinates: null },
+    ]);
+    expect(stack.font.recordForId(glyphId)?.layers).toEqual([
+      { id: layerId, sourceId, baseSourceId: null, coordinates: null },
+    ]);
   });
 
   it("projects mapping edits and evaluates them in Rust", async () => {

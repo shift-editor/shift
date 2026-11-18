@@ -20,7 +20,7 @@ export class BendCurve implements SelectBehavior {
     if (!objectIsKindOf(object, "segment")) return false;
 
     const layer = object.layer;
-    if (!layer || layer.sourceId !== ctx.editor.activeSourceId) return false;
+    if (!layer || !ctx.editor.isEditingLayer(layer)) return false;
 
     const segment = layer.segment(object.segmentId);
     const cubic = segment?.asCubic();

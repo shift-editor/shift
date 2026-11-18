@@ -8,6 +8,7 @@ import type {
   GlyphId,
   GlyphName,
   GlyphSnapshot,
+  InterpolationBasis,
   KerningGroupId,
   KerningSide,
   LayerId,
@@ -417,12 +418,30 @@ export class EngineSession {
   ): readonly number[] | null {
     let numbers = this.#weightSetNumbers.get(sets);
     if (!numbers) {
-      numbers = sets.map((set) => this.sourceSetNumber(set.basis.sourceIds));
+      // A glyph's basis with drawings off the font's sources names no source:
+      // it is interned as sent and read on its own, its glyph axes at their defaults.
+      numbers = sets.map((set) =>
+        set.basis.sourceIds.length > 0
+          ? this.sourceSetNumber(set.basis.sourceIds)
+          : this.glyphBasisNumber(set.basis),
+      );
       this.#weightSetNumbers.set(sets, numbers);
     }
-    const values = this.#reads.atlasWeights(numbers, external);
-    if (!values) return null;
+    const sourceSets = numbers.filter((_, index) => sets[index]!.basis.sourceIds.length > 0);
+    const sourceValues = this.#reads.atlasWeights(sourceSets, external);
+    if (!sourceValues) return null;
 
+    const values: number[] = [];
+    let next = 0;
+    for (const [index, set] of sets.entries()) {
+      if (set.basis.sourceIds.length > 0) {
+        const count = set.basis.sourceIds.length;
+        values.push(...sourceValues.slice(next, next + count));
+        next += count;
+        continue;
+      }
+      values.push(...this.#reads.glyphBasisWeightsAtExternal(numbers[index]!, external));
+    }
     return placeAtlasWeights(sets, weightCount, values);
   }
 
@@ -446,6 +465,26 @@ export class EngineSession {
    */
   variationAt(variation: number, location: readonly number[]): readonly number[] {
     return this.#reads.variationAt(variation, location);
+  }
+
+  /**
+   * Interns a glyph's interpolation basis whose samples include drawings
+   * located off the font's sources, and returns its number for
+   * {@link glyphBasisWeights}; a number stays the basis's for the session's life.
+   */
+  glyphBasisNumber(basis: InterpolationBasis): number {
+    return this.#reads.glyphBasisNumber(basis);
+  }
+
+  /**
+   * One weight per sample of the glyph basis interned as `basis`, at a design
+   * location: shift-font's `InterpolationBasis::weights_at`.
+   *
+   * @param location - Design coordinates in the basis's normalization order, NaN for an axis default.
+   * @throws For a number this session never gave, or a basis it cannot evaluate.
+   */
+  glyphBasisWeights(basis: number, location: readonly number[]): readonly number[] {
+    return this.#reads.glyphBasisWeights(basis, location);
   }
 
   /**

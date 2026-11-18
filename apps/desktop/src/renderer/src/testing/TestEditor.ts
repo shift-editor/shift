@@ -559,7 +559,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
     return (
       this.glyphForId(node.glyphId)?.renderModelAt(
-        this.externalLocationCell,
+        this.editLocationCell,
         this.activeSourceIdCell,
       ) ?? null
     );

@@ -52,7 +52,12 @@ describe("Bridge", () => {
       },
     ]);
     const record = applied.next.glyphChanges.updated.find((glyph) => glyph.id === glyphId);
-    expect(record.layers).toContainEqual({ id: layerId, sourceId: defaultSourceId() });
+    expect(record.layers).toContainEqual({
+      id: layerId,
+      sourceId: defaultSourceId(),
+      baseSourceId: null,
+      coordinates: null,
+    });
     return layerId;
   }
 
@@ -144,7 +149,9 @@ describe("Bridge", () => {
     const layerId = createGlyphLayer();
 
     const glyphs = bridge.workspace.getGlyphs();
-    expect(glyphs[0].layers).toEqual([{ id: layerId, sourceId: defaultSourceId() }]);
+    expect(glyphs[0].layers).toEqual([
+      { id: layerId, sourceId: defaultSourceId(), baseSourceId: null, coordinates: null },
+    ]);
   });
 
   it("exports the live workspace font into a folder, naming the file itself", async () => {

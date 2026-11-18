@@ -40,6 +40,8 @@ import type {
   MarkColor,
   LayerScope,
   SidebearingEdit,
+  GlyphAxisEdit,
+  AxisRange,
 } from "@shift/types";
 import {
   mintAxisId,
@@ -49,7 +51,7 @@ import {
   mintNamedInstanceId,
   mintSourceId,
 } from "@shift/types";
-import type { Axis } from "./Axis";
+import { Axis } from "./Axis";
 import {
   batch,
   computed,
@@ -89,6 +91,7 @@ import {
   type KerningSideId,
 } from "./Kerning";
 import { KerningEdit } from "./KerningEdit";
+import { layerPlacementOf } from "../variation/location";
 import {
   designAxisLocationFromLocation,
   locationFromDesignAxisLocation,
@@ -928,7 +931,8 @@ export class Font {
       name: finalName,
       unicodes,
       componentBaseGlyphIds: [],
-      layers: [{ id: layerId, sourceId }],
+      axes: [],
+      layers: [{ id: layerId, sourceId, baseSourceId: null, coordinates: null }],
       mark: false,
       nonspacingMark: false,
     };
@@ -1099,6 +1103,7 @@ export class Font {
       componentGlyphs: new Map(),
       designspace: this.#designspace,
       projectionCell: this.#store.projectionCell(entry.id),
+      axesCell: this.#glyphAxesCell(glyphId),
       defaultSourceId: this.defaultSource.id,
       anchorCategory: (glyphId) => {
         // Called from render-model computeds: a re-read glyph directory re-runs them.
@@ -1106,6 +1111,17 @@ export class Font {
         const record = this.#directoryCell.peek().recordForId(glyphId);
         return { mark: record?.mark ?? false, ligature: record?.ligature ?? null };
       },
+    });
+  }
+
+  /** A glyph's own axes as its directory record lists them, kept while the record's list is. */
+  #glyphAxesCell(glyphId: GlyphId): Signal<readonly Axis[]> {
+    const recordsCell = computed(
+      () => this.#directoryCell.value.recordForId(glyphId)?.axes ?? NO_AXES,
+      { name: "font.glyphAxisRecords" },
+    );
+    return computed(() => recordsCell.value.map((record) => new Axis(record)), {
+      name: "font.glyphAxes",
     });
   }
 
@@ -1120,14 +1136,16 @@ export class Font {
       const state = stateCell.peek();
       if (!source || !state) return null;
 
+      const placement = layerPlacementOf(layerRecord);
       const existingLayer = glyph?.layerForId(layerRecord.id);
       if (existingLayer && existingLayer.geometryCell === state.geometryCell) {
         existingLayer.replaceSource(source);
+        existingLayer.replacePlacement(placement);
         layers.push(existingLayer);
         continue;
       }
 
-      layers.push(new GlyphLayer(source, this.#editCoordinator, state, this.#edits));
+      layers.push(new GlyphLayer(source, this.#editCoordinator, state, this.#edits, placement));
     }
 
     return layers;
@@ -1956,6 +1974,74 @@ export class Font {
       kind: "deleteNamedInstance",
       deleteNamedInstance: { instanceId },
     });
+  }
+
+  /**
+   * Adds an axis of its own to one glyph, such as Spread on `dot`, as one
+   * undoable edit. Without a tag, the engine makes one from the name.
+   *
+   * @param range - In the axis's own units.
+   * @returns The id the axis was given.
+   * @throws {Error} when the engine refuses it, as for a tag already in use.
+   */
+  async createGlyphAxis(
+    glyphId: GlyphId,
+    axis: { name: string; tag: string | null; range: AxisRange },
+  ): Promise<AxisId> {
+    const axisId = mintAxisId();
+    await this.editCoordinator.apply(
+      [{ kind: "createGlyphAxis", createGlyphAxis: { glyphId, axisId, ...axis } }],
+      "Add Glyph Axis",
+    );
+    return axisId;
+  }
+
+  /**
+   * Renames, retags, changes the range of, rescales or removes one glyph's
+   * axis, as one undoable edit.
+   *
+   * @throws {Error} when the engine refuses it: a range that strands stored
+   * values, or removing an axis a drawing or component still sets.
+   */
+  async editGlyphAxis(axisId: AxisId, edit: GlyphAxisEdit): Promise<void> {
+    await this.editCoordinator.apply(
+      [{ kind: "editGlyphAxis", editGlyphAxis: { axisId, edit } }],
+      "Edit Glyph Axis",
+    );
+  }
+
+  /**
+   * Adds a drawing of a glyph at a location off the font's sources, starting
+   * from what the glyph draws there: `fromLayerId`'s structure with `values`.
+   *
+   * @param baseSourceId - The source the coordinates are laid over, or null
+   *   for coordinates alone, every axis they don't name at its default.
+   * @param coordinates - Values on font axes (design units) and the glyph's
+   *   own axes (their own units).
+   * @returns The minted layer id submitted to the workspace.
+   */
+  materializeLocatedGlyphLayer(
+    glyphId: GlyphId,
+    baseSourceId: SourceId | null,
+    coordinates: Location,
+    fromLayerId: LayerId,
+    values: Float64Array,
+  ): LayerId {
+    const layerId = mintLayerId();
+    this.editCoordinator.push({
+      kind: "materializeLocatedGlyphLayer",
+      materializeLocatedGlyphLayer: {
+        layer: { layerId, glyphId, baseSourceId, coordinates },
+        fromLayerId,
+        values,
+      },
+    });
+    return layerId;
+  }
+
+  /** Removes one drawing of a glyph, wherever it sits. */
+  deleteGlyphLayer(layerId: LayerId): void {
+    this.editCoordinator.push({ kind: "deleteGlyphLayer", deleteGlyphLayer: { layerId } });
   }
 
   /** @knipclassignore — used by VariationPanel component */

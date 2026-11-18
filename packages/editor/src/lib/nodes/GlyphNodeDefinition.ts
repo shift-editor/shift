@@ -140,7 +140,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const glyph = this.editor.glyphForId(node.glyphId);
     if (!glyph) return [];
 
-    const geometry = glyph.geometryAt(this.editor.externalLocation);
+    const geometry = glyph.geometryAt(this.editor.editLocation);
     const localRect = Bounds.toRect(rect);
     const ids: SelectableId[] = [];
     for (const point of geometry.allPoints) {
@@ -301,7 +301,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     return (
       this.editor
         .glyphForId(node.glyphId)
-        ?.renderModelAt(this.editor.externalLocationCell, this.editor.activeSourceIdCell) ?? null
+        ?.renderModelAt(this.editor.editLocationCell, this.editor.activeSourceIdCell) ?? null
     );
   }
 
@@ -498,10 +498,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     if (this.editor.toolIdCell.peek() !== "select") return;
 
     track(this.editor.activeSourceIdCell);
-    const sourceId = this.editor.activeSourceIdCell.peek();
-    if (!sourceId) return;
-
-    const layer = this.editor.layerForGlyph(node.glyphId, sourceId);
+    const layer = this.editor.editableLayer(node);
     if (!layer) return;
 
     track(layer.editBaseOutlineCell);
@@ -551,8 +548,10 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     track(this.editor.font.committedRevisionCell);
     track(this.editor.activeSourceIdCell);
     track(this.editor.externalLocationCell);
+    track(this.editor.activeDrawingCell);
     const interpolated =
       this.editor.activeSourceId === null &&
+      this.editor.activeDrawing === null &&
       this.editor.font.sourceAt(this.editor.externalLocation) === null;
 
     track(view.rootContoursCell);

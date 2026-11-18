@@ -11,6 +11,7 @@ import type {
   GlyphRecord,
   GlyphSnapshot,
   GlyphSnapshotRequest,
+  InterpolationBasis,
   LayerId,
   LayerRead,
   Location,
@@ -343,6 +344,20 @@ export interface EngineVariation {
    * @throws For a number the session never gave, or a basis it cannot evaluate.
    */
   variationAt(variation: number, location: readonly number[]): readonly number[];
+  /**
+   * The number the session interned a glyph's interpolation basis as, one
+   * whose samples include drawings located off the font's sources (it names
+   * no source); intern each basis once.
+   */
+  glyphBasisNumber(basis: InterpolationBasis): number;
+  /**
+   * One weight per sample of the glyph basis interned as `basis`, at a
+   * design location in the order of the basis's design normalization (the
+   * font's axes, then the glyph's own), NaN for an axis default.
+   *
+   * @throws For a number the session never gave, or a basis it cannot evaluate.
+   */
+  glyphBasisWeights(basis: number, location: readonly number[]): readonly number[];
 }
 
 /**
