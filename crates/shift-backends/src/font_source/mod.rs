@@ -10,7 +10,7 @@ mod types;
 
 pub use crate::formats::designspace::DesignspaceFont;
 pub use crate::formats::glyphs::GlyphsFont;
-pub use crate::formats::opentype::{OpenTypeFont, build_binary_atlas_page};
+pub use crate::formats::opentype::{DrawnGlyph, OpenTypeFont, build_binary_atlas_page};
 pub use crate::formats::ufo::UfoFont;
 pub use atlas::{SourceAtlasDescriptor, SourceAtlasError, SourceAtlasPage};
 pub use authored::{AuthoredReadError, AuthoredSource, OpenedAuthoredSource};

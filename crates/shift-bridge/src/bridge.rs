@@ -3,8 +3,7 @@ use crate::input::parse_id_list;
 use crate::reply::{PackedReply, answer};
 use crate::wire_napi::IntoEach;
 use crate::wire_napi::{
-  self, NapiGlyphPreview, NapiGlyphProjection, NapiGlyphSnapshot, NapiGlyphSnapshotRequest,
-  NapiLayerRead,
+  self, NapiGlyphProjection, NapiGlyphSnapshot, NapiGlyphSnapshotRequest, NapiLayerRead,
 };
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
@@ -16,7 +15,6 @@ use shift_backends::{
   GlyphProjection as SourceGlyphProjection, GlyphShape as SourceGlyphShape, OpenedFont,
   SourceAtlasDescriptor, SourceIds, VariationAxisKind, font_loader::FontLoader,
 };
-use shift_font::composite::resolved_contours_to_svg_path;
 use shift_font::wire::{
   AnchorData, ComponentData, ComponentGlyph, ComponentTransformKind, ContourData, FontMetadata,
   FontMetrics, FontSnapshot, GlyphComponents, GlyphEntry, GlyphLayerShape, GlyphLayerSnapshot,
@@ -238,6 +236,46 @@ impl RetainedSource {
       kind: "font source",
       value: "an authored source has no binary".to_string(),
     })
+  }
+
+  /// Each of `glyph_ids` drawn at the design `location`: a compiled font's
+  /// outlines and advances as its own scaler draws them there. An axis
+  /// `location` leaves out is at its default.
+  ///
+  /// # Errors
+  ///
+  /// Returns [`BridgeError::InvalidInput`] for an authored source (UFO,
+  /// designspace, Glyphs), whose window's engine draws its previews, or a
+  /// glyph id the source lacks, and the font's error when a glyph cannot be
+  /// drawn.
+  fn glyph_previews(
+    &self,
+    glyph_ids: &[GlyphId],
+    location: &shift_font::DesignLocation,
+  ) -> BridgeResult<Vec<shift_font::GlyphPreview>> {
+    let OpenedFont::OpenType(font) = &self.font else {
+      return Err(BridgeError::InvalidInput {
+        kind: "font source",
+        value: "an authored source's previews draw in the window's engine".to_string(),
+      });
+    };
+    let identity = &self.identity;
+    let design = identity
+      .font_axes
+      .iter()
+      .map(|axis| location.value_on(axis))
+      .collect::<Vec<_>>();
+    glyph_ids
+      .iter()
+      .map(|glyph_id| {
+        let drawn = font.drawn_glyph(identity.glyph_index(*glyph_id)?, &design)?;
+        Ok(shift_font::GlyphPreview {
+          glyph_id: *glyph_id,
+          svg_path: drawn.svg_path,
+          x_advance: drawn.x_advance,
+        })
+      })
+      .collect()
   }
 
   /// Maps external axis coordinates, in source axis order, to design values.
@@ -1271,38 +1309,6 @@ impl Bridge {
     }
 
     Ok(projections)
-  }
-
-  /// Location-resolved glyph previews: one svg path and advance per glyph.
-  ///
-  /// `location` is an internal authoring location; external axis mappings must
-  /// be evaluated first (see `map_location`). Components and interpolation
-  /// resolve at that location with shared component work across the batch.
-  /// Missing glyph identities are omitted. No editable structure crosses the
-  /// boundary, so the payload stays orders of magnitude lighter than
-  /// `get_glyph_snapshots`.
-  #[napi(ts_args_type = "glyphIds: Array<GlyphId>, location: Location")]
-  pub fn get_glyph_previews(
-    &mut self,
-    glyph_ids: Vec<String>,
-    location: wire_napi::Location,
-  ) -> errors::Result<Vec<NapiGlyphPreview>> {
-    let glyph_ids = parse_id_list::<GlyphId>(&glyph_ids)?;
-    let location =
-      shift_font::DesignLocation::from_untyped(shift_font::Location::try_from(location)?);
-    let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
-    let mut projection = font.projection(&location);
-    let previews = projection
-      .glyphs(&glyph_ids)?
-      .into_iter()
-      .map(|glyph| NapiGlyphPreview {
-        glyph_id: glyph.glyph_id().to_string(),
-        svg_path: resolved_contours_to_svg_path(glyph.contours()),
-        x_advance: glyph.x_advance(),
-      })
-      .collect();
-
-    Ok(previews)
   }
 
   /// Streams the prepared generation with native Web Stream backpressure.
@@ -3291,7 +3297,7 @@ mod tests {
   }
 
   #[test]
-  fn get_glyph_previews_resolve_drawable_paths_at_a_location() {
+  fn glyph_previews_resolve_drawable_paths_at_a_location() {
     let mut bridge = bridge_with_workspace();
     let (layer_id, contour_id) = pen_setup(&mut bridge);
     let glyph = bridge.get_glyphs().unwrap()[0].clone();
@@ -3309,19 +3315,12 @@ mod tests {
         None,
       )
       .unwrap();
-    let missing_glyph_id = GlyphId::new().to_string();
-
     let previews = bridge
-      .get_glyph_previews(
-        vec![glyph.id.to_string(), missing_glyph_id],
-        wire_napi::Location {
-          values: HashMap::new(),
-        },
-      )
+      .glyph_previews(vec![glyph.id, GlyphId::new()], FontLocation::new())
       .unwrap();
 
     assert_eq!(previews.len(), 1);
-    assert_eq!(previews[0].glyph_id, glyph.id.as_str());
+    assert_eq!(previews[0].glyph_id, glyph.id);
     assert_eq!(previews[0].x_advance, 500.0);
     assert!(previews[0].svg_path.starts_with('M'));
   }

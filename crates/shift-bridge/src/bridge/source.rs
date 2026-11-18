@@ -2,8 +2,8 @@
 //! once, and its glyphs read one at a time, without a workspace or store.
 
 use pack::{Bytes, Pack};
-use shift_font::GlyphId;
 use shift_font::wire::{FontSnapshot, GlyphSnapshot};
+use shift_font::{DesignLocation, GlyphId, GlyphPreview, Location};
 use std::path::Path;
 
 use super::{Bridge, RetainedSource};
@@ -55,6 +55,23 @@ pub(crate) trait NativeSource {
     &self,
     glyph_id: GlyphId,
   ) -> Result<Vec<GlyphSnapshot>, NativeSourceError>;
+
+  /// Each of `glyph_ids` of a compiled font source (TrueType, OpenType)
+  /// drawn at the design `location`: its outline as one SVG path in font
+  /// units and its advance, as the font's own scaler draws them. A glyph
+  /// without ink has an empty path. What the glyph tiles of a preview
+  /// window show, which has no workspace.
+  ///
+  /// # Errors
+  ///
+  /// Fails when no font source is open, the open one is an authored source
+  /// (UFO, designspace, Glyphs), a glyph is not in it, or its outline
+  /// cannot be drawn.
+  fn font_source_glyph_previews(
+    &self,
+    glyph_ids: Vec<GlyphId>,
+    location: Location,
+  ) -> Result<Vec<GlyphPreview>, NativeSourceError>;
 }
 
 /// Why a [`NativeSource`] request failed. Every variant carries the Rust error's
@@ -123,5 +140,18 @@ impl NativeSource for Bridge {
     glyph_id: GlyphId,
   ) -> Result<Vec<GlyphSnapshot>, NativeSourceError> {
     Ok(self.retained_source()?.glyph(glyph_id)?)
+  }
+
+  fn font_source_glyph_previews(
+    &self,
+    glyph_ids: Vec<GlyphId>,
+    location: Location,
+  ) -> Result<Vec<GlyphPreview>, NativeSourceError> {
+    let location = DesignLocation::from_untyped(location);
+    Ok(
+      self
+        .retained_source()?
+        .glyph_previews(&glyph_ids, &location)?,
+    )
   }
 }

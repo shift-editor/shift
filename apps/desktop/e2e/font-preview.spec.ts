@@ -4,6 +4,7 @@ import type { GlyphId } from "@shift/types";
 import { previewTest as test, expect } from "./fixtures/perfApp";
 import {
   editorShell,
+  editorSidebar,
   fontNavigation,
   glyphCatalogCanvas,
   glyphCatalogSurface,
@@ -67,6 +68,16 @@ test.describe("retained font source Grid preview", () => {
     });
     expect(editorFrame.equals(editorWithoutScene)).toBe(false);
     await expect(editorShell(page).getByLabel("Create source")).toBeDisabled();
+  });
+
+  test("draws the canvas's Glyphs tab tiles without a workspace", async ({ page, editor }) => {
+    await expectResidentPreviewGrid(editor);
+    await openFirstPreviewGlyph(editor);
+
+    const sidebar = editorSidebar(page);
+    await sidebar.getByRole("tab", { name: "Glyphs list" }).click();
+
+    await expect(sidebar.locator("svg path[d^='M']").first()).toBeVisible();
   });
 
   test("returns to the resident Grid without reading the source or rebuilding the atlas", async ({

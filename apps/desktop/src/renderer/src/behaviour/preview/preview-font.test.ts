@@ -224,3 +224,53 @@ describe("a compiled font's preview shapes proof text with the binary itself", (
     expect(width({})).toBeLessThan(width({ kern: false }) ?? 0);
   });
 });
+
+describe("a preview's glyph tiles draw without a workspace", () => {
+  /** The preview of each named glyph at `location`, by name. */
+  async function previews(font: Font, names: readonly string[], location: ExternalAxisLocation) {
+    const ids = names.map((name) => {
+      const entry = font.entryForName(name as GlyphName);
+      if (!entry) throw new Error(`the font has no ${name}`);
+      return entry.id;
+    });
+    const resolved = await font.glyphPreviews(ids, font.designspace.toDesign(location));
+    return Object.fromEntries(
+      resolved.map((preview) => [font.glyphName(preview.glyphId), preview] as const),
+    );
+  }
+
+  it.each([
+    ["a compiled TrueType font", FONTS.mutatorSansTtf],
+    ["a compiled CFF font", FONTS.mutatorSansOtf],
+    ["a UFO", FONTS.mutatorSansLightCondensed],
+    ["a designspace", FONTS.mutatorSans],
+    ["a Glyphs file", FONTS.mutatorSansGlyphs],
+  ])("draws %s's outlined glyphs and leaves a space empty", async (_case, path) => {
+    const font = await preview(path);
+    const drawn = await previews(font, ["A", "space"], font.designspace.defaultLocation());
+
+    expect(drawn.A?.svgPath).toMatch(/^M[^Z]*Z/);
+    expect(drawn.A?.xAdvance).toBeGreaterThan(0);
+    expect(drawn.space?.svgPath ?? "").toBe("");
+  });
+
+  it("draws a compiled glyph at a mapped weight where its canvas draws it", async () => {
+    const font = await preview(VARIABLE_TTF);
+    /** The bounds of every coordinate in an SVG path, control points included. */
+    const pathBounds = (path: string | undefined) => {
+      const values = (path ?? "").match(/-?\d+(\.\d+)?/g)?.map(Number) ?? [];
+      const xs = values.filter((_, index) => index % 2 === 0);
+      const ys = values.filter((_, index) => index % 2 === 1);
+      return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+    };
+    // Within half a unit: the font's scaler rounds varied points to whole units.
+    const near = (bounds: readonly number[]) => bounds.map((value) => expect.closeTo(value, 0));
+
+    // The fontTools instancer bounds the canvas test above draws "o" at.
+    const mapped = await previews(font, ["o"], at(font, { wght: 550 }));
+    const bold = await previews(font, ["o"], at(font, { wght: 800 }));
+
+    expect(pathBounds(mapped.o?.svgPath)).toEqual(near([26.35675, -12, 549.64325, 508]));
+    expect(pathBounds(bold.o?.svgPath)).toEqual(near([21, -12, 555, 508]));
+  });
+});

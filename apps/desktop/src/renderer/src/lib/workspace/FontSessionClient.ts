@@ -159,6 +159,23 @@ export class FontSessionClient {
     return this.#workspace().sourceGlyph(glyphId);
   }
 
+  /**
+   * Draws glyphs of a compiled font's preview at one design location, as the
+   * font's own scaler draws them; other previews draw glyphs in their engine.
+   *
+   * @param glyphIds - Glyphs in the open preview.
+   * @param location - Design location; axis mappings must already be evaluated.
+   * @returns One svg path and advance per glyph; a glyph without ink has an empty path.
+   */
+  async sourceGlyphPreviews(
+    glyphIds: readonly GlyphId[],
+    location: Location,
+  ): Promise<readonly GlyphPreview[]> {
+    await this.connect();
+
+    return this.#workspace().sourceGlyphPreviews([...glyphIds], location);
+  }
+
   /** Prepares one retained-source atlas page at dense source coordinates. */
   async prepareSourceAtlasPage(request: FontSourceAtlasPageRequest): Promise<CatalogAtlasPage> {
     await this.connect();
@@ -305,7 +322,10 @@ export class FontSessionClient {
    * @param location - Internal location; axis mappings must already be evaluated.
    * @returns One svg path and advance per resolvable glyph; missing ids are omitted.
    */
-  async glyphPreviews(glyphIds: readonly GlyphId[], location: Location): Promise<GlyphPreview[]> {
+  async glyphPreviews(
+    glyphIds: readonly GlyphId[],
+    location: Location,
+  ): Promise<readonly GlyphPreview[]> {
     await this.connect();
 
     return this.#workspace().glyphPreviews([...glyphIds], location);

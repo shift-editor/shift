@@ -17,6 +17,7 @@ import {
   type FontChangeFlag,
   type FontFeature,
   type GlyphIdentityChange,
+  type GlyphPreview,
   type PlacedText,
   type SideLink,
   type RevisedNode,
@@ -39,6 +40,7 @@ import {
 import { unkerned } from "../model/Kerning";
 import type { EngineStore } from "../../types/engine";
 import type { EngineVariation, FontEngine, KerningPlace } from "../../types/font";
+import type { DesignAxisLocation } from "../../types/variation";
 
 /** Every flag an edit's impact can set, in bit order: bit `i` is flag `i`, as Rust declares them. */
 const CHANGE_FLAGS: readonly FontChangeFlag[] = FontChangeFlagSchema.names;
@@ -161,6 +163,25 @@ export class SessionEngine implements FontEngine {
     const session = this.#require();
     this.preload(glyphIds);
     return session.glyphSnapshots(glyphIds);
+  }
+
+  /**
+   * Loads `glyphIds` and the glyphs their components use, then draws each at
+   * `location`: one SVG path in font units and its advance, as the native
+   * workspace's glyph previews give them, for glyph tiles that need no
+   * workspace. Loading tells layout readers, as {@link preload} does.
+   *
+   * @returns One preview per glyph the font has; a glyph without ink has an empty path.
+   * @throws When no session is open, the store's reader cannot answer, or a
+   * glyph cannot be resolved at `location`.
+   */
+  glyphPreviews(
+    glyphIds: readonly GlyphId[],
+    location: DesignAxisLocation,
+  ): readonly GlyphPreview[] {
+    const session = this.#require();
+    this.preload(glyphIds);
+    return session.glyphPreviews(glyphIds, location);
   }
 
   /**
