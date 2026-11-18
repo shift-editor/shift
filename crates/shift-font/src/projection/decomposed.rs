@@ -20,7 +20,7 @@ use std::sync::Arc;
 use crate::composite::ResolvedContour;
 use crate::{
     Component, CoreError, CoreResult, DesignLocation, Font, Glyph, GlyphId, GlyphInterpolation,
-    GlyphLayer, InterpolationBasis, Point, SourceId, Transform,
+    GlyphLayer, InterpolationBasis, InterpolationSample, Point, SourceId, Transform,
 };
 
 use super::FontProjection;
@@ -197,10 +197,11 @@ impl FontProjection<'_> {
 }
 
 fn at_a_source(font: &Font, basis: &InterpolationBasis, location: &DesignLocation) -> bool {
-    basis.source_ids().iter().any(|source_id| {
-        font.source(*source_id)
-            .is_some_and(|source| source.location().is_equivalent_to(location, font.axes()))
-    })
+    basis
+        .samples()
+        .iter()
+        .filter_map(|sample| font.source(sample.source_id()?))
+        .any(|source| source.location().is_equivalent_to(location, font.axes()))
 }
 
 impl Font {
@@ -240,10 +241,10 @@ impl Font {
         glyph_id: GlyphId,
         basis: &InterpolationBasis,
     ) -> CoreResult<Option<Vec<OutlineParts>>> {
-        let mut outlines = Vec::with_capacity(basis.source_ids().len());
-        for source_id in basis.source_ids() {
-            let location = self.require_source(*source_id)?.location();
-            let Some(parts) = self.projection(location).composed_parts(
+        let mut outlines = Vec::with_capacity(basis.samples().len());
+        for sample in basis.samples() {
+            let location = self.sample_location(*sample)?;
+            let Some(parts) = self.projection(&location).composed_parts(
                 glyph_id,
                 &mut HashSet::new(),
                 Placement::Decomposed,
@@ -266,21 +267,25 @@ impl Font {
         &self,
         glyph: &Glyph,
         interpolation: &GlyphInterpolation,
-        interpolation_bases: &mut HashMap<Vec<SourceId>, Arc<InterpolationBasis>>,
+        interpolation_bases: &mut HashMap<Vec<InterpolationSample>, Arc<InterpolationBasis>>,
     ) -> CoreResult<Option<Arc<InterpolationBasis>>> {
-        let source_ids = interpolation.basis().source_ids();
+        // Decomposition is sampled at the font's masters; a glyph with
+        // drawings located off them is drawn composite.
+        let Some(source_ids) = interpolation.basis().source_ids() else {
+            return Ok(None);
+        };
         if source_ids.len() < 2 {
             return Ok(None);
         }
         let layers_by_source: HashMap<SourceId, &GlyphLayer> = glyph
             .located_layers(self)
             .filter_map(|located| {
-                let source_id = located.location.base_source_id()?;
+                let source_id = located.location.exact_source_id()?;
                 Some((source_id, located.layer.as_ref()))
             })
             .collect();
         let mut layers = Vec::with_capacity(source_ids.len());
-        for source_id in source_ids {
+        for source_id in &source_ids {
             let Some(layer) = layers_by_source.get(source_id) else {
                 return Ok(None);
             };
@@ -303,7 +308,13 @@ impl Font {
             if let Some(component_interpolation) =
                 self.glyph_interpolation_with_bases(component_id, interpolation_bases)?
             {
-                masters.extend(component_interpolation.basis().source_ids().iter().copied());
+                masters.extend(
+                    component_interpolation
+                        .basis()
+                        .samples()
+                        .iter()
+                        .filter_map(|sample| sample.source_id()),
+                );
             }
             pending.extend(component.component_glyph_ids());
         }
@@ -315,7 +326,7 @@ impl Font {
             .collect::<Vec<_>>();
         let key = locations
             .iter()
-            .map(|(source_id, _)| *source_id)
+            .map(|(source_id, _)| InterpolationSample::Source(*source_id))
             .collect::<Vec<_>>();
         if let Some(basis) = interpolation_bases.get(&key) {
             return Ok(Some(Arc::clone(basis)));

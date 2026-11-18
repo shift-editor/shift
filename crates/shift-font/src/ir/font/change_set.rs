@@ -287,8 +287,12 @@ impl Font {
     }
 
     fn require_layer_sources(&self, glyph: &Glyph) -> CoreResult<()> {
-        for layer in glyph.layers().values() {
-            self.require_source(layer.source_id())?;
+        for source_id in glyph
+            .layers()
+            .values()
+            .filter_map(|layer| layer.source_id())
+        {
+            self.require_source(source_id)?;
         }
         Ok(())
     }

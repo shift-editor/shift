@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 use crate::anchor_attachment::{PlacingComponent, anchored_placements};
 use crate::{
-    Anchor, Component, CoreResult, DecomposedTransform, DesignLocation, Font, Glyph, GlyphId,
-    GlyphLayer, SourceId, Transform,
+    Anchor, AxisList, Component, CoreResult, DecomposedTransform, DesignLocation, Font, Glyph,
+    GlyphId, GlyphLayer, SourceId, Transform,
 };
 
 use super::FontProjection;
@@ -14,13 +14,32 @@ use super::FontProjection;
 impl FontProjection<'_> {
     /// Where `component` draws its base glyph, when that is not this
     /// projection's location.
+    ///
+    /// Only font axes pass from a glyph to its components' bases: a base
+    /// draws at the default of each of its own axes the component doesn't
+    /// set, even when this projection's location sets that axis.
     pub(super) fn moved_location(&self, component: &Component) -> Option<DesignLocation> {
-        if !component.moves_base() {
+        let font_axes = self.font.axes();
+        let only_font_axes = self
+            .location
+            .iter()
+            .all(|(axis_id, _)| font_axes.contains_axis(*axis_id));
+        if !component.moves_base() && only_font_axes {
             return None;
         }
         // An empty location is the font's default location.
-        let location = component.base_location(&self.location, &DesignLocation::new());
-        (!location.is_equivalent_to(&self.location, self.font.axes())).then_some(location)
+        let location = component.base_location(&self.location, &DesignLocation::new(), font_axes);
+        let base_axes = self
+            .font
+            .glyph(component.base_glyph_id())
+            .map(Glyph::axes)
+            .unwrap_or_default();
+        let same_on_base_axes = base_axes.iter().all(|axis| {
+            let axis = axis.as_axis();
+            (location.value_on(axis) - self.location.value_on(axis)).abs() <= 1e-6
+        });
+        let same_place = same_on_base_axes && location.is_equivalent_to(&self.location, font_axes);
+        (!same_place).then_some(location)
     }
 
     /// Runs `read` on a projection at `location` that shares this one's
@@ -98,7 +117,7 @@ impl FontProjection<'_> {
 
 impl Font {
     /// The font's glyphs with each anchored component's transform set where
-    /// its anchors place it at each layer's source, for a reader that takes
+    /// its anchors place it at each layer's location, for a reader that takes
     /// stored transforms as they are, such as export.
     ///
     /// # Errors
@@ -113,13 +132,17 @@ impl Font {
                 if layer.components_iter().nth(1).is_none() {
                     continue;
                 }
-                let Some(source) = self.source(layer.source_id()) else {
+                let Some(location) = layer.location().design_location(self) else {
                     continue;
                 };
-                let projection = projections
-                    .entry(source.id())
-                    .or_insert_with(|| self.projection(source.location()));
-                placed.push((*layer_id, projection.component_transforms(layer)?));
+                let transforms = match layer.location().exact_source_id() {
+                    Some(source_id) => projections
+                        .entry(source_id)
+                        .or_insert_with(|| self.projection(&location))
+                        .component_transforms(layer)?,
+                    None => self.projection(&location).component_transforms(layer)?,
+                };
+                placed.push((*layer_id, transforms));
             }
             let mut glyph = glyph.clone();
             for (layer_id, transforms) in placed {

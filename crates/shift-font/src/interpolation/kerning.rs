@@ -3,7 +3,7 @@ use crate::{
     SourceId,
 };
 
-use super::InterpolationBasis;
+use super::{InterpolationBasis, InterpolationSample};
 
 impl Font {
     /// Returns the basis kerning interpolates over: the default source and
@@ -74,7 +74,7 @@ impl Font {
             return Ok(KerningBlend::only(self.default_source_id()));
         };
         let weights = basis.weights_at(location, self.axes())?;
-        Ok(KerningBlend::weighted(basis.source_ids(), weights))
+        Ok(KerningBlend::weighted(basis.samples(), weights))
     }
 
     /// Returns the sources kerning reads while `source_id` is edited: the
@@ -140,14 +140,14 @@ pub struct KerningBlend {
 }
 
 impl KerningBlend {
-    /// The sources of `source_ids` whose paired weight is not zero.
-    fn weighted(source_ids: &[SourceId], weights: impl IntoIterator<Item = f64>) -> Self {
+    /// The source samples of `samples` whose paired weight is not zero.
+    fn weighted(samples: &[InterpolationSample], weights: impl IntoIterator<Item = f64>) -> Self {
         Self {
-            sources: source_ids
+            sources: samples
                 .iter()
-                .copied()
                 .zip(weights)
                 .filter(|(_, weight)| *weight != 0.0)
+                .filter_map(|(sample, weight)| Some((sample.source_id()?, weight)))
                 .collect(),
         }
     }
@@ -326,8 +326,8 @@ mod tests {
 
         let basis = font.kerning_interpolation_basis().unwrap();
 
-        assert_eq!(basis.source_ids().len(), 2);
-        assert!(!basis.source_ids().contains(&medium_id));
+        assert_eq!(basis.samples().len(), 2);
+        assert!(!basis.has_source(medium_id));
         let default_source_id = font.default_source_id().unwrap();
         font.kerning_mut().remove_value(
             default_source_id,
@@ -339,8 +339,7 @@ mod tests {
         assert!(
             font.kerning_interpolation_basis()
                 .unwrap()
-                .source_ids()
-                .contains(&default_source_id)
+                .has_source(default_source_id)
         );
     }
 

@@ -134,7 +134,7 @@ fn collect_weight_sets(
         {
             continue;
         }
-        let count = u32::try_from(interpolation.basis().source_ids().len())?;
+        let count = u32::try_from(interpolation.basis().samples().len())?;
         let end = next_weight_index
             .checked_add(count)
             .ok_or("weight index overflow")?;

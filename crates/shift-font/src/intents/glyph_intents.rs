@@ -127,8 +127,8 @@ impl SetSidebearings {
                 .map(GlyphLayer::id)
                 .collect(),
             LayerScope::EveryMaster => glyphs
-                .flat_map(|glyph| glyph.located_layers(font))
-                .map(|located| located.layer.id())
+                .flat_map(|glyph| font.masters_with_layers(glyph))
+                .map(|(_, layer)| layer.id())
                 .collect(),
         }
     }
@@ -177,7 +177,7 @@ impl Font {
         *copy.metrics_keys_mut() = original.metrics_keys().clone();
         *copy.lib_mut() = original.lib().clone();
         for layer in original.layers().values() {
-            copy.set_layer(layer.clone_with_fresh_ids(LayerId::new(), layer.source_id()));
+            copy.set_layer(layer.clone_with_fresh_ids(LayerId::new(), layer.location().clone()));
         }
         Ok(copy)
     }
@@ -250,7 +250,10 @@ impl Font {
     /// the font's error when its source or a component cannot be resolved.
     fn sidebearing(&self, layer_id: LayerId, side: MetricsKeySide) -> CoreResult<Option<f64>> {
         let glyph_id = self.require_layer_owner(layer_id)?;
-        let source_id = self.require_layer(layer_id)?.source_id();
+        // A layer placed by coordinates alone is measured in no source.
+        let Some(source_id) = self.require_layer(layer_id)?.source_id() else {
+            return Ok(None);
+        };
         let measured = MetricsKeyEvaluator::new(self, source_id)
             .and_then(|mut evaluator| evaluator.current(glyph_id, side));
         match measured {
@@ -265,7 +268,9 @@ impl Font {
     /// a key on the side itself, or on the side that sets the same edge.
     fn side_is_held(&self, layer_id: LayerId, side: MetricsKeySide) -> CoreResult<bool> {
         let glyph = self.require_glyph(self.require_layer_owner(layer_id)?)?;
-        let source_id = self.require_layer(layer_id)?.source_id();
+        let Some(source_id) = self.require_layer(layer_id)?.source_id() else {
+            return Ok(false);
+        };
         Ok(side
             .sides_holding()
             .iter()

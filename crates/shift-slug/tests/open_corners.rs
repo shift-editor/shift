@@ -18,7 +18,7 @@ fn font_with_open_a() -> Fixture<Font> {
     let layers: Vec<_> = glyph
         .layers()
         .values()
-        .map(|layer| (layer.id(), layer.source_id() == default_source))
+        .map(|layer| (layer.id(), layer.source_id() == Some(default_source)))
         .collect();
     for (layer_id, is_default) in layers {
         let layer = glyph

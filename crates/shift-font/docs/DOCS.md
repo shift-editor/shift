@@ -1,6 +1,6 @@
 # shift-font
 
-<!-- reviewed: 2026-10-15 review-every: 90d -->
+<!-- reviewed: 2026-11-17 review-every: 90d -->
 
 First-class Rust font object model for Shift.
 
@@ -32,6 +32,9 @@ crates/shift-font/src/
   ir/              -- font entities, IDs, axes, mappings, instances, glyph data
     collection.rs  -- semantic ordered identity collections
     font/change_set.rs -- atomic reversible changeset application and target validation
+    font/glyph_axes.rs -- glyph axes on the font: unique ids and tags, range edits, rescale, layer locations
+    glyph_axis.rs  -- `GlyphAxis`, private tags, `AxisValueUse`
+    located_layer.rs -- `LayerLocation`, `Glyph::located_layers`: every drawing with where it sits
     variation.rs   -- external-to-design mapping evaluation
   intents.rs       -- atomic authoring intents and changeset derivation
   changes.rs       -- reversible replacements, impacts, and entity lifecycle views
@@ -77,11 +80,13 @@ crates/shift-font/src/
 - `Source` is an editable designspace position with a name, location, complete metric values, and optional technical metrics.
 - `SourceMetricInterpolation` owns metric identity, optional technical-field participation, variation regions, and delta ordering for source-owned metrics.
 - `Glyph` is a glyph concept identified by `GlyphId`.
-- `GlyphLayer` is authored editable data for one glyph at one source.
+- `GlyphLayer` is authored editable data for one drawing of a glyph: exactly on one source, or at a `LayerLocation` of its own (`GlyphLayer::located`). Per-source lookups (`layer_for_source`, `masters_with_layers`, the source index) see only layers exactly on a source.
+- `GlyphAxis` is an axis only one glyph varies along, with a stable `AxisId` in the font's axis namespace, a name, a continuous range and a tag. Ids and tags are unique across font axes and every glyph's axes.
+- `LayerLocation` is where a drawing sits: an optional base source plus sparse coordinates on font axes, the glyph's own axes, or both, in each axis's own units.
 - `LibData` and recursive `LibValue::Dict` use ordered maps so equal domain values serialize deterministically.
 - `GlyphEntityId` gives `FontIndex` one typed set for contour, point, component, anchor, and guideline identity.
 - `VariationBasis` is the source-neutral Fontdrasil output: normalized regions paired with numeric `VariationDelta` vectors.
-- `InterpolationBasis` combines real source identities with a `VariationBasis` whose vectors produce source weights; it never contains glyph coordinates or metrics.
+- `InterpolationBasis` combines sample identities (`InterpolationSample`: a real `SourceId`, or the `LayerId` of a drawing located off the sources) with a `VariationBasis` whose vectors produce sample weights; it never contains glyph coordinates or metrics, and never invents a `SourceId`. Font-wide bases (metrics, kerning) sample only sources.
 - `AxisMappingBasis` combines mapping input/output identities with a `VariationBasis` whose vectors produce output adjustments in design units, added to the input value. Inputs are normalized over the user axis; outputs are not, because design values can lie outside the user range (a default at the axis end with stem-width design values).
 - `AxisRange` is the one minimum/default/maximum → `-1..=1` rule, and it is fontdrasil's: `normalize` and `denormalize` go through a `CoordConverter` built from the three anchors, so Shift and fontc normalize alike, reversed ranges and out-of-range extrapolation included. `AxisKind::normalize` clamps a user value to the axis range first, as a font's `fvar` does; the source projection and the atlas axes call `AxisRange` directly. `DesignNormalization` holds an axis's design anchors as an `AxisRange` plus the converter built once, because region evaluation normalizes through it for every support. `normalize` treats values within a relative `1e-9` of the default, `0`, or `±1` as exactly those, because mapped anchors carry rounding error and the variation model only recognises an exact default; region evaluation clamps normalized coordinates to `-1..=1`. `Font::design_normalization()` derives the anchors from compiled independent mapping bases at the axis's user minimum, default and maximum, and keeps unmapped and internal ranges as authored.
 - `Font::static_instance` / `Font::static_at` evaluate the font at one location into a font with one master and no axes, for static binaries: glyphs through `GlyphInterpolation` (a glyph without a model keeps its fallback layer), source metrics through `SourceMetricInterpolation`, and kerning through `KerningBlend`. Kerning keeps its groups: each authored pair takes `KerningBlend::pair_value` (a master's own value, else the group pair compilers fill it with), and a glyph pair whose compiled value those pairs do not reproduce gains its own pair.
@@ -132,6 +137,18 @@ Coordinates, advance width, smooth flags, anchor positions, and component transf
 `Font::axis_mapping_bases()` compiles authored independent and cross-axis mappings through Fontdrasil. `map_location` and `map_location_with_bases` are the only external-to-design boundaries: external locations evaluate independent bases first, then cross-axis bases against the independently mapped location, and the resulting `DesignLocation` must not be mapped again. Raw mapping points remain authoring data and never become renderer evaluation input. Output parity does not authorize another language or bridge layer to reconstruct the same model.
 
 `Font::projection(location)` expects an internal authoring location. Apply external axis mappings before constructing it. Resolution prefers an exact authored layer, then compatible interpolation, then the default or preferred fallback. A globally authored source with no glyph layer is not blank by definition: it uses interpolation/fallback while remaining non-editable at that source. Component branches resolve independently at the same location and are flattened through the same `GlyphComponents` semantics exposed to renderers.
+
+## Glyph axes and located drawings
+
+A glyph's design space is the font's axes plus its own (`Font::glyph_space_axes`, `Font::glyph_space_normalization`). Every drawing is a sample in it: `Glyph::located_layers` yields the layers exactly on masters, then the located layers, and `Font::glyph_interpolation` builds one fontdrasil basis over all of them. A glyph source on a glyph axis (`dot` at Spread 100) and a glyph-specific intermediate on a font axis (a Glyphs brace layer, `H` at Bleed 50 with no base source) are the same thing and take the same path.
+
+- **Values are in each axis's own units**, never normalized: layer coordinates and component locations.
+- **A component sets its base glyph's axes through `Component::location`.** Only font axes are inherited (`ComponentInheritance::base_location` drops every other coordinate of the parent location): a glyph axis a component doesn't set is at its default, even when the location being drawn sets it. `ComponentLocationFill` fills an unset glyph axis with its default through `InheritedValues`.
+- **Range edits never move a value.** `Font::edit_glyph_axis` takes a `GlyphAxisEdit`: `Range` refuses a range that would leave a drawing coordinate or a component location outside it, listing them as `AxisValueUse`s; `Rescale` maps every stored value piecewise-linearly per side of the default, the glyph's drawings and every component in the font that sets the axis; `Remove` refuses while any value is stored; `Tag` keeps tags unique.
+- **A drawing must sit in its glyph's space:** its glyph-axis values inside their ranges, and no other drawing at the same location (`Font::insert_glyph_layer`).
+- **A layer's place is its `LayerLocation`, nothing else.** `GlyphLayer::source_id` is that location's base, `None` for a layer placed by coordinates alone; no source is kept only to file a layer under. A per-source read of such a layer (its structure, bounds) uses `Font::reading_source_id`, the base or else the default source; per-source questions about it (sidebearings, metrics keys, anchor alignment) have no answer.
+- **They serialize with the font.** `Glyph::axes` is a named field, and `LayerLocation` takes the layer's old source-id field: a layer exactly on a source writes the bare id there, so stored payloads keep their bytes (see shift-store's outer payload contract). Change sets and the bridge's font directory carry both.
+- **Not yet read by the editor or exported.** Editor snapshots (`shift-bridge`'s `layer_snapshot`) refuse a layer off the sources with `CoreError::LayerOffSources`; the editor receives a glyph whose basis has located samples without its interpolation (`wire::GlyphInterpolation::over_sources`), and the compiler snapshot (`located_layers_on`) reads only master layers.
 
 ## Boundaries
 

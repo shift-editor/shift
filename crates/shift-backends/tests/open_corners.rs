@@ -18,7 +18,7 @@ fn font_with_a(mut contour_for: impl FnMut(usize) -> Contour) -> Fixture<Font> {
     let mut layers: Vec<_> = glyph
         .layers()
         .values()
-        .map(|layer| (layer.source_id() != default_source, layer.id()))
+        .map(|layer| (layer.source_id() != Some(default_source), layer.id()))
         .collect();
     layers.sort();
     for (index, (_, layer_id)) in layers.into_iter().enumerate() {

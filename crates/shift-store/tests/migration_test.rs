@@ -5,6 +5,8 @@ use shift_store::{SHIFT_DOCUMENT_SCHEMA_VERSION, ShiftStore};
 /// no categories and kerning pairs had no source and named glyphs and
 /// prefixed groups.
 const V1_TABLES: &str = r"
+DROP TABLE glyph_layer_locations;
+DROP TABLE glyph_axes;
 ALTER TABLE glyphs DROP COLUMN category;
 ALTER TABLE glyphs DROP COLUMN sub_category;
 ALTER TABLE glyphs DROP COLUMN left_metrics_key;

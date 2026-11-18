@@ -8,7 +8,7 @@ use shift_font as font;
 
 use super::{
     MAX_LAYER_PAYLOAD_BYTES_SQL,
-    directory::{map_directory_facts_row, validate_directory_facts},
+    directory::{layer_coordinates, map_directory_facts_row, validate_directory_facts},
     format::decode_layer,
     references::{validate_component_index, validate_component_rows},
 };
@@ -105,14 +105,11 @@ pub(crate) fn load_glyph_layer_from_conn(
     let decoded = facts
         .stored_layer(payload)?
         .decode(facts.layer_id.as_str())?;
-    let layer = decode_layer(&decoded)?;
-    validate_directory_facts(
-        layer_id,
-        &facts.source_id,
-        facts.width,
-        facts.height,
-        &layer,
-    )?;
+    let mut layer = decode_layer(&decoded)?;
+    validate_directory_facts(layer_id, facts.width, facts.height, &layer)?;
+    let coordinates =
+        layer_coordinates(conn, std::slice::from_ref(&facts.layer_id))?.remove(&facts.layer_id);
+    layer.relocate(facts.placed_with(coordinates));
     validate_component_index(conn, &layer)?;
     Ok(Some(layer))
 }
@@ -306,6 +303,7 @@ fn load_glyph_layer_batch_with_directory(
         payloads.push((layer_id, payload));
     }
     drop(payload_stmt);
+    let coordinates = layer_coordinates(conn, &keys)?;
 
     let decoded = payloads
         .into_par_iter()
@@ -317,15 +315,10 @@ fn load_glyph_layer_batch_with_directory(
                     detail: "payload has no directory row".to_string(),
                 })?;
             let decoded = facts.stored_layer(payload)?.decode(layer_id.as_str())?;
-            let layer = decode_layer(&decoded)?;
+            let mut layer = decode_layer(&decoded)?;
             let expected_id = font::LayerId::from_raw(layer_id.clone());
-            validate_directory_facts(
-                expected_id,
-                &facts.source_id,
-                facts.width,
-                facts.height,
-                &layer,
-            )?;
+            validate_directory_facts(expected_id, facts.width, facts.height, &layer)?;
+            layer.relocate(facts.placed_with(coordinates.get(&layer_id).cloned()));
             Ok((layer_id, layer))
         })
         .collect::<Result<Vec<_>, StoreError>>()?;

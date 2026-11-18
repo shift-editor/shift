@@ -129,7 +129,7 @@ fn a_glyph_opens_with_its_default_layers_colour_and_each_layer_keeps_its_own() {
     let default_source_id = font.default_source_id().unwrap();
     assert_eq!(a.layers().len(), 2);
     for layer in a.layers().values() {
-        let entry = if layer.source_id() == default_source_id {
+        let entry = if layer.source_id() == Some(default_source_id) {
             RED
         } else {
             TEAL

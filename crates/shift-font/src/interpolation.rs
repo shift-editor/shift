@@ -13,11 +13,11 @@ use fontdrasil::variations::{
 
 use crate::{
     Axis, AxisId, AxisList, CoreResult, DesignLocation, DesignNormalization, Font, GlyphId,
-    GlyphLayer, Location, SourceId,
+    GlyphLayer, LayerId, Location, SourceId,
 };
 
 mod filled_locations;
-pub use filled_locations::ComponentLocationFill;
+pub use filled_locations::{ComponentLocationFill, InheritedValues};
 mod kerning;
 mod layer_match;
 mod metrics;
@@ -99,8 +99,9 @@ impl InterpolationRegion {
     ///
     /// # Errors
     ///
-    /// Returns [`crate::CoreError::AxisNotFound`] when a support names an axis that
-    /// `axes` or `design_normalization` does not have.
+    /// Returns [`crate::CoreError::AxisNotFound`] when a support names an axis
+    /// that `design_normalization` does not have, or, without it, that `axes`
+    /// does not have.
     pub fn scalar_at(
         &self,
         location: &Location,
@@ -117,18 +118,18 @@ impl InterpolationRegion {
                 continue;
             }
 
-            let axis = axes.axis(support.axis_id).require(&support.axis_id)?;
             let normalized = if let Some(design_normalization) = design_normalization {
                 let normalization = design_normalization
                     .iter()
-                    .find(|normalization| normalization.axis_id() == axis.id())
+                    .find(|normalization| normalization.axis_id() == support.axis_id)
                     .require(&support.axis_id)?;
                 normalization.normalize(
                     location
-                        .get(axis.id())
+                        .get(support.axis_id)
                         .unwrap_or_else(|| normalization.range().default),
                 )
             } else {
+                let axis = axes.axis(support.axis_id).require(&support.axis_id)?;
                 axis.normalize(location.value_on(axis))
             }
             .clamp(-1.0, 1.0);
@@ -262,28 +263,55 @@ impl VariationBasis {
     }
 }
 
-/// Coordinate-independent interpolation weights for an ordered source set.
+/// What one sample of an [`InterpolationBasis`] is: a font source, or a
+/// glyph's drawing located off the font's sources.
 ///
-/// The basis depends only on source locations and authoring axes. Its numeric
+/// A drawing exactly on a source is that source's sample, so glyphs whose
+/// drawings sit on the same sources share one basis. A drawing at a location
+/// of its own, on the glyph's axes or between the font's sources, is
+/// identified by its layer: such a sample has no source.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum InterpolationSample {
+    Source(SourceId),
+    Layer(LayerId),
+}
+
+impl InterpolationSample {
+    /// The font source this sample is, when it is one.
+    pub fn source_id(self) -> Option<SourceId> {
+        match self {
+            Self::Source(source_id) => Some(source_id),
+            Self::Layer(_) => None,
+        }
+    }
+}
+
+/// Coordinate-independent interpolation weights for an ordered sample set.
+///
+/// The basis depends only on sample locations and authoring axes. Its numeric
 /// contributions contain no glyph coordinates or metric values, so renderers
 /// can combine it with live source-value signals without rebuilding native
 /// variation data after ordinary numeric edits.
 #[derive(Clone, Debug, PartialEq)]
 pub struct InterpolationBasis {
-    source_ids: Vec<SourceId>,
+    samples: Vec<InterpolationSample>,
     basis: VariationBasis,
     design_normalization: Vec<DesignNormalization>,
 }
 
 impl InterpolationBasis {
-    /// Rebuilds a basis compiled elsewhere, such as one the editor received.
+    /// Rebuilds a basis over font sources compiled elsewhere, such as one the
+    /// editor received.
     pub fn new(
         source_ids: Vec<SourceId>,
         basis: VariationBasis,
         design_normalization: Vec<DesignNormalization>,
     ) -> Self {
         Self {
-            source_ids,
+            samples: source_ids
+                .into_iter()
+                .map(InterpolationSample::Source)
+                .collect(),
             basis,
             design_normalization,
         }
@@ -298,22 +326,53 @@ impl InterpolationBasis {
         axes: &[Axis],
         design_normalization: Vec<DesignNormalization>,
     ) -> Option<Self> {
-        let normalized_sources = sources
+        let samples: Vec<_> = sources
             .iter()
             .map(|(source_id, location)| {
+                (InterpolationSample::Source(*source_id), location.clone())
+            })
+            .collect();
+        Self::from_sample_locations(&samples, axes, design_normalization)
+    }
+
+    /// Builds a basis from ordered sample locations in a design space of
+    /// `axes`, bounded by `design_normalization` in the same order.
+    pub(crate) fn from_sample_locations(
+        samples: &[(InterpolationSample, DesignLocation)],
+        axes: &[Axis],
+        design_normalization: Vec<DesignNormalization>,
+    ) -> Option<Self> {
+        let normalized_samples = samples
+            .iter()
+            .map(|(sample, location)| {
                 (
-                    *source_id,
+                    *sample,
                     normalized_location(location, axes, &design_normalization),
                 )
             })
             .collect::<Vec<_>>();
 
-        interpolation_basis(&normalized_sources, axes, design_normalization)
+        interpolation_basis(&normalized_samples, axes, design_normalization)
     }
 
-    /// Returns source identities in the order used by coefficient rows and weights.
-    pub fn source_ids(&self) -> &[SourceId] {
-        &self.source_ids
+    /// Returns sample identities in the order used by coefficient rows and weights.
+    pub fn samples(&self) -> &[InterpolationSample] {
+        &self.samples
+    }
+
+    /// Returns the font source of each sample, in sample order, when every
+    /// sample is a font source; `None` when a sample is a located drawing.
+    pub fn source_ids(&self) -> Option<Vec<SourceId>> {
+        self.samples
+            .iter()
+            .map(|sample| sample.source_id())
+            .collect()
+    }
+
+    /// Returns whether the basis has a sample for the font source `source_id`.
+    pub fn has_source(&self, source_id: SourceId) -> bool {
+        self.samples
+            .contains(&InterpolationSample::Source(source_id))
     }
 
     /// Returns the Fontdrasil-compiled source-weight basis.
@@ -326,16 +385,16 @@ impl InterpolationBasis {
         &self.design_normalization
     }
 
-    /// Evaluates one scalar weight per source at an internal location.
+    /// Evaluates one scalar weight per sample at an internal location.
     ///
-    /// The returned weights are ordered like [`Self::source_ids`]. Missing
+    /// The returned weights are ordered like [`Self::samples`]. Missing
     /// axis coordinates use mapped design defaults. `axes` supplies axis identity;
     /// normalization always uses the design-space bounds retained by this basis.
     ///
     /// # Errors
     ///
-    /// Returns [`crate::CoreError::AxisNotFound`] when `axes` omits an axis referenced
-    /// by an interpolation region.
+    /// Returns [`crate::CoreError::AxisNotFound`] when the basis's design
+    /// normalization omits an axis referenced by an interpolation region.
     pub fn weights_at(&self, location: &DesignLocation, axes: &[Axis]) -> CoreResult<Vec<f64>> {
         self.basis.evaluate(
             location.as_untyped(),
@@ -345,17 +404,23 @@ impl InterpolationBasis {
     }
 }
 
-/// Initial numeric glyph values associated with one compatible source.
+/// Initial numeric glyph values associated with one compatible sample.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GlyphInterpolationSource {
-    source_id: SourceId,
+    sample: InterpolationSample,
     values: GlyphInterpolationValues,
 }
 
 impl GlyphInterpolationSource {
-    /// Returns the stable identity of the compatible authored source.
-    pub fn source_id(&self) -> SourceId {
-        self.source_id
+    /// Returns the sample these values are drawn at.
+    pub fn sample(&self) -> InterpolationSample {
+        self.sample
+    }
+
+    /// Returns the font source these values are drawn on; `None` for a
+    /// drawing located off the font's sources.
+    pub fn source_id(&self) -> Option<SourceId> {
+        self.sample.source_id()
     }
 
     /// Returns the source's initial structure-ordered numeric values.
@@ -390,7 +455,7 @@ impl GlyphInterpolation {
         &self.basis
     }
 
-    /// Returns initial values aligned with [`InterpolationBasis::source_ids`].
+    /// Returns initial values aligned with [`InterpolationBasis::samples`].
     pub fn sources(&self) -> &[GlyphInterpolationSource] {
         &self.sources
     }
@@ -487,14 +552,20 @@ impl Font {
         ))
     }
 
-    /// Builds interpolation for one glyph from compatible authored sources.
+    /// Builds interpolation for one glyph from its compatible drawings.
+    ///
+    /// The glyph is interpolated over its design space, the font's axes plus
+    /// its own ([`Font::glyph_space_axes`]): each drawing is a sample at its
+    /// [location](crate::LayerLocation), whether exactly on a master or
+    /// located off them on font axes, glyph axes or both.
     ///
     /// The font default source defines topology when that glyph has a layer
     /// there. Otherwise the most structurally complete master-backed layer is
     /// the reference, allowing sparse glyphs to interpolate without inventing
-    /// a default-source layer. Incompatible master layers are ignored. `None`
-    /// means the font is static or no viable model can be formed; callers may
-    /// then use their documented source fallback.
+    /// a default-source layer. Incompatible drawings are ignored. `None`
+    /// means the font is static and the glyph has no axes of its own, or no
+    /// viable model can be formed; callers may then use their documented
+    /// source fallback.
     ///
     /// # Errors
     ///
@@ -506,10 +577,10 @@ impl Font {
     pub(crate) fn glyph_interpolation_with_bases(
         &self,
         glyph_id: GlyphId,
-        bases: &mut HashMap<Vec<SourceId>, Arc<InterpolationBasis>>,
+        bases: &mut HashMap<Vec<InterpolationSample>, Arc<InterpolationBasis>>,
     ) -> CoreResult<Option<GlyphInterpolation>> {
         let glyph = self.require_glyph(glyph_id)?;
-        if !self.is_variable() {
+        if !self.is_variable() && glyph.axes().is_empty() {
             return Ok(None);
         }
 
@@ -517,59 +588,60 @@ impl Font {
             return Ok(None);
         };
 
+        // Every drawing is a sample at its location in the glyph's design
+        // space: the font's axes plus its own.
         let mut compatible = Vec::new();
         for located in glyph.located_layers(self) {
             if !reference_layer.match_with(located.layer).is_complete() {
                 continue;
             }
-            let (Some(source_id), Some(location)) = (
-                located.location.base_source_id(),
-                located.location.design_location(self),
-            ) else {
+            let Some(location) = located.location.design_location(self) else {
                 continue;
             };
-            compatible.push((source_id, location, located.layer));
+            let sample = match located.location.exact_source_id() {
+                Some(source_id) => InterpolationSample::Source(source_id),
+                None => InterpolationSample::Layer(located.layer.id()),
+            };
+            compatible.push((sample, location, located.layer));
         }
 
-        // Masters' components may set different axes: read each with the
+        // Drawings' components may set different axes: read each with the
         // values it inherits filled in, so all carry the same ones.
         let layers: Vec<&GlyphLayer> = std::iter::once(reference_layer.as_ref())
             .chain(compatible.iter().map(|(_, _, layer)| layer.as_ref()))
             .collect();
         let fill = ComponentLocationFill::new(self.axes(), &layers);
-        if let Some(reference_location) = self
-            .source(reference_layer.source_id())
-            .map(|source| source.location().clone())
-            && let Some(filled) = fill.fill(self.axes(), &reference_layer, &reference_location)
+        if let Some(reference_location) = reference_layer.location().design_location(self)
+            && let Some(filled) = fill.fill(self, &reference_layer, &reference_location)
         {
             reference_layer = Arc::new(filled);
         }
-        let compatible_sources: Vec<_> = compatible
+        let compatible_samples: Vec<_> = compatible
             .into_iter()
-            .map(|(source_id, location, layer)| {
-                let values = fill.fill(self.axes(), layer, &location).map_or_else(
+            .map(|(sample, location, layer)| {
+                let values = fill.fill(self, layer, &location).map_or_else(
                     || layer.interpolation_values(),
                     |filled| filled.interpolation_values(),
                 );
-                (source_id, location, values)
+                (sample, location, values)
             })
             .collect();
 
-        let source_locations = compatible_sources
+        let sample_locations = compatible_samples
             .iter()
-            .map(|(source_id, location, _)| (*source_id, location.clone()))
+            .map(|(sample, location, _)| (*sample, location.clone()))
             .collect::<Vec<_>>();
-        let basis_key = source_locations
+        let basis_key = sample_locations
             .iter()
-            .map(|(source_id, _)| *source_id)
+            .map(|(sample, _)| *sample)
             .collect::<Vec<_>>();
         let basis = if let Some(basis) = bases.get(&basis_key) {
             Arc::clone(basis)
         } else {
-            let Some(basis) = InterpolationBasis::from_source_locations(
-                &source_locations,
-                self.axes(),
-                self.design_normalization()?,
+            let Some(basis) = InterpolationBasis::from_sample_locations(
+                &sample_locations,
+                &self.glyph_space_axes(glyph),
+                self.glyph_space_normalization(glyph)?,
             ) else {
                 return Ok(None);
             };
@@ -577,9 +649,9 @@ impl Font {
             bases.insert(basis_key, Arc::clone(&basis));
             basis
         };
-        let sources = compatible_sources
+        let sources = compatible_samples
             .into_iter()
-            .map(|(source_id, _, values)| GlyphInterpolationSource { source_id, values })
+            .map(|(sample, _, values)| GlyphInterpolationSource { sample, values })
             .collect();
 
         Ok(Some(GlyphInterpolation {
@@ -591,7 +663,7 @@ impl Font {
 }
 
 fn interpolation_basis(
-    sources: &[(SourceId, NormalizedLocation)],
+    sources: &[(InterpolationSample, NormalizedLocation)],
     axes: &[Axis],
     design_normalization: Vec<DesignNormalization>,
 ) -> Option<InterpolationBasis> {
@@ -637,7 +709,7 @@ fn interpolation_basis(
         .deltas_with_rounding::<f64, f64>(&points, RoundingBehaviour::None)
         .ok()?;
     Some(InterpolationBasis {
-        source_ids: sources.iter().map(|(source_id, _)| *source_id).collect(),
+        samples: sources.iter().map(|(sample, _)| *sample).collect(),
         design_normalization,
         basis: VariationBasis::from_fontdrasil(model_coefficients, &axis_ids_by_tag),
     })
@@ -724,7 +796,7 @@ mod tests {
 
     use super::{blend_values, virtual_default_coefficients};
     use crate::test_support::sample_variable_font;
-    use crate::{DesignLocation, GlyphInterpolationValues};
+    use crate::{DesignLocation, GlyphInterpolationValues, Location};
 
     fn location(coordinates: &[(&str, f64)]) -> NormalizedLocation {
         coordinates
@@ -878,7 +950,8 @@ mod tests {
         let glyph = font.glyph_by_name("A").unwrap();
         let interpolation = font.glyph_interpolation(glyph.id()).unwrap().unwrap();
 
-        for (expected_index, source_id) in interpolation.basis().source_ids().iter().enumerate() {
+        let source_ids = interpolation.basis().source_ids().unwrap();
+        for (expected_index, source_id) in source_ids.iter().enumerate() {
             let source = font.source(*source_id).unwrap();
             let weights = interpolation
                 .basis()
@@ -903,7 +976,7 @@ mod tests {
         let interpolation = font.glyph_interpolation(glyph.id()).unwrap().unwrap();
 
         let basis = font
-            .interpolation_basis_for(interpolation.basis().source_ids())
+            .interpolation_basis_for(&interpolation.basis().source_ids().unwrap())
             .unwrap()
             .unwrap();
 
@@ -911,15 +984,24 @@ mod tests {
     }
 
     #[test]
-    fn glyph_interpolation_rejects_missing_axis_definitions() {
+    fn glyph_interpolation_normalizes_with_the_bounds_its_basis_holds() {
+        // A glyph's basis spans its own axes too, which the font's axis list
+        // doesn't hold, so it normalizes with the bounds it was built with
+        // and refuses bounds that miss an axis it varies along.
         let font = sample_variable_font();
-        let glyph = font.glyph_by_name("A").unwrap();
-        let interpolation = font.glyph_interpolation(glyph.id()).unwrap().unwrap();
+        let glyph_id = font.glyph_id_by_name("A").unwrap();
+        let interpolation = font.glyph_interpolation(glyph_id).unwrap().unwrap();
+        let location = DesignLocation::from([(font.axes()[0].id(), 600.0)]);
 
-        let error = interpolation
-            .resolve(&DesignLocation::new(), &[])
+        let without_axes = interpolation.resolve(&location, &[]).unwrap();
+        let with_axes = interpolation.resolve(&location, font.axes()).unwrap();
+        let without_bounds = interpolation
+            .basis()
+            .variation_basis()
+            .evaluate(&Location::new(), font.axes(), Some(&[]))
             .unwrap_err();
 
-        assert!(matches!(error, crate::CoreError::AxisNotFound(_)));
+        assert_eq!(without_axes, with_axes);
+        assert!(matches!(without_bounds, crate::CoreError::AxisNotFound(_)));
     }
 }

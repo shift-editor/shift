@@ -3,12 +3,14 @@ use crate::collection::{EntityList, Identified};
 use crate::component::Component;
 use crate::contour::Contour;
 use crate::entity::{
-    AnchorId, ComponentId, ContourId, GlyphEntityId, GlyphId, GuidelineId, LayerId, PointId,
-    SourceId,
+    AnchorId, AxisId, ComponentId, ContourId, GlyphEntityId, GlyphId, GuidelineId, LayerId,
+    PointId, SourceId,
 };
+use crate::glyph_axis::GlyphAxis;
 use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
+use crate::located_layer::LayerLocation;
 use crate::mark_color::MarkColor;
 use crate::metrics_keys::{MetricsKey, MetricsKeySide, MetricsKeys};
 use crate::point::{Canonical, Point};
@@ -36,6 +38,9 @@ pub struct Glyph {
     /// The colour the glyph is tagged with, in every source.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     mark_color: Option<MarkColor>,
+    /// Axes only this glyph varies along, in the order they were added.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    axes: Vec<GlyphAxis>,
 }
 
 impl Identified for Glyph {
@@ -49,7 +54,10 @@ impl Identified for Glyph {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GlyphLayer {
     id: LayerId,
-    source_id: SourceId,
+    /// Where the layer draws. It takes the place the layer's source id had
+    /// in stored layers, and a layer exactly on a source still writes only
+    /// that id there; see [`LayerLocation`]'s serde.
+    location: LayerLocation,
     width: f64,
     height: Option<f64>,
     contours: EntityList<Contour>,
@@ -88,10 +96,19 @@ impl GlyphLayer {
             .flat_map(|contour| contour.points().iter())
     }
 
+    /// An empty layer exactly on `source_id`.
     pub fn new(id: LayerId, source_id: SourceId) -> Self {
+        Self::located(id, LayerLocation::at_source(source_id))
+    }
+
+    /// An empty layer that draws at `location` in its glyph's design space:
+    /// exactly on a source, or off the sources as a glyph source on the
+    /// glyph's own axes, an intermediate on the font's axes, or both. A
+    /// location without a base source needs none.
+    pub fn located(id: LayerId, location: LayerLocation) -> Self {
         Self {
             id,
-            source_id,
+            location,
             width: 0.0,
             height: None,
             contours: EntityList::new(),
@@ -101,6 +118,35 @@ impl GlyphLayer {
             lib: LibData::new(),
             metrics_keys: MetricsKeys::new(),
         }
+    }
+
+    /// Where this layer draws: exactly on a source, or at a location of its
+    /// own.
+    pub fn location(&self) -> &LayerLocation {
+        &self.location
+    }
+
+    /// Whether the layer draws exactly on `source_id`, with no coordinates of
+    /// its own: the layer a per-source lookup means.
+    pub fn is_at_source(&self, source_id: SourceId) -> bool {
+        self.location.exact_source_id() == Some(source_id)
+    }
+
+    /// Whether the layer draws at a location of its own rather than exactly
+    /// on a source.
+    pub fn is_located(&self) -> bool {
+        self.location.exact_source_id().is_none()
+    }
+
+    /// Moves the layer to `location`.
+    pub fn relocate(&mut self, location: LayerLocation) {
+        self.location = location;
+    }
+
+    /// The layer's own coordinates, for an edit that rewrites values stored
+    /// on an axis; `None` for a layer exactly on its source.
+    pub(crate) fn own_location_mut(&mut self) -> Option<&mut LayerLocation> {
+        self.is_located().then_some(&mut self.location)
     }
 
     pub fn with_width(id: LayerId, source_id: SourceId, width: f64) -> Self {
@@ -114,31 +160,39 @@ impl GlyphLayer {
         self.id
     }
 
-    pub fn source_id(&self) -> SourceId {
-        self.source_id
+    /// The source the layer's location starts from: the source it sits on,
+    /// or the base of its own location. `None` for a layer placed by
+    /// coordinates alone.
+    pub fn source_id(&self) -> Option<SourceId> {
+        self.location.base_source_id()
     }
 
+    /// This layer under `id`, exactly on `source_id`.
     pub fn clone_with_identity(&self, id: LayerId, source_id: SourceId) -> Self {
         let mut layer = self.clone();
         layer.id = id;
-        layer.source_id = source_id;
+        layer.location = LayerLocation::at_source(source_id);
         layer
     }
 
-    /// This layer's advance, height, lib, and metrics keys under `id` and
-    /// `source_id`, with no contours, components, anchors, or guidelines:
-    /// the start of a copy that rebuilds its content.
-    fn without_content(&self, id: LayerId, source_id: SourceId) -> Self {
+    /// This layer's advance, height, lib, and metrics keys under `id` at
+    /// `location`, with no contours, components, anchors, or guidelines:
+    /// the start of a copy that rebuilds its content, or a placeholder for
+    /// a layer whose content is not loaded.
+    pub fn without_content(&self, id: LayerId, location: LayerLocation) -> Self {
         Self {
+            width: self.width,
             height: self.height,
             lib: self.lib.clone(),
             metrics_keys: self.metrics_keys.clone(),
-            ..Self::with_width(id, source_id, self.width)
+            ..Self::located(id, location)
         }
     }
 
-    pub fn clone_with_fresh_ids(&self, id: LayerId, source_id: SourceId) -> Self {
-        let mut layer = self.without_content(id, source_id);
+    /// A copy of this layer under `id` at `location`, every contour, point,
+    /// component, anchor and guideline with a fresh id.
+    pub fn clone_with_fresh_ids(&self, id: LayerId, location: LayerLocation) -> Self {
+        let mut layer = self.without_content(id, location);
 
         for contour in self.contours_iter() {
             let mut cloned_contour = Contour::new();
@@ -192,7 +246,7 @@ impl GlyphLayer {
     #[must_use]
     pub fn with_derived_entity_ids(&self) -> Self {
         let namespace = self.id.as_str();
-        let mut layer = self.without_content(self.id, self.source_id);
+        let mut layer = self.without_content(self.id, self.location.clone());
         for (contour_index, contour) in self.contours_iter().enumerate() {
             let place = format!("contour {contour_index}");
             let mut derived = Contour::with_id(ContourId::derived(namespace, &place));
@@ -245,7 +299,7 @@ impl GlyphLayer {
     /// Replaces drawing content in font units, preserving layer identity and auxiliary data.
     ///
     /// Contours, anchors, and components retain the supplied order and identities.
-    /// Height, source binding, guidelines, and library data are unchanged.
+    /// Height, location, guidelines, and library data are unchanged.
     /// Font-wide identity and component-reference validation belongs to the font intent path.
     ///
     /// # Errors
@@ -516,6 +570,7 @@ impl Glyph {
             lib: LibData::new(),
             metrics_keys: MetricsKeys::new(),
             mark_color: None,
+            axes: Vec::new(),
         }
     }
 
@@ -664,6 +719,26 @@ impl Glyph {
             .flat_map(|layer| layer.component_glyph_ids())
     }
 
+    /// The axes only this glyph varies along, in the order they were added.
+    pub fn axes(&self) -> &[GlyphAxis] {
+        &self.axes
+    }
+
+    /// The glyph's own axis with `axis_id`.
+    pub fn axis(&self, axis_id: AxisId) -> Option<&GlyphAxis> {
+        self.axes.iter().find(|axis| axis.id() == axis_id)
+    }
+
+    /// Gives the glyph `axes`, as a reader of stored glyphs does before
+    /// adding the glyph to a font, which checks them.
+    pub fn set_axes(&mut self, axes: Vec<GlyphAxis>) {
+        self.axes = axes;
+    }
+
+    pub(crate) fn axes_mut(&mut self) -> &mut Vec<GlyphAxis> {
+        &mut self.axes
+    }
+
     pub fn layer(&self, id: LayerId) -> Option<&GlyphLayer> {
         self.layers.get(&id).map(Arc::as_ref)
     }
@@ -676,7 +751,7 @@ impl Glyph {
         if let Some(layer_id) = self
             .layers
             .values()
-            .find(|layer| layer.source_id() == source_id)
+            .find(|layer| layer.is_at_source(source_id))
             .map(Identified::id)
         {
             return self.layer_mut(layer_id).expect("layer id came from glyph");
@@ -704,14 +779,7 @@ impl Glyph {
     pub fn shared_layer_for_source(&self, source_id: SourceId) -> Option<&Arc<GlyphLayer>> {
         self.layers
             .values()
-            .find(|layer| layer.source_id() == source_id)
-    }
-
-    pub fn layer_for_source_mut(&mut self, source_id: SourceId) -> Option<&mut GlyphLayer> {
-        self.layers
-            .values_mut()
-            .find(|layer| layer.source_id() == source_id)
-            .map(Arc::make_mut)
+            .find(|layer| layer.is_at_source(source_id))
     }
 
     pub fn remove_layer(&mut self, id: LayerId) -> Option<GlyphLayer> {
@@ -775,7 +843,8 @@ mod tests {
             .set(MetricsKeySide::Right, MetricsKey::new("=|"));
 
         let derived = layer.with_derived_entity_ids();
-        let fresh = layer.clone_with_fresh_ids(LayerId::new(), SourceId::new());
+        let fresh =
+            layer.clone_with_fresh_ids(LayerId::new(), LayerLocation::at_source(SourceId::new()));
 
         assert_eq!(derived.metrics_keys(), layer.metrics_keys());
         assert_eq!(fresh.metrics_keys(), layer.metrics_keys());

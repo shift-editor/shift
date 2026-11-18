@@ -5,6 +5,7 @@
 //! carry caller-minted ids and insertion anchors, while changesets retain
 //! expected originals and replacements for atomic persistence and inversion.
 
+use crate::LayerLocation;
 use crate::Require;
 use crate::anchor_attachment::realign_attached_components;
 use crate::changes::{FontChange, FontChangeSet, Replacement, SourceCollection};
@@ -471,17 +472,18 @@ impl EditScopes {
             else {
                 continue;
             };
-            changed
-                .entry(layer.source_id())
-                .or_default()
-                .insert(glyph_id);
+            // A layer placed by coordinates alone is no source's layer.
+            if let Some(source_id) = layer.source_id() {
+                changed.entry(source_id).or_default().insert(glyph_id);
+            }
         }
         for glyph in self.glyph_ids.iter().filter_map(|id| font.glyph(*id)) {
-            for layer in glyph.layers().values() {
-                changed
-                    .entry(layer.source_id())
-                    .or_default()
-                    .insert(glyph.id());
+            for source_id in glyph
+                .layers()
+                .values()
+                .filter_map(|layer| layer.source_id())
+            {
+                changed.entry(source_id).or_default().insert(glyph.id());
             }
         }
         changed
@@ -930,7 +932,7 @@ impl Font {
                 layer.apply_read_values(
                     interpolation.reference_layer(),
                     values,
-                    self.axes(),
+                    self,
                     &location,
                 )?;
             }
@@ -968,7 +970,8 @@ impl Font {
         }
 
         let source_layer = self.require_layer(from_layer_id)?;
-        let layer = source_layer.clone_with_fresh_ids(layer_id, source_id);
+        let layer =
+            source_layer.clone_with_fresh_ids(layer_id, LayerLocation::at_source(source_id));
 
         Ok(layer)
     }
@@ -997,7 +1000,9 @@ impl Font {
         base_glyph_id: GlyphId,
     ) -> CoreResult<Option<DecomposedTransform>> {
         let layer = self.require_layer(layer_id)?;
-        let source_id = layer.source_id();
+        let Some(source_id) = layer.source_id() else {
+            return Ok(None);
+        };
         let base_layer_at_source = |glyph_id: GlyphId| {
             self.glyph(glyph_id)
                 .and_then(|glyph| glyph.layer_for_source(source_id))

@@ -529,3 +529,91 @@ pub fn kerning_between(font: &Font, source_id: SourceId, first: &str, second: &s
 pub fn default_kerning_between(font: &Font, first: &str, second: &str) -> Option<f64> {
     kerning_between(font, font.default_source_id()?, first, second)
 }
+
+/// A Solenoid-like font with glyph axes and drawings off its sources, for
+/// tests of where drawings sit.
+///
+/// A Bleed axis (`BLED`, 0 to 100) has a Regular master at 0 and a Bled one
+/// at 100. `dot` has axes of its own, Spread and Strike (0 to 100), and is a
+/// two-point line drawn on both masters and at Spread 100 and Strike 100 on
+/// Regular. `H` holds two `dot` components on both masters, the first
+/// setting Spread 60, and has a brace layer at Bleed 50 with no base source
+/// whose first component sets Spread 80.
+///
+/// # Panics
+///
+/// Panics if the font's model refuses the fixture, which would be a bug.
+pub fn glyph_axis_font() -> Font {
+    use crate::{GlyphAxis, LayerLocation};
+
+    let line = |location: LayerLocation, from: (f64, f64), to: (f64, f64)| {
+        let mut layer = GlyphLayer::located(LayerId::new(), location);
+        let mut contour = Contour::new();
+        contour.add_point(from.0, from.1, PointType::OnCurve, false);
+        contour.add_point(to.0, to.1, PointType::OnCurve, false);
+        layer.add_contour(contour);
+        layer
+    };
+
+    let mut font = Font::new();
+    font.clear_sources();
+    let axis = Axis::new("BLED".into(), "Bleed".into(), 0.0, 0.0, 100.0);
+    let bleed = axis.id();
+    font.add_axis(axis).unwrap();
+    let regular = font.add_source(Source::new(
+        "Regular".into(),
+        DesignLocation::from([(bleed, 0.0)]),
+    ));
+    let bled = font.add_source(Source::new(
+        "Bled".into(),
+        DesignLocation::from([(bleed, 100.0)]),
+    ));
+    font.set_default_source_id(regular);
+
+    let dot = GlyphId::from_raw("dot");
+    let mut glyph = Glyph::with_id(dot, "dot");
+    glyph.set_layer(line(
+        LayerLocation::at_source(regular),
+        (0.0, 0.0),
+        (10.0, 0.0),
+    ));
+    glyph.set_layer(line(
+        LayerLocation::at_source(bled),
+        (20.0, 0.0),
+        (30.0, 0.0),
+    ));
+    font.insert_glyph(glyph).unwrap();
+    let spread = font
+        .add_glyph_axis(dot, GlyphAxis::new("Spread", 0.0, 0.0, 100.0))
+        .unwrap();
+    let strike = font
+        .add_glyph_axis(dot, GlyphAxis::new("Strike", 0.0, 0.0, 100.0))
+        .unwrap();
+    let on_regular =
+        |axis: AxisId| LayerLocation::new(Some(regular), DesignLocation::from([(axis, 100.0)]));
+    font.insert_glyph_layer(dot, line(on_regular(spread), (0.0, 0.0), (110.0, 0.0)))
+        .unwrap();
+    font.insert_glyph_layer(dot, line(on_regular(strike), (0.0, 50.0), (10.0, 50.0)))
+        .unwrap();
+
+    let h_layer = |location: LayerLocation, first_spread: f64| {
+        let mut layer = GlyphLayer::located(LayerId::new(), location);
+        layer.set_width(720.0);
+        let mut spread_dot = Component::new(dot, "dot");
+        spread_dot.set_location(DesignLocation::from([(spread, first_spread)]));
+        layer.add_component(spread_dot);
+        let mut plain_dot = Component::new(dot, "dot");
+        plain_dot.translate(500.0, 0.0);
+        layer.add_component(plain_dot);
+        layer
+    };
+    let h = GlyphId::from_raw("H");
+    let mut glyph = Glyph::with_id(h, "H");
+    for source in [regular, bled] {
+        glyph.set_layer(h_layer(LayerLocation::at_source(source), 60.0));
+    }
+    font.insert_glyph(glyph).unwrap();
+    let brace = LayerLocation::at(DesignLocation::from([(bleed, 50.0)]));
+    font.insert_glyph_layer(h, h_layer(brace, 80.0)).unwrap();
+    font
+}

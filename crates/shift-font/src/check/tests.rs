@@ -27,7 +27,8 @@ fn edit_layer(font: &mut Font, source: &str, edit: impl FnOnce(&mut GlyphLayer))
     let source_id = source_named(font, source);
     let glyph_id = font.glyph_id_by_name("A").unwrap();
     let mut glyph = font.pop_glyph(glyph_id).unwrap();
-    edit(glyph.layer_for_source_mut(source_id).unwrap());
+    let layer_id = glyph.layer_for_source(source_id).unwrap().id();
+    edit(glyph.layer_mut(layer_id).unwrap());
     font.insert_glyph(glyph).unwrap();
 }
 

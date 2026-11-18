@@ -36,6 +36,8 @@ Recovery states are `Clean`, `Dirty`, `SavePending`, and `Conflict`:
 
 - Font metadata and the glyph/layer directory remain relational and load eagerly. Layer rows reference their glyph rather than duplicating its editable name.
 - Each editable glyph layer is one independently addressable, store-private MessagePack payload identified as `shift.glyph-layer.v1`; the store independently wraps it as `none` or `zstd.v1` without changing authored semantics.
+- A glyph's own axes are rows of `glyph_axes` (id, tag, name, range, order). Their ids and tags share the font axes' namespace, which `shift-font` enforces, not SQL.
+- Where a layer draws is relational, so the directory places every drawing without reading payloads: `glyph_layers.source_id` is the source its location starts from (`NULL` for a layer placed by coordinates alone, such as a brace layer), and `glyph_layer_locations` holds the coordinates that move it off that source, in each axis's own units. An axis there is a font axis or one of the glyph's, checked in Rust, so it has no foreign key. A layer exactly on a source has no coordinate rows. On load the directory's location replaces whatever place the payload records.
 - Component dependency rows contain only the earned query index: component ID, owner layer ID, base glyph ID, and ordinal.
 - Points, contours, anchors, transforms, guidelines, and layer lib values are canonical only inside the layer BLOB; they are not duplicated as normalized SQL rows.
 - Payload replacement, directory facts, component rows, monotonic workspace revision, and the workspace-supplied dirty value commit in one transaction.
@@ -49,7 +51,7 @@ Recovery states are `Clean`, `Dirty`, `SavePending`, and `Conflict`:
 
 `glyph_layer_payloads` stores `inner_format`, `compression`, `stored_byte_length`,
 `decoded_byte_length`, `decoded_blake3`, and `payload`. `inner_format` remains
-`shift.glyph-layer.v1`. Its bytes are `rmp-serde`'s compact serialization of `GlyphLayer`; struct field order and enum Serde attributes are format-bearing and require a new identifier if changed. Compression is either `none` or `zstd.v1`; `zstd.v1` means one complete independent Zstandard frame with no dictionary. Level 1 is the current write policy, not a decoding
+`shift.glyph-layer.v1`. Its bytes are `rmp-serde`'s compact serialization of `GlyphLayer`; struct field order and enum Serde attributes are format-bearing and require a new identifier if changed. The second field, once the layer's source id, is now its `LayerLocation`: a layer exactly on a source still writes the bare source id there, so its bytes are those of a layer stored before locations; a layer placed by coordinates alone writes `nil` or `[base, coordinates]`. Old payloads therefore decode unchanged and are never rewritten. Compression is either `none` or `zstd.v1`; `zstd.v1` means one complete independent Zstandard frame with no dictionary. Level 1 is the current write policy, not a decoding
 requirement. Writers retain compressed bytes only when they are smaller than the canonical input.
 
 `decoded_blake3` is the 32-byte BLAKE3 of the exact canonical bytes. Reads bound both lengths before
@@ -68,6 +70,8 @@ only then invoke strict MessagePack decoding. A layer replacement may move betwe
 Canonical SQLite publication must preserve the complete `shift-font::Font`, not a projection chosen for one exporter. The kitchen-sink canonical-document test covers metadata, metrics, axes and mappings, named instances, sources, kerning, features, libs, binary data, guidelines, glyph layers, components, anchors, and stable authored identities through SQLite equality. UFO and Designspace exports must materialize that complete canonical state and use their dedicated writers. Any concept the target format cannot represent requires an explicit export diagnostic; no exporter may silently narrow the canonical document or route through another authoring format.
 
 ## Schema policy
+
+Documents, working stores and recovery overlays carry `user_version` 7 and upgrade on open through the frozen steps in `schema.rs`; the overlay's version is the document's by definition. Version 7 adds `glyph_axes` and `glyph_layer_locations` and rebuilds `glyph_layers` so `source_id` may be `NULL`. The rebuild copies directory rows only; payload BLOBs are in their own table and are not touched, which keeps the upgrade cheap at CJK scale. `migrate` turns foreign keys off around its transaction, as SQLite's table-rebuild procedure requires, so dropping the old table cascades to nothing.
 
 Shift has not shipped either SQLite schema. Schema changes therefore update the version-1 baselines directly; there is intentionally no compatibility migration for earlier development databases. Every canonical table must be classified in the recovery catalog; open validates the overlay's columns, primary keys, foreign keys, and dependency order before installing generated merged views. Canonical document schema stabilization is gated on preservation/export goldens and hostile-input budgets.
 

@@ -68,7 +68,7 @@ fn sqlite_payload_preserves_canonical_bytes() {
         .conn
         .execute(
             "INSERT INTO sources (id, name, kind, order_index) VALUES (?1, 'Golden', 'master', 0)",
-            [layer.source_id().to_string()],
+            [layer.source_id().unwrap().to_string()],
         )
         .unwrap();
     store

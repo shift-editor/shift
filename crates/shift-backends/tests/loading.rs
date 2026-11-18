@@ -174,7 +174,7 @@ fn loads_ufo_components_anchors_layers_and_kerning() {
             .all(|layer| font
                 .sources()
                 .iter()
-                .any(|source| source.id() == layer.source_id()))
+                .any(|source| Some(source.id()) == layer.source_id()))
     );
 
     assert_eq!(

@@ -110,6 +110,8 @@ pub(super) const SOURCES: RecoveryTable =
     RecoveryTable::overlay_rows("sources", Some("source"), SOURCE_BASE_FALLBACK_COLUMNS);
 pub(super) const GLYPHS: RecoveryTable =
     RecoveryTable::overlay_rows("glyphs", Some("glyph"), NO_BASE_FALLBACK_COLUMNS);
+pub(super) const GLYPH_AXES: RecoveryTable =
+    RecoveryTable::replace_collection("glyph_axes", Some("glyph_id"), false);
 pub(super) const GLYPH_UNICODES: RecoveryTable =
     RecoveryTable::replace_collection("glyph_unicodes", Some("glyph_id"), false);
 pub(super) const FONT_GUIDELINES: RecoveryTable = RecoveryTable::canonical_only("font_guidelines");
@@ -137,6 +139,8 @@ pub(super) const GLYPH_LAYERS: RecoveryTable =
     RecoveryTable::overlay_rows("glyph_layers", Some("layer"), NO_BASE_FALLBACK_COLUMNS);
 pub(super) const GLYPH_LAYER_PAYLOADS: RecoveryTable =
     RecoveryTable::overlay_rows("glyph_layer_payloads", None, NO_BASE_FALLBACK_COLUMNS);
+pub(super) const GLYPH_LAYER_LOCATIONS: RecoveryTable =
+    RecoveryTable::replace_collection("glyph_layer_locations", Some("layer_id"), false);
 pub(super) const GLYPH_COMPONENTS: RecoveryTable =
     RecoveryTable::replace_collection("glyph_components", Some("layer_id"), false);
 pub(super) const DOCUMENT_METADATA: RecoveryTable =
@@ -153,6 +157,7 @@ const RECOVERY_TABLES: &[RecoveryTable] = &[
     NAMED_INSTANCES,
     SOURCES,
     GLYPHS,
+    GLYPH_AXES,
     GLYPH_UNICODES,
     FONT_GUIDELINES,
     SOURCE_LOCATIONS,
@@ -168,6 +173,7 @@ const RECOVERY_TABLES: &[RecoveryTable] = &[
     FONT_BINARIES,
     GLYPH_LAYERS,
     GLYPH_LAYER_PAYLOADS,
+    GLYPH_LAYER_LOCATIONS,
     GLYPH_COMPONENTS,
     DOCUMENT_METADATA,
     SCENE_NODES,

@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashSet};
 
 use shift_font::{
     AppliedIntents, CoreError, Font, FontChange, FontChangeSet, FontIntentSet, Glyph, GlyphId,
-    GlyphLayer, LayerId, TouchedLayer,
+    LayerId, TouchedLayer,
 };
 
 use crate::scene::{Scene, SceneChangeSet, SceneError, SceneIntent};
@@ -259,10 +259,7 @@ impl EngineSession {
                 if self.residency.is_unloaded(layer.id()) || !seen.insert(layer.id()) {
                     continue;
                 }
-                let mut placeholder =
-                    GlyphLayer::with_width(layer.id(), layer.source_id(), layer.width());
-                placeholder.set_height(layer.height());
-                placeholders.push(placeholder);
+                placeholders.push(layer.without_content(layer.id(), layer.location().clone()));
                 evicted.push(layer.id());
             }
         }

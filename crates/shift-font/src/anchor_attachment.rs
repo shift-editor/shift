@@ -121,14 +121,16 @@ pub(crate) fn realign_attached_components<'a>(
     changed_layers
 }
 
-/// The component glyph's own anchors at `layer`'s source; none when it has no layer there.
+/// The component glyph's own anchors at `layer`'s source; none when it has no
+/// layer there or `layer` has no source.
 fn base_anchors<'font>(
     font: &'font Font,
     component: &Component,
     layer: &GlyphLayer,
 ) -> &'font [Anchor] {
     font.glyph(component.base_glyph_id())
-        .and_then(|glyph| glyph.layer_for_source(layer.source_id()))
+        .zip(layer.source_id())
+        .and_then(|(glyph, source_id)| glyph.layer_for_source(source_id))
         .map_or(&[], GlyphLayer::anchors)
 }
 

@@ -11,13 +11,54 @@
 //! When the masters' components take unset axes from different places, each
 //! is filled on every font axis, applying its own inheritance, so its
 //! inheritance no longer matters to how it draws.
+//!
+//! An axis of the base glyph's own is never inherited: a component that
+//! doesn't set it is filled with the axis default.
 
 use std::collections::BTreeSet;
 
 use crate::{
-    Axis, AxisId, AxisList, Component, ComponentInheritance, CoreResult, DesignLocation,
+    Axis, AxisId, AxisList, Component, ComponentInheritance, CoreResult, DesignLocation, Font,
     GlyphInterpolationValues, GlyphLayer,
 };
+
+/// Where a component that doesn't set an axis takes its value from: the
+/// axes a reader knows.
+pub trait InheritedValues {
+    /// The value a component that doesn't set `axis_id` draws its base glyph
+    /// at on that axis, when the glyph it is placed in draws at `parent`;
+    /// `None` for an axis this reader doesn't know.
+    fn inherited_value(
+        &self,
+        axis_id: AxisId,
+        inheritance: ComponentInheritance,
+        parent: &DesignLocation,
+    ) -> Option<f64>;
+}
+
+/// Font axes alone, for a reader that holds them without the font.
+impl InheritedValues for [Axis] {
+    fn inherited_value(
+        &self,
+        axis_id: AxisId,
+        inheritance: ComponentInheritance,
+        parent: &DesignLocation,
+    ) -> Option<f64> {
+        Some(inheritance.inherited_value(self.axis(axis_id)?, parent))
+    }
+}
+
+/// The font's axes and every glyph's axes; see [`Font::inherited_value`].
+impl InheritedValues for Font {
+    fn inherited_value(
+        &self,
+        axis_id: AxisId,
+        inheritance: ComponentInheritance,
+        parent: &DesignLocation,
+    ) -> Option<f64> {
+        Self::inherited_value(self, axis_id, inheritance, parent)
+    }
+}
 
 /// The axes, and the inheritance, one component carries in every master's
 /// interpolation values.
@@ -78,12 +119,13 @@ impl ComponentLocationFill {
         Self { slots }
     }
 
-    /// `layer`, a master drawn at `location`, with each component carrying
-    /// its slot's axes: an axis it doesn't set takes the value it inherits
-    /// there. `None` when no slot asks for anything the layer lacks.
+    /// `layer`, a drawing at `location`, with each component carrying its
+    /// slot's axes: an axis it doesn't set takes the value it inherits there
+    /// (see [`InheritedValues`]). `None` when no slot asks for anything the
+    /// layer lacks.
     pub fn fill(
         &self,
-        axes: &[Axis],
+        font: &(impl InheritedValues + ?Sized),
         layer: &GlyphLayer,
         location: &DesignLocation,
     ) -> Option<GlyphLayer> {
@@ -106,13 +148,11 @@ impl ComponentLocationFill {
                 if component_location.get(axis_id).is_some() {
                     continue;
                 }
-                let Some(axis) = axes.axis(*axis_id) else {
+                let Some(value) = font.inherited_value(*axis_id, component.inheritance(), location)
+                else {
                     continue;
                 };
-                component_location.set(
-                    *axis_id,
-                    component.inheritance().inherited_value(axis, location),
-                );
+                component_location.set(*axis_id, value);
             }
             component.set_location(component_location);
             component.set_inheritance(slot.inheritance);
@@ -139,7 +179,7 @@ impl GlyphLayer {
         &mut self,
         read: &Self,
         values: &GlyphInterpolationValues,
-        axes: &[Axis],
+        font: &(impl InheritedValues + ?Sized),
         location: &DesignLocation,
     ) -> CoreResult<()> {
         if read.components().len() != self.components().len() {
@@ -168,9 +208,9 @@ impl GlyphLayer {
                 .iter()
                 .filter(|(axis_id, value)| {
                     set.get(axis_id).is_some()
-                        || axes.axis(**axis_id).is_none_or(|axis| {
-                            inheritance.inherited_value(axis, location) != **value
-                        })
+                        || font
+                            .inherited_value(**axis_id, inheritance, location)
+                            .is_none_or(|inherited| inherited != **value)
                 })
                 .map(|(axis, value)| (*axis, *value))
                 .collect();

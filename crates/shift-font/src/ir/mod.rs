@@ -9,6 +9,7 @@ pub mod entity;
 pub mod features;
 pub mod font;
 pub mod glyph;
+pub mod glyph_axis;
 pub mod glyph_category;
 pub mod glyph_name;
 pub mod grid;
@@ -45,6 +46,7 @@ pub use entity::{
 pub use features::FeatureData;
 pub use font::{Font, FontCopyId, FontMetadata, LANGUAGES_LIB_KEY};
 pub use glyph::{Glyph, GlyphLayer};
+pub use glyph_axis::{AxisValueUse, GlyphAxis, GlyphAxisEdit};
 pub use glyph_category::{
     GlyphCategory, GlyphClasses, GlyphDataCategory, GlyphSubcategory, Ligature, NamedGlyph,
     OpenTypeCategories, OpenTypeCategory, RecordCategory, UnknownGlyphCategory,

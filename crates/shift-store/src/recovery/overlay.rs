@@ -5,7 +5,9 @@ use rusqlite::{Connection, OpenFlags, params};
 use crate::{CommitId, DocumentId, StoreError, connection::configure_common, schema};
 
 const RECOVERY_APPLICATION_ID: i64 = 0x5348_4652;
-const RECOVERY_SCHEMA_VERSION: i64 = 6;
+/// An overlay holds the document's authored tables and runs the same
+/// migrations, so its version is the document's.
+const RECOVERY_SCHEMA_VERSION: i64 = schema::SHIFT_DOCUMENT_SCHEMA_VERSION;
 
 const RECOVERY_SCHEMA: &str = r"
 CREATE TABLE IF NOT EXISTS recovery_metadata (

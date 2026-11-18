@@ -374,13 +374,7 @@ fn placeholders(font: &Font) -> Font {
     let layers: Vec<GlyphLayer> = font
         .glyphs()
         .flat_map(|glyph| glyph.layers().values())
-        .map(|layer| {
-            let mut placeholder =
-                GlyphLayer::with_width(layer.id(), layer.source_id(), layer.width());
-            placeholder.set_height(layer.height());
-            *placeholder.metrics_keys_mut() = layer.metrics_keys().clone();
-            placeholder
-        })
+        .map(|layer| layer.without_content(layer.id(), layer.location().clone()))
         .collect();
     directory.replace_glyph_layers(layers).unwrap();
     directory

@@ -1,5 +1,5 @@
 use crate::GlyphName;
-use crate::axis::{Axis, DesignLocation};
+use crate::axis::{Axis, AxisList, DesignLocation};
 use crate::collection::Identified;
 use crate::entity::{ComponentId, GlyphId};
 use crate::point::Canonical;
@@ -45,16 +45,27 @@ impl ComponentInheritance {
     }
 
     /// The location a base glyph draws at when its component sets `set` and
-    /// the glyph the component is placed in draws at `parent`: `parent`, or
-    /// `font_default` for [`Self::Font`], with `set` laid over it.
+    /// the glyph the component is placed in draws at `parent`: `parent` on
+    /// `font_axes`, or `font_default` for [`Self::Font`], with `set` laid
+    /// over it.
+    ///
+    /// Only font axes are inherited. A coordinate `parent` has on any other
+    /// axis is a glyph axis of some glyph, and a glyph axis never passes from
+    /// a glyph to the glyphs its components draw: the base draws at the
+    /// default of each of its own axes `set` leaves out.
     pub fn base_location(
         self,
         set: &DesignLocation,
         parent: &DesignLocation,
         font_default: &DesignLocation,
+        font_axes: &[Axis],
     ) -> DesignLocation {
         let mut location = match self {
-            Self::Parent => parent.clone(),
+            Self::Parent => parent
+                .iter()
+                .filter(|(axis_id, _)| font_axes.contains_axis(**axis_id))
+                .map(|(axis_id, value)| (*axis_id, *value))
+                .collect(),
             Self::Font => font_default.clone(),
         };
         location.extend(set.iter().map(|(axis, value)| (*axis, *value)));
@@ -536,16 +547,19 @@ impl Component {
     }
 
     /// The location the base glyph draws at when the glyph this component
-    /// is placed in draws at `parent`: `parent`, or `font_default` when the
-    /// component [inherits from the font](ComponentInheritance::Font), with
-    /// [`Self::location`] laid over it.
+    /// is placed in draws at `parent`: `parent` on `font_axes`, or
+    /// `font_default` when the component
+    /// [inherits from the font](ComponentInheritance::Font), with
+    /// [`Self::location`] laid over it. See
+    /// [`ComponentInheritance::base_location`].
     pub fn base_location(
         &self,
         parent: &DesignLocation,
         font_default: &DesignLocation,
+        font_axes: &[Axis],
     ) -> DesignLocation {
         self.inheritance
-            .base_location(&self.location, parent, font_default)
+            .base_location(&self.location, parent, font_default, font_axes)
     }
 
     pub fn translate(&mut self, dx: f64, dy: f64) {

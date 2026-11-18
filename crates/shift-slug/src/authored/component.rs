@@ -39,7 +39,7 @@ impl AuthoredWeightSet {
         basis: InterpolationBasis,
         source_weight_indices: Vec<u32>,
     ) -> Result<Self, AuthoredSlugError> {
-        let expected = basis.source_ids().len();
+        let expected = basis.samples().len();
         let actual = source_weight_indices.len();
         if expected != actual {
             return Err(AuthoredSlugError::WeightCountMismatch { expected, actual });
@@ -406,13 +406,13 @@ fn decomposition_advances(
     basis: &InterpolationBasis,
 ) -> Result<Vec<f32>, AuthoredSlugError> {
     basis
-        .source_ids()
+        .samples()
         .iter()
         .enumerate()
-        .map(|(source_index, source_id)| {
-            let location = font.require_source(*source_id)?.location();
+        .map(|(source_index, sample)| {
+            let location = font.sample_location(*sample)?;
             let glyph = font
-                .projection(location)
+                .projection(&location)
                 .glyph(glyph_id)?
                 .require(&glyph_id)?;
             authored_advance(glyph.x_advance(), source_index)
@@ -570,7 +570,7 @@ fn fallback_bounds(
         font,
         projection_set,
         projection,
-        projection.fallback().source_id(),
+        font.reading_source_id(projection.fallback())?,
     )?;
     let curves = curves_from_resolved_contours(resolved.contours())?;
     Ok(Bounds::of_curves(&curves))

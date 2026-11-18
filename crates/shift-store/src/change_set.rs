@@ -242,7 +242,9 @@ impl<'a> StoreWriter<'a> {
         self.tx.execute("DELETE FROM font_guidelines", [])?;
         self.tx.execute("DELETE FROM glyph_components", [])?;
         self.tx.execute("DELETE FROM glyph_layer_payloads", [])?;
+        self.tx.execute("DELETE FROM glyph_layer_locations", [])?;
         self.tx.execute("DELETE FROM glyph_layers", [])?;
+        self.tx.execute("DELETE FROM glyph_axes", [])?;
         self.tx.execute("DELETE FROM glyph_unicodes", [])?;
         self.tx.execute("DELETE FROM glyphs", [])?;
         self.tx.execute("DELETE FROM source_locations", [])?;
@@ -355,7 +357,7 @@ impl<'a> StoreWriter<'a> {
                         )?
                         .execute(params![glyph.id(), key, lib_value_json(value)?])?;
                 }
-                Ok(())
+                self.insert_glyph_axes(glyph)
             }
             WriteMode::Upsert => {
                 self.upsert_glyph(glyph, order_index)?;
@@ -365,9 +367,36 @@ impl<'a> StoreWriter<'a> {
                     "glyph_id",
                     Some(glyph.id().as_str()),
                     glyph.lib(),
-                )
+                )?;
+                self.tx
+                    .prepare_cached("DELETE FROM glyph_axes WHERE glyph_id = ?1")?
+                    .execute([glyph.id()])?;
+                self.insert_glyph_axes(glyph)
             }
         }
+    }
+
+    /// Inserts `glyph`'s own axes in order.
+    fn insert_glyph_axes(&self, glyph: &font::Glyph) -> Result<(), StoreError> {
+        for (order_index, axis) in glyph.axes().iter().enumerate() {
+            self.tx
+                .prepare_cached(
+                    "INSERT INTO glyph_axes (
+                        id, glyph_id, tag, name, min_value, default_value, max_value, order_index
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                )?
+                .execute(params![
+                    axis.id(),
+                    glyph.id(),
+                    axis.tag(),
+                    axis.name(),
+                    axis.minimum(),
+                    axis.as_axis().default(),
+                    axis.maximum(),
+                    sql_int(order_index),
+                ])?;
+        }
+        Ok(())
     }
 
     fn apply_change(
