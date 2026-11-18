@@ -1,6 +1,5 @@
 import { useMemo, useState, type ComponentType } from "react";
 import { useSignalState } from "@shift/editor/signals";
-import type { Editor } from "@shift/editor";
 import {
   Button,
   Menu,
@@ -18,16 +17,11 @@ import {
   SidebarActionRow,
   type CollapsibleSectionProps,
 } from "@/components/sidebar";
-import {
-  addGlyphSourceHere,
-  canAddGlyphSourceCell,
-  deleteGlyphSource,
-  glyphSourcesCell,
-  selectGlyphSource,
-} from "@/lib/variation/glyphAxes";
+import { deleteGlyphSource, glyphSourcesCell, selectGlyphSource } from "@/lib/variation/glyphAxes";
 import type { GlyphSourceRow } from "@/types/glyphAxes";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 import PlusIcon from "@/assets/general/plus.svg";
+import { NewGlyphSourcePanel } from "./NewGlyphSourcePanel";
 import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
 
 /**
@@ -35,8 +29,8 @@ import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
  * a glyph is edited: the glyph's own sources, its drawings off the font's
  * sources (brace drawings included), each named by where it sits. A glyph
  * with none says "None". Selecting one moves the sliders there and edits it;
- * its ⋮ deletes it. **+** adds a glyph source where the sliders sit; it is
- * disabled, saying why, where the glyph already has a source or glyph source.
+ * its ⋮ deletes it. **+** opens the New glyph source panel beside the
+ * sidebar, prefilled with where the sliders sit.
  */
 export const GlyphSourcesSection = ({
   section: Section = CollapsibleSection,
@@ -59,7 +53,7 @@ export const GlyphSourcesSection = ({
         title="Glyph sources"
         open={open}
         onOpenChange={setOpen}
-        actions={<AddGlyphSourceButton editor={editor} canAuthor={canAuthor} />}
+        actions={<AddGlyphSourceButton canAuthor={canAuthor} />}
       >
         {rows.length === 0 ? (
           <p className="pl-2 text-ui text-muted">None</p>
@@ -85,35 +79,20 @@ export const GlyphSourcesSection = ({
   );
 };
 
-/**
- * The section's **+**: adds a glyph source where the sliders sit, starting
- * from the outline shown. It follows a boolean, so a slider scrub that keeps
- * it re-renders nothing.
- */
-const AddGlyphSourceButton = ({ editor, canAuthor }: { editor: Editor; canAuthor: boolean }) => {
-  const canAddCell = useMemo(() => canAddGlyphSourceCell(editor), [editor]);
-  const canAdd = useSignalState(canAddCell);
-  const enabled = canAuthor && canAdd;
+/** The section's **+**: opens the New glyph source panel, or shows it is unavailable in a preview. */
+const AddGlyphSourceButton = ({ canAuthor }: { canAuthor: boolean }) => {
+  if (!canAuthor) {
+    return (
+      <Tooltip content="New glyph source">
+        <SidebarActionButton label="New glyph source" aria-disabled>
+          <PlusIcon className="h-3 w-3" />
+        </SidebarActionButton>
+      </Tooltip>
+    );
+  }
 
-  return (
-    <Tooltip content={addGlyphSourceTooltip(canAuthor, canAdd)}>
-      <SidebarActionButton
-        label="Add glyph source"
-        aria-disabled={enabled ? undefined : true}
-        onClick={enabled ? () => void addGlyphSourceHere(editor) : undefined}
-      >
-        <PlusIcon className="h-3 w-3" />
-      </SidebarActionButton>
-    </Tooltip>
-  );
+  return <NewGlyphSourcePanel />;
 };
-
-/** What **+** says: its action, or why it is unavailable. */
-function addGlyphSourceTooltip(canAuthor: boolean, canAdd: boolean): string {
-  if (!canAuthor) return "Add glyph source";
-  if (!canAdd) return "A source or glyph source is already here";
-  return "Add glyph source";
-}
 
 /** One glyph source: its location's name, selected while it is the one edited. */
 const GlyphSourceRowView = ({

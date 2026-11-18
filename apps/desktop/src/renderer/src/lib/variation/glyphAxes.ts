@@ -76,23 +76,6 @@ export function glyphSourcesCell(editor: Editor): Signal<readonly GlyphSourceRow
   });
 }
 
-/**
- * Whether a glyph source can be added where the sliders sit: the edited glyph
- * has no source or glyph source there.
- *
- * @remarks
- * A boolean, so a slider scrub that keeps it re-renders nothing.
- */
-export function canAddGlyphSourceCell(editor: Editor): Signal<boolean> {
-  return computed(() => {
-    const glyph = editedGlyph(editor);
-    if (!glyph || editor.activeSourceIdCell.value !== null) return false;
-
-    const location = editor.editLocationCell.value;
-    return !glyph.layerAt(location) && !glyph.sourceAt(location);
-  });
-}
-
 /** Edits the glyph source `layerId`, moving the sliders to where it sits, as selecting a source does. */
 export function selectGlyphSource(editor: Editor, layerId: LayerId): void {
   editor.selectDrawing(layerId);

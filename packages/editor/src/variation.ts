@@ -1,6 +1,7 @@
 export { interpolateSourceValues } from "./lib/interpolation/InterpolationBasis";
 export { atlasWeights, FontVariation } from "./lib/wasm/variation";
 export {
+  asExternalAxisLocation,
   axisValue,
   defaultExternalAxisLocation,
   designAxisLocationFromLocation,

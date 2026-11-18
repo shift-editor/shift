@@ -4,14 +4,18 @@ import { FONTS, useTestEditor } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
 import {
   addGlyphAxis,
-  addGlyphSourceHere,
-  canAddGlyphSourceCell,
   deleteGlyphSource,
   glyphAxesCell,
   glyphSourcesCell,
   selectGlyphSource,
   setGlyphAxis,
 } from "./glyphAxes";
+import {
+  createGlyphSource,
+  currentGlyphSourceValues,
+  glyphSourceAxes,
+  glyphSourceIssue,
+} from "@/components/variation/glyphSourceCreation";
 
 // Solenoid: a Bleed axis (Bled at 100). `dot` is a 100 × 100 square at
 // Regular, 300 wide at Spread 100 and 300 tall at Strike 100 (both its own
@@ -164,24 +168,68 @@ describe("the Glyph sources section", () => {
   });
 });
 
-describe("adding a glyph source where the sliders sit", () => {
-  it("is offered only where the glyph has no source or glyph source", () => {
-    expect(canAddGlyphSourceCell(editor.asEditor()).peek()).toBe(false);
+/**
+ * The New glyph source panel's fields, as it opens, with `typed` (by axis
+ * tag) typed over them.
+ */
+function panelFields(typed: Record<string, number>) {
+  const axes = glyphSourceAxes(editor.asEditor());
+  const { location } = currentGlyphSourceValues(editor.asEditor(), axes);
+  const fields = { ...location };
+  for (const [tag, value] of Object.entries(typed)) {
+    // oxlint-disable-next-line shift/no-lookup-in-tests -- the panel's fields are the font's and the glyph's axes, by tag
+    const axis = axes.find((candidate) => candidate.tag === tag);
+    if (!axis) throw new Error(`no field for ${tag}`);
+    fields[axis.id] = String(value);
+  }
+  return { axes, fields };
+}
 
+describe("the New glyph source panel", () => {
+  it("opens on where the sliders sit, the font's axes then the glyph's", () => {
     setGlyphAxis(editor.asEditor(), axisId("SPRD"), 60);
-    expect(canAddGlyphSourceCell(editor.asEditor()).peek()).toBe(true);
+    const { axes, fields } = panelFields({});
 
-    setGlyphAxis(editor.asEditor(), axisId("SPRD"), 100);
-    expect(canAddGlyphSourceCell(editor.asEditor()).peek()).toBe(false);
+    expect(axes.map((axis) => [axis.name, fields[axis.id]])).toEqual([
+      ["Bleed", "0"],
+      ["Spread", "60"],
+      ["Strike", "0"],
+    ]);
   });
 
-  it("adds one there from the outline shown, and edits it", async () => {
-    setGlyphAxis(editor.asEditor(), axisId("SPRD"), 60);
-    await addGlyphSourceHere(editor.asEditor());
+  it("says which source or glyph source is already at the location", () => {
+    const spread = panelFields({ SPRD: 100 });
+    const regular = panelFields({});
+
+    expect(glyphSourceIssue(editor.asEditor(), spread.axes, spread.fields)).toEqual({
+      kind: "location",
+      message: "Spread 100 is already here",
+    });
+    expect(glyphSourceIssue(editor.asEditor(), regular.axes, regular.fields)).toEqual({
+      kind: "location",
+      message: "Regular is already here",
+    });
+  });
+
+  it("refuses a value outside its axis's range", () => {
+    const { axes, fields } = panelFields({ SPRD: 150 });
+
+    expect(glyphSourceIssue(editor.asEditor(), axes, fields)).toMatchObject({
+      kind: "axis",
+      message: "Spread must be between 0 and 100",
+    });
+  });
+
+  it("creates a glyph source there from the outline drawn, and edits it", async () => {
+    const { axes, fields } = panelFields({ SPRD: 60 });
+    await createGlyphSource(editor.asEditor(), axes, fields);
 
     expect(glyphSources()).toContainEqual({ name: "Spread 60", active: true });
+    expect(glyphAxes()?.rows).toEqual([
+      ["Spread", 60],
+      ["Strike", 0],
+    ]);
     expect(await drawnWidth()).toBe(220);
-    expect(canAddGlyphSourceCell(editor.asEditor()).peek()).toBe(false);
   });
 
   it("deletes a glyph source, leaving the glyph interpolated there", async () => {

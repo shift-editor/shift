@@ -30,12 +30,13 @@ test.describe("glyph sources and glyph axes in the Designspace tab", () => {
     await expect(controls.getByLabel("Spread value")).toHaveValue("0");
   });
 
-  test("adds a glyph source where the glyph has none", async ({ page, editor }) => {
+  test("creates a glyph source where the sliders sit", async ({ page, editor }) => {
     await editor.openGlyphByName("dot");
     const controls = await openVariationControls(page);
 
     await editor.commitInputValue(controls.getByLabel("Spread value"), 60);
-    await controls.getByLabel("Add glyph source").click();
+    await controls.getByLabel("New glyph source").click();
+    await page.getByRole("button", { name: "Create", exact: true }).click();
 
     await expect(glyphSourceRow(controls, "Spread 60")).toBeVisible();
   });
