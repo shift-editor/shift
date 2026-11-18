@@ -122,3 +122,18 @@ decomposed contour reverses there. `wedgenest` places `wedgeflip` and mirrors it
 Bold, so Bold's wedge is mirrored twice and keeps its order. Compilers decompose such glyphs and interpolate the
 placed outlines, so the instances cover component interpolation matching
 export.
+
+## Solenoid
+
+`Solenoid.shift` is a small font with glyph axes, built through `shift-cli` by
+`generate_solenoid.sh`: a Bleed axis (0–100, source Bled at 100); `dot` with its
+own Spread and Strike axes (0–100), drawn at Regular, Bled, Spread 100 and
+Strike 100; and `H`, two `dot` components (the first at Spread 60) with a
+drawing at Bleed 50 off the font's sources. Regenerate it with:
+
+```bash
+./generate_solenoid.sh path/to/shift-cli Solenoid.shift
+```
+
+Used by the desktop glyph axes tests (`lib/variation/glyphAxes.test.ts`,
+`componentGlyphAxes.test.ts`) and `e2e/glyph-axes.spec.ts`.

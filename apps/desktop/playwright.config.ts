@@ -32,6 +32,7 @@ export const VISUAL_SPECS = [
   "component-rendering.spec.ts",
   "deletion.spec.ts",
   "editor.spec.ts",
+  "glyph-axes.spec.ts",
   "glyph-navigation.spec.ts",
   "glyph-rendering.spec.ts",
   "glyph-view.spec.ts",

@@ -84,6 +84,22 @@ export function MenuSeparator({ className, ...props }: MenuSeparatorProps) {
   );
 }
 
+export interface MenuGroupProps extends React.ComponentProps<typeof BaseMenu.Group> {}
+
+export const MenuGroup = (props: MenuGroupProps) => <BaseMenu.Group {...props} />;
+
+export interface MenuGroupLabelProps extends React.ComponentProps<typeof BaseMenu.GroupLabel> {}
+
+/** A group's heading: muted, not an item, so arrow keys pass over it. */
+export function MenuGroupLabel({ className, ...props }: MenuGroupLabelProps) {
+  return (
+    <BaseMenu.GroupLabel
+      className={cn("flex h-6 items-center px-2 text-ui text-muted select-none", className)}
+      {...props}
+    />
+  );
+}
+
 export interface MenuSubmenuRootProps extends React.ComponentProps<typeof BaseMenu.SubmenuRoot> {}
 
 export const MenuSubmenuRoot = (props: MenuSubmenuRootProps) => <BaseMenu.SubmenuRoot {...props} />;

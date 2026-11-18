@@ -3,12 +3,14 @@ import { AxesSection } from "@/components/variation/AxesSection";
 import { InstancesSection } from "@/components/variation/InstancesSection";
 import { SourcesSection } from "@/components/variation/SourcesSection";
 import { ComponentLocationSection } from "@/components/variation/ComponentLocationSection";
+import { GlyphAxesSection } from "@/components/variation/GlyphAxesSection";
 import { useVariationOutlineControls } from "@/hooks/useVariationOutlineControls";
 import { ObjectSectionRow } from "./object-tree/ObjectSectionRow";
 
 /**
- * The Designspace tab: the font's sources and instances, then where the font
- * is drawn (Axes) and, under it while components are selected, where they
+ * The Designspace tab: the font's sources and instances (then the edited
+ * glyph's drawings off them), then where the font is drawn (Font axes), the
+ * edited glyph's own axes and, while components are selected, where they
  * draw their base glyphs.
  */
 export const VariationPanel = () => {
@@ -29,6 +31,8 @@ export const VariationPanel = () => {
       />
       <Separator className="-mx-1 w-auto" />
       <AxesSection defaultOpen />
+      {/* While a glyph is edited; it brings its own divider. */}
+      <GlyphAxesSection />
       {/* Only while components are selected; it brings its own divider. */}
       <ComponentLocationSection />
     </div>

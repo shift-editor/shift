@@ -21,16 +21,23 @@ import { OutlineVisibilityButton } from "./OutlineVisibilityButton";
 import type { SourcesProps } from "./types";
 import type { SourceSelectionMode } from "@shift/editor/types";
 
+import { useMemo } from "react";
+import { useSignalState } from "@shift/editor/signals";
+import { deleteDrawing, glyphDrawingsCell, selectDrawing } from "@/lib/variation/glyphAxes";
+import type { GlyphDrawingRow as GlyphDrawingRowState } from "@/types/glyphAxes";
 import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
+import LocationPin from "@/assets/general/location-pin.svg";
 
 export const Sources = ({ canAuthor, outlineControls }: SourcesProps) => {
+  const editor = useEditor();
   const sources = useSources();
+  const drawingsCell = useMemo(() => glyphDrawingsCell(editor), [editor]);
+  const drawings = useSignalState(drawingsCell);
   const activeSourceId = useActiveSourceId();
   const editingSourceIds = useEditingSourceIds();
-  const editor = useEditor();
   const settings = useSettingsNavigation();
 
-  if (sources.length === 0) return null;
+  if (sources.length === 0 && drawings.length === 0) return null;
 
   const selectSource = (sourceId: SourceId, mode: SourceSelectionMode = "single") => {
     if (canAuthor) {
@@ -102,7 +109,88 @@ export const Sources = ({ canAuthor, outlineControls }: SourcesProps) => {
           </SidebarActionRow>
         );
       })}
+      {drawings.map((drawing) => (
+        <GlyphDrawingRow
+          key={drawing.layerId}
+          drawing={drawing}
+          canAuthor={canAuthor}
+          onSelect={() => selectDrawing(editor, drawing.layerId)}
+          onDelete={() => void deleteDrawing(editor, drawing.layerId)}
+        />
+      ))}
     </div>
+  );
+};
+
+/**
+ * A drawing of the edited glyph off the font's sources, after the font's
+ * sources: named by where it sits, with a pin saying it belongs to this
+ * glyph alone. Selecting it edits it, as selecting a source does.
+ */
+const GlyphDrawingRow = ({
+  drawing,
+  canAuthor,
+  onSelect,
+  onDelete,
+}: {
+  drawing: GlyphDrawingRowState;
+  canAuthor: boolean;
+  onSelect: () => void;
+  onDelete: () => void;
+}) => (
+  <SidebarActionRow
+    data-testid={`glyph-drawing-${drawing.layerId}`}
+    isActive={drawing.active}
+    isSelected={drawing.active}
+    onClick={onSelect}
+    actions={<DrawingActionsMenu name={drawing.name} disabled={!canAuthor} onDelete={onDelete} />}
+  >
+    <span className="min-w-0 flex-1 truncate text-left" title={drawing.name}>
+      {drawing.name}
+    </span>
+    {/* Always shown, unlike the row's actions; decorative, so the row keeps its name. */}
+    <span title="This glyph only" aria-hidden className="mr-1 flex shrink-0">
+      <LocationPin className="h-3.5 w-3.5 text-icon-subtle" />
+    </span>
+  </SidebarActionRow>
+);
+
+const DrawingActionsMenu = ({
+  name,
+  disabled,
+  onDelete,
+}: {
+  name: string;
+  disabled: boolean;
+  onDelete: () => void;
+}) => {
+  if (disabled) {
+    return (
+      <Tooltip content="Drawing actions unavailable in preview mode">
+        <SidebarActionButton label={`Actions for ${name}`} aria-disabled>
+          <VerticalElipsis className="h-5 w-5 text-icon-subtle" />
+        </SidebarActionButton>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Menu modal={false}>
+      <Tooltip content="Drawing actions">
+        <MenuTrigger
+          render={<Button variant="ghost" size="icon-sm" aria-label={`Actions for ${name}`} />}
+        >
+          <VerticalElipsis className="h-5 w-5 text-icon-subtle" />
+        </MenuTrigger>
+      </Tooltip>
+      <MenuPortal>
+        <MenuPositioner sideOffset={4} align="start">
+          <MenuPopup>
+            <MenuItem onClick={onDelete}>Delete</MenuItem>
+          </MenuPopup>
+        </MenuPositioner>
+      </MenuPortal>
+    </Menu>
   );
 };
 
