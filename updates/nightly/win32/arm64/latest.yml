@@ -1,8 +1,8 @@
-version: 0.191.1
+version: 0.192.1
 files:
-  - url: https://releases.shift.graphics/nightly/deb4be9e67132e20715c24bcc06943acb0bee9db/Shift-Nightly-0.191.1-Windows-arm64-Setup.exe
-    sha512: 8B1HGst1oWjhm0edWBZA5/CG2+xSSyu+dren/5Ghi9HrFdB59r345gRWLaibW+O3nOQidqfCpgIt2QbnC88tiw==
-    size: 122889986
-path: https://releases.shift.graphics/nightly/deb4be9e67132e20715c24bcc06943acb0bee9db/Shift-Nightly-0.191.1-Windows-arm64-Setup.exe
-sha512: 8B1HGst1oWjhm0edWBZA5/CG2+xSSyu+dren/5Ghi9HrFdB59r345gRWLaibW+O3nOQidqfCpgIt2QbnC88tiw==
-releaseDate: '2026-11-17T16:33:10.178Z'
+  - url: https://releases.shift.graphics/nightly/6d852cdf7cc7d321367c68b3a9d7ba98c46147e6/Shift-Nightly-0.192.1-Windows-arm64-Setup.exe
+    sha512: vyGxRN60Kn0eeM8zALIcsSXak5IQ6pAYBLpOuVS/rggk9w3fH3v33HJD3LM+qGiQSQJVt0jjoI3x7fXTskbN9w==
+    size: 123070579
+path: https://releases.shift.graphics/nightly/6d852cdf7cc7d321367c68b3a9d7ba98c46147e6/Shift-Nightly-0.192.1-Windows-arm64-Setup.exe
+sha512: vyGxRN60Kn0eeM8zALIcsSXak5IQ6pAYBLpOuVS/rggk9w3fH3v33HJD3LM+qGiQSQJVt0jjoI3x7fXTskbN9w==
+releaseDate: '2026-11-18T14:00:03.314Z'
