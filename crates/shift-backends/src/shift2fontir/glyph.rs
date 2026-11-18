@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use std::sync::Arc;
 
-use fontdrasil::coords::{DesignCoord, NormalizedLocation};
+use fontdrasil::coords::{DesignCoord, NormalizedCoord, NormalizedLocation};
 use fontdrasil::orchestration::{Access, AccessBuilder, Work};
 use fontdrasil::types::{Axes, GlyphName, Tag};
 use fontir::error::Error;
@@ -9,9 +9,10 @@ use fontir::ir::{AnchorBuilder, Component, ComponentTransform, GlyphBuilder, Gly
 use fontir::orchestration::{Context, WorkId};
 use kurbo::{Affine, BezPath};
 use shift_font::{
-    Axis, AxisList, ComponentInheritance, ComponentLocationFill, Glyph, GlyphLayer, open_corners,
+    AxisId, AxisList, ComponentInheritance, ComponentLocationFill, Glyph, GlyphLayer, open_corners,
 };
 
+use super::glyph_axes;
 use super::source::{DrawingSource, ShiftSnapshot};
 
 /// Emits the authored drawings and anchors for one Shift glyph, each as a
@@ -99,7 +100,7 @@ impl Work<Context, WorkId, Error> for GlyphWork {
             );
             let mut instance = to_glyph_instance(
                 filled.as_ref().unwrap_or(layer),
-                &self.snapshot.axes,
+                &self.snapshot,
                 &metadata.all_source_axes,
             );
             if self.snapshot.nonspacing_marks.contains(self.glyph.name()) {
@@ -113,6 +114,8 @@ impl Work<Context, WorkId, Error> for GlyphWork {
         for (location, instance) in sources {
             builder.try_add_source(location, instance)?;
         }
+
+        builder.axes = self.snapshot.hidden_axes.of_glyph(self.glyph.id());
 
         context.anchors.set(anchors.build()?);
         context.glyphs.set(builder.build()?);
@@ -134,25 +137,50 @@ fn erase_open_corners(sources: &mut [(&NormalizedLocation, GlyphInstance)]) {
     }
 }
 
-/// One master's drawing as fontir reads it. A component's location is its
-/// design values on font axes, normalized through `ir_axes` as the font's
-/// own coordinates are; `Font` inheritance is VARC's
-/// `RESET_UNSPECIFIED_AXES`. A component with either is a variable
-/// component, which fontc writes to `VARC` or decomposes at its location.
-fn to_glyph_instance(layer: &GlyphLayer, shift_axes: &[Axis], ir_axes: &Axes) -> GlyphInstance {
+/// One drawing as fontir reads it. A component's location is its design
+/// values on font axes, normalized through `ir_axes` as the font's own
+/// coordinates are, and on its base glyph's own axes, normalized over each
+/// axis's range and tagged as [`HiddenAxes`](super::glyph_axes::HiddenAxes)
+/// compiles them. A base glyph axis the component doesn't set is written at
+/// its default, since glyph axes are never inherited and the hidden tags are
+/// shared across glyphs. `Font` inheritance is VARC's
+/// `RESET_UNSPECIFIED_AXES`. A component with a location or that reset is a
+/// variable component, which fontc writes to `VARC` or decomposes at its
+/// location.
+fn to_glyph_instance(
+    layer: &GlyphLayer,
+    snapshot: &ShiftSnapshot,
+    ir_axes: &Axes,
+) -> GlyphInstance {
+    let font_axis_coordinate = |axis_id: AxisId, value: f64| {
+        let tag = Tag::from_str(snapshot.axes.axis(axis_id)?.tag()).ok()?;
+        let ir_axis = ir_axes.get(&tag)?;
+        Some((
+            tag,
+            DesignCoord::new(value).to_normalized(&ir_axis.converter),
+        ))
+    };
     let normalized = |component: &shift_font::Component| -> NormalizedLocation {
-        component
+        let mut location: NormalizedLocation = component
             .location()
             .iter()
             .filter_map(|(axis_id, value)| {
-                let tag = Tag::from_str(shift_axes.axis(*axis_id)?.tag()).ok()?;
-                let ir_axis = ir_axes.get(&tag)?;
-                Some((
-                    tag,
-                    DesignCoord::new(*value).to_normalized(&ir_axis.converter),
-                ))
+                font_axis_coordinate(*axis_id, *value).or_else(|| {
+                    let ir_axis = snapshot.hidden_axes.axis(*axis_id)?;
+                    Some((ir_axis.tag, glyph_axes::normalized(ir_axis, *value)))
+                })
             })
-            .collect()
+            .collect();
+        for base_axis in snapshot
+            .hidden_axes
+            .of_glyph(component.base_glyph_id())
+            .iter()
+        {
+            if location.get(base_axis.tag).is_none() {
+                location.insert(base_axis.tag, NormalizedCoord::new(0.0));
+            }
+        }
+        location
     };
     GlyphInstance {
         width: layer.width(),

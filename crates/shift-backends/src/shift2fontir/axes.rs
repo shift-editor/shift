@@ -85,7 +85,9 @@ pub(super) fn normalized_source_location(
 /// Converts a design location on the font's axes to normalized space.
 ///
 /// An axis the location omits resolves to its mapped design-space default,
-/// and coordinates on axes outside `shift_axes` are ignored.
+/// and coordinates on axes outside `shift_axes` are ignored. Every axis of
+/// `ir_axes` is named, those outside `shift_axes` (the hidden axes glyph
+/// axes compile to) at their defaults.
 ///
 /// # Errors
 ///
@@ -114,5 +116,16 @@ pub(super) fn normalized_design_location(
         })
         .collect();
 
-    Ok(design_location.to_normalized(ir_axes)?)
+    let mut location = design_location.to_normalized(ir_axes)?;
+    // With VARC the compiled axes also hold the hidden glyph axes, which no
+    // Shift location names; fontir finds the default master by every axis.
+    for ir_axis in ir_axes.iter() {
+        if location.get(ir_axis.tag).is_none() {
+            location.insert(
+                ir_axis.tag,
+                ir_axis.default.to_normalized(&ir_axis.converter),
+            );
+        }
+    }
+    Ok(location)
 }

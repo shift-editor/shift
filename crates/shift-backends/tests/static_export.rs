@@ -2,17 +2,19 @@
 //! instance: the same outlines, advances and kerning, measured in the
 //! compiled binaries.
 
+mod outlines;
 mod support;
 
 use std::path::Path;
 use std::str::FromStr;
 
 use harfrust::{Feature, ShapeOptions, ShaperData, ShaperInstance, Tag, UnicodeBuffer, Variation};
-use kurbo::{BezPath, ParamCurve, ParamCurveNearest, PathSeg};
+use kurbo::BezPath;
+use outlines::{Outline, outline_distance};
 use shift_backends::{BinaryEncodings, ExportError, FontExporter, StaticInstanceFile};
 use shift_font::test_support::sample_variable_font;
 use shift_font::{Font, NamedInstance};
-use skrifa::outline::{DrawSettings, OutlinePen};
+use skrifa::outline::DrawSettings;
 use skrifa::prelude::{LocationRef, Size};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 use support::mutatorsans;
@@ -29,55 +31,6 @@ const TOLERANCE: f32 = 1.0;
 /// into different quadratic segments; the shapes agree only to within the
 /// conversion's accuracy plus rounding.
 const OUTLINE_TOLERANCE: f64 = 1.5;
-
-/// A glyph's outline as a path.
-#[derive(Default)]
-struct Outline(BezPath);
-
-impl OutlinePen for Outline {
-    fn move_to(&mut self, x: f32, y: f32) {
-        self.0.move_to((f64::from(x), f64::from(y)));
-    }
-    fn line_to(&mut self, x: f32, y: f32) {
-        self.0.line_to((f64::from(x), f64::from(y)));
-    }
-    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
-        self.0.quad_to(
-            (f64::from(cx0), f64::from(cy0)),
-            (f64::from(x), f64::from(y)),
-        );
-    }
-    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
-        self.0.curve_to(
-            (f64::from(cx0), f64::from(cy0)),
-            (f64::from(cx1), f64::from(cy1)),
-            (f64::from(x), f64::from(y)),
-        );
-    }
-    fn close(&mut self) {
-        self.0.close_path();
-    }
-}
-
-/// The farthest any point of `from`, sampled along each segment, lies from
-/// the nearest point of `to`.
-fn farthest_from(from: &BezPath, to: &BezPath) -> f64 {
-    let targets: Vec<PathSeg> = to.segments().collect();
-    from.segments()
-        .flat_map(|segment| (0..=8).map(move |step| segment.eval(f64::from(step) / 8.0)))
-        .map(|point| {
-            targets
-                .iter()
-                .map(|target| target.nearest(point, 1e-3).distance_sq.sqrt())
-                .fold(f64::INFINITY, f64::min)
-        })
-        .fold(0.0, f64::max)
-}
-
-/// How far apart two outlines run at most, measured both ways.
-fn outline_distance(a: &BezPath, b: &BezPath) -> f64 {
-    farthest_from(a, b).max(farthest_from(b, a))
-}
 
 /// The user location the variable binary's `fvar` gives the instance
 /// named `name`, as `(tag, value)` pairs.
