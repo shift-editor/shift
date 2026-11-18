@@ -42,6 +42,19 @@ pub(crate) fn on_curve_points_at(
     character: char,
     user: &[(&str, f32)],
 ) -> Fixture<Vec<(f32, f32)>> {
+    let mut pen = OnCurvePoints::default();
+    draw_at(binary, character, user, &mut pen)?;
+    Ok(pen.0)
+}
+
+/// Draws the glyph mapped to `character` at `user` (as
+/// [`on_curve_points_at`] reads it) into `pen`.
+pub(crate) fn draw_at(
+    binary: &[u8],
+    character: char,
+    user: &[(&str, f32)],
+    pen: &mut impl OutlinePen,
+) -> Fixture<()> {
     let compiled = FontRef::new(binary)?;
     let glyph_id = compiled
         .charmap()
@@ -52,10 +65,9 @@ pub(crate) fn on_curve_points_at(
         .get(glyph_id)
         .ok_or("the glyph has no outline")?;
     let location = compiled.axes().location(user.iter().copied());
-    let mut pen = OnCurvePoints::default();
     outline.draw(
         DrawSettings::unhinted(Size::unscaled(), LocationRef::from(&location)),
-        &mut pen,
+        pen,
     )?;
-    Ok(pen.0)
+    Ok(())
 }

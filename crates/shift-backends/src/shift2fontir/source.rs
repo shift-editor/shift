@@ -1,15 +1,15 @@
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
-use fontdrasil::coords::NormalizedLocation;
+use fontdrasil::coords::{NormalizedCoord, NormalizedLocation};
+use fontdrasil::types::Tag;
 use fontir::error::Error;
 use fontir::ir::StaticMetadata;
 use fontir::orchestration::{Flags, IrWork};
 use fontir::source::Source;
 use shift_font::{
-    Axis, AxisList, DesignLocation, FeatureData, FontMetadata, Glyph, GlyphLayer, Kerning,
-    LayerLocation, LocatedLayer, MetricDefinition, NamedInstance, Source as ShiftSource, SourceId,
-    SourceList,
+    Axis, DesignLocation, FeatureData, FontMetadata, Glyph, GlyphLayer, Kerning, LayerLocation,
+    LocatedLayer, MetricDefinition, NamedInstance, Source as ShiftSource, SourceId, SourceList,
 };
 
 use crate::glyph_category::GlyphCategories;
@@ -20,6 +20,7 @@ use shift_text::shaper_font::{AxisConversionError, ToGlyphClassDef, UnitsPerEm, 
 
 use super::axes::{normalized_design_location, normalized_source_location};
 use super::glyph::GlyphWork;
+use super::glyph_axes::{GlyphAxesError, HiddenAxes, normalized};
 use super::kerning::{KerningInstanceWork, KerningLocationsWork};
 use super::metadata::{
     ColorGlyphsWork, ColorPaletteWork, FeatureWork, GlobalMetricsWork, StaticMetadataWork,
@@ -44,6 +45,9 @@ pub(crate) enum ShiftIrSourceError {
 
     #[error("cannot place the font's components: {0}")]
     Placement(#[from] shift_font::CoreError),
+
+    #[error("cannot compile the glyph axes: {0}")]
+    GlyphAxes(#[from] GlyphAxesError),
 }
 
 /// Provides fontir work backed by an immutable, shared Shift snapshot.
@@ -65,6 +69,8 @@ pub(super) struct ShiftSnapshot {
     pub metric_definitions: Vec<MetricDefinition>,
     pub axes: Vec<Axis>,
     pub ir_axes: Vec<fontdrasil::types::Axis>,
+    /// Every glyph's own axes, as the hidden axes they compile to.
+    pub hidden_axes: HiddenAxes,
     pub named_instances: Vec<NamedInstance>,
     pub sources: Vec<ShiftSource>,
     pub default_source_id: SourceId,
@@ -130,9 +136,10 @@ impl ShiftSnapshot {
     /// returns, as [`Glyph::located_layers_on`] orders them, each at its
     /// own location: one exactly on a master at the master's location, and
     /// one located off the masters (a brace drawing, with or without a base
-    /// source) wherever its coordinates put it. A master the glyph has no
-    /// drawing on is skipped, and so is a drawing off the default of one of
-    /// the glyph's own axes, which compiles to no font axis.
+    /// source, or a drawing on the glyph's own axes) wherever its
+    /// coordinates put it. The location names every one of the glyph's own
+    /// axes by its [hidden tag](HiddenAxes). A master the glyph has no
+    /// drawing on is skipped.
     ///
     /// # Errors
     ///
@@ -145,32 +152,41 @@ impl ShiftSnapshot {
     ) -> Result<Vec<DrawingSource<'a>>, Error> {
         glyph
             .located_layers_on(masters.iter().map(|(source, _)| *source))
-            .filter(|located| !self.is_off_glyph_axis_defaults(glyph, &located.location))
             .filter_map(|located| {
                 let design_location = self.layer_design_location(&located.location)?;
-                Some(
-                    normalized_design_location(
-                        &design_location,
-                        &self.axes,
-                        &metadata.all_source_axes,
-                    )
-                    .map(|location| DrawingSource {
+                let location = normalized_design_location(
+                    &design_location,
+                    &self.axes,
+                    &metadata.all_source_axes,
+                )
+                .map(|mut location| {
+                    for (tag, coord) in self.glyph_axis_coordinates(glyph, &design_location) {
+                        location.insert(tag, coord);
+                    }
+                    DrawingSource {
                         located,
                         design_location,
                         location,
-                    }),
-                )
+                    }
+                });
+                Some(location)
             })
             .collect()
     }
 
-    /// Whether `location` sets one of `glyph`'s own axes off its default.
-    fn is_off_glyph_axis_defaults(&self, glyph: &Glyph, location: &LayerLocation) -> bool {
-        location.coordinates().iter().any(|(axis_id, value)| {
-            !self.axes.contains_axis(*axis_id)
-                && glyph
-                    .axis(*axis_id)
-                    .is_some_and(|axis| axis.as_axis().default() != *value)
+    /// `design_location` on `glyph`'s own axes, normalized and tagged as
+    /// [`HiddenAxes`] compiles them; an axis it doesn't set is at its default.
+    fn glyph_axis_coordinates<'a>(
+        &'a self,
+        glyph: &'a Glyph,
+        design_location: &'a DesignLocation,
+    ) -> impl Iterator<Item = (Tag, NormalizedCoord)> + 'a {
+        glyph.axes().iter().filter_map(move |axis| {
+            let ir_axis = self.hidden_axes.axis(axis.id())?;
+            let value = design_location
+                .get(&axis.id())
+                .unwrap_or_else(|| axis.as_axis().default());
+            Some((ir_axis.tag, normalized(ir_axis, value)))
         })
     }
 
@@ -225,6 +241,8 @@ impl ShiftIrSource {
             .get();
 
         let ir_axes = to_ir_axes(font.axes(), font.axis_mappings())?;
+        let font_tags: Vec<&str> = font.axes().iter().map(Axis::tag).collect();
+        let hidden_axes = HiddenAxes::new(font.glyphs(), &font_tags)?;
 
         Ok(Self {
             snapshot: Arc::new(ShiftSnapshot {
@@ -233,6 +251,7 @@ impl ShiftIrSource {
                 metric_definitions: font.metric_definitions().to_vec(),
                 axes: font.axes().to_vec(),
                 ir_axes,
+                hidden_axes,
                 named_instances: font.named_instances().to_vec(),
                 sources: font.sources().to_vec(),
                 default_source_id,

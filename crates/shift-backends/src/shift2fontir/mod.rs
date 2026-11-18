@@ -12,6 +12,7 @@
 
 mod axes;
 mod glyph;
+mod glyph_axes;
 mod kerning;
 mod metadata;
 mod propagation;

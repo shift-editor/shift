@@ -20,7 +20,9 @@ use crate::variation::AxisRange;
 /// An axis only one glyph varies along.
 ///
 /// Its id is unique among the font's axes and every glyph's axes, and so is
-/// its [tag](Self::tag): export writes each glyph axis as a hidden `fvar` axis.
+/// its [tag](Self::tag). The tag names the axis in the document only: export
+/// tags a glyph's axes by their position in the glyph, sharing hidden axes
+/// across glyphs (see shift-backends' `shift2fontir`).
 /// A glyph axis is always continuous, and is never inherited by the glyphs its
 /// glyph is placed in: a component that doesn't set it draws its base at the
 /// axis default.
