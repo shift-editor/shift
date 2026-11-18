@@ -5,7 +5,7 @@ use fontir::propagate_anchors::propagate_all_anchors;
 use fontir::source::Source;
 use shift_font::SourceId;
 
-use super::source::{ShiftIrSource, located_master_layers};
+use super::source::ShiftIrSource;
 
 /// One glyph's anchors as export compiles them, at each master source it has a layer for.
 #[derive(Clone, Debug, PartialEq)]
@@ -49,16 +49,21 @@ impl ShiftIrSource {
         let metadata = context.static_metadata.get();
         let masters = snapshot.glyph_masters(&metadata)?;
 
-        Ok(snapshot
+        snapshot
             .glyphs
             .iter()
             .map(|glyph| {
                 let anchors = context
                     .anchors
                     .try_get(&WorkId::Anchor(glyph.name().into()));
-                let sources = located_master_layers(glyph, &masters)
-                    .filter_map(|(located, location)| {
-                        Some((located.location.base_source_id()?, location))
+                let sources = snapshot
+                    .drawing_sources(glyph, &masters, &metadata)?
+                    .into_iter()
+                    .filter_map(|drawing| {
+                        Some((
+                            drawing.located.location.exact_source_id()?,
+                            drawing.location,
+                        ))
                     })
                     .map(|(source_id, location)| PropagatedSourceAnchors {
                         source_id,
@@ -66,7 +71,7 @@ impl ShiftIrSource {
                             .iter()
                             .flat_map(|anchors| anchors.anchors.iter())
                             .filter_map(|anchor| {
-                                let position = anchor.positions.get(location)?;
+                                let position = anchor.positions.get(&location)?;
                                 Some(PropagatedAnchor {
                                     name: anchor.original_name.to_string(),
                                     x: position.x,
@@ -76,11 +81,11 @@ impl ShiftIrSource {
                             .collect(),
                     })
                     .collect();
-                PropagatedGlyphAnchors {
+                Ok(PropagatedGlyphAnchors {
                     glyph_name: glyph.name().to_string(),
                     sources,
-                }
+                })
             })
-            .collect())
+            .collect()
     }
 }

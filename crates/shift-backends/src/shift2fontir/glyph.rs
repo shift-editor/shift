@@ -9,17 +9,19 @@ use fontir::ir::{AnchorBuilder, Component, ComponentTransform, GlyphBuilder, Gly
 use fontir::orchestration::{Context, WorkId};
 use kurbo::{Affine, BezPath};
 use shift_font::{
-    Axis, AxisList, ComponentInheritance, ComponentLocationFill, Glyph, GlyphLayer, SourceList,
-    open_corners,
+    Axis, AxisList, ComponentInheritance, ComponentLocationFill, Glyph, GlyphLayer, open_corners,
 };
 
-use super::source::{ShiftSnapshot, located_master_layers};
+use super::source::{DrawingSource, ShiftSnapshot};
 
-/// Emits the authored master instances and anchors for one Shift glyph.
+/// Emits the authored drawings and anchors for one Shift glyph, each as a
+/// glyph source at its own location.
 ///
 /// The default-source layer is required. Missing layers for other master
-/// sources are treated as sparse masters, while layers belonging to non-master
-/// sources do not participate in compilation.
+/// sources are treated as sparse masters, and a drawing located off the
+/// masters (a brace drawing) is a glyph source of its own, for which fontir
+/// builds the glyph a variation model of its own. Layers belonging to
+/// non-master sources do not participate in compilation.
 #[derive(Debug)]
 pub(super) struct GlyphWork {
     snapshot: Arc<ShiftSnapshot>,
@@ -80,24 +82,21 @@ impl Work<Context, WorkId, Error> for GlyphWork {
         let mut anchors = AnchorBuilder::new(self.glyph_name.clone());
 
         let masters = self.snapshot.glyph_masters(&metadata)?;
-        let located: Vec<_> = located_master_layers(&self.glyph, &masters).collect();
-        // A master stores only the component axes its designer set; fill each with what it
-        // inherits, as interpolation reads it, so every master locates the same axes.
-        let layers: Vec<&GlyphLayer> = located
-            .iter()
-            .map(|(layer, _)| layer.layer.as_ref())
-            .collect();
+        let drawings = self
+            .snapshot
+            .drawing_sources(&self.glyph, &masters, &metadata)?;
+        // A drawing stores only the component axes its designer set; fill each with what it
+        // inherits, as interpolation reads it, so every drawing locates the same axes.
+        let layers: Vec<&GlyphLayer> = drawings.iter().map(DrawingSource::drawing).collect();
         let fill = ComponentLocationFill::new(&self.snapshot.axes, &layers);
         let mut sources = Vec::new();
-        for (located, location) in located {
-            let layer = located.layer.as_ref();
-            let design_location = located
-                .location
-                .base_source_id()
-                .and_then(|source_id| self.snapshot.sources.source(source_id))
-                .map(|source| source.location().clone())
-                .unwrap_or_default();
-            let filled = fill.fill(self.snapshot.axes.as_slice(), layer, &design_location);
+        for drawing in &drawings {
+            let layer = drawing.drawing();
+            let filled = fill.fill(
+                self.snapshot.axes.as_slice(),
+                layer,
+                &drawing.design_location,
+            );
             let mut instance = to_glyph_instance(
                 filled.as_ref().unwrap_or(layer),
                 &self.snapshot.axes,
@@ -107,8 +106,8 @@ impl Work<Context, WorkId, Error> for GlyphWork {
                 // Glyphs exports nonspacing marks with no advance.
                 instance.width = 0.0;
             }
-            add_anchors(&mut anchors, layer, location)?;
-            sources.push((location, instance));
+            add_anchors(&mut anchors, layer, &drawing.location)?;
+            sources.push((&drawing.location, instance));
         }
         erase_open_corners(&mut sources);
         for (location, instance) in sources {
