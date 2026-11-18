@@ -285,7 +285,7 @@ impl Font {
             };
             self.check_glyph_alternates(glyph)?;
             for layer in glyph.layers().values() {
-                self.check_layer_conditions(layer)?;
+                self.check_layer_conditions(glyph, layer)?;
             }
         }
         Ok(())

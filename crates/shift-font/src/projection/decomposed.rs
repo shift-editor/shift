@@ -109,7 +109,7 @@ impl FontProjection<'_> {
             .collect::<Vec<_>>();
         let mut parts = vec![own];
 
-        let transforms = self.component_placements(&layer)?;
+        let transforms = self.component_placements(glyph_id, &layer)?;
         visiting.insert(glyph_id);
         for (component, transform) in layer.components_iter().zip(transforms) {
             let base_glyph_id = component.base_glyph_id();
@@ -124,7 +124,7 @@ impl FontProjection<'_> {
                 })?;
             // A component whose condition fails here draws nothing, but
             // keeps its parts so they still line up with its occurrences.
-            if !self.draws(component) {
+            if !self.draws(glyph_id, component) {
                 parts.extend(base.iter().map(|_| Vec::new()));
                 continue;
             }

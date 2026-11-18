@@ -178,9 +178,9 @@ pub enum CoreError {
     },
 
     /// A component condition reads an axis that is neither a font axis nor
-    /// one of the base glyph's own axes.
+    /// one of the own axes of the glyph the component is placed in.
     #[error(
-        "component {component_id} has a condition on axis {axis_id}, which is neither a font axis nor an axis of its base glyph"
+        "component {component_id} has a condition on axis {axis_id}, which is neither a font axis nor an axis of the glyph it is placed in"
     )]
     ComponentConditionOffSpace {
         component_id: ComponentId,

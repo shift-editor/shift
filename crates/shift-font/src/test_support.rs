@@ -629,9 +629,11 @@ pub fn glyph_axis_font() -> Font {
 ///   draws `dollar.compact-heavy`; Weight ≥ 700 draws `dollar.heavy`.
 /// - `dollarcomp` is one component of `dollar`.
 /// - `dot` has a glyph axis, Spread (`SPRD`, 0–100).
-/// - `H` has three components: `bar` where Weight ≥ 700; `dot` at Spread 80,
-///   moved 100 right, where Spread is 70–100; and `dot` setting no Spread,
-///   moved 200 right, where Spread is 70–100.
+/// - `H` has a glyph axis of its own, Crossbar (`CRSB`, 0–100), and three
+///   components: `bar` where Weight ≥ 700; `dot`, moved 100 right, where
+///   Crossbar is 70–100; and `bar` drawn at Weight 800, moved 200 right,
+///   where Weight ≥ 700, which reads `H`'s Weight, not the 800 it sets.
+/// - `HX` is `H` drawn at Crossbar 80.
 /// - `mid` is `bar` where Weight is at least 700; `T` is `mid` drawn at
 ///   Weight 800, and `U` is `mid` drawn where `U` is.
 ///
@@ -706,23 +708,32 @@ pub fn conditions_font() -> Font {
     ))
     .unwrap();
 
-    let spread = font
-        .add_glyph_axis(dot, GlyphAxis::new("Spread", 0.0, 0.0, 100.0))
+    font.add_glyph_axis(dot, GlyphAxis::new("Spread", 0.0, 0.0, 100.0))
         .unwrap();
-    let spread_70_to_100 = Condition::all([ConditionRange::new(spread, Some(70.0), Some(100.0))]);
     let heavy_bar = || {
         let mut component = Component::new(bar, "bar");
         component.set_condition(Condition::all([heavy_weight]));
         component
     };
-    let mut spread_dot = Component::new(dot, "dot");
-    spread_dot.set_location(DesignLocation::from([(spread, 80.0)]));
-    spread_dot.set_condition(spread_70_to_100.clone());
-    spread_dot.translate(100.0, 0.0);
-    let mut plain_dot = Component::new(dot, "dot");
-    plain_dot.set_condition(spread_70_to_100);
-    plain_dot.translate(200.0, 0.0);
-    font.insert_glyph(composite("H", vec![heavy_bar(), spread_dot, plain_dot]))
+    let crossbar = AxisId::from_raw("crossbar");
+    let mut crossbar_dot = Component::new(dot, "dot");
+    crossbar_dot.set_condition(Condition::all([ConditionRange::new(
+        crossbar,
+        Some(70.0),
+        Some(100.0),
+    )]));
+    crossbar_dot.translate(100.0, 0.0);
+    let mut own_weight_bar = heavy_bar();
+    own_weight_bar.set_location(DesignLocation::from([(wght, 800.0)]));
+    own_weight_bar.translate(200.0, 0.0);
+    let mut h = composite("H", vec![heavy_bar(), crossbar_dot, own_weight_bar]);
+    h.set_axes(vec![GlyphAxis::with_id(
+        crossbar, "CRSB", "Crossbar", 0.0, 0.0, 100.0,
+    )]);
+    let h = font.insert_glyph(h).unwrap();
+    let mut crossbar_h = Component::new(h, "H");
+    crossbar_h.set_location(DesignLocation::from([(crossbar, 80.0)]));
+    font.insert_glyph(composite("HX", vec![crossbar_h]))
         .unwrap();
 
     let mid = font

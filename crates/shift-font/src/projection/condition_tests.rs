@@ -4,7 +4,7 @@
 use crate::test_support::conditions_font;
 use crate::{
     AlternateId, AxisId, Component, Condition, ConditionRange, CoreError, DesignLocation, Font,
-    Glyph, GlyphAlternate, GlyphId, GlyphLayer, LayerId,
+    Glyph, GlyphAlternate, GlyphAxis, GlyphId, GlyphLayer, LayerId,
 };
 
 fn glyph_id_of(font: &Font, name: &str) -> GlyphId {
@@ -30,10 +30,15 @@ fn drawn_glyph_name(font: &Font, name: &str, weight: f64, width: f64) -> String 
 }
 
 /// Each contour's first x, which tells the fixture's glyphs apart, with the
-/// advance.
+/// advance, at Weight `weight` and Width `width`.
 fn drawn_starts(font: &Font, name: &str, weight: f64, width: f64) -> (Vec<f64>, f64) {
+    drawn_starts_at(font, name, &weight_width(font, weight, width))
+}
+
+/// [`drawn_starts`] at `location`.
+fn drawn_starts_at(font: &Font, name: &str, location: &DesignLocation) -> (Vec<f64>, f64) {
     let glyph = font
-        .projection(&weight_width(font, weight, width))
+        .projection(location)
         .glyph(glyph_id_of(font, name))
         .unwrap()
         .unwrap();
@@ -202,37 +207,59 @@ fn a_glyph_that_is_an_alternate_cannot_be_removed() {
     assert!(font.glyph(alternate_glyph).is_some());
 }
 
+/// Each contour's first x of `name` drawn at Weight `weight` with `H`'s
+/// own Crossbar axis at `crossbar`.
+fn drawn_with_crossbar(font: &Font, name: &str, weight: f64, crossbar: f64) -> Vec<f64> {
+    let mut location = weight_width(font, weight, 100.0);
+    location.set(axis_tagged_on(font, "H", "CRSB"), crossbar);
+    drawn_starts_at(font, name, &location).0
+}
+
+fn axis_tagged_on(font: &Font, glyph: &str, tag: &str) -> AxisId {
+    font.axis_id_in_glyph_space(Some(glyph_id_of(font, glyph)), tag)
+        .unwrap()
+}
+
 #[test]
 fn a_component_draws_only_where_its_condition_holds_on_a_font_axis() {
     let font = conditions_font();
 
-    // H's bar (x 4) draws from Weight 700 up; the dot at Spread 80 (x 105)
-    // always does; the dot that sets no Spread (x 205) never does.
-    assert_eq!(drawn_starts(&font, "H", 699.0, 100.0).0, vec![105.0]);
-    assert_eq!(drawn_starts(&font, "H", 700.0, 100.0).0, vec![4.0, 105.0]);
-    assert_eq!(drawn_starts(&font, "H", 900.0, 100.0).0, vec![4.0, 105.0]);
+    // H's bar (x 4) and its Weight-800 bar (x 204) draw from Weight 700 up.
+    assert_eq!(drawn_starts(&font, "H", 699.0, 100.0).0, Vec::<f64>::new());
+    assert_eq!(drawn_starts(&font, "H", 700.0, 100.0).0, vec![4.0, 204.0]);
+    assert_eq!(drawn_starts(&font, "H", 900.0, 100.0).0, vec![4.0, 204.0]);
 }
 
 #[test]
-fn a_component_condition_on_its_base_glyphs_axis_reads_what_the_component_sets() {
-    let mut font = conditions_font();
-    let h = glyph_id_of(&font, "H");
-    let spread = axis_tagged(&font, "SPRD");
-    let layer_id = font.glyph(h).unwrap().layer_ids().next().unwrap();
-    let mut layer = font.layer(layer_id).unwrap().clone();
-    let spread_dot = layer.components_iter_mut().nth(1).unwrap();
-    spread_dot.set_location(DesignLocation::from([(spread, 69.0)]));
-    font.replace_glyph_layers(vec![layer]).unwrap();
+fn a_component_condition_reads_its_parents_value_not_the_one_it_sets() {
+    let font = conditions_font();
 
-    assert_eq!(drawn_starts(&font, "H", 900.0, 100.0).0, vec![4.0]);
+    // The bar at x 204 sets Weight 800, but its condition (Weight ≥ 700)
+    // reads where H is drawn, as skrifa's VARC reader does.
+    assert_eq!(drawn_starts(&font, "H", 600.0, 100.0).0, Vec::<f64>::new());
+    assert_eq!(drawn_starts(&font, "H", 750.0, 100.0).0, vec![4.0, 204.0]);
+}
+
+#[test]
+fn a_component_condition_reads_its_parent_glyphs_own_axis() {
+    let font = conditions_font();
+
+    // H's dot (x 105) draws where H's Crossbar is 70–100.
+    assert_eq!(
+        drawn_with_crossbar(&font, "H", 400.0, 69.0),
+        Vec::<f64>::new()
+    );
+    assert_eq!(drawn_with_crossbar(&font, "H", 400.0, 80.0), vec![105.0]);
 }
 
 #[test]
 fn a_component_condition_sees_the_location_its_parent_glyph_draws_at() {
     let font = conditions_font();
 
-    // T draws mid at Weight 800, so mid's bar draws though T is at 400; U
-    // draws mid where U is.
+    // HX draws H at Crossbar 80, so H's dot draws though HX sets nothing
+    // else; T draws mid at Weight 800, so mid's bar draws though T is at
+    // 400; U draws mid where U is.
+    assert_eq!(drawn_starts(&font, "HX", 400.0, 100.0).0, vec![105.0]);
     assert_eq!(drawn_starts(&font, "T", 400.0, 100.0).0, vec![4.0]);
     assert_eq!(drawn_starts(&font, "U", 400.0, 100.0).0, Vec::<f64>::new());
     assert_eq!(drawn_starts(&font, "U", 800.0, 100.0).0, vec![4.0]);
@@ -246,30 +273,34 @@ fn a_component_condition_leaves_the_advance_alone() {
 }
 
 #[test]
-fn component_conditions_off_the_base_glyphs_space_are_refused() {
+fn component_conditions_off_the_parent_glyphs_space_are_refused() {
     let font = conditions_font();
     let source = font.default_source_id().unwrap();
     let dot = glyph_id_of(&font, "dot");
-    let bar = glyph_id_of(&font, "bar");
     let spread = axis_tagged(&font, "SPRD");
-    let layer_with = |base: GlyphId, condition: Condition| {
-        let mut component = Component::new(base, "base");
+    let probe_axis = AxisId::from_raw("probe");
+    let probe_with = |condition: Condition| {
+        let mut component = Component::new(dot, "dot");
         component.set_condition(condition);
         let mut layer = GlyphLayer::new(LayerId::new(), source);
         layer.add_component(component);
         let mut glyph = Glyph::new("probe");
         glyph.set_layer(layer);
+        glyph.set_axes(vec![GlyphAxis::with_id(
+            probe_axis, "PRBE", "Probe", 0.0, 0.0, 100.0,
+        )]);
         glyph
     };
     let on = |axis_id: AxisId| Condition::all([ConditionRange::new(axis_id, Some(1.0), None)]);
 
+    // The base glyph's own axis is not the parent's.
     let off_space = font
         .clone()
-        .insert_glyph(layer_with(bar, on(spread)))
+        .insert_glyph(probe_with(on(spread)))
         .unwrap_err();
     let unknown = font
         .clone()
-        .insert_glyph(layer_with(dot, on(AxisId::new())))
+        .insert_glyph(probe_with(on(AxisId::new())))
         .unwrap_err();
 
     assert!(matches!(
@@ -278,5 +309,5 @@ fn component_conditions_off_the_base_glyphs_space_are_refused() {
     ));
     assert!(matches!(unknown, CoreError::AxisNotFound(_)));
     let mut font = font;
-    font.insert_glyph(layer_with(dot, on(spread))).unwrap();
+    font.insert_glyph(probe_with(on(probe_axis))).unwrap();
 }

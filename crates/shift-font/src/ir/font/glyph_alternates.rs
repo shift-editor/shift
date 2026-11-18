@@ -133,41 +133,49 @@ impl Font {
         }
     }
 
-    /// Checks the condition of every component in `layer`; see
-    /// [`Self::check_component_condition`].
+    /// Checks the condition of every component in `layer`, a layer of
+    /// `parent`; see [`Self::check_component_condition`].
     ///
     /// # Errors
     ///
     /// As [`Self::check_component_condition`], for the first component.
-    pub(crate) fn check_layer_conditions(&self, layer: &GlyphLayer) -> CoreResult<()> {
+    pub(crate) fn check_layer_conditions(
+        &self,
+        parent: &Glyph,
+        layer: &GlyphLayer,
+    ) -> CoreResult<()> {
         layer
             .components_iter()
-            .try_for_each(|component| self.check_component_condition(component))
+            .try_for_each(|component| self.check_component_condition(parent, component))
     }
 
-    /// Checks that `component`'s condition is well formed and reads only
-    /// axes its base glyph draws along: font axes and the base glyph's own,
-    /// the axes of the location the condition is evaluated at.
+    /// Checks that `component`, placed in `parent`, has a well-formed
+    /// condition that reads only axes `parent` draws along: font axes and
+    /// `parent`'s own, the axes of the coordinates the condition is
+    /// evaluated at (skrifa's rule; see `FontProjection::draws`). The
+    /// component's base glyph's own axes are not among them.
     ///
     /// # Errors
     ///
     /// Returns a condition's own error ([`crate::Condition::check_well_formed`]),
     /// [`CoreError::AxisNotFound`] for an axis the font has nowhere, and
     /// [`CoreError::ComponentConditionOffSpace`] for another glyph's axis.
-    pub(crate) fn check_component_condition(&self, component: &Component) -> CoreResult<()> {
+    pub(crate) fn check_component_condition(
+        &self,
+        parent: &Glyph,
+        component: &Component,
+    ) -> CoreResult<()> {
         let condition = component.condition();
         condition.check_well_formed()?;
         for axis_id in condition.axis_ids() {
-            if self.axes().contains_axis(axis_id) {
+            if self.axes().contains_axis(axis_id) || parent.axis(axis_id).is_some() {
                 continue;
             }
-            let owner = self.glyph_axis_owner(axis_id).require(&axis_id)?;
-            if owner != component.base_glyph_id() {
-                return Err(CoreError::ComponentConditionOffSpace {
-                    component_id: component.id(),
-                    axis_id,
-                });
-            }
+            self.glyph_axis_owner(axis_id).require(&axis_id)?;
+            return Err(CoreError::ComponentConditionOffSpace {
+                component_id: component.id(),
+                axis_id,
+            });
         }
         Ok(())
     }

@@ -222,7 +222,7 @@ fn an_upgraded_document_saves_alternates_and_component_conditions() {
 /// change set that adds them back as unsaved edits.
 fn without_alternate_and_condition_glyphs() -> TestResult<(Font, Font, FontChangeSet)> {
     let full = conditions_font();
-    let tail = ["U", "T", "mid", "H", "dollarcomp", "dollar"];
+    let tail = ["U", "T", "mid", "HX", "H", "dollarcomp", "dollar"];
     let (saved, added) = without_tail(&full, &tail)?;
     Ok((full, saved, added))
 }

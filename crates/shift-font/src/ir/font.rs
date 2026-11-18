@@ -1051,7 +1051,7 @@ impl Font {
     /// [`CoreError::AlternateIsItself`], [`CoreError::AlternateConditionOffFontAxes`] or
     /// [`CoreError::GlyphNotFound`] for an alternate glyph the font lacks (so an alternate glyph
     /// is added first); [`CoreError::ComponentConditionOffSpace`] or [`CoreError::AxisNotFound`]
-    /// for a component condition off its base glyph's space; and a condition's own error for a
+    /// for a component condition on an axis the glyph doesn't draw along; and a condition's own error for a
     /// range that is reversed or not finite.
     pub fn insert_glyph(&mut self, glyph: Glyph) -> CoreResult<GlyphId> {
         let glyph_id = glyph.id();
@@ -1060,7 +1060,7 @@ impl Font {
         }
         self.check_glyph_alternates(&glyph)?;
         for layer in glyph.layers().values() {
-            self.check_layer_conditions(layer)?;
+            self.check_layer_conditions(&glyph, layer)?;
         }
         let mut index = self.index().clone();
         index.try_insert(IndexEntries::of_glyph(glyph_id, &glyph))?;
@@ -1535,7 +1535,7 @@ impl Font {
         if layer.is_located() {
             self.check_layer_location(glyph, layer.id(), layer.location())?;
         }
-        self.check_layer_conditions(&layer)?;
+        self.check_layer_conditions(glyph, &layer)?;
         let mut index = self.index().clone();
         index.try_insert(IndexEntries::of_layer(glyph_id, &layer))?;
 
