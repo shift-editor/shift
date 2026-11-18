@@ -1,4 +1,4 @@
-import { alphabetical, comparing, orderBy } from "@shift/types";
+import { alphabetical, ascending, comparing, orderBy } from "@shift/types";
 import type { GlyphSets } from "./glyphSets.js";
 import type {
   FontGlyph,
@@ -11,6 +11,8 @@ import type {
   ScriptGroupDefinition,
 } from "./types.js";
 
+/** A font glyph by where its set lists it; `toSorted` keeps font order for glyphs at one place. */
+const bySetRank = comparing(({ rank }: { rank: number }) => rank, ascending);
 const byScript = comparing((script: LanguageScript) => script.script, alphabetical);
 const byLanguageName = orderBy<LanguageCoverage>(
   comparing((coverage) => coverage.language.name, alphabetical),
@@ -143,16 +145,22 @@ export function createLanguageCatalog(
     scripts: sortedScripts,
     trackedScripts,
     filter: (setId) => {
-      const setGlyphs = required(setId);
-      const setCodepoints = new Set(setGlyphs.flatMap(({ codepoint }) => codepoint ?? []));
-      const setNames = new Set(setGlyphs.map(({ name }) => name));
+      const rankByCodepoint = new Map<number, number>();
+      const rankByName = new Map<string, number>();
+      for (const [rank, { codepoint, name }] of required(setId).entries()) {
+        if (codepoint !== null && !rankByCodepoint.has(codepoint)) {
+          rankByCodepoint.set(codepoint, rank);
+        }
+        if (!rankByName.has(name)) rankByName.set(name, rank);
+      }
 
-      return glyphs.flatMap((glyph, index) => {
-        const inSet =
-          glyph.unicodes.some((unicode) => setCodepoints.has(unicode)) ||
-          setNames.has(resolvedNames[index] ?? glyph.name);
-        return inSet ? [glyph.name] : [];
+      const ranked = glyphs.flatMap((glyph, index) => {
+        const ranks = glyph.unicodes.flatMap((unicode) => rankByCodepoint.get(unicode) ?? []);
+        const nameRank = rankByName.get(resolvedNames[index] ?? glyph.name);
+        if (nameRank !== undefined) ranks.push(nameRank);
+        return ranks.length > 0 ? [{ name: glyph.name, rank: Math.min(...ranks) }] : [];
       });
+      return ranked.toSorted(bySetRank).map(({ name }) => name);
     },
     coverage: (languageId) => coverageById.get(languageId) ?? null,
     required,

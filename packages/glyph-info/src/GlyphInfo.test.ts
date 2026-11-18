@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { alphabetical, ascending } from "@shift/types";
+import { alphabetical } from "@shift/types";
 import { GlyphInfo } from "./GlyphInfo.js";
 import { DEFAULT_LANGUAGE_IDS, type GlyphCategory } from "./types.js";
 import { defaultResources } from "./resources.js";
@@ -424,24 +424,68 @@ describe("language coverage catalogs", () => {
     expect([english?.presentCount, english?.requiredCount]).toEqual([1, 4]);
   });
 
-  it("filters the font's glyphs by a set while preserving font order", () => {
-    const catalog = db.createLanguageCatalog(encoded([0x42, 0x24, 0xe6, 0x41, 0x61]), [
+  it("filters the font's glyphs by a set, in the set's order", () => {
+    const catalog = db.createLanguageCatalog(encoded([0x61, 0x42, 0x24, 0xe6, 0x41]), [
       "eng-latin",
     ]);
 
-    expect(catalog.filter("latin/basic")).toEqual(["B", "A", "a"]);
+    expect(catalog.filter("latin/basic")).toEqual(["A", "B", "a"]);
     expect(catalog.filter("eng-latin")).toEqual(["ae"]);
     expect(catalog.filter("unknown-language")).toEqual([]);
   });
 
-  it("lists every required character in codepoint order, named from glyph data", () => {
+  it("lists every required character, named from glyph data", () => {
     const required = db.createLanguageCatalog([]).requiredFully("eng-latin");
 
     expect(required).toHaveLength(56);
     expect(required[0]).toEqual({ name: "A", codepoint: 0x41, characters: [0x41], position: null });
-    const codepoints = required.map(({ codepoint }) => codepoint ?? -1);
-    expect(codepoints).toEqual(codepoints.toSorted(ascending));
     expect(db.createLanguageCatalog([]).required("unknown-language")).toEqual([]);
+  });
+
+  describe("orders a language's letters by its alphabet, capitals first", () => {
+    const letters = (languageId: string) =>
+      db
+        .createLanguageCatalog([])
+        .requiredFully(languageId)
+        .flatMap(({ codepoint, position }) =>
+          codepoint === null || position !== null ? [] : [String.fromCodePoint(codepoint)],
+        );
+    /** The language's letters among `alphabet`, in the order the set lists them. */
+    const listed = (languageId: string, alphabet: string) =>
+      letters(languageId)
+        .filter((letter) => alphabet.includes(letter))
+        .join("");
+
+    it.each([
+      ["rus-cyrillic", "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя"],
+      ["ukr-cyrillic", "АБВГҐДЕЄЖЗИІЇЙКЛМНОПРСТУФХЦЧШЩЬЮЯабвгґдеєжзиіїйклмнопрстуфхцчшщьюя"],
+      ["srp-cyrillic", "АБВГДЂЕЖЗИЈКЛЉМНЊОПРСТЋУФХЦЧЏШабвгдђежзијклљмнњопрстћуфхцчџш"],
+      ["tur-latin", "ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZabcçdefgğhıijklmnoöprsştuüvyz"],
+      ["dan-latin", "ABCDEFGHIJKLMNOPQRSTUVWXYZÆØÅabcdefghijklmnopqrstuvwxyzæøå"],
+      ["ell-greek", "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩαβγδεζηθικλμνξοπρστυφχψω"],
+    ])("%s", (languageId, alphabet) => {
+      expect(listed(languageId, alphabet)).toBe(alphabet);
+    });
+
+    it("pes-arabic", () => {
+      const alphabet = "ابپتثجچحخدذرزژسشصضطظعغفقکگلمنوهی";
+      expect(listed("pes-arabic", alphabet)).toBe(alphabet);
+    });
+
+    it("keeps a letter's positional forms right after it", () => {
+      const names = db
+        .createLanguageCatalog([])
+        .requiredFully("pes-arabic")
+        .map(({ name }) => name);
+      const peh = names.indexOf("peh-ar");
+
+      expect(names.slice(peh, peh + 4)).toEqual([
+        "peh-ar",
+        "peh-ar.fina",
+        "peh-ar.medi",
+        "peh-ar.init",
+      ]);
+    });
   });
 
   it("requires an Arabic letter's positional forms after the letter", () => {
@@ -473,7 +517,7 @@ describe("language coverage catalogs", () => {
 
     expect(behInit && catalog.has(behInit)).toBe(true);
     expect(catalog.coverage("arb-arabic")?.fullPresentCount).toBe(2);
-    expect(catalog.filter("arabic/basic")).toEqual(["uni0628.init", "myBeh"]);
+    expect(catalog.filter("arabic/basic")).toEqual(["myBeh", "uni0628.init"]);
   });
 
   it("requires Devanagari half forms built from a consonant and virama", () => {
