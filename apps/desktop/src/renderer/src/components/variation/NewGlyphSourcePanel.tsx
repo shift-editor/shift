@@ -20,15 +20,12 @@ import WarningIcon from "@/assets/general/warning.svg";
 import { SidebarActionButton } from "@/components/sidebar";
 import { useSidebarPanelAnchor } from "@/hooks/useSidebarPanelAnchor";
 import { useEditor } from "@/workspace/WorkspaceContext";
-import {
-  createGlyphSource,
-  currentGlyphSourceValues,
-  glyphSourceAxes,
-  glyphSourceIssue,
-} from "./glyphSourceCreation";
+import { useGlyphDesignspace } from "@/hooks/useGlyphDesignspace";
+import { GlyphSourceForm } from "./glyphSourceCreation";
 import { useLocationDraftForm } from "./useLocationDraftForm";
 
 const ISSUE_ID = "new-glyph-source-issue";
+const NO_AXES: readonly Axis[] = [];
 
 /**
  * The Glyph sources section's **+** and the New glyph source panel it opens
@@ -41,23 +38,25 @@ const ISSUE_ID = "new-glyph-source-issue";
 export const NewGlyphSourcePanel = () => {
   const editor = useEditor();
   const [open, setOpen] = useState(false);
+  const glyphs = useGlyphDesignspace();
   // Read when the panel opens: the glyph's axes don't change while it is open.
-  const [axes, setAxes] = useState<readonly Axis[]>([]);
+  const [sourceForm, setSourceForm] = useState<GlyphSourceForm | null>(null);
+  const axes: readonly Axis[] = sourceForm?.axes ?? NO_AXES;
   const form = useLocationDraftForm(axes);
   const panelAnchor = useSidebarPanelAnchor();
 
   const changeOpen = (next: boolean) => {
     if (next) {
-      const fields = glyphSourceAxes(editor);
-      setAxes(fields);
-      form.reset(currentGlyphSourceValues(editor, fields));
+      const opened = new GlyphSourceForm(editor, glyphs);
+      setSourceForm(opened);
+      form.reset(opened.initialValues());
     } else {
       form.reset(null);
     }
     setOpen(next);
   };
 
-  const issue = open ? glyphSourceIssue(editor, axes, form.values.location) : null;
+  const issue = open && sourceForm ? sourceForm.issue(form.values.location) : null;
   // Taken locations show at once; a field's problem shows once Create is pressed.
   const occupied = issue?.kind === "location" ? issue : null;
   const shown = form.shown(issue);
@@ -70,7 +69,7 @@ export const NewGlyphSourcePanel = () => {
       return;
     }
 
-    await createGlyphSource(editor, axes, form.values.location);
+    await sourceForm?.create(form.values.location);
     changeOpen(false);
   };
 

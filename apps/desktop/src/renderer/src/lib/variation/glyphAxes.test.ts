@@ -2,29 +2,22 @@ import { describe, expect, it } from "vitest";
 import type { LayerId } from "@shift/types";
 import { FONTS, useTestEditor } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
-import {
-  addGlyphAxis,
-  deleteGlyphSource,
-  glyphAxesCell,
-  glyphSourcesCell,
-  selectGlyphSource,
-  setGlyphAxis,
-} from "./glyphAxes";
-import {
-  createGlyphSource,
-  currentGlyphSourceValues,
-  glyphSourceAxes,
-  glyphSourceIssue,
-} from "@/components/variation/glyphSourceCreation";
+import { GlyphDesignspace } from "./GlyphDesignspace";
+import { GlyphSourceForm } from "@/components/variation/glyphSourceCreation";
 
 // Solenoid: a Bleed axis (Bled at 100). `dot` is a 100 × 100 square at
 // Regular, 300 wide at Spread 100 and 300 tall at Strike 100 (both its own
 // axes, 0–100). `H` has no axes of its own and a drawing at Bleed 50.
 const editor = useTestEditor({ file: FONTS.solenoid, glyph: "dot" });
 
+/** The open glyph's own sources and axes, as the Designspace tab's sections use them. */
+function glyphs() {
+  return new GlyphDesignspace(editor.asEditor());
+}
+
 /** What the Glyph axes section shows, by axis name. */
 function glyphAxes() {
-  const section = glyphAxesCell(editor.asEditor()).peek();
+  const section = glyphs().axesCell.peek();
   if (!section) return null;
 
   return {
@@ -35,26 +28,22 @@ function glyphAxes() {
 
 /** What the Glyph sources section lists; null when it is not shown. */
 function glyphSources() {
-  const rows = glyphSourcesCell(editor.asEditor()).peek();
+  const rows = glyphs().sourcesCell.peek();
   return rows?.map(({ name, active }) => ({ name, active })) ?? null;
 }
 
 /** The layer of the glyph source the Glyph sources section names `name`. */
 function glyphSourceNamed(name: string): LayerId {
-  const row = glyphSourcesCell(editor.asEditor())
-    .peek()
-    // oxlint-disable-next-line shift/no-lookup-in-tests -- rows are named by location, the UI's only handle on them
-    ?.find((source) => source.name === name);
+  const row = editor.glyphSource(name);
   if (!row) throw new Error(`no glyph source named ${name}`);
   return row.layerId;
 }
 
+/** The open glyph's own axis tagged `tag`. */
 function axisId(tag: string) {
-  const section = glyphAxesCell(editor.asEditor()).peek();
-  // oxlint-disable-next-line shift/no-lookup-in-tests -- the section lists the glyph's own axes, which the axis selector does not read
-  const row = section?.rows.find(({ axis }) => axis.tag === tag);
-  if (!row) throw new Error(`no glyph axis ${tag}`);
-  return row.axis.id;
+  const axis = editor.glyphAxis(tag);
+  if (!axis) throw new Error(`no glyph axis ${tag}`);
+  return axis.id;
 }
 
 async function drawnWidth(surface: EditorTestSurface = editor): Promise<number | null> {
@@ -102,13 +91,13 @@ describe("the Glyph axes section", () => {
 
   it("adds an axis to a glyph that has none", async () => {
     await editor.openGlyph("H");
-    await addGlyphAxis(editor.asEditor(), { name: "Gap", minimum: 0, default: 0, maximum: 50 });
+    await glyphs().addAxis({ name: "Gap", minimum: 0, default: 0, maximum: 50 });
 
     expect(glyphAxes()).toEqual({ glyph: "H", rows: [["Gap", 0]] });
   });
 
   it("slides where the canvas draws the glyph", async () => {
-    setGlyphAxis(editor.asEditor(), axisId("SPRD"), 50);
+    glyphs().setAxis(axisId("SPRD"), 50);
 
     expect(glyphAxes()?.rows).toEqual([
       ["Spread", 50],
@@ -118,7 +107,7 @@ describe("the Glyph axes section", () => {
   });
 
   it("draws the glyph's own axes at their defaults again in another glyph", async () => {
-    setGlyphAxis(editor.asEditor(), axisId("SPRD"), 50);
+    glyphs().setAxis(axisId("SPRD"), 50);
     await editor.openGlyph("H");
     await editor.openGlyph("dot");
 
@@ -145,7 +134,7 @@ describe("the Glyph sources section", () => {
   });
 
   it("moves the sliders to a glyph source selected, and draws it", async () => {
-    selectGlyphSource(editor.asEditor(), glyphSourceNamed("Spread 100"));
+    glyphs().selectSource(glyphSourceNamed("Spread 100"));
 
     expect(glyphSources()).toContainEqual({ name: "Spread 100", active: true });
     expect(await editor.source("active")).toBeNull();
@@ -157,7 +146,7 @@ describe("the Glyph sources section", () => {
   });
 
   it("edits the selected glyph source and no other", async () => {
-    selectGlyphSource(editor.asEditor(), glyphSourceNamed("Spread 100"));
+    glyphs().selectSource(glyphSourceNamed("Spread 100"));
     editor.selectTool("select");
     editor.selectAll();
     await editor.pressKey("ArrowRight", { shiftKey: true });
@@ -169,28 +158,26 @@ describe("the Glyph sources section", () => {
 });
 
 /**
- * The New glyph source panel's fields, as it opens, with `typed` (by axis
- * tag) typed over them.
+ * The New glyph source panel's form as it opens, and its fields with `typed`
+ * (by axis tag) typed over them.
  */
 function panelFields(typed: Record<string, number>) {
-  const axes = glyphSourceAxes(editor.asEditor());
-  const { location } = currentGlyphSourceValues(editor.asEditor(), axes);
-  const fields = { ...location };
+  const form = new GlyphSourceForm(editor.asEditor(), glyphs());
+  const fields = { ...form.initialValues().location };
   for (const [tag, value] of Object.entries(typed)) {
-    // oxlint-disable-next-line shift/no-lookup-in-tests -- the panel's fields are the font's and the glyph's axes, by tag
-    const axis = axes.find((candidate) => candidate.tag === tag);
-    if (!axis) throw new Error(`no field for ${tag}`);
-    fields[axis.id] = String(value);
+    const field = editor.glyphAxis(tag)?.id ?? editor.axis({ tag })?.id;
+    if (!field) throw new Error(`no field for ${tag}`);
+    fields[field] = String(value);
   }
-  return { axes, fields };
+  return { form, fields };
 }
 
 describe("the New glyph source panel", () => {
   it("opens on where the sliders sit, the font's axes then the glyph's", () => {
-    setGlyphAxis(editor.asEditor(), axisId("SPRD"), 60);
-    const { axes, fields } = panelFields({});
+    glyphs().setAxis(axisId("SPRD"), 60);
+    const { form, fields } = panelFields({});
 
-    expect(axes.map((axis) => [axis.name, fields[axis.id]])).toEqual([
+    expect(form.axes.map((axis) => [axis.name, fields[axis.id]])).toEqual([
       ["Bleed", "0"],
       ["Spread", "60"],
       ["Strike", "0"],
@@ -201,28 +188,28 @@ describe("the New glyph source panel", () => {
     const spread = panelFields({ SPRD: 100 });
     const regular = panelFields({});
 
-    expect(glyphSourceIssue(editor.asEditor(), spread.axes, spread.fields)).toEqual({
+    expect(spread.form.issue(spread.fields)).toEqual({
       kind: "location",
       message: "Spread 100 is already here",
     });
-    expect(glyphSourceIssue(editor.asEditor(), regular.axes, regular.fields)).toEqual({
+    expect(regular.form.issue(regular.fields)).toEqual({
       kind: "location",
       message: "Regular is already here",
     });
   });
 
   it("refuses a value outside its axis's range", () => {
-    const { axes, fields } = panelFields({ SPRD: 150 });
+    const { form, fields } = panelFields({ SPRD: 150 });
 
-    expect(glyphSourceIssue(editor.asEditor(), axes, fields)).toMatchObject({
+    expect(form.issue(fields)).toMatchObject({
       kind: "axis",
       message: "Spread must be between 0 and 100",
     });
   });
 
   it("creates a glyph source there from the outline drawn, and edits it", async () => {
-    const { axes, fields } = panelFields({ SPRD: 60 });
-    await createGlyphSource(editor.asEditor(), axes, fields);
+    const { form, fields } = panelFields({ SPRD: 60 });
+    await form.create(fields);
 
     expect(glyphSources()).toContainEqual({ name: "Spread 60", active: true });
     expect(glyphAxes()?.rows).toEqual([
@@ -233,7 +220,7 @@ describe("the New glyph source panel", () => {
   });
 
   it("deletes a glyph source, leaving the glyph interpolated there", async () => {
-    await deleteGlyphSource(editor.asEditor(), glyphSourceNamed("Strike 100"));
+    await glyphs().deleteSource(glyphSourceNamed("Strike 100"));
 
     expect(glyphSources()).toEqual([{ name: "Spread 100", active: false }]);
   });

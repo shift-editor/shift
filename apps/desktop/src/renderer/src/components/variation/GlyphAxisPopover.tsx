@@ -17,8 +17,7 @@ import {
 } from "@shift/ui";
 import WarningIcon from "@/assets/general/warning.svg";
 import type { useSidebarPanelAnchor } from "@/hooks/useSidebarPanelAnchor";
-import { addGlyphAxis, editGlyphAxis } from "@/lib/variation/glyphAxes";
-import { useEditor } from "@/workspace/WorkspaceContext";
+import { useGlyphDesignspace } from "@/hooks/useGlyphDesignspace";
 import type { GlyphAxisDraft } from "@/types/glyphAxes";
 
 /** What the glyph axis popover is open for. */
@@ -127,7 +126,7 @@ const GlyphAxisForm = ({
   axis: Axis | null;
   onClose: () => void;
 }) => {
-  const editor = useEditor();
+  const glyphs = useGlyphDesignspace();
   const [text, setText] = useState(() => draftFor(axis));
   const [issue, setIssue] = useState<string | null>(
     target.kind === "refused" ? target.message : null,
@@ -153,8 +152,8 @@ const GlyphAxisForm = ({
     }
 
     try {
-      if (target.kind === "edit") await editGlyphAxis(editor, target.axisId, draft);
-      else await addGlyphAxis(editor, draft);
+      if (target.kind === "edit") await glyphs.updateAxis(target.axisId, draft);
+      else await glyphs.addAxis(draft);
       onClose();
     } catch (error) {
       setIssue(refusalMessage(error));

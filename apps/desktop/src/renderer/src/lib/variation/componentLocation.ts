@@ -3,7 +3,7 @@ import type { Axis } from "@shift/editor/model";
 import { computed, type Signal } from "@shift/editor/signals";
 import { axisValue, withExternalAxisValue } from "@shift/editor/variation";
 import { isComponentId, type AxisId, type ComponentInheritance } from "@shift/types";
-import type { Component } from "@shift/glyph-state";
+import { GlyphDesignspace } from "./GlyphDesignspace";
 import type {
   FollowedComponentAxis,
   SelectedComponentLocation,
@@ -29,6 +29,7 @@ import type {
 export function selectedComponentLocationCell(
   editor: Editor,
 ): Signal<SelectedComponentLocation | null> {
+  const glyphs = new GlyphDesignspace(editor);
   return computed(() => {
     const parent = editor.externalLocationCell.value;
     const editing =
@@ -43,7 +44,7 @@ export function selectedComponentLocationCell(
     const components = editor.selectedComponentsAtActiveSource();
     if (!components) return null;
 
-    const glyphAxes = sharedBaseGlyphAxes(editor, components);
+    const glyphAxes = glyphs.sharedBaseAxes(components);
     if (axes.length === 0 && glyphAxes.length === 0) return null;
 
     const designspace = editor.font.designspace;
@@ -113,7 +114,9 @@ export function setSelectedComponentAxis(
   value: number,
 ): Promise<boolean> {
   const components = editor.selectedComponentsAtActiveSource() ?? [];
-  const glyphAxis = sharedBaseGlyphAxes(editor, components).find(({ id }) => id === axisId);
+  const glyphAxis = new GlyphDesignspace(editor)
+    .sharedBaseAxes(components)
+    .find(({ id }) => id === axisId);
   // A base glyph's own axis has no mapping: the value is stored as given.
   if (glyphAxis) return editor.setSelectedComponentsAxis(axisId, value);
 
@@ -123,15 +126,6 @@ export function setSelectedComponentAxis(
   const parent = editor.externalLocationCell.peek();
   const design = editor.font.designspace.toDesign(withExternalAxisValue(parent, axis, value));
   return editor.setSelectedComponentsAxis(axis.id, design.get(axis.id) ?? value);
-}
-
-/** The own axes of the glyph every one of `components` draws; none when their bases differ. */
-function sharedBaseGlyphAxes(editor: Editor, components: readonly Component[]): readonly Axis[] {
-  const bases = new Set(components.map((component) => component.baseGlyphId));
-  const [base] = bases;
-  if (bases.size !== 1 || !base) return [];
-
-  return editor.glyphForId(base)?.axes ?? [];
 }
 
 function round(value: number): number {

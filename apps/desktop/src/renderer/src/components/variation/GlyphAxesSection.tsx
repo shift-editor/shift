@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import type { Axis } from "@shift/editor/model";
 import { EditableSidebarInput } from "@shift/editor/ui";
 import { useSignalState } from "@shift/editor/signals";
@@ -18,8 +18,8 @@ import {
 } from "@shift/ui";
 import { CollapsibleSection, SidebarActionButton } from "@/components/sidebar";
 import { useSidebarPanelAnchor } from "@/hooks/useSidebarPanelAnchor";
-import { glyphAxesCell, removeGlyphAxis, setGlyphAxis } from "@/lib/variation/glyphAxes";
-import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
+import { useGlyphDesignspace } from "@/hooks/useGlyphDesignspace";
+import { useFontSession } from "@/workspace/WorkspaceContext";
 import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 import { GlyphAxisPopover, refusalMessage, type GlyphAxisPopoverTarget } from "./GlyphAxisPopover";
@@ -33,10 +33,9 @@ import { GlyphAxisPopover, refusalMessage, type GlyphAxisPopoverTarget } from ".
  * removes the axis.
  */
 export const GlyphAxesSection = () => {
-  const editor = useEditor();
   const canAuthor = useFontSession().mode === "workspace";
-  const stateCell = useMemo(() => glyphAxesCell(editor), [editor]);
-  const state = useSignalState(stateCell);
+  const glyphs = useGlyphDesignspace();
+  const state = useSignalState(glyphs.axesCell);
   const [open, setOpen] = useState(true);
   const [editing, setEditing] = useState<GlyphAxisPopoverTarget | null>(null);
   const anchor = useSidebarPanelAnchor();
@@ -46,7 +45,7 @@ export const GlyphAxesSection = () => {
   const addAxis = () => setEditing({ kind: "add" });
   const removeAxis = async (axisId: AxisId) => {
     try {
-      await removeGlyphAxis(editor, axisId);
+      await glyphs.removeAxis(axisId);
     } catch (error) {
       // Still used by a drawing or component: say which, rather than drop the values.
       setEditing({ kind: "refused", message: refusalMessage(error) });
@@ -82,7 +81,7 @@ export const GlyphAxesSection = () => {
               axis={axis}
               value={value}
               canAuthor={canAuthor}
-              onValueChange={(next) => setGlyphAxis(editor, axis.id, next)}
+              onValueChange={(next) => glyphs.setAxis(axis.id, next)}
               onEdit={(focus) => setEditing({ kind: "edit", axisId: axis.id, focus })}
               onRemove={() => void removeAxis(axis.id)}
             />

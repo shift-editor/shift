@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentType } from "react";
+import { useState, type ComponentType } from "react";
 import { useSignalState } from "@shift/editor/signals";
 import {
   Button,
@@ -17,9 +17,9 @@ import {
   SidebarActionRow,
   type CollapsibleSectionProps,
 } from "@/components/sidebar";
-import { deleteGlyphSource, glyphSourcesCell, selectGlyphSource } from "@/lib/variation/glyphAxes";
+import { useGlyphDesignspace } from "@/hooks/useGlyphDesignspace";
 import type { GlyphSourceRow } from "@/types/glyphAxes";
-import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
+import { useFontSession } from "@/workspace/WorkspaceContext";
 import PlusIcon from "@/assets/general/plus.svg";
 import { NewGlyphSourcePanel } from "./NewGlyphSourcePanel";
 import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
@@ -38,10 +38,9 @@ export const GlyphSourcesSection = ({
   /** Draws the section, so it can match Sources and Instances around it. */
   section?: ComponentType<CollapsibleSectionProps>;
 }) => {
-  const editor = useEditor();
   const canAuthor = useFontSession().mode === "workspace";
-  const rowsCell = useMemo(() => glyphSourcesCell(editor), [editor]);
-  const rows = useSignalState(rowsCell);
+  const glyphs = useGlyphDesignspace();
+  const rows = useSignalState(glyphs.sourcesCell);
   const [open, setOpen] = useState(true);
 
   if (!rows) return null;
@@ -68,8 +67,8 @@ export const GlyphSourcesSection = ({
                 key={row.layerId}
                 row={row}
                 canAuthor={canAuthor}
-                onSelect={() => selectGlyphSource(editor, row.layerId)}
-                onDelete={() => void deleteGlyphSource(editor, row.layerId)}
+                onSelect={() => glyphs.selectSource(row.layerId)}
+                onDelete={() => void glyphs.deleteSource(row.layerId)}
               />
             ))}
           </div>
