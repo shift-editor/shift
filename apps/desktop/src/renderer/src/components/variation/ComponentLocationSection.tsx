@@ -167,7 +167,7 @@ function AddAxisMenu({
         />
       </Tooltip>
       <MenuPortal>
-        <MenuPositioner sideOffset={4} align="end">
+        <MenuPositioner side="right" sideOffset={4} align="start">
           <MenuPopup>
             {groups.length === 1
               ? groups[0]!.entries.map((entry) => (

@@ -150,7 +150,7 @@ const GlyphSourcesAddMenu = ({
         />
       </Tooltip>
       <MenuPortal>
-        <MenuPositioner sideOffset={4} align="end">
+        <MenuPositioner side="right" sideOffset={4} align="start">
           <MenuPopup>
             <MenuItem disabled={!canAdd} onClick={() => void addGlyphSourceHere(editor)}>
               Glyph source
