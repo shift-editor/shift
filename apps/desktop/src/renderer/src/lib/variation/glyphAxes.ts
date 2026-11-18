@@ -73,21 +73,36 @@ export function glyphDrawingsCell(editor: Editor): Signal<readonly GlyphDrawingR
 }
 
 /**
- * Where "Add drawing here" would add a drawing: the name of the place the
- * sliders sit, when the edited glyph has no drawing there.
+ * Whether "Add drawing here" applies: the sliders sit where the edited glyph
+ * has no drawing and no font source.
  *
- * @returns null on a source, on a drawing, or with no single glyph edited.
+ * @remarks
+ * A boolean, so a slider scrub that keeps it re-renders nothing; read the
+ * place's name with {@link drawingHereName} when the menu opens.
  */
-export function addDrawingHereCell(editor: Editor): Signal<string | null> {
+export function addDrawingHereCell(editor: Editor): Signal<boolean> {
   return computed(() => {
     const glyph = editedGlyph(editor);
-    if (!glyph || editor.activeSourceIdCell.value !== null) return null;
+    if (!glyph || editor.activeSourceIdCell.value !== null) return false;
 
     const location = editor.editLocationCell.value;
-    if (glyph.layerAt(location) || glyph.sourceAt(location)) return null;
-
-    return drawingName(editor.font.designspace, glyph, glyph.space.toDesign(location));
+    return !glyph.layerAt(location) && !glyph.sourceAt(location);
   });
+}
+
+/**
+ * The name of the place the sliders sit, as "Add drawing here" names it
+ * ("Spread 60"), read once.
+ *
+ * @returns null with no single glyph edited.
+ */
+export function drawingHereName(editor: Editor): string | null {
+  const node = editor.scene.only("glyph");
+  const glyph = node ? editor.glyphForId(node.glyphId) : null;
+  if (!glyph) return null;
+
+  const location = glyph.space.toDesign(editor.editLocationCell.peek());
+  return drawingName(editor.font.designspace, glyph, location);
 }
 
 /** Edits the drawing `layerId`, moving the sliders to where it sits, as selecting a source does. */

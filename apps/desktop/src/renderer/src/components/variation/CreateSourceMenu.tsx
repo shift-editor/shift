@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useSignalState } from "@shift/editor/signals";
-import { addDrawingHere, addDrawingHereCell } from "@/lib/variation/glyphAxes";
+import { addDrawingHere, addDrawingHereCell, drawingHereName } from "@/lib/variation/glyphAxes";
 import {
   Button,
   Field,
@@ -61,9 +61,11 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
   const axes = useAxes();
   const sources = useSources();
   const drawingHereCell = useMemo(() => addDrawingHereCell(editor), [editor]);
-  const drawingHere = useSignalState(drawingHereCell);
+  const canAddDrawing = useSignalState(drawingHereCell);
   const [open, setOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Named when the menu opens: subscribing to it would re-render on every scrub step.
+  const [drawingHere, setDrawingHere] = useState<string | null>(null);
   const form = useLocationDraftForm(axes);
   const { values, nameInputRef } = form;
 
@@ -185,6 +187,7 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
 
   const panelAnchor = useSidebarPanelAnchor();
   const changeMenuOpen = (next: boolean) => {
+    if (next) setDrawingHere(drawingHereName(editor));
     setMenuOpen(next);
     if (onOpenChange) onOpenChange(next || open);
   };
@@ -200,7 +203,7 @@ export const CreateSourceMenu = ({ onSourceCreated, onOpenChange }: CreateSource
   );
 
   // Where the edited glyph has no drawing, + also offers to draw it there.
-  if (drawingHere !== null) {
+  if (canAddDrawing) {
     return (
       <>
         <Menu modal={false} open={menuOpen} onOpenChange={changeMenuOpen}>

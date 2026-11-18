@@ -7,6 +7,7 @@ import {
   addDrawingHereCell,
   addGlyphAxis,
   deleteDrawing,
+  drawingHereName,
   glyphAxesCell,
   glyphDrawingsCell,
   selectDrawing,
@@ -160,13 +161,14 @@ describe("drawings off the font's sources in the Sources list", () => {
 
 describe("Add drawing here", () => {
   it("is offered only where the glyph has no drawing", () => {
-    expect(addDrawingHereCell(editor.asEditor()).peek()).toBeNull();
+    expect(addDrawingHereCell(editor.asEditor()).peek()).toBe(false);
 
     setGlyphAxis(editor.asEditor(), axisId("SPRD"), 60);
-    expect(addDrawingHereCell(editor.asEditor()).peek()).toBe("Spread 60");
+    expect(addDrawingHereCell(editor.asEditor()).peek()).toBe(true);
+    expect(drawingHereName(editor.asEditor())).toBe("Spread 60");
 
     setGlyphAxis(editor.asEditor(), axisId("SPRD"), 100);
-    expect(addDrawingHereCell(editor.asEditor()).peek()).toBeNull();
+    expect(addDrawingHereCell(editor.asEditor()).peek()).toBe(false);
   });
 
   it("adds a drawing there from the outline shown, and edits it", async () => {
@@ -175,7 +177,7 @@ describe("Add drawing here", () => {
 
     expect(drawings()).toContainEqual({ name: "Spread 60", active: true });
     expect(await drawnWidth()).toBe(220);
-    expect(addDrawingHereCell(editor.asEditor()).peek()).toBeNull();
+    expect(addDrawingHereCell(editor.asEditor()).peek()).toBe(false);
   });
 
   it("deletes a drawing, leaving the glyph interpolated there", async () => {
