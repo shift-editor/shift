@@ -60,7 +60,8 @@ pub(super) struct ComponentInput {
     #[serde(default)]
     pub transform: Option<TransformInput>,
     /// The axes this component sets for its base glyph, by axis tag, in
-    /// design units: `{"BLED": 100}`.
+    /// design units: font axes or the base glyph's own axes, such as
+    /// `{"BLED": 100, "SPRD": 60}`.
     #[serde(default)]
     pub location: BTreeMap<String, f64>,
     /// Where the base glyph takes the axes `location` doesn't set:
@@ -122,6 +123,10 @@ pub(super) struct GlyphEntryInput {
     pub unicodes: Option<Vec<String>>,
     #[serde(default)]
     pub source: Option<String>,
+    /// Where the drawing sits, by axis tag in design units: font axes or the
+    /// glyph's own axes, laid over `source`, or over no source without one.
+    #[serde(default)]
+    pub location: Option<BTreeMap<String, f64>>,
     /// Metrics keys that apply in every source the glyph's layers do not override.
     #[serde(default)]
     pub metrics_keys: Option<MetricsKeysInput>,

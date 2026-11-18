@@ -24,6 +24,7 @@ use crate::{
 /// range under a decreasing axis mapping runs the other way, `minimum` above
 /// `maximum`, because normalized signs follow the user axis.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct AxisRange {
     pub minimum: f64,
     pub default: f64,

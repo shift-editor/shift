@@ -308,7 +308,8 @@ source (the target document needs sources with those names); the default exports
 source for the target's default source. `--output PATH` writes a file instead of stdout.
 
 - Omitted `layer` authors identity only; it does not create or clear a layer.
-- Omitted `source` selects the default source. Explicit selectors accept source names or full IDs.
+- Omitted `source` selects the default source, unless the entry has a `location`. Explicit selectors
+  accept source names or full IDs.
 - A name may repeat for distinct sources. Repeated glyph/source pairs and conflicting
   supplied Unicode lists are rejected, including equivalent source name/ID selectors.
 - Layer payloads have the same replacement semantics as `layer set`.
@@ -318,6 +319,62 @@ All entries are planned before one atomic workspace application; the CLI does no
 scratch font or load unrelated geometry. Entry errors identify the glyph and one-based entry
 number; malformed JSON reports its line and column. An invalid entry leaves every canonical
 byte unchanged, including otherwise valid entries earlier in the batch.
+
+### Glyph axes and drawings anywhere
+
+A glyph can have axes of its own, such as Spread and Strike on a `dot` that an `H` is built from.
+Every value on a glyph axis is in the axis's own units. A drawing can sit anywhere in the glyph's
+design space (the font's axes plus its own): on a source, at coordinates laid over a source, or at
+coordinates alone with no source, as a Glyphs brace layer does.
+
+```sh
+shift glyph axis add Solenoid.shift dot --name Spread --min 0 --default 0 --max 100   # tag SPRD
+shift glyph axis edit Solenoid.shift dot SPRD --name Splay --tag SPLY
+shift glyph axis edit Solenoid.shift dot SPRD --max 200                 # refused if it strands a value
+shift glyph axis edit Solenoid.shift dot SPRD --max 1000 --rescale      # moves every value with it
+shift glyph axis remove Solenoid.shift dot STRK                         # refused while anything uses it
+shift layer add Solenoid.shift --glyph dot --source Regular --location SPRD=100 --input dot-spread.json
+shift layer add Solenoid.shift --glyph H --location BLED=50 --input H-brace.json   # no source
+shift layer move Solenoid.shift --glyph dot --source Regular --location SPRD=100 --to-source Regular --to-location SPRD=80
+shift layer remove Solenoid.shift --glyph H --location BLED=50
+```
+
+- An omitted `--tag` is made from the name: its first letter and the consonants after it
+  (`Spread` is `SPRD`). Tags are unique across font axes and every glyph's axes.
+- A drawing's place is `--source`, `--location`, or both. With `--location` and no `--source` the
+  drawing sits on no source, and every axis the coordinates don't name is at its default. The same
+  rule names a drawing in `layer set`, `move` and `remove`, and `--to-source`/`--to-location` give
+  `layer move` its new place.
+- A range edit never moves a value. One that would leave a drawing coordinate or a component
+  location outside the range is refused, and the error lists each value with its glyph and drawing.
+  `--rescale` maps every value on the axis onto the new range instead, linearly on each side of the
+  default, in this glyph's drawings and in every component in the font that sets the axis.
+- `remove` is refused while a drawing or a component sets a value on the axis, and lists them.
+- A component's `location` sets its base glyph's own axes as well as font axes, by tag:
+  `{"base": "dot", "location": {"SPRD": 60}}`. A glyph axis a component doesn't set is at its
+  default; it is never inherited from the glyph the component sits in.
+- In `glyph set`, an entry's `location` places its drawing the same way, beside `source`: with
+  `location` and no `source` the drawing sits on no source.
+
+```json
+{
+  "glyphs": [
+    {
+      "name": "dot",
+      "source": "Regular",
+      "location": { "SPRD": 100 },
+      "layer": { "advance": 0, "svgPath": "M0 0 L110 0" }
+    },
+    {
+      "name": "H",
+      "location": { "BLED": 50 },
+      "layer": { "advance": 720, "components": [{ "base": "dot", "location": { "SPRD": 80 } }] }
+    }
+  ]
+}
+```
+
+`inspect` lists each glyph's axes, and `inspect --view layers` each drawing's coordinates.
 
 ### Font metadata and source metrics
 

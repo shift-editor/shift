@@ -6,7 +6,7 @@
 //! Every payload is lowered to a single [`FontIntentSet`], preserving the same
 //! validation and all-or-nothing behavior as interactive authoring.
 
-use shift_font::{CloneGlyphLayer, CreateGlyph, CreateGlyphLayer};
+use shift_font::{CloneGlyphLayer, CreateGlyph};
 use std::collections::{BTreeSet, HashSet};
 use std::path::Path;
 
@@ -19,6 +19,7 @@ use crate::cli::{AddGlyphArgs, CopyLayerArgs, LayerPayloadArgs};
 
 use super::input::LayerInput;
 use super::layer_payload::read_json_input;
+use super::layer_place::{PlacedLayer, create_layer, layer_at};
 use super::metrics_keys::check_written_keys;
 use super::{AuthoringReport, apply_checked_mutation, apply_mutation};
 
@@ -42,10 +43,11 @@ pub(crate) fn add_glyph(args: AddGlyphArgs) -> Result<AuthoringReport> {
     apply_mutation(&args.path, &args.mutation, &set)
 }
 
-/// Adds one sparse authored layer from a semantic JSON payload.
+/// Adds one authored layer from a semantic JSON payload, exactly on a source
+/// or at a location in the glyph's design space.
 ///
 /// Glyph and source selectors accept a unique authored name or a full stable
-/// id. The payload is read completely before mutation; `-` reads stdin. Shift
+/// id; location tags name font axes or the glyph's own axes. The payload is read completely before mutation; `-` reads stdin. Shift
 /// mints every layer, contour, point, and anchor identity.
 ///
 /// # Errors
@@ -55,19 +57,11 @@ pub(crate) fn add_glyph(args: AddGlyphArgs) -> Result<AuthoringReport> {
 /// persistence failures.
 pub(crate) fn add_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
-    let glyph_id = font.glyph_id_for(&args.glyph)?;
-    let source_id = font.source_id_for(&args.source)?;
+    let PlacedLayer { glyph_id, location } = args.layer.resolve(&font)?;
     let layer_id = LayerId::new();
     let input = read_json_input::<LayerInput>(&args.input, "layer payload")?;
     let mut written = BTreeSet::new();
-    let mut intents = vec![
-        CreateGlyphLayer {
-            layer_id,
-            glyph_id,
-            source_id,
-        }
-        .into(),
-    ];
+    let mut intents = vec![create_layer(layer_id, glyph_id, &location)];
     intents.extend(input.into_intents(
         glyph_id,
         layer_id,
@@ -84,7 +78,7 @@ pub(crate) fn add_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     )
 }
 
-/// Creates or replaces one layer's drawing, preserving an existing layer's identity.
+/// Creates or replaces the drawing at one place, preserving an existing layer's identity.
 ///
 /// Source binding, height, guidelines, and lib data survive replacement. Components
 /// are replaced by the payload's, which name existing glyphs as their bases.
@@ -94,21 +88,13 @@ pub(crate) fn add_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
 /// Rejects invalid payloads or selectors without writing; persistence failures are reported.
 pub(crate) fn set_layer(args: &LayerPayloadArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
-    let glyph_id = font.glyph_id_for(&args.glyph)?;
-    let source_id = font.source_id_for(&args.source)?;
+    let PlacedLayer { glyph_id, location } = args.layer.resolve(&font)?;
     let input = read_json_input::<LayerInput>(&args.input, "layer payload")?;
-    let existing = font.layer_id_for_source(glyph_id, source_id);
+    let existing = layer_at(&font, glyph_id, &location);
     let layer_id = existing.unwrap_or_default();
     let mut intents = Vec::new();
     if existing.is_none() {
-        intents.push(
-            CreateGlyphLayer {
-                layer_id,
-                glyph_id,
-                source_id,
-            }
-            .into(),
-        );
+        intents.push(create_layer(layer_id, glyph_id, &location));
     }
     let mut written = BTreeSet::new();
     intents.extend(input.into_intents(

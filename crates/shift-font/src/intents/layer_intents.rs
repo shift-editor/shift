@@ -664,20 +664,20 @@ impl LayerIntent for SetComponentLocations {
                 ),
             });
         }
-        for location in locations {
-            for (axis_id, _) in location.iter() {
-                font.require_axis(*axis_id)?;
-            }
+        for (component_id, location) in component_ids.iter().zip(locations) {
             location
                 .iter()
                 .map(|(_, value)| *value)
                 .require_finite(Coordinates::ComponentLocations)?;
+            let base_glyph_id = font
+                .require_layer(*layer_id)?
+                .component(component_id)
+                .require(component_id)?
+                .base_glyph_id();
+            font.check_component_location(*layer_id, component_id, base_glyph_id, location)?;
         }
 
         let layer = font.require_layer_mut(*layer_id)?;
-        for component_id in component_ids {
-            layer.component(component_id).require(component_id)?;
-        }
         for ((component_id, location), inheritance) in
             component_ids.iter().zip(locations).zip(inheritances)
         {
@@ -1264,6 +1264,12 @@ impl LayerIntent for ReplaceGlyphLayerContent {
                     base_glyph_id,
                 });
             }
+            font.check_component_location(
+                *layer_id,
+                &component.id(),
+                base_glyph_id,
+                component.location(),
+            )?;
         }
         let mut layer = font
             .layer(*layer_id)
