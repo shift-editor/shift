@@ -8,7 +8,6 @@ import {
   canAddGlyphSourceCell,
   deleteGlyphSource,
   glyphAxesCell,
-  glyphSourceHereName,
   glyphSourcesCell,
   selectGlyphSource,
   setGlyphAxis,
@@ -171,7 +170,6 @@ describe("adding a glyph source where the sliders sit", () => {
 
     setGlyphAxis(editor.asEditor(), axisId("SPRD"), 60);
     expect(canAddGlyphSourceCell(editor.asEditor()).peek()).toBe(true);
-    expect(glyphSourceHereName(editor.asEditor())).toBe("Spread 60");
 
     setGlyphAxis(editor.asEditor(), axisId("SPRD"), 100);
     expect(canAddGlyphSourceCell(editor.asEditor()).peek()).toBe(false);

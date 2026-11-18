@@ -36,7 +36,7 @@ test.describe("glyph sources and glyph axes in the Designspace tab", () => {
 
     await editor.commitInputValue(controls.getByLabel("Spread value"), 60);
     await controls.getByLabel("Add glyph source or axis").click();
-    await page.getByRole("menuitem", { name: "Add glyph source at Spread 60" }).click();
+    await page.getByRole("menuitem", { name: "Glyph source", exact: true }).click();
 
     await expect(glyphSourceRow(controls, "Spread 60")).toBeVisible();
   });
@@ -47,7 +47,7 @@ test.describe("glyph sources and glyph axes in the Designspace tab", () => {
 
     await expect(controls.getByRole("slider", { name: "Gap", exact: true })).toHaveCount(0);
     await controls.getByLabel("Add glyph source or axis").click();
-    await page.getByRole("menuitem", { name: "Add glyph axis…" }).click();
+    await page.getByRole("menuitem", { name: "Glyph axis…" }).click();
     await page.getByLabel("Name", { exact: true }).fill("Gap");
     await page.getByRole("button", { name: "Add", exact: true }).click();
 

@@ -85,8 +85,7 @@ export function glyphSourcesCell(editor: Editor): Signal<readonly GlyphSourceRow
  * has no source or glyph source there.
  *
  * @remarks
- * A boolean, so a slider scrub that keeps it re-renders nothing; read the
- * place's name with {@link glyphSourceHereName} when it is shown.
+ * A boolean, so a slider scrub that keeps it re-renders nothing.
  */
 export function canAddGlyphSourceCell(editor: Editor): Signal<boolean> {
   return computed(() => {
@@ -96,21 +95,6 @@ export function canAddGlyphSourceCell(editor: Editor): Signal<boolean> {
     const location = editor.editLocationCell.value;
     return !glyph.layerAt(location) && !glyph.sourceAt(location);
   });
-}
-
-/**
- * The name of the place the sliders sit, as adding a glyph source there
- * names it ("Spread 60"), read once.
- *
- * @returns null with no single glyph edited.
- */
-export function glyphSourceHereName(editor: Editor): string | null {
-  const node = editor.scene.only("glyph");
-  const glyph = node ? editor.glyphForId(node.glyphId) : null;
-  if (!glyph) return null;
-
-  const location = glyph.space.toDesign(editor.editLocationCell.peek());
-  return drawingName(editor.font.designspace, glyph, location);
 }
 
 /** Edits the glyph source `layerId`, moving the sliders to where it sits, as selecting a source does. */

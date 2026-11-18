@@ -23,7 +23,6 @@ import {
   addGlyphSourceHere,
   canAddGlyphSourceCell,
   deleteGlyphSource,
-  glyphSourceHereName,
   glyphSourcesCell,
   selectGlyphSource,
 } from "@/lib/variation/glyphAxes";
@@ -38,9 +37,9 @@ import { GlyphAxisPopover, type GlyphAxisPopoverTarget } from "./GlyphAxisPopove
  * a glyph is edited: the glyph's own sources, its drawings off the font's
  * sources (brace drawings included), each named by where it sits. A glyph
  * with none says "None". Selecting one moves the sliders there and edits it;
- * its ⋮ deletes it. **+** opens a menu: add a glyph source where the sliders
- * sit (disabled where the glyph has a source or glyph source there), or add
- * a glyph axis.
+ * its ⋮ deletes it. **+** opens a menu: Glyph source, added where the
+ * sliders sit (disabled where the glyph has a source or glyph source there),
+ * and Glyph axis….
  */
 export const GlyphSourcesSection = ({
   section: Section = CollapsibleSection,
@@ -105,16 +104,10 @@ export const GlyphSourcesSection = ({
   );
 };
 
-/** Where **+** would add a glyph source, read when its menu opens. */
-interface AddHere {
-  readonly name: string | null;
-  readonly enabled: boolean;
-}
-
 /**
  * The section's **+**: a menu to add a glyph source where the sliders sit
- * or a glyph axis. Where it would add is read when the menu opens, so a
- * slider scrub re-renders nothing.
+ * or a glyph axis. Whether a glyph source can be added is read when the
+ * menu opens, so a slider scrub re-renders nothing.
  */
 const GlyphSourcesAddMenu = ({
   editor,
@@ -128,7 +121,7 @@ const GlyphSourcesAddMenu = ({
   onAddAxis: () => void;
 }) => {
   const canAddCell = useMemo(() => canAddGlyphSourceCell(editor), [editor]);
-  const [here, setHere] = useState<AddHere>({ name: null, enabled: false });
+  const [canAdd, setCanAdd] = useState(false);
 
   if (disabled) {
     return (
@@ -141,7 +134,7 @@ const GlyphSourcesAddMenu = ({
   }
 
   const onOpenChange = (open: boolean) => {
-    if (open) setHere({ name: glyphSourceHereName(editor), enabled: canAddCell.peek() });
+    if (open) setCanAdd(canAddCell.peek());
   };
 
   return (
@@ -159,10 +152,10 @@ const GlyphSourcesAddMenu = ({
       <MenuPortal>
         <MenuPositioner sideOffset={4} align="end">
           <MenuPopup>
-            <MenuItem disabled={!here.enabled} onClick={() => void addGlyphSourceHere(editor)}>
-              {here.name ? `Add glyph source at ${here.name}` : "Add glyph source"}
+            <MenuItem disabled={!canAdd} onClick={() => void addGlyphSourceHere(editor)}>
+              Glyph source
             </MenuItem>
-            <MenuItem onClick={onAddAxis}>Add glyph axis…</MenuItem>
+            <MenuItem onClick={onAddAxis}>Glyph axis…</MenuItem>
           </MenuPopup>
         </MenuPositioner>
       </MenuPortal>
