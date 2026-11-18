@@ -31,10 +31,12 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
 mod font_intents;
+mod glyph_axis_intents;
 mod glyph_intents;
 mod layer_intents;
 
 pub use font_intents::*;
+pub use glyph_axis_intents::*;
 pub use glyph_intents::*;
 pub use layer_intents::*;
 
@@ -194,6 +196,11 @@ font_intents! {
         DuplicateGlyphs,
         DecomposeGlyphs,
         SetSidebearings,
+        CreateGlyphAxis,
+        EditGlyphAxis,
+        CreateLocatedGlyphLayer,
+        SetGlyphLayerLocation,
+        DeleteGlyphLayer,
     }
 }
 
@@ -231,6 +238,7 @@ enum Coordinates {
     LayerTransform,
     PointTransform,
     SidebearingDelta,
+    LayerLocation,
 }
 
 impl Coordinates {
@@ -247,6 +255,7 @@ impl Coordinates {
             Self::LayerTransform => "layer transform",
             Self::PointTransform => "point transform",
             Self::SidebearingDelta => "sidebearing delta",
+            Self::LayerLocation => "layer location",
         }
     }
 }
@@ -280,6 +289,12 @@ impl<I: IntoIterator<Item = f64>> RequireFinite for I {
 trait FontLevelIntent {
     /// Authored layers to load before applying it.
     fn required_layer_ids(&self, _font: &Font) -> Vec<LayerId> {
+        Vec::new()
+    }
+
+    /// Glyphs whose composites applying it reads: every layer with a
+    /// component of one of them must be loaded first.
+    fn composites_read(&self, _font: &Font) -> Vec<GlyphId> {
         Vec::new()
     }
 
@@ -406,6 +421,19 @@ impl FontIntentSet {
             .collect();
         glyph_ids.extend(font.component_glyph_ids_of_layers(&self.required_layer_ids(font)));
         glyph_ids
+    }
+
+    /// Glyphs whose composites this set reads, such as a glyph axis whose
+    /// range edit checks every component that sets it. The layers with a
+    /// component of one of them must be loaded before the set applies.
+    pub fn composites_read(&self, font: &Font) -> BTreeSet<GlyphId> {
+        self.intents
+            .iter()
+            .flat_map(|intent| match intent.kind() {
+                IntentKind::Layer(_) => Vec::new(),
+                IntentKind::Font(intent) => intent.composites_read(font),
+            })
+            .collect()
     }
 
     /// The kerning values this set writes, by source and pair.
@@ -1205,6 +1233,9 @@ impl FontDiff<'_> {
 
 #[cfg(test)]
 mod replacement_tests;
+
+#[cfg(test)]
+mod glyph_axis_tests;
 
 #[cfg(test)]
 mod glyph_tests;

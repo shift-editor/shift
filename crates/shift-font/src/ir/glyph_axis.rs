@@ -122,6 +122,12 @@ impl GlyphAxis {
         self
     }
 
+    pub(crate) fn with_name(&self, name: String) -> Self {
+        let mut axis = self.clone();
+        axis.axis.set_name(name);
+        axis
+    }
+
     pub(crate) fn with_range(&self, range: AxisRange) -> Self {
         Self::with_id(
             self.id(),
@@ -142,7 +148,10 @@ impl GlyphAxis {
 /// An edit to an existing glyph axis, applied with
 /// [`Font::edit_glyph_axis`](crate::Font::edit_glyph_axis).
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum GlyphAxisEdit {
+    /// Gives the axis a new name; its tag stays.
+    Name(String),
     /// Gives the axis a new tag.
     Tag(String),
     /// Gives the axis a new range; every stored value stays where it is.

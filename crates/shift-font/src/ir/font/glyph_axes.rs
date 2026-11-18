@@ -12,7 +12,7 @@ use super::index::IndexEntries;
 use crate::Require;
 use crate::axis::{Axis, AxisList, DesignLocation};
 use crate::component::ComponentInheritance;
-use crate::entity::{AxisId, GlyphId, LayerId, SourceId};
+use crate::entity::{AxisId, ComponentId, GlyphId, LayerId, SourceId};
 use crate::error::{CoreError, CoreResult};
 use crate::glyph::{Glyph, GlyphLayer};
 use crate::glyph_axis::{
@@ -34,6 +34,16 @@ impl Font {
     /// The glyph that owns the glyph axis `axis_id`.
     pub fn glyph_axis_owner(&self, axis_id: AxisId) -> Option<GlyphId> {
         self.index().glyph_axis_owner(axis_id).copied()
+    }
+
+    /// The axis tagged `tag` in `glyph_id`'s design space: a font axis, else
+    /// one of the glyph's own axes. Without a glyph, font axes only.
+    pub fn axis_id_in_glyph_space(&self, glyph_id: Option<GlyphId>, tag: &str) -> Option<AxisId> {
+        if let Some(axis_id) = self.axis_id_by_tag(tag) {
+            return Some(axis_id);
+        }
+        let axis_id = *self.index().glyph_axis_by_tag(tag)?;
+        (self.glyph_axis_owner(axis_id) == Some(glyph_id?)).then_some(axis_id)
     }
 
     /// Whether a font axis or a glyph axis already uses `tag`.
@@ -100,6 +110,7 @@ impl Font {
     /// Applies `edit` to the glyph axis `axis_id`. A failed edit leaves the
     /// font unchanged.
     ///
+    /// - [`GlyphAxisEdit::Name`] changes its name, which must not be blank.
     /// - [`GlyphAxisEdit::Tag`] changes its tag, which must stay four ASCII
     ///   characters and unique across font and glyph axes.
     /// - [`GlyphAxisEdit::Range`] changes its range without moving any
@@ -112,7 +123,7 @@ impl Font {
     /// # Errors
     ///
     /// Returns [`CoreError::AxisNotFound`] for an unknown glyph axis,
-    /// [`CoreError::InvalidAxis`] for an invalid tag or a range not ordered
+    /// [`CoreError::InvalidAxis`] for a blank name, an invalid tag or a range not ordered
     /// around its default, [`CoreError::DuplicateAxisTag`] for a tag in use,
     /// [`CoreError::AxisValuesOutsideRange`] listing the values a range would
     /// strand, [`CoreError::DuplicateLayerLocation`] when a new default puts a
@@ -120,11 +131,25 @@ impl Font {
     /// listing the values that keep an axis from being removed.
     pub fn edit_glyph_axis(&mut self, axis_id: AxisId, edit: GlyphAxisEdit) -> CoreResult<()> {
         match edit {
+            GlyphAxisEdit::Name(name) => self.set_glyph_axis_name(axis_id, name),
             GlyphAxisEdit::Tag(tag) => self.set_glyph_axis_tag(axis_id, tag),
             GlyphAxisEdit::Range(range) => self.set_glyph_axis_range(axis_id, range),
             GlyphAxisEdit::Rescale(range) => self.rescale_glyph_axis(axis_id, range),
             GlyphAxisEdit::Remove => self.remove_glyph_axis(axis_id),
         }
+    }
+
+    /// Changes a glyph axis's name, keeping its tag.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::AxisNotFound`] for an unknown glyph axis and
+    /// [`CoreError::InvalidAxis`] for a blank name.
+    fn set_glyph_axis_name(&mut self, axis_id: AxisId, name: String) -> CoreResult<()> {
+        let (glyph_id, axis) = self.require_glyph_axis(axis_id)?;
+        let renamed = axis.with_name(name);
+        renamed.as_axis().validate()?;
+        self.replace_glyph_axis(glyph_id, renamed)
     }
 
     /// Changes a glyph axis's tag.
@@ -465,6 +490,87 @@ impl Font {
                     first: other.layer.id(),
                     second: layer_id,
                 });
+            }
+        }
+        Ok(())
+    }
+
+    /// Moves the drawing `layer_id` to `location`, keeping its content.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::LayerNotFound`] for an unknown layer,
+    /// [`CoreError::SourceNotFound`] for a base the font lacks,
+    /// [`CoreError::LayerLocationOffSpace`] for an axis that is neither a font
+    /// axis nor one of the glyph's, [`CoreError::AxisValuesOutsideRange`] for a
+    /// glyph-axis value outside its range, and
+    /// [`CoreError::DuplicateLayerLocation`] or
+    /// [`CoreError::DuplicateGlyphLayer`] when another drawing of the glyph
+    /// already sits there. The font is unchanged on failure.
+    pub fn set_layer_location(
+        &mut self,
+        layer_id: LayerId,
+        location: LayerLocation,
+    ) -> CoreResult<()> {
+        let glyph_id = self.require_layer_owner(layer_id)?;
+        let glyph = self.require_glyph(glyph_id)?;
+        let previous = Arc::clone(glyph.layers().get(&layer_id).require(&layer_id)?);
+        if *previous.location() == location {
+            return Ok(());
+        }
+        self.check_layer_location(glyph, layer_id, &location)?;
+        let mut moved = (*previous).clone();
+        moved.relocate(location);
+
+        let mut index = self.index().clone();
+        index.remove(&IndexEntries::records_of_layer(glyph_id, &previous));
+        index.try_insert(IndexEntries::records_of_layer(glyph_id, &moved))?;
+        let state = self.state_mut();
+        state.index = index;
+        let glyph = state.data.glyphs.get_mut(&glyph_id).require(&glyph_id)?;
+        Arc::make_mut(glyph).set_layer(moved);
+        Ok(())
+    }
+
+    /// Checks that a component of `base_glyph_id` in `layer_id` may draw its
+    /// base at `location`: each axis is a font axis or one of the base glyph's
+    /// own axes, and a value on a glyph axis lies inside its range.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::AxisNotFound`] for an axis the font has nowhere,
+    /// [`CoreError::ComponentLocationOffSpace`] for another glyph's axis,
+    /// [`CoreError::AxisValuesOutsideRange`] for a glyph-axis value outside its
+    /// range, and [`CoreError::LayerNotFound`] for an unknown layer.
+    pub(crate) fn check_component_location(
+        &self,
+        layer_id: LayerId,
+        component_id: &ComponentId,
+        base_glyph_id: GlyphId,
+        location: &DesignLocation,
+    ) -> CoreResult<()> {
+        for (axis_id, value) in location.iter() {
+            if self.axes().contains_axis(*axis_id) {
+                continue;
+            }
+            let owner = self.glyph_axis_owner(*axis_id).require(axis_id)?;
+            if owner != base_glyph_id {
+                return Err(CoreError::ComponentLocationOffSpace {
+                    component_id: component_id.clone(),
+                    axis_id: *axis_id,
+                });
+            }
+            let (_, axis) = self.require_glyph_axis(*axis_id)?;
+            if !axis.contains(*value) {
+                return Err(values_outside_range(
+                    *axis_id,
+                    vec![AxisValueUse::Component {
+                        glyph_id: self.require_layer_owner(layer_id)?,
+                        layer_id,
+                        component_id: component_id.clone(),
+                        value: *value,
+                    }],
+                ));
             }
         }
         Ok(())

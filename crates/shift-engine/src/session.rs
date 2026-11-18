@@ -143,6 +143,8 @@ impl EngineSession {
         let mut roots = set.component_bases(&self.font);
         let anchor_edits: Vec<LayerId> = set.layers_with_anchor_edits().into_iter().collect();
         roots.extend(self.dependents(source, &anchor_edits)?);
+        let composites_read: Vec<GlyphId> = set.composites_read(&self.font).into_iter().collect();
+        roots.extend(self.composites_of(source, &composites_read)?);
         roots.extend(self.font.linked_glyph_ids());
         self.load_glyph_closure(source, roots)
     }
@@ -457,16 +459,29 @@ impl EngineSession {
         if layer_ids.is_empty() {
             return Ok(BTreeSet::new());
         }
-        let mut dependents = self.font.dependent_glyph_ids(layer_ids);
         let owners: BTreeSet<GlyphId> = layer_ids
             .iter()
             .filter_map(|layer_id| self.font.glyph_id_by_layer(*layer_id))
             .collect();
         let owners: Vec<GlyphId> = owners.into_iter().collect();
+        self.composites_of(source, &owners)
+    }
+
+    /// Glyphs with a component of one of `glyph_ids`, loaded or not.
+    fn composites_of<S: LayerSource>(
+        &self,
+        source: &mut S,
+        glyph_ids: &[GlyphId],
+    ) -> Result<BTreeSet<GlyphId>, LoadError<S::Error>> {
+        if glyph_ids.is_empty() {
+            return Ok(BTreeSet::new());
+        }
+        let layer_ids = self.font.layer_ids_of_glyphs(glyph_ids);
+        let mut composites = self.font.dependent_glyph_ids(&layer_ids);
         // Loaded composites may use the glyph through edits not persisted
         // yet, so the source's answer only adds to the font's.
-        dependents.extend(source.composites_of(&owners).map_err(LoadError::Source)?);
-        Ok(dependents)
+        composites.extend(source.composites_of(glyph_ids).map_err(LoadError::Source)?);
+        Ok(composites)
     }
 
     fn staged(&self, font: Font, applied: AppliedIntents) -> Result<StagedEdit, EngineError> {

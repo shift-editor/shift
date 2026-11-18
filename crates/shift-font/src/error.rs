@@ -172,6 +172,14 @@ pub enum CoreError {
     )]
     LayerLocationOffSpace { layer_id: LayerId, axis_id: AxisId },
 
+    #[error(
+        "component {component_id} sets axis {axis_id}, which is neither a font axis nor an axis of its base glyph"
+    )]
+    ComponentLocationOffSpace {
+        component_id: ComponentId,
+        axis_id: AxisId,
+    },
+
     #[error("layers {first} and {second} of glyph {glyph_id} sit at the same location")]
     DuplicateLayerLocation {
         glyph_id: GlyphId,
