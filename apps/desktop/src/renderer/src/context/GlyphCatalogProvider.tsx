@@ -159,17 +159,24 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
     sameCategoryFilter,
   );
 
+  const availableGlyphByName = useMemo(
+    () => new Map(availableGlyphs.map((glyph) => [glyph.name, glyph])),
+    [availableGlyphs],
+  );
+
   // One filter for every glyph list in the window: the overview's grid and the canvas's Glyphs tab.
   const filterGlyphs = useCallback<GlyphCatalogSource["filterGlyphs"]>(
     ({ query, categoryFilters, languageId }) => {
       const search = NameQuery.from(query);
       const searchLimit = Math.max(availableUnicodes.length, 200);
       if (languageId !== null) {
-        const inSet = new Set(languageCatalog.filter(languageId));
+        // In the set's order, not the font's: a language lists its glyphs in alphabet order.
+        const inSet = languageCatalog
+          .filter(languageId)
+          .flatMap((name) => availableGlyphByName.get(name) ?? []);
         const queryUnicodes = new Set(categoryCatalog.filter({ query, searchLimit }));
 
-        return availableGlyphs.filter((glyph) => {
-          if (!inSet.has(glyph.name)) return false;
+        return inSet.filter((glyph) => {
           if (search.isEmpty) return true;
 
           const unicodeMatched = glyph.unicode !== null && queryUnicodes.has(glyph.unicode);
@@ -195,7 +202,13 @@ const useGlyphCatalogSource = (): GlyphCatalogSource => {
         return unicodeMatched || nameMatched;
       });
     },
-    [availableGlyphs, availableUnicodes.length, categoryCatalog, languageCatalog],
+    [
+      availableGlyphs,
+      availableGlyphByName,
+      availableUnicodes.length,
+      categoryCatalog,
+      languageCatalog,
+    ],
   );
   const filteredGlyphs = useMemo(
     () => filterGlyphs({ query, categoryFilters, languageId: selectedLanguageId }),

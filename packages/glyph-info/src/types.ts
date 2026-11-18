@@ -185,7 +185,11 @@ export interface LanguageCatalog {
    * unknown ids are skipped.
    */
   trackedScripts: LanguageScript[];
-  /** Returns the names of the font's glyphs in a set, in font order. */
+  /**
+   * Returns the names of the font's glyphs in a set, in the set's order:
+   * a language's alphabet, each letter followed by its forms. Font glyphs
+   * the set lists in one place keep font order.
+   */
   filter(setId: string): string[];
   /** Returns coverage for one language, or `null` for an unknown id. */
   coverage(languageId: string): LanguageCoverage | null;

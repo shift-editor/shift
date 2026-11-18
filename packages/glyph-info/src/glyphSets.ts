@@ -1,5 +1,6 @@
-import { ascending, comparing, descending } from "@shift/types";
-import { casingCharacters, unicodeGroups } from "./scriptGroups.js";
+import { comparing, descending } from "@shift/types";
+import { alphabetOrder } from "./alphabetOrder.js";
+import { casingCharacters, languageTag, unicodeGroups } from "./scriptGroups.js";
 import type {
   Glyph,
   GlyphPosition,
@@ -120,7 +121,7 @@ export class GlyphSets {
         within(form.characters, available) &&
         (form.required || (form.alternate && casing.size > 0 && within(form.characters, casing))),
     );
-    const required = this.#ordered(language.baseCodepoints, forms);
+    const required = this.#ordered(language.baseCodepoints, forms, languageTag(language.id));
     this.#requiredByLanguage.set(language.id, required);
     return required;
   }
@@ -189,7 +190,7 @@ export class GlyphSets {
       );
       groups.push({
         group: { id: `${key}/basic-shapes`, name: "Basic Shapes", script },
-        required: this.#ordered(shapes, forms),
+        required: this.#ordered(shapes, forms, null),
       });
     }
 
@@ -285,8 +286,17 @@ export class GlyphSets {
     return this.#formsByScript.get(scriptKey(script)) ?? [];
   }
 
-  /** Each character followed by its own forms, then forms of several characters. */
-  #ordered(codepoints: readonly number[], forms: readonly Form[]): RequiredGlyph[] {
+  /**
+   * Each character, in alphabet order ({@link alphabetOrder}), followed by
+   * its own forms, then forms of several characters.
+   *
+   * @param locale - BCP 47 tag whose alphabet orders the characters; `null` for the root collation.
+   */
+  #ordered(
+    codepoints: readonly number[],
+    forms: readonly Form[],
+    locale: string | null,
+  ): RequiredGlyph[] {
     const formsByCharacter = new Map<number, Form[]>();
     const compound: Form[] = [];
     for (const form of forms) {
@@ -302,7 +312,7 @@ export class GlyphSets {
     }
 
     const required: RequiredGlyph[] = [];
-    for (const codepoint of [...new Set(codepoints)].sort(ascending)) {
+    for (const codepoint of [...new Set(codepoints)].sort(alphabetOrder(locale))) {
       const glyph = this.#glyphFor(codepoint);
       required.push(glyph, ...this.#positionalForms(glyph));
       for (const form of formsByCharacter.get(codepoint) ?? []) required.push(requiredForm(form));

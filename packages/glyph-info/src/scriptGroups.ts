@@ -132,7 +132,7 @@ function unihanCore({
 }
 
 /** The BCP 47 tag of a Hyperglot orthography id (`tur-latin` → `tr`), as SpecialCasing uses. */
-function languageTag(languageId: string): string | null {
+export function languageTag(languageId: string): string | null {
   const code = languageId.split("-")[0];
   if (!code) return null;
 
