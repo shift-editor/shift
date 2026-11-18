@@ -201,13 +201,32 @@ impl<'a> LayoutFont<'a> {
             .map(|(_, glyph)| glyph)
     }
 
+    /// The glyph drawn for the text glyph `glyph_id` at the location: the
+    /// glyph of its first alternate that holds there, as an `rvrn`
+    /// substitution swaps it in a compiled font ([`Font::drawn_glyph_at`]).
+    /// Layout keeps the text glyph throughout and asks every per-glyph
+    /// question of the glyph drawn for it, so a alternate glyph's own alternates are
+    /// never applied. A compiled font, or one known only by its advances,
+    /// draws each glyph as itself.
+    pub(crate) fn drawn(&self, glyph_id: GlyphId) -> GlyphId {
+        let Glyphs::Session(session) = &self.glyphs else {
+            return glyph_id;
+        };
+        if session.whole_shaper().is_some() {
+            return glyph_id;
+        }
+        session
+            .font
+            .drawn_glyph_at(glyph_id, session.projection.borrow().location())
+    }
+
     /// The glyph's advance at the location; 0 for one with no shape here.
     pub(crate) fn advance(&self, glyph: GlyphId) -> f64 {
         if let Some(advance) = self.advances.borrow().get(&glyph) {
             return advance.unwrap_or(0.0);
         }
         let advance = match &self.glyphs {
-            Glyphs::Session(session) => session.advance(glyph),
+            Glyphs::Session(session) => session.advance(self.drawn(glyph)),
             Glyphs::Advances(typed) => typed.glyphs.get(&glyph).map(|typed| typed.advance),
         };
         self.advances.borrow_mut().insert(glyph, advance);
@@ -224,7 +243,8 @@ impl<'a> LayoutFont<'a> {
         if session.whole_shaper().is_some() {
             return None;
         }
-        let resolved = session.projection.borrow_mut().glyph(glyph).ok()??;
+        let drawn = self.drawn(glyph);
+        let resolved = session.projection.borrow_mut().glyph(drawn).ok()??;
         resolved_contours_bbox(resolved.contours()).map(|(x_min, y_min, x_max, y_max)| {
             GlyphBounds {
                 x_min,
@@ -242,10 +262,11 @@ impl<'a> LayoutFont<'a> {
             return None;
         };
         let class = |glyph| self.class(glyph);
+        let drawn = self.drawn(glyph);
         session
             .projection
             .borrow_mut()
-            .compiled_anchors(glyph, &class)
+            .compiled_anchors(drawn, &class)
             .ok()
             .flatten()
     }
@@ -254,9 +275,12 @@ impl<'a> LayoutFont<'a> {
     /// [`TypedFont`].
     fn kerning(&self, pairs: &[(GlyphId, GlyphId)]) -> Vec<f64> {
         match &self.glyphs {
-            Glyphs::Session(session) => session
-                .kerning
-                .values(session.font.kerning(), pairs.iter().copied()),
+            Glyphs::Session(session) => session.kerning.values(
+                session.font.kerning(),
+                pairs
+                    .iter()
+                    .map(|(left, right)| (self.drawn(*left), self.drawn(*right))),
+            ),
             Glyphs::Advances(_) => vec![0.0; pairs.len()],
         }
     }

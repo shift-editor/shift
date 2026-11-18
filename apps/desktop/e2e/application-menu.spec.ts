@@ -463,7 +463,9 @@ convertiblePreviewTest(
   "View menu distinguishes canvas zoom from interface size",
   async ({ electronApp, page }) => {
     const workspacePage = await openFontFromLauncher(page, electronApp);
-    await clickApplicationMenuItem(workspacePage, electronApp, "file.save");
+    await convertPreview(workspacePage, () =>
+      clickApplicationMenuItem(workspacePage, electronApp, "file.save"),
+    );
     await waitForWorkspaceReady(workspacePage);
 
     const browserWindow = await electronApp.browserWindow(workspacePage);

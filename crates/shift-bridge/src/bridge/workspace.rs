@@ -591,10 +591,14 @@ impl NativeWorkspace for Bridge {
     location: Location,
   ) -> Result<Vec<GlyphPreview>, NativeWorkspaceError> {
     let location = DesignLocation::from_untyped(location);
-    let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
+    // A tile draws each glyph as text does, as the alternate picked at this
+    // location, so the alternate glyphs are acquired too.
+    let mut drawn = glyph_ids.clone();
+    drawn.extend(self.font()?.alternate_glyphs_of(&glyph_ids));
+    let font = self.acquire_and_font(&drawn, AcquireScope::ComponentClosure)?;
     let glyphs = font
       .projection(&location)
-      .glyphs(&glyph_ids)
+      .drawn_glyphs(&glyph_ids)
       .map_err(BridgeError::from)?;
     Ok(glyphs.iter().map(GlyphPreview::from).collect())
   }

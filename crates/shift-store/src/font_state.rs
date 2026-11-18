@@ -462,6 +462,7 @@ fn load_glyphs(
     };
     let mut coordinates = load_layer_coordinates(conn)?;
     let mut glyph_axes = load_glyph_axes(conn)?;
+    let mut glyph_alternates = load_glyph_alternates(conn)?;
     let mut loaded_layers = HashMap::new();
     if read == FontRead::WithLayerPayloads {
         let layer_ids = layer_rows.iter().map(|row| row.id).collect::<Vec<_>>();
@@ -510,6 +511,7 @@ fn load_glyphs(
         );
         *glyph.lib_mut() = font::LibData::from_map(libs.remove(&glyph_id).unwrap_or_default());
         glyph.set_axes(glyph_axes.remove(&glyph_id).unwrap_or_default());
+        glyph.set_alternates(glyph_alternates.remove(&glyph_id).unwrap_or_default());
         for layer in layers.remove(&glyph_id).unwrap_or_default() {
             glyph.set_layer(layer);
         }
@@ -537,6 +539,54 @@ fn load_layer_coordinates(
         coordinates.entry(layer_id).or_default().set(axis_id, value);
     }
     Ok(coordinates)
+}
+
+/// Every glyph's alternates, by glyph, in the order they are tried, each with
+/// its condition's ranges in order.
+fn load_glyph_alternates(
+    conn: &rusqlite::Connection,
+) -> Result<HashMap<font::GlyphId, Vec<font::GlyphAlternate>>, StoreError> {
+    let mut ranges: HashMap<font::AlternateId, Vec<font::ConditionRange>> = HashMap::new();
+    let mut stmt = conn.prepare(
+        "SELECT alternate_id, axis_id, min_value, max_value FROM glyph_alternate_conditions
+         ORDER BY alternate_id, order_index",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, font::AlternateId>(0)?,
+            font::ConditionRange::new(row.get(1)?, row.get(2)?, row.get(3)?),
+        ))
+    })?;
+    for row in rows {
+        let (alternate_id, range) = row?;
+        ranges.entry(alternate_id).or_default().push(range);
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT id, glyph_id, alternate_glyph_id FROM glyph_alternates
+         ORDER BY glyph_id, order_index, id",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, font::AlternateId>(0)?,
+            row.get::<_, font::GlyphId>(1)?,
+            row.get::<_, font::GlyphId>(2)?,
+        ))
+    })?;
+    let mut alternates: HashMap<font::GlyphId, Vec<font::GlyphAlternate>> = HashMap::new();
+    for row in rows {
+        let (alternate_id, glyph_id, alternate_glyph) = row?;
+        let condition = font::Condition::all(ranges.remove(&alternate_id).unwrap_or_default());
+        alternates
+            .entry(glyph_id)
+            .or_default()
+            .push(font::GlyphAlternate::new(
+                alternate_id,
+                condition,
+                alternate_glyph,
+            ));
+    }
+    Ok(alternates)
 }
 
 /// Every glyph's own axes, by glyph, in order.

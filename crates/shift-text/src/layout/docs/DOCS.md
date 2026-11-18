@@ -1,6 +1,6 @@
 # shift-text: layout
 
-<!-- reviewed: 2026-11-01 review-every: 90d -->
+<!-- reviewed: 2026-11-18 review-every: 90d -->
 
 Lays out proof text over the live font in one call: shaping, the positioning export generates from kerning and anchors, line breaking, bidi order, alignment, carets and boxes. The editor draws, hit-tests and edits from the `TextLayout` it returns. The `layout` module of `shift-text`: its request and result types always build, laying out needs the `layout` feature.
 
@@ -36,6 +36,8 @@ crates/shift-text/src/layout/
 - `LayoutFont` -- the live font at one location: a `FontProjection` for advances (each layer's width, with no outline resolved) and compiled anchors, a `KerningBlend`, the session's `LiveShaper` (or why there is none), and each glyph's `GDEF` class
 
 ## How it works
+
+**Alternates.** Layout keeps the text glyph (what shaping or the character map gave) throughout and asks every per-glyph question of the glyph drawn for it, `LayoutFont::drawn`: the glyph of its first alternate that holds at the layout's location (shift-font's `Font::drawn_glyph_at`), as an `rvrn` substitution would swap it. Advances (the shaper's included), outline bounds, anchors and kerning are the alternate glyph's, and the finished layout names the alternate glyph in `PlacedGlyph::glyph_id`, which is what the editor draws and loads. Asking through the text glyph means an alternate glyph's own alternates are never applied. A compiled font's session, and a `TypedFont`, draw each glyph as itself. Authored `GSUB` lookups see the text glyph, where a compiled font's `rvrn` would have swapped it first.
 
 Each paragraph is shaped by `LiveShaper::shape_paragraph_live`: bidi levels and scripts split it into runs, each glyph starts from its live advance, HarfRust applies the shaper font's authored lookups, and at each generated feature's marker `GeneratedPositions` hands the run to shift-font's `RunPositioning`. Text with `shaping` off, and a paragraph that cannot be shaped, is laid out as typed: one glyph per unit by the shaper's character map, left to right, with a zero-width nonspacing mark given a 600-unit stand-in advance and set beside the text at the height its anchor attaches at (`TextLayout::unshaped` says why, when it was not asked for). `LayoutFont::typed` lays text out the same way over a `TypedFont`, what a window with no live font knows of each glyph (its advance and mark class, the glyph each character maps to, the line metrics): the editor lays out over it only while a font's engine session is not open yet: the open document, a UFO, designspace or Glyphs preview and a memory session shape in their engine over a shaper font compiled from feature code, and a compiled font's preview (TrueType, OpenType) shapes in its engine over the binary itself (`ShaperFont::from_binary`), whose own `cmap`, advances and lookups apply and whose lines are set from its `OS/2` metrics.
 

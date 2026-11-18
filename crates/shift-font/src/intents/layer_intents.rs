@@ -1270,6 +1270,7 @@ impl LayerIntent for ReplaceGlyphLayerContent {
                 base_glyph_id,
                 component.location(),
             )?;
+            font.check_component_condition(font.require_glyph(glyph_id)?, component)?;
         }
         let mut layer = font
             .layer(*layer_id)

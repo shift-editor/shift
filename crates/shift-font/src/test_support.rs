@@ -617,3 +617,132 @@ pub fn glyph_axis_font() -> Font {
     font.insert_glyph_layer(h, h_layer(brace, 80.0)).unwrap();
     font
 }
+
+/// A font with glyph alternates and component conditions, built in code.
+///
+/// - Axes: Weight (`wght`, 100–400–900) and Width (`wdth`, 50–100–100), one
+///   master, Regular, at their defaults.
+/// - Each simple glyph is one line from `(x, 0)` to `(x + 10, 0)`, its `x`
+///   telling it apart: `dollar` 1 (advance 500, U+0024 `$`), `dollar.heavy` 2 (600),
+///   `dollar.compact-heavy` 3 (450), `bar` 4, `dot` 5.
+/// - `dollar` has two alternates, tried in order: Weight ≥ 700 and Width ≤ 80
+///   draws `dollar.compact-heavy`; Weight ≥ 700 draws `dollar.heavy`.
+/// - `dollarcomp` is one component of `dollar`.
+/// - `dot` has a glyph axis, Spread (`SPRD`, 0–100).
+/// - `H` has a glyph axis of its own, Crossbar (`CRSB`, 0–100), and three
+///   components: `bar` where Weight ≥ 700; `dot`, moved 100 right, where
+///   Crossbar is 70–100; and `bar` drawn at Weight 800, moved 200 right,
+///   where Weight ≥ 700, which reads `H`'s Weight, not the 800 it sets.
+/// - `HX` is `H` drawn at Crossbar 80.
+/// - `mid` is `bar` where Weight is at least 700; `T` is `mid` drawn at
+///   Weight 800, and `U` is `mid` drawn where `U` is.
+///
+/// # Panics
+///
+/// Panics if the font refuses one of the glyphs it is built from.
+pub fn conditions_font() -> Font {
+    use crate::{AlternateId, Condition, ConditionRange, GlyphAlternate, GlyphAxis};
+
+    let line = |source: SourceId, x: f64, advance: f64| {
+        let mut layer = GlyphLayer::with_width(LayerId::new(), source, advance);
+        let mut contour = Contour::new();
+        contour.add_point(x, 0.0, PointType::OnCurve, false);
+        contour.add_point(x + 10.0, 0.0, PointType::OnCurve, false);
+        layer.add_contour(contour);
+        layer
+    };
+
+    let mut font = Font::new();
+    font.clear_sources();
+    let weight = Axis::new("wght".into(), "Weight".into(), 100.0, 400.0, 900.0);
+    let width = Axis::new("wdth".into(), "Width".into(), 50.0, 100.0, 100.0);
+    let (wght, wdth) = (weight.id(), width.id());
+    font.add_axis(weight).unwrap();
+    font.add_axis(width).unwrap();
+    let regular = font.add_source(Source::new(
+        "Regular".into(),
+        DesignLocation::from([(wght, 400.0), (wdth, 100.0)]),
+    ));
+    font.set_default_source_id(regular);
+
+    let mut simple = |name: &str, x: f64, advance: f64| {
+        let mut glyph = Glyph::with_id(GlyphId::from_raw(name), name);
+        glyph.set_layer(line(regular, x, advance));
+        font.insert_glyph(glyph).unwrap()
+    };
+    let heavy = simple("dollar.heavy", 2.0, 600.0);
+    let compact_heavy = simple("dollar.compact-heavy", 3.0, 450.0);
+    let bar = simple("bar", 4.0, 0.0);
+    let dot = simple("dot", 5.0, 0.0);
+
+    let heavy_weight = ConditionRange::new(wght, Some(700.0), None);
+    let mut dollar = Glyph::with_id(GlyphId::from_raw("dollar"), "dollar");
+    dollar.set_unicodes(vec![u32::from('$')]);
+    dollar.set_layer(line(regular, 1.0, 500.0));
+    dollar.set_alternates(vec![
+        GlyphAlternate::new(
+            AlternateId::from_raw("compact-heavy"),
+            Condition::all([heavy_weight, ConditionRange::new(wdth, None, Some(80.0))]),
+            compact_heavy,
+        ),
+        GlyphAlternate::new(
+            AlternateId::from_raw("heavy"),
+            Condition::all([heavy_weight]),
+            heavy,
+        ),
+    ]);
+    let dollar = font.insert_glyph(dollar).unwrap();
+
+    let composite = |name: &str, components: Vec<Component>| {
+        let mut glyph = Glyph::with_id(GlyphId::from_raw(name), name);
+        let mut layer = GlyphLayer::with_width(LayerId::new(), regular, 500.0);
+        for component in components {
+            layer.add_component(component);
+        }
+        glyph.set_layer(layer);
+        glyph
+    };
+    font.insert_glyph(composite(
+        "dollarcomp",
+        vec![Component::new(dollar, "dollar")],
+    ))
+    .unwrap();
+
+    font.add_glyph_axis(dot, GlyphAxis::new("Spread", 0.0, 0.0, 100.0))
+        .unwrap();
+    let heavy_bar = || {
+        let mut component = Component::new(bar, "bar");
+        component.set_condition(Condition::all([heavy_weight]));
+        component
+    };
+    let crossbar = AxisId::from_raw("crossbar");
+    let mut crossbar_dot = Component::new(dot, "dot");
+    crossbar_dot.set_condition(Condition::all([ConditionRange::new(
+        crossbar,
+        Some(70.0),
+        Some(100.0),
+    )]));
+    crossbar_dot.translate(100.0, 0.0);
+    let mut own_weight_bar = heavy_bar();
+    own_weight_bar.set_location(DesignLocation::from([(wght, 800.0)]));
+    own_weight_bar.translate(200.0, 0.0);
+    let mut h = composite("H", vec![heavy_bar(), crossbar_dot, own_weight_bar]);
+    h.set_axes(vec![GlyphAxis::with_id(
+        crossbar, "CRSB", "Crossbar", 0.0, 0.0, 100.0,
+    )]);
+    let h = font.insert_glyph(h).unwrap();
+    let mut crossbar_h = Component::new(h, "H");
+    crossbar_h.set_location(DesignLocation::from([(crossbar, 80.0)]));
+    font.insert_glyph(composite("HX", vec![crossbar_h]))
+        .unwrap();
+
+    let mid = font
+        .insert_glyph(composite("mid", vec![heavy_bar()]))
+        .unwrap();
+    let mut heavy_mid = Component::new(mid, "mid");
+    heavy_mid.set_location(DesignLocation::from([(wght, 800.0)]));
+    font.insert_glyph(composite("T", vec![heavy_mid])).unwrap();
+    font.insert_glyph(composite("U", vec![Component::new(mid, "mid")]))
+        .unwrap();
+    font
+}

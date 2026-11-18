@@ -8,7 +8,10 @@ use shift_font as font;
 
 use super::{
     MAX_LAYER_PAYLOAD_BYTES_SQL,
-    directory::{layer_coordinates, map_directory_facts_row, validate_directory_facts},
+    directory::{
+        attach_component_conditions, component_conditions, layer_coordinates,
+        map_directory_facts_row, validate_directory_facts,
+    },
     format::decode_layer,
     references::{validate_component_index, validate_component_rows},
 };
@@ -110,6 +113,8 @@ pub(crate) fn load_glyph_layer_from_conn(
     let coordinates =
         layer_coordinates(conn, std::slice::from_ref(&facts.layer_id))?.remove(&facts.layer_id);
     layer.relocate(facts.placed_with(coordinates));
+    let conditions = component_conditions(conn, std::slice::from_ref(&facts.layer_id))?;
+    attach_component_conditions(&mut layer, &conditions);
     validate_component_index(conn, &layer)?;
     Ok(Some(layer))
 }
@@ -304,6 +309,7 @@ fn load_glyph_layer_batch_with_directory(
     }
     drop(payload_stmt);
     let coordinates = layer_coordinates(conn, &keys)?;
+    let conditions = component_conditions(conn, &keys)?;
 
     let decoded = payloads
         .into_par_iter()
@@ -319,6 +325,7 @@ fn load_glyph_layer_batch_with_directory(
             let expected_id = font::LayerId::from_raw(layer_id.clone());
             validate_directory_facts(expected_id, facts.width, facts.height, &layer)?;
             layer.relocate(facts.placed_with(coordinates.get(&layer_id).cloned()));
+            attach_component_conditions(&mut layer, &conditions);
             Ok((layer_id, layer))
         })
         .collect::<Result<Vec<_>, StoreError>>()?;

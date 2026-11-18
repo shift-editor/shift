@@ -342,6 +342,12 @@ impl TextMeasure {
         layout.carets = carets::Carets::new(font, &layout).stops(&self.paragraphs);
         layout.words = layout.words_of(&self.paragraphs);
         layout.unshaped.clone_from(&self.unshaped);
+        // Layout asked every question of the glyph drawn for each text
+        // glyph; the layout names the glyph drawn, which is what a reader
+        // draws and loads.
+        for glyph in &mut layout.glyphs {
+            glyph.glyph_id = glyph.glyph_id.map(|text| font.drawn(text));
+        }
         Ok(layout)
     }
 

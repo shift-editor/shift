@@ -129,6 +129,31 @@ CREATE TABLE IF NOT EXISTS glyph_axes (
 CREATE INDEX IF NOT EXISTS glyph_axes_glyph_id_idx
 ON glyph_axes(glyph_id);
 
+CREATE TABLE IF NOT EXISTS glyph_alternates (
+    id TEXT PRIMARY KEY,
+    glyph_id TEXT NOT NULL,
+    alternate_glyph_id TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS glyph_alternates_glyph_id_idx
+ON glyph_alternates(glyph_id);
+
+CREATE TABLE IF NOT EXISTS glyph_alternate_conditions (
+    alternate_id TEXT NOT NULL,
+    glyph_id TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    axis_id TEXT NOT NULL,
+    min_value REAL,
+    max_value REAL,
+    PRIMARY KEY (alternate_id, order_index),
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS glyph_alternate_conditions_glyph_id_idx
+ON glyph_alternate_conditions(glyph_id);
+
 CREATE TABLE IF NOT EXISTS glyph_layers (
     id TEXT PRIMARY KEY,
     glyph_id TEXT NOT NULL,
@@ -155,6 +180,20 @@ CREATE TABLE IF NOT EXISTS glyph_layer_locations (
     PRIMARY KEY (layer_id, axis_id),
     FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS glyph_component_conditions (
+    component_id TEXT NOT NULL,
+    layer_id TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    axis_id TEXT NOT NULL,
+    min_value REAL,
+    max_value REAL,
+    PRIMARY KEY (component_id, order_index),
+    FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS glyph_component_conditions_layer_id_idx
+ON glyph_component_conditions(layer_id);
 
 CREATE TABLE IF NOT EXISTS glyph_layer_payloads (
     layer_id TEXT PRIMARY KEY,
@@ -307,7 +346,7 @@ CREATE TABLE IF NOT EXISTS workspace_state (
 ";
 
 pub const SHIFT_APPLICATION_ID: i64 = 0x5348_4654;
-pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 7;
+pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 8;
 
 /// The oldest schema version [`migrate`] can upgrade.
 pub(crate) const OLDEST_MIGRATABLE_SCHEMA_VERSION: i64 = 1;
@@ -535,6 +574,54 @@ CREATE TABLE glyph_layer_locations (
 );
 ";
 
+/// Version 7 to 8: glyph alternates and component conditions.
+///
+/// `glyph_alternates` holds each glyph's alternates in the order they are tried, each
+/// naming the glyph text draws in its place; `glyph_alternate_conditions` holds
+/// each alternate's ranges, filed under the alternate's glyph so they are replaced
+/// with it. `glyph_component_conditions` holds the ranges of each
+/// component's condition, filed under its layer; components themselves stay
+/// in the layer payloads, which are not touched. A alternate glyph or an axis is
+/// checked in Rust, so neither has a foreign key. Existing documents get no
+/// rows: no alternates and no conditions. This SQL is frozen.
+const MIGRATE_V7_TO_V8: &str = r"
+CREATE TABLE glyph_alternates (
+    id TEXT PRIMARY KEY,
+    glyph_id TEXT NOT NULL,
+    alternate_glyph_id TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX glyph_alternates_glyph_id_idx ON glyph_alternates(glyph_id);
+
+CREATE TABLE glyph_alternate_conditions (
+    alternate_id TEXT NOT NULL,
+    glyph_id TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    axis_id TEXT NOT NULL,
+    min_value REAL,
+    max_value REAL,
+    PRIMARY KEY (alternate_id, order_index),
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX glyph_alternate_conditions_glyph_id_idx ON glyph_alternate_conditions(glyph_id);
+
+CREATE TABLE glyph_component_conditions (
+    component_id TEXT NOT NULL,
+    layer_id TEXT NOT NULL,
+    order_index INTEGER NOT NULL,
+    axis_id TEXT NOT NULL,
+    min_value REAL,
+    max_value REAL,
+    PRIMARY KEY (component_id, order_index),
+    FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
+);
+
+CREATE INDEX glyph_component_conditions_layer_id_idx ON glyph_component_conditions(layer_id);
+";
+
 /// The version that added the scene.
 const SCENE_SCHEMA_VERSION: i64 = 4;
 
@@ -550,13 +637,14 @@ pub(crate) enum SceneUpgrade {
 
 /// Steps that bring authored tables from one schema version to the next, as
 /// `(version reached, SQL)`, in ascending order.
-const MIGRATIONS: [(i64, &str); 6] = [
+const MIGRATIONS: [(i64, &str); 7] = [
     (2, MIGRATE_V1_TO_V2),
     (3, MIGRATE_V2_TO_V3),
     (4, MIGRATE_V3_TO_V4),
     (5, MIGRATE_V4_TO_V5),
     (6, MIGRATE_V5_TO_V6),
     (7, MIGRATE_V6_TO_V7),
+    (8, MIGRATE_V7_TO_V8),
 ];
 
 /// Upgrades the authored tables of a store at `version` to

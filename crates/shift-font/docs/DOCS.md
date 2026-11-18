@@ -1,6 +1,6 @@
 # shift-font
 
-<!-- reviewed: 2026-11-17 review-every: 90d -->
+<!-- reviewed: 2026-11-18 review-every: 90d -->
 
 First-class Rust font object model for Shift.
 
@@ -33,6 +33,9 @@ crates/shift-font/src/
     collection.rs  -- semantic ordered identity collections
     font/change_set.rs -- atomic reversible changeset application and target validation
     font/glyph_axes.rs -- glyph axes on the font: unique ids and tags, range edits, rescale, layer locations
+    font/glyph_alternates.rs -- glyph alternates on the font: which glyph text draws, checks, removal guard; component condition checks
+    condition.rs   -- `Condition`, `ConditionRange`: where something applies, evaluated at a design location
+    glyph_alternate.rs -- `GlyphAlternate`: where text draws another glyph in a glyph's place
     glyph_axis.rs  -- `GlyphAxis`, private tags, `AxisValueUse`, `GlyphAxisEdit`
     located_layer.rs -- `LayerLocation`, `Glyph::located_layers`: every drawing with where it sits
     variation.rs   -- external-to-design mapping evaluation
@@ -152,6 +155,17 @@ A glyph's design space is the font's axes plus its own (`Font::glyph_space_axes`
 - **Export compiles them.** Located drawings are glyph sources at their own locations, and glyph axes compile to hidden axes tagged by position in the glyph (`V000`, `V001`, ...), shared across glyphs; their own tags stay in the document. See shift-backends' DOCS.md.
 - **They serialize with the font.** `Glyph::axes` is a named field, and `LayerLocation` takes the layer's old source-id field: a layer exactly on a source writes the bare id there, so stored payloads keep their bytes (see shift-store's outer payload contract). Change sets and the bridge's font directory carry both.
 - **Read by the editor and compiled by export.** Editor snapshots and glyph records (`wire::GlyphLayerSnapshot`, `GlyphLayerRecord`) list every drawing from `Glyph::editor_drawings`: those on masters, then the located ones, each with the source a per-source read of it uses and, for a located one, its `base_source_id` and `coordinates`. A record also carries the glyph's own axes. A glyph's basis crosses as `wire::InterpolationBasis::of_glyph`: over its sources when every sample is one, or with no source ids when a sample is a located drawing, which the editor evaluates as sent over its design normalization, glyph axes included; `wire::GlyphSourceValues` names each sample by its source or its layer. `MaterializeLocatedGlyphLayer` adds a drawing at a location with what the glyph draws there. The compiler snapshot reads every located layer through `Glyph::located_layers_on`, which takes the masters without the font.
+
+## Conditions, glyph alternates and component conditions
+
+A `Condition` is a conjunction of `ConditionRange`s, each an inclusive range on one axis (`min`/`max`, either open), all of which must hold; an empty condition always holds. An axis is a font axis or a glyph axis, named by its `AxisId` (the two share one namespace). Values are in each axis's own design units, as source locations, layer coordinates and component locations are; an axis a location doesn't name is at its default. `Condition::holds_at(location, axes)` evaluates it and `Condition::check_well_formed` checks its ranges; a range on an axis the given space lacks doesn't hold. Its ranges sit behind constructors (`Condition::all`, `Condition::always`) so other forms (any of, not) can join later without changing callers.
+
+- **Alternates swap a glyph for another where text draws it.** `Glyph::alternates` is an ordered list of `GlyphAlternate { id: AlternateId, condition, glyph: GlyphId }` (`dollar.heavy` is an alternate of `dollar`). `Font::drawn_glyph_at(glyph, location)` ("which glyph is drawn for this glyph here") takes the first alternate whose condition holds and returns its glyph, else the glyph itself, as a designspace rule or an `rvrn` substitution does. One step: an alternate glyph's own alternates are not applied. Conditions read font axes only, since a glyph is swapped before any component location exists.
+- **A glyph drawn as itself is swapped; a component is not.** Wherever a glyph is drawn at a font location as itself, it draws its alternate: text layout (`shift-text`'s `LayoutFont`) asks every per-glyph question (advance, outline bounds, anchors, kerning) of the glyph drawn for each text glyph and names the drawn glyph in the finished layout; previews and glyph tiles draw through `FontProjection::drawn_glyph`, which keeps the requested glyph's id with the alternate's outline and advance; and the glyph open for editing is drawn as its alternate where one holds, which the editor asks the engine for (`EngineReads.drawnGlyph`; the canvas and the edit target follow it in the editor, still to come). `FontProjection::glyph` is the glyph itself, so a component of `dollar` draws `dollar`, as export does. `Font::alternate_glyphs_of` lists what a reader drawing glyphs must load besides them; `Font::subset` keeps them.
+- **Alternates are checked when a glyph is added or replaced** (`Font::insert_glyph`, change-set targets): `AlternateIsItself`, `GlyphNotFound` for a missing alternate glyph (so an alternate glyph is added first), `AlternateConditionOffFontAxes`, a condition's own `ConditionRangeReversed` / `ConditionValueNotFinite`, and `DuplicateAlternateId` (alternate ids are unique in the font, held in a `FontIndex` unique index). Replacing the axes rechecks every glyph's alternates.
+- **A glyph that is another glyph's alternate can't be removed** (`GlyphIsAlternate`), by `Font::pop_glyph` or a change set: the alternate is never dropped silently. `FontIndex` keeps the glyphs each glyph is an alternate of, so the check needs no scan.
+- **A component condition says where a component draws.** `Component::condition` is evaluated at the coordinates the glyph it is placed in (its parent) is drawn at, after the parent's own inheritance and before the component's own location applies, as skrifa's VARC reader does (`outline/varc/mod.rs`, `draw_glyph`: `component_condition_met` reads `current_coords` before `component_coords`). So a condition never sees an axis value the component itself sets, and it may read only axes the parent draws along: font axes and the parent glyph's own axes, not the base glyph's (`Font::check_component_condition`: `ComponentConditionOffSpace`, `AxisNotFound`), checked on `insert_glyph`, `insert_glyph_layer`, `ReplaceGlyphLayerContent` and change-set targets. A parent drawn at a location another component sets (`T` drawing `mid` at Weight 800) passes that location on. `FontProjection::draws` is the one place this rule lives. A component whose condition fails draws nothing, propagates no anchors and lends no anchor to a later component, but keeps its outline parts (empty) so parts still line up with `GlyphComponents` occurrences. The advance is the layer's, unaffected.
+- **Serde.** `Glyph::alternates` and `Component::condition` are named fields skipped when empty, so glyphs and components without them keep their bytes. `Component` crosses `pack` with its condition.
 
 ## Boundaries
 

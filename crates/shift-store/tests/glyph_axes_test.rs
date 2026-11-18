@@ -2,7 +2,6 @@
 //! save and reopen as they were, a version 6 document upgrades with every
 //! layer on its source, and unsaved ones survive in the recovery overlay.
 
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use shift_font::test_support::{glyph_axis_font, sample_variable_font};
@@ -12,7 +11,9 @@ use shift_font::{
 };
 use shift_store::{RecoveryState, SHIFT_DOCUMENT_SCHEMA_VERSION, SaveState, ShiftStore};
 
-type TestResult<T> = Result<T, Box<dyn std::error::Error>>;
+mod support;
+
+use support::{TestResult, payloads, without_tail};
 
 /// A glyph drawn somewhere: each contour as its points.
 type Outline = Vec<Vec<(f64, f64)>>;
@@ -209,6 +210,9 @@ fn downgrade_to_version_6(path: &Path) -> TestResult<()> {
     rusqlite::Connection::open(path)?.execute_batch(
         "PRAGMA foreign_keys = OFF;
          BEGIN;
+         DROP TABLE glyph_component_conditions;
+         DROP TABLE glyph_alternate_conditions;
+         DROP TABLE glyph_alternates;
          DROP TABLE glyph_layer_locations;
          DROP TABLE glyph_axes;
          CREATE TABLE glyph_layers_v6 (
@@ -247,14 +251,6 @@ fn schema_facts(path: &Path) -> TestResult<(i64, bool)> {
     Ok((version, source_required))
 }
 
-/// Every stored layer payload, by layer id, as its bytes.
-fn payloads(path: &Path) -> TestResult<BTreeMap<String, Vec<u8>>> {
-    let conn = rusqlite::Connection::open(path)?;
-    let mut statement = conn.prepare("SELECT layer_id, payload FROM glyph_layer_payloads")?;
-    let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
-    Ok(rows.collect::<Result<_, _>>()?)
-}
-
 #[test]
 fn a_version_6_document_upgrades_with_every_layer_on_its_source_and_nothing_else_changed() {
     let font = sample_variable_font();
@@ -291,17 +287,8 @@ fn a_version_6_document_upgrades_with_every_layer_on_its_source_and_nothing_else
 /// as unsaved edits.
 fn without_dot_and_h() -> TestResult<(Font, Font, FontChangeSet)> {
     let full = glyph_axis_font();
-    let mut saved = full.clone();
-    let mut changes = Vec::new();
-    for name in ["H", "dot"] {
-        let glyph_id = saved.glyph_id_by_name(name).ok_or("no such glyph")?;
-        let glyph = saved.pop_glyph(glyph_id)?;
-        changes.insert(
-            0,
-            FontChange::Glyph(Box::new(Replacement::new(None, Some(glyph)))),
-        );
-    }
-    Ok((full, saved, FontChangeSet::new(changes)))
+    let (saved, added) = without_tail(&full, &["H", "dot"])?;
+    Ok((full, saved, added))
 }
 
 #[test]

@@ -8,6 +8,8 @@ mod anchored_placement_tests;
 mod anchors;
 #[cfg(test)]
 mod component_location_tests;
+#[cfg(test)]
+mod condition_tests;
 mod decomposed;
 #[cfg(test)]
 mod glyph_axis_tests;
@@ -686,6 +688,37 @@ impl FontProjection<'_> {
             contours,
             x_advance: layer.width(),
         }))
+    }
+
+    /// Resolves `glyph_id` as it is drawn here, in text, a preview or open
+    /// for editing: the glyph of its first alternate that holds at this
+    /// location, else the glyph itself ([`Font::drawn_glyph_at`]). The
+    /// result keeps `glyph_id`, the glyph asked for, with the outline and
+    /// advance of the glyph drawn. Components are never swapped, so
+    /// [`Self::glyph`] stays the glyph itself.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::glyph`], for the glyph drawn.
+    pub fn drawn_glyph(&mut self, glyph_id: GlyphId) -> CoreResult<Option<ResolvedGlyph>> {
+        let drawn = self.font.drawn_glyph_at(glyph_id, &self.location);
+        Ok(self.glyph(drawn)?.map(|resolved| ResolvedGlyph {
+            glyph_id,
+            ..resolved
+        }))
+    }
+
+    /// [`Self::drawn_glyph`] for each of `glyph_ids` the font has, in request
+    /// order.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::drawn_glyph`].
+    pub fn drawn_glyphs(&mut self, glyph_ids: &[GlyphId]) -> CoreResult<Vec<ResolvedGlyph>> {
+        glyph_ids
+            .iter()
+            .filter_map(|glyph_id| self.drawn_glyph(*glyph_id).transpose())
+            .collect()
     }
 
     /// Returns the glyph's advance at this projection's location without

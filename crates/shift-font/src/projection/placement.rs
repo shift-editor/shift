@@ -42,6 +42,29 @@ impl FontProjection<'_> {
         (!same_place).then_some(location)
     }
 
+    /// Whether `component`, placed in `parent`, draws here: its condition
+    /// holds at the coordinates `parent` is drawn at, which are this
+    /// projection's location: the font axes after `parent`'s own
+    /// inheritance, and `parent`'s own axes at what its placement sets, else
+    /// their defaults. The component's own location doesn't apply yet, so a
+    /// condition can't see an axis the component itself sets.
+    ///
+    /// This is skrifa's rule: `outline/varc/mod.rs` (`draw_glyph`, skrifa
+    /// 0.49) checks `component_condition_met` with `current_coords`, the
+    /// parent's, before `component_coords` applies the component's axis
+    /// values.
+    pub(super) fn draws(&self, parent: GlyphId, component: &Component) -> bool {
+        let condition = component.condition();
+        if condition.is_always() {
+            return true;
+        }
+        let axes = match self.font.glyph(parent) {
+            Some(parent) => self.font.glyph_space_axes(parent),
+            None => self.font.axes().to_vec(),
+        };
+        condition.holds_at(&self.location, &axes)
+    }
+
     /// Runs `read` on a projection at `location` that shares this one's
     /// interpolation bases.
     pub(super) fn at<T>(
@@ -56,13 +79,15 @@ impl FontProjection<'_> {
         value
     }
 
-    /// Each of `layer`'s components' placements here, as matrices.
+    /// Each of `layer`'s components' placements here, as matrices, where
+    /// `layer` is `parent`'s.
     pub(super) fn component_placements(
         &mut self,
+        parent: GlyphId,
         layer: &GlyphLayer,
     ) -> CoreResult<Vec<Transform>> {
         Ok(self
-            .component_transforms(layer)?
+            .component_transforms(parent, layer)?
             .into_iter()
             .map(DecomposedTransform::to_matrix)
             .collect())
@@ -72,7 +97,11 @@ impl FontProjection<'_> {
     /// on anchors read where each glyph is drawn ([`anchored_placements`]),
     /// so a mark whose location is set elsewhere sits on its anchor there,
     /// and a mark stacked on it follows it. Others as authored.
-    fn component_transforms(&mut self, layer: &GlyphLayer) -> CoreResult<Vec<DecomposedTransform>> {
+    fn component_transforms(
+        &mut self,
+        parent: GlyphId,
+        layer: &GlyphLayer,
+    ) -> CoreResult<Vec<DecomposedTransform>> {
         let authored = layer
             .components_iter()
             .map(|component| *component.transform());
@@ -83,6 +112,11 @@ impl FontProjection<'_> {
 
         let mut anchors = Vec::new();
         for component in layer.components_iter() {
+            // A component that doesn't draw here has no anchors to align to.
+            if !self.draws(parent, component) {
+                anchors.push(Vec::new());
+                continue;
+            }
             let base_glyph_id = component.base_glyph_id();
             let own = match self.moved_location(component) {
                 Some(location) => self.at(&location, |moved| moved.own_anchors(base_glyph_id))?,
@@ -139,8 +173,10 @@ impl Font {
                     Some(source_id) => projections
                         .entry(source_id)
                         .or_insert_with(|| self.projection(&location))
-                        .component_transforms(layer)?,
-                    None => self.projection(&location).component_transforms(layer)?,
+                        .component_transforms(glyph.id(), layer)?,
+                    None => self
+                        .projection(&location)
+                        .component_transforms(glyph.id(), layer)?,
                 };
                 placed.push((*layer_id, transforms));
             }

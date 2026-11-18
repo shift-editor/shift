@@ -121,7 +121,10 @@ fn opening_a_version_4_document_upgrades_it_with_no_keys() {
     drop(ShiftStore::create_document(&path, &font).unwrap());
     let conn = rusqlite::Connection::open(&path).unwrap();
     conn.execute_batch(
-        "DROP TABLE glyph_layer_locations;
+        "DROP TABLE glyph_component_conditions;
+         DROP TABLE glyph_alternate_conditions;
+         DROP TABLE glyph_alternates;
+         DROP TABLE glyph_layer_locations;
          DROP TABLE glyph_axes;
          ALTER TABLE glyphs DROP COLUMN left_metrics_key;
          ALTER TABLE glyphs DROP COLUMN right_metrics_key;

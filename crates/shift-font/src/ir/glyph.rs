@@ -6,6 +6,7 @@ use crate::entity::{
     AnchorId, AxisId, ComponentId, ContourId, GlyphEntityId, GlyphId, GuidelineId, LayerId,
     PointId, SourceId,
 };
+use crate::glyph_alternate::GlyphAlternate;
 use crate::glyph_axis::GlyphAxis;
 use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
 use crate::guideline::Guideline;
@@ -41,6 +42,10 @@ pub struct Glyph {
     /// Axes only this glyph varies along, in the order they were added.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     axes: Vec<GlyphAxis>,
+    /// Where text draws another glyph in this one's place: the first
+    /// alternate whose condition holds; see [`crate::glyph_alternate`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    alternates: Vec<GlyphAlternate>,
 }
 
 impl Identified for Glyph {
@@ -571,6 +576,7 @@ impl Glyph {
             metrics_keys: MetricsKeys::new(),
             mark_color: None,
             axes: Vec::new(),
+            alternates: Vec::new(),
         }
     }
 
@@ -733,6 +739,17 @@ impl Glyph {
     /// adding the glyph to a font, which checks them.
     pub fn set_axes(&mut self, axes: Vec<GlyphAxis>) {
         self.axes = axes;
+    }
+
+    /// The glyph's alternates, in the order they are tried.
+    pub fn alternates(&self) -> &[GlyphAlternate] {
+        &self.alternates
+    }
+
+    /// Gives the glyph `alternates`, tried in order, as a reader of stored glyphs
+    /// does before adding the glyph to a font, which checks them.
+    pub fn set_alternates(&mut self, alternates: Vec<GlyphAlternate>) {
+        self.alternates = alternates;
     }
 
     pub(crate) fn axes_mut(&mut self) -> &mut Vec<GlyphAxis> {
