@@ -18,7 +18,6 @@
  * `Editor`.
  */
 import type { GlyphSourceRow } from "@/types/glyphAxes";
-import type { Axis as AxisRecord } from "@shift/types";
 import type { ControlOperation } from "@/agent/AgentControl";
 import type {
   DeleteMode,
@@ -561,7 +560,7 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
    */
   glyphSource(name: string): GlyphSourceRow | null;
   /** The open glyph's own axis tagged `tag`; null when it has none. Test-only. */
-  glyphAxis(tag: string): AxisRecord | null;
+  glyphAxis(tag: string): Axis | null;
   instance(selector: InstanceSelection): NamedInstance | null;
   axis(selector: AxisSelection): Axis | null;
   /** The languages the font tracks; null when none were ever set. Test-only: not agent data yet. */

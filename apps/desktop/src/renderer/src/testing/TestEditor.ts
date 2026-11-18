@@ -13,7 +13,6 @@
 
 import { GlyphDesignspace } from "@/lib/variation/GlyphDesignspace";
 import type { GlyphSourceRow } from "@/types/glyphAxes";
-import type { Axis as AxisRecord } from "@shift/types";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -72,6 +71,7 @@ import {
   type SidebearingEdit,
   type PointId,
   type SelectableId,
+  type Axis as AxisRecord,
   type NamedInstance,
   type Source,
   type SourceId,
