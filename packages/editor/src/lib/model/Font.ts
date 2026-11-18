@@ -91,9 +91,9 @@ import {
   type KerningSideId,
 } from "./Kerning";
 import { KerningEdit } from "./KerningEdit";
-import { layerPlacementOf } from "../variation/location";
 import {
   designAxisLocationFromLocation,
+  layerPlacementOf,
   locationFromDesignAxisLocation,
 } from "../variation/location";
 import { Designspace } from "../variation/Designspace";

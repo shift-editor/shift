@@ -11,16 +11,18 @@ export interface GlyphAxisRow {
 /** What the Designspace tab's Glyph axes section shows for the glyph being edited. */
 export interface GlyphAxesSection {
   readonly glyphName: string;
-  /** Empty for a glyph with no axes of its own: the section shows how to add one. */
   readonly rows: readonly GlyphAxisRow[];
 }
 
-/** A drawing of the edited glyph located off the font's sources, as the Sources list shows it. */
-export interface GlyphDrawingRow {
+/**
+ * One of the edited glyph's own sources: a drawing off the font's sources,
+ * as the Glyph sources section lists it.
+ */
+export interface GlyphSourceRow {
   readonly layerId: LayerId;
   /** Where it sits, "Spread 100" or "Bleed 50". */
   readonly name: string;
-  /** Whether it is the drawing being edited. */
+  /** Whether it is the glyph source being edited. */
   readonly active: boolean;
 }
 

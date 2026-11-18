@@ -135,5 +135,5 @@ drawing at Bleed 50 off the font's sources. Regenerate it with:
 ./generate_solenoid.sh path/to/shift-cli Solenoid.shift
 ```
 
-Used by the desktop glyph axes tests (`lib/variation/glyphAxes.test.ts`,
+Used by the desktop glyph sources and glyph axes tests (`lib/variation/glyphAxes.test.ts`,
 `componentGlyphAxes.test.ts`) and `e2e/glyph-axes.spec.ts`.

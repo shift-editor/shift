@@ -3,7 +3,7 @@ import type { Glyph } from "@shift/editor/model";
 import { computed, track, type Signal } from "@shift/editor/signals";
 import { axisValue, drawingName } from "@shift/editor/variation";
 import type { AxisId, LayerId } from "@shift/types";
-import type { GlyphAxesSection, GlyphAxisDraft, GlyphDrawingRow } from "@/types/glyphAxes";
+import type { GlyphAxesSection, GlyphAxisDraft, GlyphSourceRow } from "@/types/glyphAxes";
 
 /** The glyph the editor edits alone, subscribed to; null without exactly one glyph node. */
 function editedGlyph(editor: Editor): Glyph | null {
@@ -17,8 +17,9 @@ function editedGlyph(editor: Editor): Glyph | null {
  * The Designspace tab's Glyph axes section: one row per axis of the glyph
  * being edited, at the value the canvas draws it at.
  *
- * @returns null while no single glyph is edited; empty rows for a glyph with
- * no axes of its own, which the section offers to add.
+ * @returns null while no single glyph is edited, or the glyph has no axes of
+ * its own: the section then hides, and its first axis comes from Glyph
+ * sources' ⋯ menu.
  */
 export function glyphAxesCell(editor: Editor): Signal<GlyphAxesSection | null> {
   return computed(() => {
@@ -27,7 +28,10 @@ export function glyphAxesCell(editor: Editor): Signal<GlyphAxesSection | null> {
 
     track(glyph.entryCell);
     const location = editor.glyphLocationCell.value;
-    const rows = glyph.axesCell.value.map((axis) => ({ axis, value: axisValue(location, axis) }));
+    const axes = glyph.axesCell.value;
+    if (axes.length === 0) return null;
+
+    const rows = axes.map((axis) => ({ axis, value: axisValue(location, axis) }));
     return { glyphName: glyph.name, rows };
   });
 }
@@ -47,13 +51,17 @@ export function setGlyphAxis(editor: Editor, axisId: AxisId, value: number): boo
 }
 
 /**
- * The edited glyph's drawings located off the font's sources, as the Sources
- * list shows them after the font's sources, each named by where it sits.
+ * The edited glyph's own sources, as the Designspace tab's Glyph sources
+ * section lists them: its drawings off the font's sources (brace drawings
+ * included), each named by where it sits.
+ *
+ * @returns null while no single glyph is edited; an empty list for a glyph
+ * with none, which the section shows as "None".
  */
-export function glyphDrawingsCell(editor: Editor): Signal<readonly GlyphDrawingRow[]> {
+export function glyphSourcesCell(editor: Editor): Signal<readonly GlyphSourceRow[] | null> {
   return computed(() => {
     const glyph = editedGlyph(editor);
-    if (!glyph) return [];
+    if (!glyph) return null;
 
     const designspace = editor.font.designspace;
     const active = editor.activeDrawingCell.value;
@@ -73,14 +81,14 @@ export function glyphDrawingsCell(editor: Editor): Signal<readonly GlyphDrawingR
 }
 
 /**
- * Whether "Add drawing here" applies: the sliders sit where the edited glyph
- * has no drawing and no font source.
+ * Whether a glyph source can be added where the sliders sit: the edited glyph
+ * has no source or glyph source there.
  *
  * @remarks
  * A boolean, so a slider scrub that keeps it re-renders nothing; read the
- * place's name with {@link drawingHereName} when the menu opens.
+ * place's name with {@link glyphSourceHereName} when it is shown.
  */
-export function addDrawingHereCell(editor: Editor): Signal<boolean> {
+export function canAddGlyphSourceCell(editor: Editor): Signal<boolean> {
   return computed(() => {
     const glyph = editedGlyph(editor);
     if (!glyph || editor.activeSourceIdCell.value !== null) return false;
@@ -91,12 +99,12 @@ export function addDrawingHereCell(editor: Editor): Signal<boolean> {
 }
 
 /**
- * The name of the place the sliders sit, as "Add drawing here" names it
- * ("Spread 60"), read once.
+ * The name of the place the sliders sit, as adding a glyph source there
+ * names it ("Spread 60"), read once.
  *
  * @returns null with no single glyph edited.
  */
-export function drawingHereName(editor: Editor): string | null {
+export function glyphSourceHereName(editor: Editor): string | null {
   const node = editor.scene.only("glyph");
   const glyph = node ? editor.glyphForId(node.glyphId) : null;
   if (!glyph) return null;
@@ -105,25 +113,25 @@ export function drawingHereName(editor: Editor): string | null {
   return drawingName(editor.font.designspace, glyph, location);
 }
 
-/** Edits the drawing `layerId`, moving the sliders to where it sits, as selecting a source does. */
-export function selectDrawing(editor: Editor, layerId: LayerId): void {
+/** Edits the glyph source `layerId`, moving the sliders to where it sits, as selecting a source does. */
+export function selectGlyphSource(editor: Editor, layerId: LayerId): void {
   editor.selectDrawing(layerId);
 }
 
 /**
- * Adds a drawing of the edited glyph where the sliders sit, starting from
- * the outline shown there.
+ * Adds a glyph source to the edited glyph where the sliders sit, starting
+ * from the outline shown there.
  *
- * @returns The new drawing's layer id, or null when there is a drawing or source there.
+ * @returns The new glyph source's layer id, or null when there is a source or glyph source there.
  */
-export async function addDrawingHere(editor: Editor): Promise<LayerId | null> {
+export async function addGlyphSourceHere(editor: Editor): Promise<LayerId | null> {
   const layerId = editor.addDrawingHere();
   if (layerId) await editor.font.editCoordinator.settled();
   return layerId;
 }
 
-/** Deletes one of the edited glyph's located drawings. */
-export async function deleteDrawing(editor: Editor, layerId: LayerId): Promise<void> {
+/** Deletes one of the edited glyph's own sources. */
+export async function deleteGlyphSource(editor: Editor, layerId: LayerId): Promise<void> {
   editor.deleteDrawing(layerId);
   await editor.font.editCoordinator.settled();
 }

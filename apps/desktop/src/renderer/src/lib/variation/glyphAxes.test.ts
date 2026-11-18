@@ -3,14 +3,14 @@ import type { LayerId } from "@shift/types";
 import { FONTS, useTestEditor } from "@/testing/fontFixture";
 import type { EditorTestSurface } from "@/testing/surface";
 import {
-  addDrawingHere,
-  addDrawingHereCell,
   addGlyphAxis,
-  deleteDrawing,
-  drawingHereName,
+  addGlyphSourceHere,
+  canAddGlyphSourceCell,
+  deleteGlyphSource,
   glyphAxesCell,
-  glyphDrawingsCell,
-  selectDrawing,
+  glyphSourceHereName,
+  glyphSourcesCell,
+  selectGlyphSource,
   setGlyphAxis,
 } from "./glyphAxes";
 
@@ -30,20 +30,19 @@ function glyphAxes() {
   };
 }
 
-/** The edited glyph's drawings off the font's sources, as the Sources list names them. */
-function drawings() {
-  return glyphDrawingsCell(editor.asEditor())
-    .peek()
-    .map(({ name, active }) => ({ name, active }));
+/** What the Glyph sources section lists; null when it is not shown. */
+function glyphSources() {
+  const rows = glyphSourcesCell(editor.asEditor()).peek();
+  return rows?.map(({ name, active }) => ({ name, active })) ?? null;
 }
 
-/** The layer of the drawing the Sources list names `name`. */
-function drawingNamed(name: string): LayerId {
-  const row = glyphDrawingsCell(editor.asEditor())
+/** The layer of the glyph source the Glyph sources section names `name`. */
+function glyphSourceNamed(name: string): LayerId {
+  const row = glyphSourcesCell(editor.asEditor())
     .peek()
     // oxlint-disable-next-line shift/no-lookup-in-tests -- rows are named by location, the UI's only handle on them
-    .find((drawing) => drawing.name === name);
-  if (!row) throw new Error(`no drawing named ${name}`);
+    ?.find((source) => source.name === name);
+  if (!row) throw new Error(`no glyph source named ${name}`);
   return row.layerId;
 }
 
@@ -60,14 +59,14 @@ async function drawnWidth(surface: EditorTestSurface = editor): Promise<number |
   return bounds ? bounds.max.x - bounds.min.x : null;
 }
 
-describe("a glyph with drawings off the font's sources", () => {
+describe("a glyph with sources of its own", () => {
   it("opens and draws its default source", async () => {
     expect(await editor.drawnGlyph()).toMatchObject({
       bounds: { min: { x: 0, y: 0 }, max: { x: 100, y: 100 } },
     });
   });
 
-  it("draws a brace drawing between the font's sources", async () => {
+  it("draws a glyph source between the font's sources", async () => {
     await editor.openGlyph("H");
     editor.setLocation({ BLED: 50 });
 
@@ -92,10 +91,10 @@ describe("the Glyph axes section", () => {
     });
   });
 
-  it("shows a glyph without axes of its own, so the first can be added", async () => {
+  it("hides for a glyph without axes of its own", async () => {
     await editor.openGlyph("H");
 
-    expect(glyphAxes()).toEqual({ glyph: "H", rows: [] });
+    expect(glyphAxes()).toBeNull();
   });
 
   it("adds an axis to a glyph that has none", async () => {
@@ -124,21 +123,28 @@ describe("the Glyph axes section", () => {
   });
 });
 
-describe("drawings off the font's sources in the Sources list", () => {
-  it("are named by where they sit", async () => {
-    expect(drawings()).toEqual([
+describe("the Glyph sources section", () => {
+  it("lists the glyph's own sources, named by where they sit", async () => {
+    expect(glyphSources()).toEqual([
       { name: "Spread 100", active: false },
       { name: "Strike 100", active: false },
     ]);
 
     await editor.openGlyph("H");
-    expect(drawings()).toEqual([{ name: "Bleed 50", active: false }]);
+    expect(glyphSources()).toEqual([{ name: "Bleed 50", active: false }]);
   });
 
-  it("moves the sliders to a drawing selected, and draws it", async () => {
-    selectDrawing(editor.asEditor(), drawingNamed("Spread 100"));
+  it("shows for a glyph with none, listing nothing", async () => {
+    await editor.addGlyph("O", null);
+    await editor.openGlyph("O");
 
-    expect(drawings()).toContainEqual({ name: "Spread 100", active: true });
+    expect(glyphSources()).toEqual([]);
+  });
+
+  it("moves the sliders to a glyph source selected, and draws it", async () => {
+    selectGlyphSource(editor.asEditor(), glyphSourceNamed("Spread 100"));
+
+    expect(glyphSources()).toContainEqual({ name: "Spread 100", active: true });
     expect(await editor.source("active")).toBeNull();
     expect(glyphAxes()?.rows).toEqual([
       ["Spread", 100],
@@ -147,8 +153,8 @@ describe("drawings off the font's sources in the Sources list", () => {
     expect(await drawnWidth()).toBe(300);
   });
 
-  it("edits the selected drawing and no other", async () => {
-    selectDrawing(editor.asEditor(), drawingNamed("Spread 100"));
+  it("edits the selected glyph source and no other", async () => {
+    selectGlyphSource(editor.asEditor(), glyphSourceNamed("Spread 100"));
     editor.selectTool("select");
     editor.selectAll();
     await editor.pressKey("ArrowRight", { shiftKey: true });
@@ -159,30 +165,30 @@ describe("drawings off the font's sources in the Sources list", () => {
   });
 });
 
-describe("Add drawing here", () => {
-  it("is offered only where the glyph has no drawing", () => {
-    expect(addDrawingHereCell(editor.asEditor()).peek()).toBe(false);
+describe("adding a glyph source where the sliders sit", () => {
+  it("is offered only where the glyph has no source or glyph source", () => {
+    expect(canAddGlyphSourceCell(editor.asEditor()).peek()).toBe(false);
 
     setGlyphAxis(editor.asEditor(), axisId("SPRD"), 60);
-    expect(addDrawingHereCell(editor.asEditor()).peek()).toBe(true);
-    expect(drawingHereName(editor.asEditor())).toBe("Spread 60");
+    expect(canAddGlyphSourceCell(editor.asEditor()).peek()).toBe(true);
+    expect(glyphSourceHereName(editor.asEditor())).toBe("Spread 60");
 
     setGlyphAxis(editor.asEditor(), axisId("SPRD"), 100);
-    expect(addDrawingHereCell(editor.asEditor()).peek()).toBe(false);
+    expect(canAddGlyphSourceCell(editor.asEditor()).peek()).toBe(false);
   });
 
-  it("adds a drawing there from the outline shown, and edits it", async () => {
+  it("adds one there from the outline shown, and edits it", async () => {
     setGlyphAxis(editor.asEditor(), axisId("SPRD"), 60);
-    await addDrawingHere(editor.asEditor());
+    await addGlyphSourceHere(editor.asEditor());
 
-    expect(drawings()).toContainEqual({ name: "Spread 60", active: true });
+    expect(glyphSources()).toContainEqual({ name: "Spread 60", active: true });
     expect(await drawnWidth()).toBe(220);
-    expect(addDrawingHereCell(editor.asEditor()).peek()).toBe(false);
+    expect(canAddGlyphSourceCell(editor.asEditor()).peek()).toBe(false);
   });
 
-  it("deletes a drawing, leaving the glyph interpolated there", async () => {
-    await deleteDrawing(editor.asEditor(), drawingNamed("Strike 100"));
+  it("deletes a glyph source, leaving the glyph interpolated there", async () => {
+    await deleteGlyphSource(editor.asEditor(), glyphSourceNamed("Strike 100"));
 
-    expect(drawings()).toEqual([{ name: "Spread 100", active: false }]);
+    expect(glyphSources()).toEqual([{ name: "Spread 100", active: false }]);
   });
 });

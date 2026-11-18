@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { LayerId } from "@shift/types";
 import { FONTS, useTestEditor } from "@/testing/fontFixture";
 import { selectedComponentLocationCell, setSelectedComponentAxis } from "./componentLocation";
-import { glyphDrawingsCell, selectDrawing } from "./glyphAxes";
+import { glyphSourcesCell, selectGlyphSource } from "./glyphAxes";
 
 // Solenoid's `H` is two `dot`s, the first drawn at Spread 60 (80 in its Bleed
 // 50 drawing). `dot` has its own Spread and Strike axes (0–100): a 100 × 100
@@ -36,12 +36,12 @@ function axisOfDot(name: string) {
   return entry.axis.id;
 }
 
-function drawingNamed(name: string): LayerId {
+function glyphSourceNamed(name: string): LayerId {
   // oxlint-disable-next-line shift/no-lookup-in-tests -- rows are named by location, the UI's only handle on them
-  const row = glyphDrawingsCell(editor.asEditor())
+  const row = glyphSourcesCell(editor.asEditor())
     .peek()
-    .find((drawing) => drawing.name === name);
-  if (!row) throw new Error(`no drawing named ${name}`);
+    ?.find((source) => source.name === name);
+  if (!row) throw new Error(`no glyph source named ${name}`);
   return row.layerId;
 }
 
@@ -71,14 +71,14 @@ describe("the component section with a base glyph's own axes", () => {
     });
   });
 
-  it("shows on a drawing off the font's sources, with that drawing's values", async () => {
-    selectDrawing(editor.asEditor(), drawingNamed("Bleed 50"));
+  it("shows on a glyph source, with that glyph source's values", async () => {
+    selectGlyphSource(editor.asEditor(), glyphSourceNamed("Bleed 50"));
     await selectFirstDot();
 
     expect(shown()?.set).toEqual([["glyph", "Spread", 80]]);
   });
 
-  it("hides between drawings, where there is nothing to edit", async () => {
+  it("hides between sources, where there is nothing to edit", async () => {
     await selectFirstDot();
     editor.setLocation({ BLED: 25 });
 

@@ -25,11 +25,11 @@ import PlusIcon from "@/assets/general/plus.svg";
 import { GlyphAxisPopover, refusalMessage, type GlyphAxisPopoverTarget } from "./GlyphAxisPopover";
 
 /**
- * The Designspace tab's Glyph axes section, under Font axes, shown while a
- * glyph is edited: one slider per axis of the glyph's own (a `dot`'s Spread
- * and Strike), which moves where the canvas draws it as the font axis
- * sliders do. A glyph with none shows that it has none, and **+** adds the
- * first. Each row's ⋮ edits the range, renames or removes the axis.
+ * The Designspace tab's Glyph axes section, under Font axes, shown while the
+ * glyph being edited has axes of its own: one slider per axis (a `dot`'s
+ * Spread and Strike), which moves where the canvas draws it as the font
+ * axis sliders do. **+** adds another; a glyph's first comes from Glyph
+ * sources' ⋯ menu. Each row's ⋮ edits the range, renames or removes the axis.
  */
 export const GlyphAxesSection = () => {
   const editor = useEditor();
@@ -73,23 +73,19 @@ export const GlyphAxesSection = () => {
           </Tooltip>
         }
       >
-        {state.rows.length === 0 ? (
-          <p className="pl-2 text-ui text-muted">No axes of its own</p>
-        ) : (
-          <div className="flex flex-col gap-1">
-            {state.rows.map(({ axis, value }) => (
-              <GlyphAxisRow
-                key={axis.id}
-                axis={axis}
-                value={value}
-                canAuthor={canAuthor}
-                onValueChange={(next) => setGlyphAxis(editor, axis.id, next)}
-                onEdit={(focus) => setEditing({ kind: "edit", axisId: axis.id, focus })}
-                onRemove={() => void removeAxis(axis.id)}
-              />
-            ))}
-          </div>
-        )}
+        <div className="flex flex-col gap-1">
+          {state.rows.map(({ axis, value }) => (
+            <GlyphAxisRow
+              key={axis.id}
+              axis={axis}
+              value={value}
+              canAuthor={canAuthor}
+              onValueChange={(next) => setGlyphAxis(editor, axis.id, next)}
+              onEdit={(focus) => setEditing({ kind: "edit", axisId: axis.id, focus })}
+              onRemove={() => void removeAxis(axis.id)}
+            />
+          ))}
+        </div>
       </CollapsibleSection>
       <GlyphAxisPopover
         target={editing}
