@@ -401,7 +401,7 @@ fn component_model_resolves_varying_decomposed_transform() {
         .unwrap()
         .layers()
         .values()
-        .map(|layer| (layer.id(), layer.source_id()))
+        .filter_map(|layer| Some((layer.id(), layer.source_id()?)))
         .collect::<Vec<_>>();
     let grandchild_id = GlyphId::from_raw("component-grandchild");
     let mut grandchild = Glyph::with_id(grandchild_id, "component-grandchild");
@@ -495,7 +495,7 @@ fn component_model_ignores_mark_anchors_when_placing_components() {
         .unwrap()
         .layers()
         .values()
-        .map(|layer| layer.source_id())
+        .filter_map(|layer| layer.source_id())
         .collect::<Vec<_>>();
 
     let base_id = GlyphId::from_raw("attachment-base");
@@ -650,7 +650,7 @@ fn font_with_differently_based_child(
         .unwrap()
         .layers()
         .values()
-        .map(|layer| layer.source_id())
+        .filter_map(|layer| layer.source_id())
         .collect::<Vec<_>>();
     let medium_source_id = font
         .sources()

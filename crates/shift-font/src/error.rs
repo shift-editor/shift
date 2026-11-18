@@ -109,12 +109,11 @@ pub enum CoreError {
     #[error("layer {0} not found")]
     LayerNotFound(LayerId),
 
-    #[error("layer {layer_id} source is {actual_source_id}, expected {expected_source_id}")]
-    LayerSourceMismatch {
-        layer_id: LayerId,
-        expected_source_id: SourceId,
-        actual_source_id: SourceId,
-    },
+    #[error("layer {0} draws off the font's sources, so has no source to be read in")]
+    LayerOffSources(LayerId),
+
+    #[error("layer {layer_id} would move to another location")]
+    LayerLocationMismatch { layer_id: LayerId },
 
     #[error("layer {layer_id} belongs to glyph {actual_glyph_id}, not glyph {glyph_id}")]
     LayerGlyphMismatch {

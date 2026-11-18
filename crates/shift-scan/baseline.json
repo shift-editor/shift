@@ -17,7 +17,6 @@
     "shift-workspace": { "src": 1, "tests": 0 }
   },
   "duplicate-body": {
-    "pack-derive": { "src": 2, "tests": 0 },
     "shift-backends": { "src": 2, "tests": 0 },
     "shift-bridge": { "src": 2, "tests": 0 },
     "shift-specimen": { "src": 2, "tests": 0 }
@@ -68,7 +67,7 @@
   },
   "inline-not-found": {
     "shift-engine": { "src": 1, "tests": 0 },
-    "shift-font": { "src": 13, "tests": 0 },
+    "shift-font": { "src": 12, "tests": 0 },
     "shift-slug": { "src": 1, "tests": 0 }
   },
   "iter-suffix": {

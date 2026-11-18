@@ -117,7 +117,7 @@ impl GlyphLayerProjection {
         let exact_source_id =
             exact_source_id(location, axes, sources).filter(|_| on_glyph_axis_defaults);
         if let Some(source_id) = exact_source_id {
-            if source_id == self.fallback.source_id() {
+            if self.fallback.is_at_source(source_id) {
                 return Ok(self.fallback.as_ref().clone());
             }
 
@@ -423,7 +423,7 @@ impl Font {
         layers: Arc<GlyphLayerProjection>,
         projections: &HashMap<GlyphId, Option<Arc<GlyphLayerProjection>>>,
     ) -> CoreResult<GlyphProjection> {
-        let fallback_source_id = layers.fallback.source_id();
+        let fallback_source_id = self.reading_source_id(&layers.fallback)?;
         let components =
             Self::structural_components(glyph_id, &layers, projections, fallback_source_id)?;
 

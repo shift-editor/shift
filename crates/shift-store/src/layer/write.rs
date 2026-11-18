@@ -86,7 +86,7 @@ pub(crate) fn store_stored_layer_in_tx(
     tx.prepare_cached(layer_sql)?.execute(params![
         layer.id(),
         glyph_id,
-        layer.source_id().to_string(),
+        layer.source_id(),
         layer.width(),
         layer.height(),
         key(font::MetricsKeySide::Left),
@@ -126,7 +126,28 @@ pub(crate) fn store_stored_layer_in_tx(
         decoded_byte_length,
         stored.decoded_blake3.as_slice(),
     ])?;
+    write_layer_location(tx, layer, mode)?;
     write_component_index(tx, layer, mode)
+}
+
+/// Writes the coordinates of `layer`'s location, which with its
+/// `glyph_layers.source_id` say where it draws.
+fn write_layer_location(
+    tx: &Transaction<'_>,
+    layer: &font::GlyphLayer,
+    mode: WriteMode,
+) -> Result<(), StoreError> {
+    if mode == WriteMode::Upsert {
+        tx.prepare_cached("DELETE FROM glyph_layer_locations WHERE layer_id = ?1")?
+            .execute([layer.id()])?;
+    }
+    for (axis_id, value) in layer.location().coordinates() {
+        tx.prepare_cached(
+            "INSERT INTO glyph_layer_locations (layer_id, axis_id, value) VALUES (?1, ?2, ?3)",
+        )?
+        .execute(params![layer.id(), axis_id, value])?;
+    }
+    Ok(())
 }
 
 fn encoded_len(bytes: u64) -> Result<i64, StoreError> {

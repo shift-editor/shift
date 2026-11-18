@@ -42,13 +42,8 @@ fn line_contour(from: (f64, f64), to: (f64, f64)) -> Contour {
     contour
 }
 
-fn located_line(
-    source: SourceId,
-    location: LayerLocation,
-    from: (f64, f64),
-    to: (f64, f64),
-) -> GlyphLayer {
-    let mut layer = GlyphLayer::located(LayerId::new(), source, location);
+fn located_line(location: LayerLocation, from: (f64, f64), to: (f64, f64)) -> GlyphLayer {
+    let mut layer = GlyphLayer::located(LayerId::new(), location);
     layer.add_contour(line_contour(from, to));
     layer
 }
@@ -88,12 +83,12 @@ fn solenoid() -> Solenoid {
 
     let at_regular =
         |axis: AxisId| LayerLocation::new(Some(regular), DesignLocation::from([(axis, 100.0)]));
-    let spread_drawing = located_line(regular, at_regular(spread), (0.0, 0.0), (110.0, 0.0));
+    let spread_drawing = located_line(at_regular(spread), (0.0, 0.0), (110.0, 0.0));
     let spread_layer = spread_drawing.id();
     font.insert_glyph_layer(dot, spread_drawing).unwrap();
     font.insert_glyph_layer(
         dot,
-        located_line(regular, at_regular(strike), (0.0, 50.0), (10.0, 50.0)),
+        located_line(at_regular(strike), (0.0, 50.0), (10.0, 50.0)),
     )
     .unwrap();
 
@@ -407,9 +402,9 @@ fn a_drawing_must_sit_in_its_glyphs_design_space() {
         LayerLocation::new(Some(s.regular), DesignLocation::from([(axis, value)]))
     };
 
-    let foreign = located_line(s.regular, on(s.spread, 50.0), (0.0, 0.0), (1.0, 0.0));
-    let outside = located_line(s.regular, on(s.spread, 150.0), (0.0, 0.0), (1.0, 0.0));
-    let repeated = located_line(s.regular, on(s.spread, 100.0), (0.0, 0.0), (1.0, 0.0));
+    let foreign = located_line(on(s.spread, 50.0), (0.0, 0.0), (1.0, 0.0));
+    let outside = located_line(on(s.spread, 150.0), (0.0, 0.0), (1.0, 0.0));
+    let repeated = located_line(on(s.spread, 100.0), (0.0, 0.0), (1.0, 0.0));
 
     assert!(matches!(
         s.font.insert_glyph_layer(ring, foreign).unwrap_err(),
@@ -436,7 +431,7 @@ fn braced() -> (Font, AxisId, GlyphId) {
     glyph.set_layer(line(bled, (0.0, 0.0), (200.0, 0.0)));
     font.insert_glyph(glyph).unwrap();
     let brace = LayerLocation::at(DesignLocation::from([(bleed, 50.0)]));
-    font.insert_glyph_layer(h, located_line(regular, brace, (0.0, 0.0), (300.0, 0.0)))
+    font.insert_glyph_layer(h, located_line(brace, (0.0, 0.0), (300.0, 0.0)))
         .unwrap();
     (font, bleed, h)
 }

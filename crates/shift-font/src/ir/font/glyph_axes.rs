@@ -12,7 +12,7 @@ use super::index::IndexEntries;
 use crate::Require;
 use crate::axis::{Axis, AxisList, DesignLocation};
 use crate::component::ComponentInheritance;
-use crate::entity::{AxisId, GlyphId, LayerId};
+use crate::entity::{AxisId, GlyphId, LayerId, SourceId};
 use crate::error::{CoreError, CoreResult};
 use crate::glyph::{Glyph, GlyphLayer};
 use crate::glyph_axis::{
@@ -367,10 +367,32 @@ impl Font {
     /// font lacks.
     pub fn layer_design_location(&self, layer: &GlyphLayer) -> CoreResult<DesignLocation> {
         let location = layer.location();
-        if let Some(base) = location.base_source_id() {
-            self.require_source(base)?;
-        }
-        location.design_location(self).require(&layer.source_id())
+        let mut design = match location.base_source_id() {
+            Some(base) => self.require_source(base)?.location().clone(),
+            None => DesignLocation::new(),
+        };
+        design.extend(
+            location
+                .coordinates()
+                .iter()
+                .map(|(axis_id, value)| (*axis_id, *value)),
+        );
+        Ok(design)
+    }
+
+    /// The source a per-source read of `layer` uses, such as its structure
+    /// or bounds: its base source, or the default source for a layer placed
+    /// by coordinates alone.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::MissingDefaultSource`] for a layer with no base
+    /// in a font with no default source.
+    pub fn reading_source_id(&self, layer: &GlyphLayer) -> CoreResult<SourceId> {
+        layer
+            .source_id()
+            .or_else(|| self.default_source_id())
+            .ok_or(CoreError::MissingDefaultSource)
     }
 
     /// Where an interpolation sample draws: its source's location, or its

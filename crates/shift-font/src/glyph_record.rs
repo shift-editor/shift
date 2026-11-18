@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::ir::glyph_category::{GlyphDataCategory, Ligature, OpenTypeCategories, RecordCategory};
 use crate::{
-    Font, FontChangeSet, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, MarkColor, SourceId,
+    Font, FontChangeSet, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, MarkColor, Source,
+    SourceId,
 };
 
 /// One glyph as the editor's directory lists it.
@@ -43,11 +44,12 @@ pub struct GlyphLayerRecord {
     pub source_id: SourceId,
 }
 
-impl From<&GlyphLayer> for GlyphLayerRecord {
-    fn from(layer: &GlyphLayer) -> Self {
+impl GlyphLayerRecord {
+    /// The record of `layer`, which sits on `source`.
+    fn on_source(source: &Source, layer: &GlyphLayer) -> Self {
         Self {
             id: layer.id(),
-            source_id: layer.source_id(),
+            source_id: source.id(),
         }
     }
 }
@@ -187,7 +189,7 @@ impl Font {
             component_base_glyph_ids,
             layers: self
                 .masters_with_layers(glyph)
-                .map(|(_, layer)| GlyphLayerRecord::from(layer))
+                .map(|(source, layer)| GlyphLayerRecord::on_source(source, layer))
                 .collect(),
             mark: category.mark,
             nonspacing_mark: category.nonspacing_mark,

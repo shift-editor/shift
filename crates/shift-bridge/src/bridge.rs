@@ -26,9 +26,9 @@ use shift_font::wire::{
 };
 use shift_font::{
   AnchorId, Axis as FontAxis, AxisId, AxisMapping as FontAxisMapping, AxisMappingId,
-  AxisMappingPoint as FontAxisMappingPoint, CompiledHeader, ComponentId, ContourId, Font, Glyph,
-  GlyphId, GlyphLayer, LayerId, Location as FontLocation, MetricId, MetricKind, NamedInstanceId,
-  PointId, SourceId,
+  AxisMappingPoint as FontAxisMappingPoint, CompiledHeader, ComponentId, ContourId, CoreError,
+  CoreResult, Font, Glyph, GlyphId, GlyphLayer, LayerId, Location as FontLocation, MetricId,
+  MetricKind, NamedInstanceId, PointId, SourceId,
 };
 use shift_slug::{AuthoredAtlasProfile, VariableAtlas};
 use shift_workspace::{AcquireScope, FontWorkspace, WorkspaceError};
@@ -680,7 +680,7 @@ impl FontView for FontSaveSnapshot {
     self.font.images()
   }
 
-  fn glyphs_with_derived_placements(&self) -> shift_font::CoreResult<Vec<Glyph>> {
+  fn glyphs_with_derived_placements(&self) -> CoreResult<Vec<Glyph>> {
     let Some(active_glyph) = self.active_glyph_override.as_deref() else {
       return self.font.glyphs_with_derived_placements();
     };
@@ -1232,7 +1232,7 @@ impl Bridge {
       .zip(glyph_ids)
       .map(|(layer_id, glyph_id)| {
         Ok(NapiLayerRead {
-          authored: layer_snapshot(glyph_id, font.require_layer(*layer_id)?).into(),
+          authored: layer_snapshot(glyph_id, font.require_layer(*layer_id)?)?.into(),
           resolved: (&font.resolve_layer(*layer_id)?).into(),
         })
       })
@@ -1470,12 +1470,22 @@ fn path_to_string(path: &Path) -> BridgeResult<String> {
     .ok_or_else(|| WorkspaceError::InvalidPathUtf8(path.to_path_buf()).into())
 }
 
-fn layer_snapshot(glyph_id: GlyphId, layer: &GlyphLayer) -> GlyphLayerSnapshot {
-  GlyphLayerSnapshot {
+/// `layer` as the editor reads it, by the source it sits on.
+///
+/// # Errors
+///
+/// Returns [`CoreError::LayerOffSources`] for a layer that draws off the
+/// font's sources, which the editor has no source to read in.
+fn layer_snapshot(glyph_id: GlyphId, layer: &GlyphLayer) -> CoreResult<GlyphLayerSnapshot> {
+  let source_id = layer
+    .location()
+    .exact_source_id()
+    .ok_or_else(|| CoreError::LayerOffSources(layer.id()))?;
+  Ok(GlyphLayerSnapshot {
     glyph_id,
-    source_id: layer.source_id(),
+    source_id,
     state: GlyphState::from_layer(layer),
-  }
+  })
 }
 
 #[cfg(test)]

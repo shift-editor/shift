@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use shift_font as font;
 
 use super::{
@@ -11,7 +13,9 @@ use crate::{ShiftStore, StoreError};
 pub struct GlyphLayerDirectoryEntry {
     pub layer_id: font::LayerId,
     pub glyph_id: font::GlyphId,
-    pub source_id: font::SourceId,
+    /// The source the layer's location starts from; `None` for a layer
+    /// placed by coordinates alone.
+    pub source_id: Option<font::SourceId>,
     pub name: Option<font::GlyphName>,
     pub width: f64,
     pub height: Option<f64>,
@@ -43,7 +47,7 @@ impl ShiftStore {
 
 pub(super) struct DirectoryFacts {
     pub(super) layer_id: String,
-    pub(super) source_id: String,
+    source_id: Option<font::SourceId>,
     pub(super) width: f64,
     pub(super) height: Option<f64>,
     inner_format: String,
@@ -100,6 +104,15 @@ impl DirectoryFacts {
         Ok(u64::try_from(self.decoded_byte_length)?)
     }
 
+    /// Where the directory places the layer: its source, with `coordinates`
+    /// laid over it.
+    pub(super) fn placed_with(
+        &self,
+        coordinates: Option<font::DesignLocation>,
+    ) -> font::LayerLocation {
+        font::LayerLocation::new(self.source_id, coordinates.unwrap_or_default())
+    }
+
     pub(super) fn stored_layer(&self, payload: Vec<u8>) -> Result<StoredLayerPayload, StoreError> {
         let decoded_blake3: [u8; 32] = self.decoded_blake3.as_slice().try_into().map_err(|_| {
             StoreError::LayerDirectoryMismatch {
@@ -132,17 +145,17 @@ pub(super) fn map_directory_facts_row(row: &rusqlite::Row<'_>) -> rusqlite::Resu
     })
 }
 
+/// Checks a decoded payload against its directory row. Where the layer
+/// draws is not checked: the directory alone says that, and the place the
+/// payload records is left from before layers could draw off a source.
 pub(super) fn validate_directory_facts(
     expected_id: font::LayerId,
-    expected_source_id: &str,
     expected_width: f64,
     expected_height: Option<f64>,
     layer: &font::GlyphLayer,
 ) -> Result<(), StoreError> {
     let detail = if layer.id() != expected_id {
         Some(format!("payload id is {}", layer.id()))
-    } else if layer.source_id().as_str() != expected_source_id {
-        Some(format!("payload source id is {}", layer.source_id()))
     } else if layer.width().to_bits() != expected_width.to_bits() {
         Some("payload width differs from directory width".to_string())
     } else if !same_optional_f64(layer.height(), expected_height) {
@@ -165,7 +178,7 @@ fn map_directory_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<GlyphLayerDire
     Ok(GlyphLayerDirectoryEntry {
         layer_id: row.get::<_, font::LayerId>(0)?,
         glyph_id: row.get::<_, font::GlyphId>(1)?,
-        source_id: row.get::<_, font::SourceId>(2)?,
+        source_id: row.get::<_, Option<font::SourceId>>(2)?,
         name: row.get::<_, Option<String>>(3)?.map(font::GlyphName::from),
         width: row.get(4)?,
         height: row.get(5)?,
@@ -191,4 +204,31 @@ fn same_optional_f64(left: Option<f64>, right: Option<f64>) -> bool {
         (None, None) => true,
         _ => false,
     }
+}
+
+/// The coordinates of the locations of those of `layer_ids` that draw off
+/// their source, by layer id.
+pub(super) fn layer_coordinates(
+    conn: &rusqlite::Connection,
+    layer_ids: &[String],
+) -> Result<HashMap<String, font::DesignLocation>, StoreError> {
+    // One JSON parameter keeps the statement prepared for any count, and an
+    // IN subquery keeps the recovery views searched by key.
+    let mut stmt = conn.prepare_cached(
+        "SELECT layer_id, axis_id, value FROM glyph_layer_locations
+         WHERE layer_id IN (SELECT value FROM json_each(?1))",
+    )?;
+    let rows = stmt.query_map([serde_json::to_string(layer_ids)?], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, font::AxisId>(1)?,
+            row.get::<_, f64>(2)?,
+        ))
+    })?;
+    let mut coordinates: HashMap<String, font::DesignLocation> = HashMap::new();
+    for row in rows {
+        let (layer_id, axis_id, value) = row?;
+        coordinates.entry(layer_id).or_default().set(axis_id, value);
+    }
+    Ok(coordinates)
 }

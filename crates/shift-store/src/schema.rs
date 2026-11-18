@@ -114,10 +114,25 @@ CREATE TABLE IF NOT EXISTS glyph_unicodes (
     FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS glyph_axes (
+    id TEXT PRIMARY KEY,
+    glyph_id TEXT NOT NULL,
+    tag TEXT NOT NULL,
+    name TEXT NOT NULL,
+    min_value REAL NOT NULL,
+    default_value REAL NOT NULL,
+    max_value REAL NOT NULL,
+    order_index INTEGER NOT NULL,
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS glyph_axes_glyph_id_idx
+ON glyph_axes(glyph_id);
+
 CREATE TABLE IF NOT EXISTS glyph_layers (
     id TEXT PRIMARY KEY,
     glyph_id TEXT NOT NULL,
-    source_id TEXT NOT NULL,
+    source_id TEXT,
     width REAL NOT NULL DEFAULT 0,
     height REAL,
     left_metrics_key TEXT,
@@ -132,6 +147,14 @@ ON glyph_layers(glyph_id);
 
 CREATE INDEX IF NOT EXISTS glyph_layers_source_id_idx
 ON glyph_layers(source_id);
+
+CREATE TABLE IF NOT EXISTS glyph_layer_locations (
+    layer_id TEXT NOT NULL,
+    axis_id TEXT NOT NULL,
+    value REAL NOT NULL,
+    PRIMARY KEY (layer_id, axis_id),
+    FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS glyph_layer_payloads (
     layer_id TEXT PRIMARY KEY,
@@ -284,7 +307,7 @@ CREATE TABLE IF NOT EXISTS workspace_state (
 ";
 
 pub const SHIFT_APPLICATION_ID: i64 = 0x5348_4654;
-pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 6;
+pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 7;
 
 /// The oldest schema version [`migrate`] can upgrade.
 pub(crate) const OLDEST_MIGRATABLE_SCHEMA_VERSION: i64 = 1;
@@ -446,6 +469,72 @@ const MIGRATE_V5_TO_V6: &str = r"
 ALTER TABLE glyphs ADD COLUMN mark_color TEXT;
 ";
 
+/// Version 6 to 7: glyphs gain axes of their own, and a layer may draw
+/// anywhere in its glyph's design space rather than only on a source.
+///
+/// `glyph_axes` holds each glyph's own axes in order. A layer's place is its
+/// `glyph_layers.source_id`, now optional, with `glyph_layer_locations`
+/// holding the coordinates that move it off that source or place it without
+/// one; an axis there is a font axis or one of the glyph's, checked in Rust,
+/// so it has no foreign key. Every existing layer sits exactly on its source
+/// and gets no coordinates.
+///
+/// `glyph_layers` is rebuilt to drop its `NOT NULL`, which SQLite cannot
+/// alter in place: the directory rows are copied and the payload BLOBs,
+/// in their own table, are not touched. [`migrate`] runs it with foreign
+/// keys off, so dropping the old table cascades to nothing. This SQL is
+/// frozen.
+const MIGRATE_V6_TO_V7: &str = r"
+CREATE TABLE glyph_layers_v7 (
+    id TEXT PRIMARY KEY,
+    glyph_id TEXT NOT NULL,
+    source_id TEXT,
+    width REAL NOT NULL DEFAULT 0,
+    height REAL,
+    left_metrics_key TEXT,
+    right_metrics_key TEXT,
+    width_metrics_key TEXT,
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE,
+    FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
+);
+
+INSERT INTO glyph_layers_v7 (
+    id, glyph_id, source_id, width, height,
+    left_metrics_key, right_metrics_key, width_metrics_key
+)
+SELECT id, glyph_id, source_id, width, height,
+       left_metrics_key, right_metrics_key, width_metrics_key
+FROM glyph_layers;
+
+DROP TABLE glyph_layers;
+ALTER TABLE glyph_layers_v7 RENAME TO glyph_layers;
+
+CREATE INDEX glyph_layers_glyph_id_idx ON glyph_layers(glyph_id);
+CREATE INDEX glyph_layers_source_id_idx ON glyph_layers(source_id);
+
+CREATE TABLE glyph_axes (
+    id TEXT PRIMARY KEY,
+    glyph_id TEXT NOT NULL,
+    tag TEXT NOT NULL,
+    name TEXT NOT NULL,
+    min_value REAL NOT NULL,
+    default_value REAL NOT NULL,
+    max_value REAL NOT NULL,
+    order_index INTEGER NOT NULL,
+    FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX glyph_axes_glyph_id_idx ON glyph_axes(glyph_id);
+
+CREATE TABLE glyph_layer_locations (
+    layer_id TEXT NOT NULL,
+    axis_id TEXT NOT NULL,
+    value REAL NOT NULL,
+    PRIMARY KEY (layer_id, axis_id),
+    FOREIGN KEY (layer_id) REFERENCES glyph_layers(id) ON DELETE CASCADE
+);
+";
+
 /// The version that added the scene.
 const SCENE_SCHEMA_VERSION: i64 = 4;
 
@@ -461,12 +550,13 @@ pub(crate) enum SceneUpgrade {
 
 /// Steps that bring authored tables from one schema version to the next, as
 /// `(version reached, SQL)`, in ascending order.
-const MIGRATIONS: [(i64, &str); 5] = [
+const MIGRATIONS: [(i64, &str); 6] = [
     (2, MIGRATE_V1_TO_V2),
     (3, MIGRATE_V2_TO_V3),
     (4, MIGRATE_V3_TO_V4),
     (5, MIGRATE_V4_TO_V5),
     (6, MIGRATE_V5_TO_V6),
+    (7, MIGRATE_V6_TO_V7),
 ];
 
 /// Upgrades the authored tables of a store at `version` to
@@ -475,7 +565,9 @@ const MIGRATIONS: [(i64, &str); 5] = [
 ///
 /// Stores already at the current version are left unchanged. Documents,
 /// working stores, and recovery overlays share the authored tables, so each
-/// runs the same steps with its own version stamp.
+/// runs the same steps with its own version stamp. Foreign keys are off
+/// while the steps run, as SQLite's procedure for rebuilding a table
+/// requires, and are restored afterwards.
 ///
 /// # Errors
 ///
@@ -498,6 +590,23 @@ pub(crate) fn migrate(
         });
     }
 
+    // A step that rebuilds a table drops the old one, which with foreign
+    // keys on would cascade through every row that references it. The
+    // pragma does nothing inside a transaction, so it is set around one.
+    let foreign_keys: bool = conn.query_row("PRAGMA foreign_keys", [], |row| row.get(0))?;
+    conn.pragma_update(None, "foreign_keys", false)?;
+    let migrated = run_migrations(conn, version, upgraded_version, scene);
+    conn.pragma_update(None, "foreign_keys", foreign_keys)?;
+    migrated
+}
+
+/// The steps of [`migrate`] in one transaction.
+fn run_migrations(
+    conn: &rusqlite::Connection,
+    version: i64,
+    upgraded_version: i64,
+    scene: SceneUpgrade,
+) -> Result<(), StoreError> {
     let tx = conn.unchecked_transaction()?;
     for (reached, sql) in MIGRATIONS {
         if reached > version {

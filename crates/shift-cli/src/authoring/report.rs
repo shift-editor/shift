@@ -123,7 +123,8 @@ pub(crate) enum AuthoringChange {
 pub(crate) struct LayerReport {
     layer_id: String,
     glyph_id: String,
-    source_id: String,
+    /// `None` for a layer placed by coordinates alone.
+    source_id: Option<String>,
     advance: f64,
     contour_count: usize,
     point_count: usize,
@@ -136,7 +137,7 @@ impl LayerReport {
         Some(Self {
             layer_id: layer.id().to_string(),
             glyph_id: font.glyph_id_by_layer(layer.id())?.to_string(),
-            source_id: layer.source_id().to_string(),
+            source_id: layer.source_id().map(|source_id| source_id.to_string()),
             advance: layer.width(),
             contour_count: layer.contours().len(),
             point_count: layer
@@ -153,7 +154,7 @@ impl LayerReport {
             "{marker} layer   {}  {} @ {}  advance {}; {} contours, {} points, {} anchors, {} components",
             self.layer_id,
             self.glyph_id,
-            self.source_id,
+            self.source_id.as_deref().unwrap_or("no source"),
             self.advance,
             self.contour_count,
             self.point_count,

@@ -429,7 +429,7 @@ impl LayerMatch {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Anchor, Component, Contour, LayerId, Point, SourceId};
+    use crate::{Anchor, Component, Contour, LayerId, LayerLocation, Point, SourceId};
 
     fn layer() -> GlyphLayer {
         let mut layer = GlyphLayer::with_width(
@@ -458,7 +458,7 @@ mod tests {
         let reference = layer();
         let mut target = reference.clone_with_fresh_ids(
             LayerId::from_raw("target-layer"),
-            SourceId::from_raw("other-source"),
+            LayerLocation::at_source(SourceId::from_raw("other-source")),
         );
         target.set_width(900.0);
         target.contours_iter_mut().next().unwrap().points_mut()[0].set_position(200.0, 300.0);
@@ -678,7 +678,7 @@ mod tests {
         let reference = layer();
         let target = reference.clone_with_fresh_ids(
             LayerId::from_raw("target-layer"),
-            SourceId::from_raw("other-source"),
+            LayerLocation::at_source(SourceId::from_raw("other-source")),
         );
         let [first, _, last] = point_ids(&reference).try_into().unwrap();
         let [target_first, _, target_last] = point_ids(&target).try_into().unwrap();

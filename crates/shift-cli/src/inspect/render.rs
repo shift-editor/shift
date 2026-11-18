@@ -329,7 +329,10 @@ impl InspectReport {
                 table.add_row(vec![
                     Cell::new(glyph.name.clone()),
                     mode.muted(compact_id(&layer.id)),
-                    Cell::new(source_label(layer.source_name.as_deref(), &layer.source_id)),
+                    Cell::new(source_label(
+                        layer.source_name.as_deref(),
+                        layer.source_id.as_deref(),
+                    )),
                     right(Number(layer.advance)),
                     right(layer.contour_count),
                     right(layer.point_count),
@@ -464,10 +467,13 @@ fn source_name(name: &str, is_default: bool) -> String {
     }
 }
 
-fn source_label(name: Option<&str>, source_id: &str) -> String {
-    match name {
-        Some(name) => name.to_string(),
-        None => compact_id(source_id),
+/// A layer's source as a column shows it: its name, else its short id, else
+/// a dash for a layer placed by coordinates alone.
+fn source_label(name: Option<&str>, source_id: Option<&str>) -> String {
+    match (name, source_id) {
+        (Some(name), _) => name.to_string(),
+        (None, Some(source_id)) => compact_id(source_id),
+        (None, None) => "-".to_string(),
     }
 }
 

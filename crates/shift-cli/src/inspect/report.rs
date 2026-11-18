@@ -178,7 +178,8 @@ pub(crate) struct GlyphSummary {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GlyphLayerSummary {
     pub id: String,
-    pub source_id: String,
+    /// `None` for a layer placed by coordinates alone.
+    pub source_id: Option<String>,
     pub source_name: Option<String>,
     pub advance: f64,
     pub height: Option<f64>,
@@ -479,8 +480,9 @@ impl GlyphLayerSummary {
 
         Self {
             id: layer.id().to_string(),
-            source_id: source_id.to_string(),
-            source_name: source_names_by_id.get(&source_id).cloned(),
+            source_id: source_id.map(|source_id| source_id.to_string()),
+            source_name: source_id
+                .and_then(|source_id| source_names_by_id.get(&source_id).cloned()),
             advance: layer.width(),
             height: layer.height(),
             contour_count: layer.contours().len(),

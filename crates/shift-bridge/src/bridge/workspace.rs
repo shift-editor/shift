@@ -577,7 +577,10 @@ impl NativeWorkspace for Bridge {
     layer_ids
       .iter()
       .zip(glyph_ids)
-      .map(|(layer_id, glyph_id)| Ok(layer_snapshot(glyph_id, font.require_layer(*layer_id)?)))
+      .map(|(layer_id, glyph_id)| {
+        let layer = font.require_layer(*layer_id)?;
+        Ok(layer_snapshot(glyph_id, layer).map_err(BridgeError::from)?)
+      })
       .collect()
   }
 

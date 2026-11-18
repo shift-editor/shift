@@ -620,7 +620,7 @@ fn creates_and_reads_glyph_layer() {
         .expect("glyph layer should exist");
 
     assert_eq!(layer.glyph_id.as_str(), glyph_id.as_str());
-    assert_eq!(layer.source_id.as_str(), source_id.as_str());
+    assert_eq!(layer.source_id.unwrap().as_str(), source_id.as_str());
     assert_eq!(
         layer.name.as_ref().map(shift_font::GlyphName::as_str),
         Some("A")
@@ -660,7 +660,7 @@ fn lists_glyph_layers_for_glyph() {
 
     assert_eq!(layers.len(), 1);
     assert_eq!(layers[0].layer_id, layer_id);
-    assert_eq!(layers[0].source_id.as_str(), source_id.as_str());
+    assert_eq!(layers[0].source_id.unwrap().as_str(), source_id.as_str());
 }
 
 #[test]
@@ -833,7 +833,7 @@ fn popping_glyph_cascades_layers() {
 fn applies_layer_metrics_and_contour_point_changes() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, contour, point_id) = store_layer_with_contour();
-    create_regular_source_with_id(&mut store, layer.source_id());
+    create_regular_source_with_id(&mut store, layer.source_id().unwrap());
 
     let mut glyph = glyph;
     glyph.set_layer(layer.clone());
@@ -880,8 +880,9 @@ fn applies_layer_metrics_and_contour_point_changes() {
 fn applies_layer_geometry_replacement() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, first_contour, _) = store_layer_with_contour();
-    create_regular_source_with_id(&mut store, layer.source_id());
-    let mut replacement = shift_font::GlyphLayer::with_width(layer.id(), layer.source_id(), 500.0);
+    create_regular_source_with_id(&mut store, layer.source_id().unwrap());
+    let mut replacement =
+        shift_font::GlyphLayer::with_width(layer.id(), layer.source_id().unwrap(), 500.0);
     replacement.add_contour(contour_with_point(10.0, 20.0));
 
     let mut original = layer.clone();
@@ -917,7 +918,7 @@ fn applies_layer_geometry_replacement() {
 fn layer_geometry_replacement_round_trips_anchors() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, anchor_id) = store_layer_with_anchor();
-    create_regular_source_with_id(&mut store, layer.source_id());
+    create_regular_source_with_id(&mut store, layer.source_id().unwrap());
 
     store
         .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
@@ -939,7 +940,7 @@ fn layer_geometry_replacement_round_trips_anchors() {
 fn applies_anchor_position_changes() {
     let mut store = ShiftStore::open_memory_for_test().expect("memory store should open");
     let (glyph, layer, anchor_id) = store_layer_with_anchor();
-    create_regular_source_with_id(&mut store, layer.source_id());
+    create_regular_source_with_id(&mut store, layer.source_id().unwrap());
     store
         .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
         .expect("change set should apply");
@@ -970,7 +971,7 @@ fn reopen_preserves_layer_anchors() {
 
     {
         let mut store = ShiftStore::open(&path).expect("open");
-        create_regular_source_with_id(&mut store, layer.source_id());
+        create_regular_source_with_id(&mut store, layer.source_id().unwrap());
         store
             .apply_change_set(&anchored_layer_change_set(&glyph, &layer))
             .expect("change set should apply");

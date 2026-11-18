@@ -189,7 +189,7 @@ mod tests {
 
         let restored = layer_from_state(
             layer.id(),
-            layer.source_id(),
+            layer.source_id().unwrap(),
             &GlyphStructure::from(&layer),
             &values,
         )
@@ -205,7 +205,7 @@ mod tests {
         let structure = GlyphStructure::from(&layer);
         let restored = layer_from_state(
             layer.id(),
-            layer.source_id(),
+            layer.source_id().unwrap(),
             &structure,
             &values_from_layer(&layer),
         )?;
@@ -268,7 +268,7 @@ mod tests {
 
         let restored = layer_from_state(
             layer.id(),
-            layer.source_id(),
+            layer.source_id().unwrap(),
             &structure,
             &values_from_layer(&layer),
         )?;

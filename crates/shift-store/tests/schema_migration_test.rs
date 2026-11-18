@@ -13,7 +13,9 @@ use shift_store::{SHIFT_DOCUMENT_SCHEMA_VERSION, ShiftStore};
 fn downgrade_to_version_2(path: &Path) {
     let conn = rusqlite::Connection::open(path).unwrap();
     conn.execute_batch(
-        "ALTER TABLE glyphs DROP COLUMN category;
+        "DROP TABLE glyph_layer_locations;
+         DROP TABLE glyph_axes;
+         ALTER TABLE glyphs DROP COLUMN category;
          ALTER TABLE glyphs DROP COLUMN sub_category;
          ALTER TABLE glyphs DROP COLUMN left_metrics_key;
          ALTER TABLE glyphs DROP COLUMN right_metrics_key;
@@ -134,7 +136,12 @@ fn opening_a_version_5_document_upgrades_it_and_its_glyphs_have_no_mark_colour()
     drop(ShiftStore::create_document(&path, &font).unwrap());
     rusqlite::Connection::open(&path)
         .unwrap()
-        .execute_batch("ALTER TABLE glyphs DROP COLUMN mark_color; PRAGMA user_version = 5;")
+        .execute_batch(
+            "DROP TABLE glyph_layer_locations;
+             DROP TABLE glyph_axes;
+             ALTER TABLE glyphs DROP COLUMN mark_color;
+             PRAGMA user_version = 5;",
+        )
         .unwrap();
     assert_eq!(user_version(&path), 5);
 

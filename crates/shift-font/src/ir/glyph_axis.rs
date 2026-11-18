@@ -10,6 +10,8 @@
 //! Every value on a glyph axis is stored in the axis's own units, never
 //! normalized: layer coordinates and component locations alike.
 
+use serde::{Deserialize, Serialize};
+
 use crate::CoreError;
 use crate::axis::Axis;
 use crate::entity::{AxisId, ComponentId, GlyphId, LayerId};
@@ -22,9 +24,48 @@ use crate::variation::AxisRange;
 /// A glyph axis is always continuous, and is never inherited by the glyphs its
 /// glyph is placed in: a component that doesn't set it draws its base at the
 /// axis default.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(from = "StoredGlyphAxis", into = "StoredGlyphAxis")]
 pub struct GlyphAxis {
     axis: Axis,
+}
+
+/// A glyph axis as it is written: everything else about it is fixed.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+struct StoredGlyphAxis {
+    id: AxisId,
+    tag: String,
+    name: String,
+    minimum: f64,
+    default: f64,
+    maximum: f64,
+}
+
+impl From<StoredGlyphAxis> for GlyphAxis {
+    fn from(stored: StoredGlyphAxis) -> Self {
+        let StoredGlyphAxis {
+            id,
+            tag,
+            name,
+            minimum,
+            default,
+            maximum,
+        } = stored;
+        Self::with_id(id, tag, name, minimum, default, maximum)
+    }
+}
+
+impl From<GlyphAxis> for StoredGlyphAxis {
+    fn from(axis: GlyphAxis) -> Self {
+        Self {
+            id: axis.id(),
+            tag: axis.tag().to_string(),
+            name: axis.name().to_string(),
+            minimum: axis.minimum(),
+            default: axis.as_axis().default(),
+            maximum: axis.maximum(),
+        }
+    }
 }
 
 impl GlyphAxis {

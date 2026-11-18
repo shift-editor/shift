@@ -570,7 +570,7 @@ fn fallback_bounds(
         font,
         projection_set,
         projection,
-        projection.fallback().source_id(),
+        font.reading_source_id(projection.fallback())?,
     )?;
     let curves = curves_from_resolved_contours(resolved.contours())?;
     Ok(Bounds::of_curves(&curves))

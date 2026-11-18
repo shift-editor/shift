@@ -337,7 +337,7 @@ fn load_source_location(
 struct LayerRow {
     id: font::LayerId,
     glyph_id: font::GlyphId,
-    source_id: font::SourceId,
+    source_id: Option<font::SourceId>,
     width: f64,
     height: Option<f64>,
     metrics_keys: font::MetricsKeys,
@@ -355,9 +355,16 @@ impl LayerRow {
         })
     }
 
-    /// The layer with no content, as a directory holds it before loading.
-    fn placeholder(&self) -> font::GlyphLayer {
-        let mut layer = font::GlyphLayer::with_width(self.id, self.source_id, self.width);
+    /// Where the layer draws: its source, with `coordinates` laid over it.
+    fn placed_with(&self, coordinates: Option<font::DesignLocation>) -> font::LayerLocation {
+        font::LayerLocation::new(self.source_id, coordinates.unwrap_or_default())
+    }
+
+    /// The layer with no content at `location`, as a directory holds it
+    /// before loading.
+    fn placeholder(&self, location: font::LayerLocation) -> font::GlyphLayer {
+        let mut layer = font::GlyphLayer::located(self.id, location);
+        layer.set_width(self.width);
         layer.set_height(self.height);
         *layer.metrics_keys_mut() = self.metrics_keys.clone();
         layer
@@ -453,6 +460,8 @@ fn load_glyphs(
         stmt.query_map([], LayerRow::read)?
             .collect::<Result<Vec<_>, _>>()?
     };
+    let mut coordinates = load_layer_coordinates(conn)?;
+    let mut glyph_axes = load_glyph_axes(conn)?;
     let mut loaded_layers = HashMap::new();
     if read == FontRead::WithLayerPayloads {
         let layer_ids = layer_rows.iter().map(|row| row.id).collect::<Vec<_>>();
@@ -463,12 +472,13 @@ fn load_glyphs(
 
     let mut layers: HashMap<font::GlyphId, Vec<font::GlyphLayer>> = HashMap::new();
     for row in layer_rows {
+        let location = row.placed_with(coordinates.remove(&row.id));
         let layer = if read == FontRead::WithLayerPayloads {
             loaded_layers
                 .remove(&row.id)
                 .or_missing(StoreEntity::GlyphLayerPayload, &row.id)?
         } else {
-            row.placeholder()
+            row.placeholder(location)
         };
         layers.entry(row.glyph_id).or_default().push(layer);
     }
@@ -499,12 +509,61 @@ fn load_glyphs(
                 .collect(),
         );
         *glyph.lib_mut() = font::LibData::from_map(libs.remove(&glyph_id).unwrap_or_default());
+        glyph.set_axes(glyph_axes.remove(&glyph_id).unwrap_or_default());
         for layer in layers.remove(&glyph_id).unwrap_or_default() {
             glyph.set_layer(layer);
         }
         glyphs.push(glyph);
     }
     Ok(glyphs)
+}
+
+/// Every layer's location coordinates, by layer; a layer exactly on its
+/// source has none.
+fn load_layer_coordinates(
+    conn: &rusqlite::Connection,
+) -> Result<HashMap<font::LayerId, font::DesignLocation>, StoreError> {
+    let mut stmt = conn.prepare("SELECT layer_id, axis_id, value FROM glyph_layer_locations")?;
+    let rows = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, font::LayerId>(0)?,
+            row.get::<_, font::AxisId>(1)?,
+            row.get::<_, f64>(2)?,
+        ))
+    })?;
+    let mut coordinates: HashMap<font::LayerId, font::DesignLocation> = HashMap::new();
+    for row in rows {
+        let (layer_id, axis_id, value) = row?;
+        coordinates.entry(layer_id).or_default().set(axis_id, value);
+    }
+    Ok(coordinates)
+}
+
+/// Every glyph's own axes, by glyph, in order.
+fn load_glyph_axes(
+    conn: &rusqlite::Connection,
+) -> Result<HashMap<font::GlyphId, Vec<font::GlyphAxis>>, StoreError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, glyph_id, tag, name, min_value, default_value, max_value
+         FROM glyph_axes ORDER BY glyph_id, order_index, id",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        let axis = font::GlyphAxis::with_id(
+            row.get::<_, font::AxisId>("id")?,
+            row.get::<_, String>("tag")?,
+            row.get::<_, String>("name")?,
+            row.get("min_value")?,
+            row.get("default_value")?,
+            row.get("max_value")?,
+        );
+        Ok((row.get::<_, font::GlyphId>("glyph_id")?, axis))
+    })?;
+    let mut axes: HashMap<font::GlyphId, Vec<font::GlyphAxis>> = HashMap::new();
+    for row in rows {
+        let (glyph_id, axis) = row?;
+        axes.entry(glyph_id).or_default().push(axis);
+    }
+    Ok(axes)
 }
 
 fn load_font_guidelines(conn: &rusqlite::Connection) -> Result<Vec<font::Guideline>, StoreError> {

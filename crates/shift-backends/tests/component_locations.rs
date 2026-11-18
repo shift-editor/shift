@@ -37,7 +37,7 @@ fn font_with_located_component(default_master: DefaultMaster) -> Fixture<Font> {
     let master_ids: Vec<_> = base
         .layers()
         .values()
-        .map(|layer| layer.source_id())
+        .filter_map(|layer| layer.source_id())
         .collect();
 
     let mut composite = Glyph::with_unicode("Aalt", u32::from(COMPOSITE));
@@ -136,7 +136,7 @@ fn font_with_located_mark() -> Fixture<Font> {
     let masters: Vec<_> = base
         .layers()
         .values()
-        .map(|layer| (layer.id(), layer.source_id()))
+        .filter_map(|layer| Some((layer.id(), layer.source_id()?)))
         .collect();
 
     let mut mark = Glyph::new("dotmark");

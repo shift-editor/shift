@@ -280,9 +280,14 @@ impl IndexEntries {
         let layer_id = layer.id();
         self.owners.push((layer_id, glyph_id));
         // A located layer is not the glyph's layer on its source.
-        if !layer.is_located() {
-            self.source_layers
-                .push((SourceLayerKey::of(glyph_id, layer), layer_id));
+        if let Some(source_id) = layer.location().exact_source_id() {
+            self.source_layers.push((
+                SourceLayerKey {
+                    glyph_id,
+                    source_id,
+                },
+                layer_id,
+            ));
         }
         for component in layer.components_iter() {
             self.component_bases
@@ -307,15 +312,6 @@ pub(super) enum KeyHolder {
 pub(super) struct SourceLayerKey {
     glyph_id: GlyphId,
     source_id: SourceId,
-}
-
-impl SourceLayerKey {
-    fn of(glyph_id: GlyphId, layer: &GlyphLayer) -> Self {
-        Self {
-            glyph_id,
-            source_id: layer.source_id(),
-        }
-    }
 }
 
 /// A glyph axis's tag as an index key.
