@@ -49,6 +49,11 @@ shift-cli instance add Lab.shift --name Book --location wght=450
 shift-cli kerning set Lab.shift @A @V -60 --source Bold
 shift-cli kerning set Lab.shift --input kerning.json --dry-run --json
 shift-cli kerning group create Lab.shift O O Q --position first
+shift-cli glyph axis add Lab.shift dot --name Spread --min 0 --default 0 --max 100     # an axis only dot has (tag SPRD)
+shift-cli glyph axis edit Lab.shift dot SPRD --max 1000 --rescale                      # also --name, --tag; remove
+shift-cli layer add Lab.shift --glyph dot --source Regular --location SPRD=100 --input dot-wide.json
+shift-cli layer add Lab.shift --glyph H --location BLED=50 --input H-brace.json        # a brace drawing on no source
+shift-cli layer move Lab.shift --glyph H --location BLED=50 --to-location BLED=40      # layer remove takes the same place flags
 ```
 
 - **Shift assigns all identities.** Read the IDs a command returns and use them as selectors; never invent IDs.
@@ -57,6 +62,8 @@ shift-cli kerning group create Lab.shift O O Q --position first
 - **`glyph set` applies a batch atomically** and supports `--dry-run`. A component's base may be another glyph in the same batch.
 - **Metrics keys** (`=n`, `=n+10`, `=|H`) go in `metricsKeys` on a glyph entry (every source) or on a layer (its source only, winning over the glyph's). They apply in the same edit, as in the app, and keep applying when a glyph they read changes later. A key that cannot be evaluated fails the command without writing. `""` removes a side's key.
 - **`glyph export` copies real glyphs**: it reads named glyphs from any source (`.shift`, UFO, Designspace, Glyphs, TTF, OTF) as the batch `glyph set` reads, adding every glyph their components use. `--source NAME` or `--source all` picks masters (default: the default source). Small exported files are good scratch fixtures: edit them, then `glyph set` them into a document.
+- **Glyph axes** (`glyph axis add|edit|remove`) belong to one glyph; values on them are in the axis's own units. A component sets its base glyph's axes in its `location`, by tag (`{"base": "dot", "location": {"SPRD": 60}}`); one that doesn't is at the axis default, never the parent's value. A range edit that would leave a drawing or component location outside is refused and lists them; `--rescale` moves them with the range. `remove` is refused while anything sets the axis.
+- **A drawing can sit anywhere**: `--source`, `--location TAG=VALUE` (font or glyph axes), or both. `--location` without `--source` places it on no source, other axes at their defaults. `glyph set` entries take the same `location` beside `source`. `inspect --json` lists each glyph's `axes` and each layer's `location`.
 - Instances are presets, not masters: instance commands never create sources or drawings.
 - **Kerning sides**: `first` is the left glyph, and its first-position group kerns its right edge; `second` is the right glyph. A side is a glyph name or `@GROUP` for a group at that position. Values are per master and default to the default source; set every master you mean to change.
 - **`kerning set --input`** applies `groups` (created if missing; `members` replaces membership) and then `pairs` (`value: null` removes) atomically, so pairs can name groups the batch creates.

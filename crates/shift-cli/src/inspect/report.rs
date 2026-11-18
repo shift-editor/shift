@@ -6,7 +6,7 @@ use miette::Diagnostic;
 use serde::Serialize;
 use shift_font::{
     Axis, AxisId, AxisKind, AxisLabel, AxisMapping, AxisMappingPoint, AxisRole, Font, Glyph,
-    GlyphLayer, Location, MetricDefinition, MetricKind, NamedInstance, Source, SourceId,
+    GlyphAxis, GlyphLayer, Location, MetricDefinition, MetricKind, NamedInstance, Source, SourceId,
 };
 use shift_store::{SHIFT_DOCUMENT_SCHEMA_VERSION, ShiftStore, StoreError};
 use thiserror::Error;
@@ -170,6 +170,8 @@ pub(crate) struct GlyphSummary {
     pub id: String,
     pub name: String,
     pub unicodes: Vec<String>,
+    /// Axes only this glyph varies along, in their own units.
+    pub axes: Vec<GlyphAxis>,
     pub layer_count: usize,
     pub layers: Vec<GlyphLayerSummary>,
 }
@@ -181,6 +183,9 @@ pub(crate) struct GlyphLayerSummary {
     /// `None` for a layer placed by coordinates alone.
     pub source_id: Option<String>,
     pub source_name: Option<String>,
+    /// Coordinates that place the layer off its source, on font axes or the
+    /// glyph's own; empty for a layer exactly on its source.
+    pub location: Vec<LocationValue>,
     pub advance: f64,
     pub height: Option<f64>,
     pub contour_count: usize,
@@ -233,7 +238,7 @@ impl InspectReport {
         let source_names_by_id = source_names_by_id(font.sources());
         let glyphs = font
             .glyphs()
-            .map(|glyph| GlyphSummary::from_glyph(glyph, &source_names_by_id))
+            .map(|glyph| GlyphSummary::from_glyph(glyph, &source_names_by_id, &axes_by_id))
             .collect::<Vec<_>>();
 
         Self {
@@ -447,11 +452,24 @@ fn location_values(
 }
 
 impl GlyphSummary {
-    fn from_glyph(glyph: &Glyph, source_names_by_id: &HashMap<SourceId, String>) -> Self {
+    fn from_glyph(
+        glyph: &Glyph,
+        source_names_by_id: &HashMap<SourceId, String>,
+        font_axes_by_id: &HashMap<AxisId, String>,
+    ) -> Self {
+        let mut axes_by_id = font_axes_by_id.clone();
+        axes_by_id.extend(
+            glyph
+                .axes()
+                .iter()
+                .map(|axis| (axis.id(), axis.tag().to_string())),
+        );
         let mut layers = glyph
             .layers()
             .values()
-            .map(|layer| GlyphLayerSummary::from_layer(layer.as_ref(), source_names_by_id))
+            .map(|layer| {
+                GlyphLayerSummary::from_layer(layer.as_ref(), source_names_by_id, &axes_by_id)
+            })
             .collect::<Vec<_>>();
         layers.sort_by(|left, right| {
             left.source_id
@@ -467,6 +485,7 @@ impl GlyphSummary {
                 .iter()
                 .map(|unicode| format!("U+{unicode:04X}"))
                 .collect(),
+            axes: glyph.axes().to_vec(),
             layer_count: layers.len(),
             layers,
         }
@@ -474,7 +493,11 @@ impl GlyphSummary {
 }
 
 impl GlyphLayerSummary {
-    fn from_layer(layer: &GlyphLayer, source_names_by_id: &HashMap<SourceId, String>) -> Self {
+    fn from_layer(
+        layer: &GlyphLayer,
+        source_names_by_id: &HashMap<SourceId, String>,
+        axes_by_id: &HashMap<AxisId, String>,
+    ) -> Self {
         let source_id = layer.source_id();
         let point_count = layer.contours_iter().map(shift_font::Contour::len).sum();
 
@@ -483,6 +506,7 @@ impl GlyphLayerSummary {
             source_id: source_id.map(|source_id| source_id.to_string()),
             source_name: source_id
                 .and_then(|source_id| source_names_by_id.get(&source_id).cloned()),
+            location: location_values(layer.location().coordinates().as_untyped(), axes_by_id),
             advance: layer.width(),
             height: layer.height(),
             contour_count: layer.contours().len(),

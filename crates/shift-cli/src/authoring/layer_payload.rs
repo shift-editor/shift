@@ -18,15 +18,22 @@ use super::input::{LayerInput, TransformInput};
 use super::metrics_keys::WrittenKey;
 use super::require_finite;
 
-/// A component location keyed by axis tag, as design coordinates on `font`'s axes.
-fn component_location(values: &BTreeMap<String, f64>, font: &Font) -> Result<DesignLocation> {
+/// A component location keyed by axis tag, as design coordinates on `font`'s
+/// axes and the base glyph's own axes.
+fn component_location(
+    values: &BTreeMap<String, f64>,
+    font: &Font,
+    base_glyph_id: GlyphId,
+) -> Result<DesignLocation> {
     values
         .iter()
         .map(|(tag, value)| {
             require_finite(*value, "component location")?;
             let axis_id = font
-                .axis_id_by_tag(tag)
-                .ok_or_else(|| miette::miette!("the font has no axis tagged {tag:?}"))?;
+                .axis_id_in_glyph_space(Some(base_glyph_id), tag)
+                .ok_or_else(|| {
+                    miette::miette!("the font and the base glyph have no axis tagged {tag:?}")
+                })?;
             Ok((axis_id, *value))
         })
         .collect()
@@ -63,7 +70,7 @@ impl LayerInput {
     ///
     /// Rejects non-finite coordinates, mixed outline formats, malformed SVG, SVG arcs,
     /// components whose base `base_glyph` cannot resolve, and component locations on
-    /// axes the font lacks.
+    /// axes neither the font nor the base glyph has.
     pub(super) fn into_intents(
         self,
         glyph_id: GlyphId,
@@ -124,7 +131,7 @@ impl LayerInput {
                     })
                 }
             };
-            let location = component_location(&input.location, font)
+            let location = component_location(&input.location, font, base_glyph_id)
                 .wrap_err_with(|| format!("component {:?} location", input.base))?;
             let mut component = Component::with_transform(base_glyph_id, input.base, transform);
             component.set_location(location);

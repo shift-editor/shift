@@ -10,6 +10,11 @@ use crate::proof::ProofArgs;
 
 mod font;
 pub(crate) use font::{FontInfoArgs, PackFontArgs, SetFontArgs};
+mod glyph_axis;
+pub(crate) use glyph_axis::{
+    AddGlyphAxisArgs, EditGlyphAxisArgs, GlyphAxisCommand, GlyphAxisRangeArgs,
+    GlyphAxisRangeEditArgs, RemoveGlyphAxisArgs,
+};
 mod kerning;
 pub(crate) use kerning::{
     AssignKerningGroupArgs, CreateKerningGroupArgs, DeleteKerningGroupArgs, GetKerningArgs,
@@ -106,7 +111,7 @@ pub(crate) enum Command {
         command: GlyphCommand,
     },
 
-    /// Author sparse glyph layers.
+    /// Author a glyph's drawings: on a source, or anywhere in its design space.
     Layer {
         #[command(subcommand)]
         command: LayerCommand,
@@ -169,6 +174,12 @@ pub(crate) enum GlyphCommand {
 
     /// Write glyphs from any font source as the JSON `glyph set` reads.
     Export(ExportGlyphsArgs),
+
+    /// Author axes only one glyph varies along.
+    Axis {
+        #[command(subcommand)]
+        command: GlyphAxisCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -181,6 +192,12 @@ pub(crate) enum LayerCommand {
 
     /// Copy one glyph's authored layer to another source with fresh internal ids.
     Copy(CopyLayerArgs),
+
+    /// Move one drawing to another place, keeping its content and identity.
+    Move(MoveLayerArgs),
+
+    /// Remove one drawing, wherever it sits.
+    Remove(RemoveLayerArgs),
 }
 
 #[derive(Debug, Args)]
@@ -346,13 +363,8 @@ pub(crate) struct LayerPayloadArgs {
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
 
-    /// Glyph name or full stable glyph id.
-    #[arg(long)]
-    pub glyph: String,
-
-    /// Source name or full stable source id.
-    #[arg(long)]
-    pub source: String,
+    #[command(flatten)]
+    pub layer: LayerPlaceArgs,
 
     /// JSON layer payload path, or - to read it from stdin.
     #[arg(long, value_hint = ValueHint::FilePath)]
@@ -360,6 +372,26 @@ pub(crate) struct LayerPayloadArgs {
 
     #[command(flatten)]
     pub mutation: MutationArgs,
+}
+
+/// One of a glyph's drawings, by where it sits: exactly on a source, or at
+/// a location.
+#[derive(Debug, Args)]
+pub(crate) struct LayerPlaceArgs {
+    /// Glyph name or full stable glyph id.
+    #[arg(long)]
+    pub glyph: String,
+
+    /// Source name or full stable source id. With --location, the source the
+    /// coordinates are laid over; without it, the drawing sits on no source.
+    #[arg(long, required_unless_present = "location")]
+    pub source: Option<String>,
+
+    /// Where the drawing sits, as TAG=VALUE on font axes or the glyph's own
+    /// axes, in design units; repeat or comma-separate values. Axes it doesn't
+    /// name take --source's value, or their default without --source.
+    #[arg(long, value_name = "TAG=VALUE", value_delimiter = ',')]
+    pub location: Vec<String>,
 }
 
 #[derive(Debug, Args)]
@@ -371,6 +403,42 @@ pub(crate) struct SetGlyphsArgs {
     /// JSON glyph batch path, or - to read it from stdin.
     #[arg(long, value_hint = ValueHint::FilePath)]
     pub input: PathBuf,
+
+    #[command(flatten)]
+    pub mutation: MutationArgs,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct MoveLayerArgs {
+    /// Path to the canonical SQLite .shift document.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+
+    /// The drawing, by its current place.
+    #[command(flatten)]
+    pub layer: LayerPlaceArgs,
+
+    /// The source the new place is laid over; without it, the drawing moves
+    /// onto no source.
+    #[arg(long = "to-source", required_unless_present = "to_location")]
+    pub to_source: Option<String>,
+
+    /// The new place as TAG=VALUE; repeat or comma-separate values.
+    #[arg(long = "to-location", value_name = "TAG=VALUE", value_delimiter = ',')]
+    pub to_location: Vec<String>,
+
+    #[command(flatten)]
+    pub mutation: MutationArgs,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct RemoveLayerArgs {
+    /// Path to the canonical SQLite .shift document.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+
+    #[command(flatten)]
+    pub layer: LayerPlaceArgs,
 
     #[command(flatten)]
     pub mutation: MutationArgs,
