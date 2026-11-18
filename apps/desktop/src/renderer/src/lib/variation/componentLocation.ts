@@ -3,6 +3,7 @@ import type { Axis } from "@shift/editor/model";
 import { computed, type Signal } from "@shift/editor/signals";
 import { axisValue, withExternalAxisValue } from "@shift/editor/variation";
 import { isComponentId, type AxisId, type ComponentInheritance } from "@shift/types";
+import { GlyphDesignspace } from "./GlyphDesignspace";
 import type {
   FollowedComponentAxis,
   SelectedComponentLocation,
@@ -16,28 +17,35 @@ import type {
  *
  * @remarks
  * Recomputes as the selection, source, location or the components change.
- * Values are in user units, as Font axes shows them.
+ * Font axis values are in user units, as Font axes shows them. When the
+ * components share a base glyph with axes of its own, those follow the font's
+ * axes, in the axis's own units; one they don't set is at its default, since
+ * glyph axes are never inherited.
  *
- * @returns null unless the selection is only components on the source being
- * edited, in a font with varying axes: off a source there is nothing to edit.
+ * @returns null unless the selection is only components on the drawing being
+ * edited (a source's, or one located off them), with an axis to set:
+ * between drawings there is nothing to edit.
  */
 export function selectedComponentLocationCell(
   editor: Editor,
 ): Signal<SelectedComponentLocation | null> {
+  const glyphs = new GlyphDesignspace(editor);
   return computed(() => {
     const parent = editor.externalLocationCell.value;
-    const sourceId = editor.activeSourceIdCell.value;
+    const editing =
+      editor.activeSourceIdCell.value !== null || editor.activeDrawingCell.value !== null;
     const axes = editor.font.externalAxesCell.value.filter(
       (axis) => !axis.isDiscrete && axis.varies,
     );
     const ids = editor.selection.stateCell.value.ids;
-    if (sourceId === null || axes.length === 0 || ids.length === 0 || !ids.every(isComponentId)) {
-      return null;
-    }
+    if (!editing || ids.length === 0 || !ids.every(isComponentId)) return null;
 
-    // Mapped to the active source's own components, which store its location.
+    // Mapped to the edited drawing's own components, which store its location.
     const components = editor.selectedComponentsAtActiveSource();
     if (!components) return null;
+
+    const glyphAxes = glyphs.sharedBaseAxes(components);
+    if (axes.length === 0 && glyphAxes.length === 0) return null;
 
     const designspace = editor.font.designspace;
     const drawnAt = (
@@ -57,13 +65,31 @@ export function selectedComponentLocationCell(
       });
       if (values.every((value) => value === null)) {
         const first = components[0]!;
-        followed.push({ axis, follows: round(drawnAt(axis, first.location, first.inheritance)) });
+        followed.push({
+          axis,
+          kind: "font",
+          follows: round(drawnAt(axis, first.location, first.inheritance)),
+        });
         continue;
       }
 
       const first = values[0];
       const same = first !== null && values.every((value) => value === first);
-      set.push({ axis, value: same ? round(first) : null });
+      set.push({ axis, kind: "font", value: same ? round(first) : null });
+    }
+
+    for (const axis of glyphAxes) {
+      const values = components.map((component) => component.location.get(axis.id) ?? null);
+      if (values.every((value) => value === null)) {
+        followed.push({ axis, kind: "glyph", follows: axis.kind.default });
+        continue;
+      }
+
+      // Unset is the default: glyph axes are never inherited.
+      const drawn = values.map((value) => value ?? axis.kind.default);
+      const first = drawn[0]!;
+      const same = drawn.every((value) => value === first);
+      set.push({ axis, kind: "glyph", value: same ? round(first) : null });
     }
 
     const bases = new Set(components.map((component) => component.baseGlyphName));
@@ -75,8 +101,9 @@ export function selectedComponentLocationCell(
 }
 
 /**
- * Sets the axis `axisId` on the selected components to `value`, in user
- * units, at the active source.
+ * Sets the axis `axisId` on the selected components to `value` at the
+ * drawing being edited: in user units for a font axis, in its own units for
+ * one of their base glyph's axes.
  *
  * @returns `false` when the axis is not in the font or the selection is not
  * entirely components on the active source.
@@ -86,6 +113,13 @@ export function setSelectedComponentAxis(
   axisId: AxisId,
   value: number,
 ): Promise<boolean> {
+  const components = editor.selectedComponentsAtActiveSource() ?? [];
+  const glyphAxis = new GlyphDesignspace(editor)
+    .sharedBaseAxes(components)
+    .find(({ id }) => id === axisId);
+  // A base glyph's own axis has no mapping: the value is stored as given.
+  if (glyphAxis) return editor.setSelectedComponentsAxis(axisId, value);
+
   const axis = editor.font.externalAxesCell.peek().find((candidate) => candidate.id === axisId);
   if (!axis) return Promise.resolve(false);
 

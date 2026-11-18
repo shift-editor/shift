@@ -3,6 +3,8 @@ import type { Axis } from "@shift/editor/model";
 import {
   Button,
   Menu,
+  MenuGroup,
+  MenuGroupLabel,
   MenuItem,
   MenuPopup,
   MenuPortal,
@@ -20,15 +22,16 @@ import {
   selectedComponentLocationCell,
   setSelectedComponentAxis,
 } from "@/lib/variation/componentLocation";
-import type { FollowedComponentAxis } from "@/types/componentLocation";
+import type { ComponentAxisKind, FollowedComponentAxis } from "@/types/componentLocation";
 import PlusIcon from "@/assets/general/plus.svg";
 
 /**
  * The Designspace tab's component section, shown only while components are
- * selected at a source and titled with the glyph they draw: one row per axis
- * they set, which draws their base glyph at that value instead of where the
- * glyph they sit in is drawn. **+** sets another axis; **−** stops setting
- * one. Each source keeps its own: switching source in the left sidebar shows
+ * selected on the drawing being edited and titled with the glyph they draw:
+ * one row per axis they set, which draws their base glyph at that value
+ * instead of where the glyph they sit in is drawn. **+** sets another axis,
+ * the font's or, under its own heading, one of the base glyph's; **−** stops
+ * setting one, which for a glyph axis draws the base at its default. Each source keeps its own: switching source in the left sidebar shows
  * that source's rows.
  *
  * @remarks
@@ -80,7 +83,7 @@ export const ComponentLocationSection = () => {
         }
       >
         <div className="flex flex-col gap-1">
-          {state.set.map(({ axis, value }) => (
+          {state.set.map(({ axis, kind, value }) => (
             <div key={axis.id} className="flex flex-col gap-1">
               <span className="px-2 text-ui text-secondary">{axis.name}</span>
               <div className="grid grid-cols-[minmax(0,1fr)_3.5rem_1.5rem] items-center gap-2 pl-2">
@@ -89,7 +92,7 @@ export const ComponentLocationSection = () => {
                     aria-label={`${axis.name} of the selected components`}
                     min={axis.minimum}
                     max={axis.maximum}
-                    step={1}
+                    step={kind === "glyph" ? 0.01 : 1}
                     value={value ?? axis.kind.default}
                     // Mixed: no single value to point at, so no thumb or fill until a drag sets one.
                     thumbClassName={value === null ? "invisible" : undefined}
@@ -106,7 +109,7 @@ export const ComponentLocationSection = () => {
                   className="w-14"
                   onValueChange={(next) => setAxis(axis, next)}
                 />
-                <Tooltip content={`Follow the glyph on ${axis.name}`}>
+                <Tooltip content={unsetTooltip(kind, axis.name)}>
                   <Button
                     variant="ghost"
                     size="icon-sm"
@@ -135,6 +138,12 @@ function AddAxisMenu({
   /** Keeps the section's header showing the + while the menu is open. */
   onOpenChange: (open: boolean) => void;
 }) {
+  const groups = AXIS_GROUPS.map(({ kind, label }) => ({
+    kind,
+    label,
+    entries: followed.filter((entry) => entry.kind === kind),
+  })).filter((group) => group.entries.length > 0);
+
   // Every axis set: the + stays, disabled, so the section always shows where axes are added.
   if (followed.length === 0) {
     return (
@@ -158,21 +167,53 @@ function AddAxisMenu({
         />
       </Tooltip>
       <MenuPortal>
-        <MenuPositioner sideOffset={4} align="end">
+        <MenuPositioner side="right" sideOffset={4} align="start">
           <MenuPopup>
-            {followed.map((entry) => (
-              <MenuItem key={entry.axis.id} onClick={() => onAdd(entry)}>
-                <span className="flex w-full justify-between gap-6">
-                  <span>{entry.axis.name}</span>
-                  <span className="text-muted">{entry.follows}</span>
-                </span>
-              </MenuItem>
-            ))}
+            {groups.length === 1
+              ? groups[0]!.entries.map((entry) => (
+                  <AxisItem key={entry.axis.id} entry={entry} onAdd={onAdd} />
+                ))
+              : groups.map((group) => (
+                  <MenuGroup key={group.kind}>
+                    <MenuGroupLabel>{group.label}</MenuGroupLabel>
+                    {group.entries.map((entry) => (
+                      <AxisItem key={entry.axis.id} entry={entry} onAdd={onAdd} />
+                    ))}
+                  </MenuGroup>
+                ))}
           </MenuPopup>
         </MenuPositioner>
       </MenuPortal>
     </Menu>
   );
+}
+
+/** The + menu's headings, once the base glyph has axes of its own beside the font's. */
+const AXIS_GROUPS: readonly { kind: ComponentAxisKind; label: string }[] = [
+  { kind: "font", label: "Font axes" },
+  { kind: "glyph", label: "Glyph axes" },
+];
+
+function AxisItem({
+  entry,
+  onAdd,
+}: {
+  entry: FollowedComponentAxis;
+  onAdd: (entry: FollowedComponentAxis) => void;
+}) {
+  return (
+    <MenuItem onClick={() => onAdd(entry)}>
+      <span className="flex w-full justify-between gap-6">
+        <span>{entry.axis.name}</span>
+        <span className="text-muted">{entry.follows}</span>
+      </span>
+    </MenuItem>
+  );
+}
+
+/** What unsetting an axis does: a font axis follows the glyph; a glyph axis goes to its default. */
+function unsetTooltip(kind: ComponentAxisKind, name: string): string {
+  return kind === "glyph" ? `Draw at the default ${name}` : `Follow the glyph on ${name}`;
 }
 
 const MinusIcon = () => (

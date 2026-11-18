@@ -71,6 +71,23 @@ impl LayerLocation {
         font.source(self.base?)
     }
 
+    /// The coordinates of a location off the font's sources; `None` for one
+    /// exactly on a source.
+    pub fn off_source_coordinates(&self) -> Option<&DesignLocation> {
+        self.exact_source_id()
+            .is_none()
+            .then_some(&self.coordinates)
+    }
+
+    /// The base source of a location off the font's sources; `None` without
+    /// one, or for a location exactly on a source.
+    pub fn off_source_base_id(&self) -> Option<SourceId> {
+        self.exact_source_id()
+            .is_none()
+            .then_some(self.base)
+            .flatten()
+    }
+
     /// The coordinates that move this layer off its base source, keyed by axis.
     pub fn coordinates(&self) -> &DesignLocation {
         &self.coordinates
@@ -200,6 +217,21 @@ impl Glyph {
     /// is a located layer whose base is not a master.
     pub fn located_layers<'a>(&'a self, font: &'a Font) -> impl Iterator<Item = LocatedLayer<'a>> {
         self.located_layers_on(font.masters())
+    }
+
+    /// The drawings an editor reads, each with the source a per-source read
+    /// of it uses ([`Font::reading_source_id`]): the [located
+    /// layers](Self::located_layers), masters first. A located drawing with
+    /// no base, in a font with no default source, is left out: nothing reads
+    /// it per source.
+    pub fn editor_drawings<'a>(
+        &'a self,
+        font: &'a Font,
+    ) -> impl Iterator<Item = (SourceId, &'a GlyphLayer)> {
+        self.located_layers(font).filter_map(move |located| {
+            let source_id = font.reading_source_id(located.layer).ok()?;
+            Some((source_id, located.layer.as_ref()))
+        })
     }
 
     /// [`Self::located_layers`] with `masters`, the font's master sources in

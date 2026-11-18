@@ -4,6 +4,7 @@ import type {
   Axis as AxisRecord,
   ComponentInheritance,
   InterpolationBasis,
+  LayerId,
   Source,
   SourceId,
   VariationBasis,
@@ -153,8 +154,22 @@ export class Designspace {
     set: ReadonlyMap<AxisId, number>,
     inheritance: ComponentInheritance,
   ): ExternalAxisLocation {
-    if (this.axes.length === 0) return emptyExternalAxisLocation();
+    if (this.axes.length === 0 && set.size === 0) return emptyExternalAxisLocation();
     return this.#mapping().componentBaseLocation(parent, set, inheritance);
+  }
+
+  /**
+   * Where the drawing `layerId` sits in its glyph's design space, as the
+   * engine places it (`Font::layer_design_location`): subscribed to the
+   * sources, whose locations a drawing's base gives it.
+   *
+   * @returns null for a layer the engine lacks.
+   * @throws When the font's engine is not open.
+   */
+  drawingLocation(layerId: LayerId): DesignAxisLocation | null {
+    track(this.#axesCell);
+    track(this.#sourcesCell);
+    return this.#variation().drawingLocation(layerId);
   }
 
   /**
@@ -174,6 +189,22 @@ export class Designspace {
     this.track();
     const variation = this.#variation();
     return variation.interpolationWeights(variation.sourceSet(basis), location);
+  }
+
+  /**
+   * One weight per sample of `basis` at a design location, for any glyph
+   * basis: over the font's sources through {@link interpolationWeights}, or,
+   * for one whose samples include drawings located off them, the basis as
+   * sent evaluated at `location`'s values on the font's axes and the glyph's
+   * own.
+   *
+   * @returns null when the font's sources give a source-only basis no model.
+   */
+  glyphWeights(basis: InterpolationBasis, location: DesignAxisLocation): Float64Array | null {
+    if (basis.sourceIds.length > 0) return this.interpolationWeights(basis, location);
+
+    track(this.#axesCell);
+    return this.#variation().glyphBasisWeights(basis, location);
   }
 
   /**

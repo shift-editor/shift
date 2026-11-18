@@ -85,6 +85,7 @@ If the reference is ambiguous or conflicts with an established interaction patte
 ## Popovers, menus, and panels
 
 - A panel opened from a sidebar section's action (create axis, source, or instance; add languages; kerning groups) opens beside the sidebar, never over it: its edge on the sidebar's edge, its top on the section's top. Use `useSidebarPanelAnchor` (`side="right"` for the left sidebar, `"left"` for the right) and spread its `positioner` on the positioner; kerning's `KerningGroupsPanel` is the reference.
+- A menu opened from a sidebar section header's action (+ or ⋯) also opens beside the sidebar, never dropping down over it: `side="right"` with `align="start"` in the left sidebar, `side="left"` in the right, so the menu's top lines up with the button.
 - A row's ⋮ menu opens from its button with `align="start"`, extending outward over the canvas, not back across the sidebar.
 - A panel that holds content has a header row: its title and an icon close button (✕ with a "Close" tooltip) above a `border-line-subtle` rule, like Create Source. A menu with a header keeps arrow-key navigation through its items. The title's inset matches the items' text inset below it.
 - Delete and other destructive actions look like every other item: no red text or red hover. Label them with the verb alone ("Delete", not "Delete page"); the row or menu already names the target. Red is for errors, not actions.

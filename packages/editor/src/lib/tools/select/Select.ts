@@ -117,11 +117,7 @@ export class Select extends BaseTool<SelectState, Select> {
       if (objectIsKindOf(object, "segment")) {
         const layer = object.layer;
         const segment = layer?.geometryCell.value.segment(object.segmentId);
-        if (
-          layer &&
-          layer.sourceId === this.editor.activeSourceIdCell.value &&
-          segment?.type === "line"
-        ) {
+        if (layer && this.editor.isEditingLayer(layer) && segment?.type === "line") {
           return { type: "bend" };
         }
       }

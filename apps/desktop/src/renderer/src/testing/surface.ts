@@ -17,6 +17,7 @@
  * lint allows it only as a call argument, for code under test that takes an
  * `Editor`.
  */
+import type { GlyphSourceRow } from "@/types/glyphAxes";
 import type { ControlOperation } from "@/agent/AgentControl";
 import type {
   DeleteMode,
@@ -552,6 +553,14 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   fontOverview(): FontSummary;
   /** The font's source named `name`, or null. */
   source(selector: SourceSelection): Source | null;
+  /**
+   * The open glyph's own source (a drawing off the font's sources) the
+   * Designspace tab's Glyph sources section names `name`; null when it has
+   * none by that name. Test-only.
+   */
+  glyphSource(name: string): GlyphSourceRow | null;
+  /** The open glyph's own axis tagged `tag`; null when it has none. Test-only. */
+  glyphAxis(tag: string): Axis | null;
   instance(selector: InstanceSelection): NamedInstance | null;
   axis(selector: AxisSelection): Axis | null;
   /** The languages the font tracks; null when none were ever set. Test-only: not agent data yet. */

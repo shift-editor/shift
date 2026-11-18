@@ -4,6 +4,7 @@ import type {
   AxisMappingBasis,
   ComponentInheritance,
   InterpolationBasis,
+  LayerId,
   SlugWeightSet,
   Source,
   VariationBasis,
@@ -12,7 +13,12 @@ import type { Signal } from "../signals";
 import type { EngineVariation, FontEngine } from "../../types/font";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import type { SourceSetWeights } from "./engine";
-import { asDesignAxisLocation, asExternalAxisLocation } from "../variation/location";
+import {
+  asDesignAxisLocation,
+  asExternalAxisLocation,
+  designAxisLocationFromLocation,
+  externalAxisLocationFromLocation,
+} from "../variation/location";
 
 /** A location as numbers in `axes` order; NaN where it has no coordinate, read as the default. */
 export function locationValues(
@@ -74,6 +80,8 @@ export class FontVariation {
   readonly #sets = new WeakMap<InterpolationBasis, number>();
   // non-reactive: each compiled basis's number in this session; a number never changes
   readonly #compiled = new WeakMap<VariationBasis, number>();
+  // non-reactive: each located glyph basis's number in this session; a number never changes
+  readonly #glyphBases = new WeakMap<InterpolationBasis, number>();
   // non-reactive: one read of pure results, checked against everything it was read at
   #weights: ReadWeights | null = null;
 
@@ -116,12 +124,22 @@ export class FontVariation {
     inheritance: ComponentInheritance,
   ): ExternalAxisLocation {
     const axes = this.#axesCell.peek();
-    const external = this.#variation.componentBaseLocation(
+    const base = this.#variation.componentBaseLocation(
       locationValues(axes, parent),
-      locationValues(axes, set),
+      { values: Object.fromEntries(set) },
       inheritance,
     );
-    return asExternalAxisLocation(locationFromValues(axes, onEveryAxis(axes, external)));
+    return externalAxisLocationFromLocation(base);
+  }
+
+  /**
+   * Where the drawing `layerId` sits in its glyph's design space, as the
+   * session's font places it: its base source's location with its own
+   * coordinates laid over it. Null for a layer the session lacks.
+   */
+  drawingLocation(layerId: LayerId): DesignAxisLocation | null {
+    const location = this.#variation.layerDesignLocation(layerId);
+    return location ? designAxisLocationFromLocation(location) : null;
   }
 
   /**
@@ -183,6 +201,26 @@ export class FontVariation {
     return Float64Array.from(
       this.#variation.variationAt(variation, locationValues(axes, location)),
     );
+  }
+
+  /**
+   * One weight per sample of a glyph's basis whose samples include drawings
+   * located off the font's sources, at a design location on the font's axes
+   * and the glyph's own: shift-font's `InterpolationBasis::weights_at` over
+   * the basis as sent. The basis crosses to the session once.
+   *
+   * @throws When the session cannot evaluate the basis.
+   */
+  glyphBasisWeights(basis: InterpolationBasis, location: DesignAxisLocation): Float64Array {
+    let number = this.#glyphBases.get(basis);
+    if (number === undefined) {
+      number = this.#variation.glyphBasisNumber(basis);
+      this.#glyphBases.set(basis, number);
+    }
+    const values = basis.designNormalization.map(
+      ({ axisId }) => location.get(axisId) ?? Number.NaN,
+    );
+    return Float64Array.from(this.#variation.glyphBasisWeights(number, values));
   }
 
   /** Whether `read` was read at `values` against the font's current inputs. */

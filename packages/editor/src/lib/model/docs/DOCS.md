@@ -134,6 +134,8 @@ For a location, `Glyph` resolves geometry in this order:
 
 A font source can exist without a glyph layer. At that exact location the Glyph remains visible through interpolation or fallback, while `Glyph.layerAt()` returns `null` until geometry is authored there.
 
+A glyph may have axes of its own (`Glyph.axes`, from its record) and drawings located off the font's sources (`GlyphLayer.placement`, `Glyph.locatedLayers`): a `dot` at Spread 100, an `H` at Bleed 50. A location the glyph is drawn at holds the font's axes in user units and may hold the glyph's own, in their own units (`GlyphSpace`); other glyphs' axes in it are ignored. `layerAt()` and `geometryAt()` read both, and `layerForSource()` returns only a drawing exactly on its source. A located drawing's `sourceId` is the source a per-source read of it uses. A basis with located samples is evaluated as sent (`Designspace.glyphWeights`), each sample's values read from its live layer. A component's base glyph draws its own axes at what the component sets, else their defaults: glyph axes are never inherited. The editor keeps the edited glyph's own axis values apart from the font location (`Editor.glyphLocationCell`) and draws the glyph at both (`Editor.editLocationCell`); the located drawing exactly there is the one edited (`Editor.activeDrawingCell`, `Editor.isEditingLayer`).
+
 Every component Glyph follows that same resolution order independently at the
 root render model's location. A sparse component can therefore interpolate between its
 own masters even when it has no layer at the root glyph's exact source. When no
@@ -207,7 +209,7 @@ contour.reverse();
 ### Displaying a glyph in a new view
 
 1. Acquire the glyph once with `await font.loadGlyph(glyphId)` (or `Font.loadGlyphs` for a batch). Never poll `Editor.glyphForId()` hoping a load happens — it only reads.
-2. Build the render surface with `glyph.renderModelAt(externalLocationCell, activeSourceIdCell)`, passing the editor's _stable_ location signals, not freshly created ones.
+2. Build the render surface with `glyph.renderModelAt(editLocationCell, activeSourceIdCell)` for the edited glyph (`externalLocationCell` for glyphs drawn in text), passing the editor's _stable_ location signals, not freshly created ones.
 3. Consume geometry through the model's reactive signals — `contoursCell`, `boundsCell`, `xAdvanceCell` (or `trackShape()` when you need per-contour coordinate dependencies) — inside a `computed`/`effect`. The bare `contours`/`bounds`/`xAdvance` getters `peek()` and register no dependency, so reading only them leaves the view stale when the location scrubs; alternatively track the location cell explicitly, the way `TextRun`'s layout computed does.
 4. Verify: `pnpm typecheck && pnpm test:desktop src/renderer/src/lib/model/Glyph.test.ts`
 

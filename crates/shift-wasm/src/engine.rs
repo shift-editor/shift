@@ -29,7 +29,7 @@ use shift_font::{
 };
 use wasm_bindgen::prelude::*;
 
-use crate::engine_reads::{CompiledVariations, FontVariation, InternedIds};
+use crate::engine_reads::{CompiledVariations, FontVariation, GlyphBases, InternedIds};
 use crate::page_layout::RunLayouts;
 use crate::shaping::TextShaping;
 use shift_text::shaper_font::ShaperFont;
@@ -345,6 +345,7 @@ pub(crate) struct Engine {
     pub(crate) ids: InternedIds,
     /// The compiled variation bases the editor interned, by number.
     pub(crate) compiled: CompiledVariations,
+    pub(crate) glyph_bases: GlyphBases,
     /// The intents `EngineEdits::hold` sent, which the next apply, stage or
     /// preview takes.
     pub(crate) held: Vec<FontIntent>,
@@ -626,6 +627,7 @@ fn open(session: EngineSession, store: EngineStore, shaping: TextShaping) -> Res
             before_edit: None,
             ids: InternedIds::default(),
             compiled: CompiledVariations::default(),
+            glyph_bases: GlyphBases::default(),
             held: Vec::new(),
             held_scene: Vec::new(),
             replayed_location: None,

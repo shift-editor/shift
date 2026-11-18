@@ -7,8 +7,8 @@ use crate::test_support::glyph_axis_font;
 use crate::{
     AxisId, AxisRange, AxisValueUse, Component, CoreError, CreateGlyphAxis,
     CreateLocatedGlyphLayer, DeleteGlyphLayer, DesignLocation, EditGlyphAxis, Font, FontIntentSet,
-    GlyphAxisEdit, GlyphId, LayerId, ReplaceGlyphLayerContent, SetComponentLocations,
-    SetGlyphLayerLocation, SourceId,
+    GlyphAxisEdit, GlyphId, LayerId, MaterializeLocatedGlyphLayer, ReplaceGlyphLayerContent,
+    SetComponentLocations, SetGlyphLayerLocation, SourceId,
 };
 
 fn dot() -> GlyphId {
@@ -332,6 +332,43 @@ fn a_brace_drawing_is_added_with_no_base_source() {
     );
 
     assert_eq!(after.layer(layer_id).unwrap().source_id(), None);
+}
+
+#[test]
+fn a_drawing_added_where_none_is_starts_from_what_the_glyph_draws_there() {
+    let mut font = glyph_axis_font();
+    let layer_id = LayerId::new();
+    let regular = source_called(&font, "Regular");
+    let spread = dot_space_axis(&font, "SPRD");
+    let mut location = font.require_source(regular).unwrap().location().clone();
+    location.set(spread, 60.0);
+    let axes = font.glyph_space_axes(font.glyph(dot()).unwrap());
+    let drawn = font
+        .glyph_interpolation(dot())
+        .unwrap()
+        .unwrap()
+        .resolve(&location, &axes)
+        .unwrap()
+        .interpolation_values();
+    let from_layer_id = font.layer_id_for_source(dot(), regular).unwrap();
+
+    let after = apply_undo_redo(
+        &mut font,
+        MaterializeLocatedGlyphLayer {
+            layer: CreateLocatedGlyphLayer {
+                layer_id,
+                glyph_id: dot(),
+                base_source_id: Some(regular),
+                coordinates: DesignLocation::from([(spread, 60.0)]),
+            },
+            from_layer_id,
+            values: drawn.clone(),
+        },
+    );
+
+    let layer = after.layer(layer_id).unwrap();
+    assert_eq!(layer.location().coordinates().get(&spread), Some(60.0));
+    assert_eq!(layer.interpolation_values(), drawn);
 }
 
 /// Why a drawing may not be created at a place.

@@ -259,6 +259,7 @@ function record(id: GlyphId, componentBaseGlyphIds: GlyphId[] = []): GlyphRecord
     name: id as unknown as GlyphName,
     unicodes: [],
     componentBaseGlyphIds,
+    axes: [],
     layers: [],
     mark: false,
     nonspacingMark: false,

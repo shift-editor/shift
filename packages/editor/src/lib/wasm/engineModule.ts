@@ -8,7 +8,9 @@ import type {
   GlyphId,
   GlyphName,
   GlyphSnapshot,
+  InterpolationBasis,
   KerningGroupId,
+  Location,
   KerningSide,
   LayerId,
   NodeId,
@@ -417,12 +419,30 @@ export class EngineSession {
   ): readonly number[] | null {
     let numbers = this.#weightSetNumbers.get(sets);
     if (!numbers) {
-      numbers = sets.map((set) => this.sourceSetNumber(set.basis.sourceIds));
+      // A glyph's basis with drawings off the font's sources names no source:
+      // it is interned as sent and read on its own, its glyph axes at their defaults.
+      numbers = sets.map((set) =>
+        set.basis.sourceIds.length > 0
+          ? this.sourceSetNumber(set.basis.sourceIds)
+          : this.glyphBasisNumber(set.basis),
+      );
       this.#weightSetNumbers.set(sets, numbers);
     }
-    const values = this.#reads.atlasWeights(numbers, external);
-    if (!values) return null;
+    const sourceSets = numbers.filter((_, index) => sets[index]!.basis.sourceIds.length > 0);
+    const sourceValues = this.#reads.atlasWeights(sourceSets, external);
+    if (!sourceValues) return null;
 
+    const values: number[] = [];
+    let next = 0;
+    for (const [index, set] of sets.entries()) {
+      if (set.basis.sourceIds.length > 0) {
+        const count = set.basis.sourceIds.length;
+        values.push(...sourceValues.slice(next, next + count));
+        next += count;
+        continue;
+      }
+      values.push(...this.#reads.glyphBasisWeightsAtExternal(numbers[index]!, external));
+    }
     return placeAtlasWeights(sets, weightCount, values);
   }
 
@@ -449,6 +469,26 @@ export class EngineSession {
   }
 
   /**
+   * Interns a glyph's interpolation basis whose samples include drawings
+   * located off the font's sources, and returns its number for
+   * {@link glyphBasisWeights}; a number stays the basis's for the session's life.
+   */
+  glyphBasisNumber(basis: InterpolationBasis): number {
+    return this.#reads.glyphBasisNumber(basis);
+  }
+
+  /**
+   * One weight per sample of the glyph basis interned as `basis`, at a design
+   * location: shift-font's `InterpolationBasis::weights_at`.
+   *
+   * @param location - Design coordinates in the basis's normalization order, NaN for an axis default.
+   * @throws For a number this session never gave, or a basis it cannot evaluate.
+   */
+  glyphBasisWeights(basis: number, location: readonly number[]): readonly number[] {
+    return this.#reads.glyphBasisWeights(basis, location);
+  }
+
+  /**
    * An external location's design location, through the session's font's
    * axis mappings, both as numbers in the font's axis order, NaN for an axis
    * the location omits.
@@ -466,18 +506,23 @@ export class EngineSession {
   }
 
   /**
-   * Where a component's base glyph draws, as an external location in the
-   * font's axis order, when the glyph it sits in draws at the external
-   * location `parent` and the component sets `set` (design units, NaN on an
-   * axis it doesn't set): shift-font's `ComponentInheritance::base_location`
-   * between the font's axis mappings. NaN on internal axes.
+   * Where a component's base glyph draws, by axis, when the glyph it sits in
+   * draws at the external location `parent` (the font's axis order) and the
+   * component sets `set` (font axes in design units, its base glyph's own in
+   * theirs): shift-font's `ComponentInheritance::base_location` between the
+   * font's axis mappings. Glyph axes are never inherited.
    */
   componentBaseLocation(
     parent: readonly number[],
-    set: readonly number[],
+    set: Location,
     inheritance: ComponentInheritance,
-  ): readonly number[] {
+  ): Location {
     return this.#reads.componentBaseLocation(parent, set, inheritance);
+  }
+
+  /** Where the drawing `layer` sits in its glyph's design space: `Font::layer_design_location`. */
+  layerDesignLocation(layer: LayerId): Location | null {
+    return this.#reads.layerDesignLocation(layer) ?? null;
   }
 
   /**

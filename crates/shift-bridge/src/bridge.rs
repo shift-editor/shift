@@ -19,14 +19,14 @@ use shift_font::wire::{
   AnchorData, ComponentData, ComponentGlyph, ComponentTransformKind, ContourData, FontMetadata,
   FontMetrics, FontSnapshot, GlyphComponents, GlyphEntry, GlyphLayerShape, GlyphLayerSnapshot,
   GlyphProjection, GlyphSnapshot, GlyphSnapshotRequest, GlyphSourceComponents, GlyphSourceShape,
-  GlyphState, GlyphStructure, GlyphVariation, InterpolationSupport, Location as WireLocation,
-  MetricDefinition, NamedInstance, PointData, PointType, VariationBasis, VariationDelta,
+  GlyphStructure, GlyphVariation, InterpolationSupport, Location as WireLocation, MetricDefinition,
+  NamedInstance, PointData, PointType, VariationBasis, VariationDelta,
 };
 use shift_font::{
   AnchorId, Axis as FontAxis, AxisId, AxisMapping as FontAxisMapping, AxisMappingId,
-  AxisMappingPoint as FontAxisMappingPoint, CompiledHeader, ComponentId, ContourId, CoreError,
-  CoreResult, Font, Glyph, GlyphId, GlyphLayer, LayerId, Location as FontLocation, MetricId,
-  MetricKind, NamedInstanceId, PointId, SourceId,
+  AxisMappingPoint as FontAxisMappingPoint, CompiledHeader, ComponentId, ContourId, CoreResult,
+  Font, Glyph, GlyphId, GlyphLayer, LayerId, Location as FontLocation, MetricId, MetricKind,
+  NamedInstanceId, PointId, SourceId,
 };
 use shift_slug::{AuthoredAtlasProfile, VariableAtlas};
 use shift_workspace::{AcquireScope, FontWorkspace, WorkspaceError};
@@ -1229,13 +1229,9 @@ impl Bridge {
 
       let projection = font.glyph_projection(glyph_id)?.as_ref().map(Into::into);
 
-      let layers = font
-        .masters_with_layers(glyph)
-        .map(|(source, layer)| GlyphLayerSnapshot {
-          glyph_id,
-          source_id: source.id(),
-          state: GlyphState::from_layer(layer),
-        })
+      let layers = glyph
+        .editor_drawings(font)
+        .map(|(source_id, layer)| GlyphLayerSnapshot::new(glyph_id, source_id, layer))
         .collect();
 
       snapshots.push(GlyphSnapshot {
@@ -1270,7 +1266,7 @@ impl Bridge {
       .zip(glyph_ids)
       .map(|(layer_id, glyph_id)| {
         Ok(NapiLayerRead {
-          authored: layer_snapshot(glyph_id, font.require_layer(*layer_id)?)?.into(),
+          authored: layer_snapshot(font, glyph_id, font.require_layer(*layer_id)?)?.into(),
           resolved: (&font.resolve_layer(*layer_id)?).into(),
         })
       })
@@ -1476,22 +1472,20 @@ fn path_to_string(path: &Path) -> BridgeResult<String> {
     .ok_or_else(|| WorkspaceError::InvalidPathUtf8(path.to_path_buf()).into())
 }
 
-/// `layer` as the editor reads it, by the source it sits on.
+/// `layer` as the editor reads it, by the source a per-source read of it
+/// uses ([`Font::reading_source_id`]).
 ///
 /// # Errors
 ///
-/// Returns [`CoreError::LayerOffSources`] for a layer that draws off the
-/// font's sources, which the editor has no source to read in.
-fn layer_snapshot(glyph_id: GlyphId, layer: &GlyphLayer) -> CoreResult<GlyphLayerSnapshot> {
-  let source_id = layer
-    .location()
-    .exact_source_id()
-    .ok_or_else(|| CoreError::LayerOffSources(layer.id()))?;
-  Ok(GlyphLayerSnapshot {
-    glyph_id,
-    source_id,
-    state: GlyphState::from_layer(layer),
-  })
+/// Returns [`CoreError::MissingDefaultSource`] for a layer with no base in a
+/// font with no default source.
+fn layer_snapshot(
+  font: &Font,
+  glyph_id: GlyphId,
+  layer: &GlyphLayer,
+) -> CoreResult<GlyphLayerSnapshot> {
+  let source_id = font.reading_source_id(layer)?;
+  Ok(GlyphLayerSnapshot::new(glyph_id, source_id, layer))
 }
 
 #[cfg(test)]

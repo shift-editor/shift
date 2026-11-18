@@ -31,9 +31,12 @@ const released: EngineVariation = {
   sourceSetWeights: () => ({ weights: new Float64Array(), starts: [] }),
   designLocation: () => [],
   externalLocation: () => [],
-  componentBaseLocation: () => [],
+  componentBaseLocation: () => ({ values: {} }),
+  layerDesignLocation: () => null,
   variationNumber: () => 0,
   variationAt: () => [],
+  glyphBasisNumber: () => 0,
+  glyphBasisWeights: () => [],
 };
 
 describe("the engine's variation reader on a released session", () => {

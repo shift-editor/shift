@@ -1,0 +1,227 @@
+import { describe, expect, it } from "vitest";
+import type { LayerId } from "@shift/types";
+import { FONTS, useTestEditor } from "@/testing/fontFixture";
+import type { EditorTestSurface } from "@/testing/surface";
+import { GlyphDesignspace } from "./GlyphDesignspace";
+import { GlyphSourceForm } from "@/components/variation/glyphSourceCreation";
+
+// Solenoid: a Bleed axis (Bled at 100). `dot` is a 100 × 100 square at
+// Regular, 300 wide at Spread 100 and 300 tall at Strike 100 (both its own
+// axes, 0–100). `H` has no axes of its own and a drawing at Bleed 50.
+const editor = useTestEditor({ file: FONTS.solenoid, glyph: "dot" });
+
+/** The open glyph's own sources and axes, as the Designspace tab's sections use them. */
+function glyphs() {
+  return new GlyphDesignspace(editor.asEditor());
+}
+
+/** What the Glyph axes section shows, by axis name. */
+function glyphAxes() {
+  const section = glyphs().axesCell.peek();
+  if (!section) return null;
+
+  return {
+    glyph: section.glyphName,
+    rows: section.rows.map(({ axis, value }) => [axis.name, value]),
+  };
+}
+
+/** What the Glyph sources section lists; null when it is not shown. */
+function glyphSources() {
+  const rows = glyphs().sourcesCell.peek();
+  return rows?.map(({ name, active }) => ({ name, active })) ?? null;
+}
+
+/** The layer of the glyph source the Glyph sources section names `name`. */
+function glyphSourceNamed(name: string): LayerId {
+  const row = editor.glyphSource(name);
+  if (!row) throw new Error(`no glyph source named ${name}`);
+  return row.layerId;
+}
+
+/** The open glyph's own axis tagged `tag`. */
+function axisId(tag: string) {
+  const axis = editor.glyphAxis(tag);
+  if (!axis) throw new Error(`no glyph axis ${tag}`);
+  return axis.id;
+}
+
+async function drawnWidth(surface: EditorTestSurface = editor): Promise<number | null> {
+  const { bounds } = await surface.drawnGlyph();
+  return bounds ? bounds.max.x - bounds.min.x : null;
+}
+
+describe("a glyph with sources of its own", () => {
+  it("opens and draws its default source", async () => {
+    expect(await editor.drawnGlyph()).toMatchObject({
+      bounds: { min: { x: 0, y: 0 }, max: { x: 100, y: 100 } },
+    });
+  });
+
+  it("draws a glyph source between the font's sources", async () => {
+    await editor.openGlyph("H");
+    editor.setLocation({ BLED: 50 });
+
+    // The Bleed 50 drawing sets its first dot to Spread 80: 280 wide at Bleed 50.
+    expect(await editor.drawnGlyph()).toMatchObject({
+      components: [
+        { glyph: "dot", bounds: { min: { x: -10 }, max: { x: 270 } } },
+        { glyph: "dot" },
+      ],
+    });
+  });
+});
+
+describe("the Glyph axes section", () => {
+  it("lists the edited glyph's own axes at their defaults", () => {
+    expect(glyphAxes()).toEqual({
+      glyph: "dot",
+      rows: [
+        ["Spread", 0],
+        ["Strike", 0],
+      ],
+    });
+  });
+
+  it("shows a glyph without axes of its own, with none listed", async () => {
+    await editor.openGlyph("H");
+
+    expect(glyphAxes()).toEqual({ glyph: "H", rows: [] });
+  });
+
+  it("adds an axis to a glyph that has none", async () => {
+    await editor.openGlyph("H");
+    await glyphs().addAxis({ name: "Gap", minimum: 0, default: 0, maximum: 50 });
+
+    expect(glyphAxes()).toEqual({ glyph: "H", rows: [["Gap", 0]] });
+  });
+
+  it("slides where the canvas draws the glyph", async () => {
+    glyphs().setAxis(axisId("SPRD"), 50);
+
+    expect(glyphAxes()?.rows).toEqual([
+      ["Spread", 50],
+      ["Strike", 0],
+    ]);
+    expect(await drawnWidth()).toBe(200);
+  });
+
+  it("draws the glyph's own axes at their defaults again in another glyph", async () => {
+    glyphs().setAxis(axisId("SPRD"), 50);
+    await editor.openGlyph("H");
+    await editor.openGlyph("dot");
+
+    expect(await drawnWidth()).toBe(100);
+  });
+});
+
+describe("the Glyph sources section", () => {
+  it("lists the glyph's own sources, named by where they sit", async () => {
+    expect(glyphSources()).toEqual([
+      { name: "Spread 100", active: false },
+      { name: "Strike 100", active: false },
+    ]);
+
+    await editor.openGlyph("H");
+    expect(glyphSources()).toEqual([{ name: "Bleed 50", active: false }]);
+  });
+
+  it("shows for a glyph with none, listing nothing", async () => {
+    await editor.addGlyph("O", null);
+    await editor.openGlyph("O");
+
+    expect(glyphSources()).toEqual([]);
+  });
+
+  it("moves the sliders to a glyph source selected, and draws it", async () => {
+    glyphs().selectSource(glyphSourceNamed("Spread 100"));
+
+    expect(glyphSources()).toContainEqual({ name: "Spread 100", active: true });
+    expect(await editor.source("active")).toBeNull();
+    expect(glyphAxes()?.rows).toEqual([
+      ["Spread", 100],
+      ["Strike", 0],
+    ]);
+    expect(await drawnWidth()).toBe(300);
+  });
+
+  it("edits the selected glyph source and no other", async () => {
+    glyphs().selectSource(glyphSourceNamed("Spread 100"));
+    editor.selectTool("select");
+    editor.selectAll();
+    await editor.pressKey("ArrowRight", { shiftKey: true });
+
+    expect(await editor.drawnGlyph()).toMatchObject({ bounds: { min: { x: 10 } } });
+    await editor.editSources(["Regular"]);
+    expect(await editor.drawnGlyph()).toMatchObject({ bounds: { min: { x: 0 } } });
+  });
+});
+
+/**
+ * The New glyph source panel's form as it opens, and its fields with `typed`
+ * (by axis tag) typed over them.
+ */
+function panelFields(typed: Record<string, number>) {
+  const form = new GlyphSourceForm(editor.asEditor(), glyphs());
+  const fields = { ...form.initialValues().location };
+  for (const [tag, value] of Object.entries(typed)) {
+    const field = editor.glyphAxis(tag)?.id ?? editor.axis({ tag })?.id;
+    if (!field) throw new Error(`no field for ${tag}`);
+    fields[field] = String(value);
+  }
+  return { form, fields };
+}
+
+describe("the New glyph source panel", () => {
+  it("opens on where the sliders sit, the font's axes then the glyph's", () => {
+    glyphs().setAxis(axisId("SPRD"), 60);
+    const { form, fields } = panelFields({});
+
+    expect(form.axes.map((axis) => [axis.name, fields[axis.id]])).toEqual([
+      ["Bleed", "0"],
+      ["Spread", "60"],
+      ["Strike", "0"],
+    ]);
+  });
+
+  it("says which source or glyph source is already at the location", () => {
+    const spread = panelFields({ SPRD: 100 });
+    const regular = panelFields({});
+
+    expect(spread.form.issue(spread.fields)).toEqual({
+      kind: "location",
+      message: "Spread 100 is already here",
+    });
+    expect(regular.form.issue(regular.fields)).toEqual({
+      kind: "location",
+      message: "Regular is already here",
+    });
+  });
+
+  it("refuses a value outside its axis's range", () => {
+    const { form, fields } = panelFields({ SPRD: 150 });
+
+    expect(form.issue(fields)).toMatchObject({
+      kind: "axis",
+      message: "Spread must be between 0 and 100",
+    });
+  });
+
+  it("creates a glyph source there from the outline drawn, and edits it", async () => {
+    const { form, fields } = panelFields({ SPRD: 60 });
+    await form.create(fields);
+
+    expect(glyphSources()).toContainEqual({ name: "Spread 60", active: true });
+    expect(glyphAxes()?.rows).toEqual([
+      ["Spread", 60],
+      ["Strike", 0],
+    ]);
+    expect(await drawnWidth()).toBe(220);
+  });
+
+  it("deletes a glyph source, leaving the glyph interpolated there", async () => {
+    await glyphs().deleteSource(glyphSourceNamed("Strike 100"));
+
+    expect(glyphSources()).toEqual([{ name: "Spread 100", active: false }]);
+  });
+});

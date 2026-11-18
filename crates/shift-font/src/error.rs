@@ -109,9 +109,6 @@ pub enum CoreError {
     #[error("layer {0} not found")]
     LayerNotFound(LayerId),
 
-    #[error("layer {0} draws off the font's sources, so has no source to be read in")]
-    LayerOffSources(LayerId),
-
     #[error("layer {layer_id} would move to another location")]
     LayerLocationMismatch { layer_id: LayerId },
 

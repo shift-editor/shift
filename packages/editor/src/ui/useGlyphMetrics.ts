@@ -45,12 +45,9 @@ export function useGlyphMetrics(editor: Editor): GlyphMetricsState {
         const glyph = editor.glyphForId(node.glyphId);
         if (!glyph) return EMPTY_METRICS;
 
-        const externalLocation = editor.externalLocationCell.value;
+        const editLocation = editor.editLocationCell.value;
         const activeSourceId = editor.activeSourceIdCell.value;
-        const renderModel = glyph.renderModelAt(
-          editor.externalLocationCell,
-          editor.activeSourceIdCell,
-        );
+        const renderModel = glyph.renderModelAt(editor.editLocationCell, editor.activeSourceIdCell);
 
         return {
           glyph,
@@ -58,7 +55,7 @@ export function useGlyphMetrics(editor: Editor): GlyphMetricsState {
           xAdvance: renderModel.xAdvanceCell.value,
           hasLayer: activeSourceId
             ? glyph.layerForSource(activeSourceId) !== null
-            : glyph.layerAt(externalLocation) !== null,
+            : glyph.layerAt(editLocation) !== null,
           linkedSides: activeSourceId ? editor.font.linkedSides(glyph.id, activeSourceId) : [],
           links: editor.activeMetricsLinks(),
         };

@@ -11,6 +11,7 @@ import type {
   GlyphRecord,
   GlyphSnapshot,
   GlyphSnapshotRequest,
+  InterpolationBasis,
   LayerId,
   LayerRead,
   Location,
@@ -322,16 +323,22 @@ export interface EngineVariation {
   /** The external location a design location's mapping came from; NaN on internal axes. */
   externalLocation(design: readonly number[]): readonly number[];
   /**
-   * Where a component's base glyph draws, as an external location, when the
-   * glyph it sits in draws at the external location `parent` and the
-   * component sets `set` (design units, NaN on an axis it doesn't set); NaN
-   * on internal axes.
+   * Where a component's base glyph draws, by axis, when the glyph it sits in
+   * draws at the external location `parent` and the component sets `set`
+   * (font axes in design units, its base glyph's own in theirs): the font's
+   * external axes in user units, internal ones left out, and the base
+   * glyph's own axes the component sets.
    */
   componentBaseLocation(
     parent: readonly number[],
-    set: readonly number[],
+    set: Location,
     inheritance: ComponentInheritance,
-  ): readonly number[];
+  ): Location;
+  /**
+   * Where the drawing `layer` sits in its glyph's design space, by axis;
+   * null for a layer the session lacks.
+   */
+  layerDesignLocation(layer: LayerId): Location | null;
   /**
    * The number the session interned the compiled variation `basis` as, a
    * compiled font's glyph deltas; intern each basis once, when its glyph loads.
@@ -343,6 +350,20 @@ export interface EngineVariation {
    * @throws For a number the session never gave, or a basis it cannot evaluate.
    */
   variationAt(variation: number, location: readonly number[]): readonly number[];
+  /**
+   * The number the session interned a glyph's interpolation basis as, one
+   * whose samples include drawings located off the font's sources (it names
+   * no source); intern each basis once.
+   */
+  glyphBasisNumber(basis: InterpolationBasis): number;
+  /**
+   * One weight per sample of the glyph basis interned as `basis`, at a
+   * design location in the order of the basis's design normalization (the
+   * font's axes, then the glyph's own), NaN for an axis default.
+   *
+   * @throws For a number the session never gave, or a basis it cannot evaluate.
+   */
+  glyphBasisWeights(basis: number, location: readonly number[]): readonly number[];
 }
 
 /**

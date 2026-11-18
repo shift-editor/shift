@@ -12,7 +12,7 @@ export class UpgradeSegment implements SelectBehavior {
     if (!objectIsKindOf(object, "segment")) return false;
 
     const layer = object.layer;
-    if (!layer || layer.sourceId !== ctx.editor.activeSourceId) return false;
+    if (!layer || !ctx.editor.isEditingLayer(layer)) return false;
 
     return layer.upgradeLineToCubic(object.segmentId);
   }

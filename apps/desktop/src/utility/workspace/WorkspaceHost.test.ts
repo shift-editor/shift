@@ -1339,7 +1339,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
       label: "Add Glyph Layer",
     });
 
-    expect(applied.next?.glyphChanges?.updated[0]?.layers).toEqual([{ id: layerId, sourceId }]);
+    expect(applied.next?.glyphChanges?.updated[0]?.layers).toEqual([
+      { id: layerId, sourceId, baseSourceId: null, coordinates: null },
+    ]);
     expect(applied.layers).toHaveLength(1);
     expect(applied.layers[0].layerId).toBe(layerId);
     expect(applied.layers[0].structure).toBeDefined();
@@ -1525,7 +1527,8 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
         id: glyphId,
         name: "A",
         unicodes: [65],
-        layers: [{ id: layerId, sourceId }],
+        axes: [],
+        layers: [{ id: layerId, sourceId, baseSourceId: null, coordinates: null }],
         componentBaseGlyphIds: [],
         mark: false,
         nonspacingMark: false,
@@ -1600,7 +1603,9 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
     const created = await applyWorkspace(sync, {
       intents,
     });
-    expect(created.next?.glyphChanges?.updated[0]?.layers).toEqual([{ id: layerId, sourceId }]);
+    expect(created.next?.glyphChanges?.updated[0]?.layers).toEqual([
+      { id: layerId, sourceId, baseSourceId: null, coordinates: null },
+    ]);
 
     const glyphId = created.next?.glyphChanges?.updated[0]?.id;
     if (!glyphId) throw new Error("createGlyph did not echo glyph id");

@@ -1,4 +1,5 @@
 import type {
+  AxisId,
   FontIntent,
   AnchorId,
   AnchorSeed,
@@ -9,6 +10,7 @@ import type {
   GlyphComponents,
   GlyphHandle,
   GlyphId,
+  GlyphSourceValues,
   GlyphLayerShape,
   GlyphName,
   GlyphProjection,
@@ -21,6 +23,7 @@ import type {
   PointSeed,
   ReadonlyEntityMap,
   SegmentId,
+  LayerPlacement,
   Source,
   SourceId,
   Unicode,
@@ -51,11 +54,13 @@ import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/varia
 import type { WeightedSource } from "../../types/glyphRender";
 import {
   designAxisLocationFromLocation,
-  designAxisLocationsEqual,
   externalAxisLocationsEqual,
+  layerPlacementsEqual,
 } from "../variation/location";
 import type { Designspace } from "../variation/Designspace";
-import { interpolateSourceValues } from "../interpolation/InterpolationBasis";
+import { blendValues } from "../interpolation/InterpolationBasis";
+import { GlyphSpace } from "./GlyphSpace";
+import type { Axis } from "./Axis";
 import { Transform } from "../transform/Transform";
 import { ContourPath } from "../graphics/ContourPath";
 import type { FontOptions } from "../../types/font";
@@ -636,16 +641,23 @@ class GlyphLayerWriter {
 }
 
 /**
- * Authored glyph layer data for one source.
+ * One authored drawing of a glyph: exactly on a source, or located off the
+ * font's sources ({@link GlyphLayer.placement}).
  *
  * A source is the authored glyph at a designspace location. `GlyphLayer`
- * exposes the reactive geometry for that source and queues workspace mutations
- * with the source layer's stable ID. Position edits can also finish locally when
+ * exposes the reactive geometry for that drawing and queues workspace mutations
+ * with its stable ID. Position edits can also finish locally when
  * no workspace is present; structural commits remain workspace-only.
+ *
+ * @remarks
+ * A located drawing (a `dot` at Spread 100, an `H` at Bleed 50 with no base)
+ * keeps a {@link GlyphLayer.source} too: the source a per-source read of it
+ * uses, its base or else the default source.
  */
 export class GlyphLayer {
   readonly positions: PositionEdits;
   readonly #sourceCell: WritableSignal<Source>;
+  readonly #placementCell: WritableSignal<LayerPlacement | null>;
   readonly #writer: GlyphLayerWriter;
   readonly #editBaseGeometry: ComputedSignal<GlyphGeometry | null>;
   readonly #editBaseOutline: ComputedSignal<Path2D | null>;
@@ -655,8 +667,13 @@ export class GlyphLayer {
     editCoordinator: NonNullable<FontOptions["editCoordinator"]> | null,
     state: GlyphLayerState,
     gate: EditGate = new EditGate(),
+    placement: LayerPlacement | null = null,
   ) {
     this.#sourceCell = signal(source, { name: "glyphLayer.source" });
+    this.#placementCell = signal(placement, {
+      name: "glyphLayer.placement",
+      equals: layerPlacementsEqual,
+    });
     this.#writer = new GlyphLayerWriter(
       editCoordinator,
       state.layerId,
@@ -688,6 +705,27 @@ export class GlyphLayer {
     this.#sourceCell.set(source);
   }
 
+  /**
+   * Where the drawing sits when it is not exactly on {@link GlyphLayer.source};
+   * null on a source.
+   */
+  get placement(): LayerPlacement | null {
+    return this.#placementCell.peek();
+  }
+
+  get placementCell(): Signal<LayerPlacement | null> {
+    return this.#placementCell;
+  }
+
+  /** Whether the drawing sits off the font's sources, at a location of its own. */
+  get isLocated(): boolean {
+    return this.#placementCell.peek() !== null;
+  }
+
+  replacePlacement(placement: LayerPlacement | null): void {
+    this.#placementCell.set(placement);
+  }
+
   /** @knipclassignore — stable edit identity for this authored glyph layer. */
   get id(): LayerId {
     return this.#writer.layerState.state.layerId;
@@ -697,7 +735,10 @@ export class GlyphLayer {
     return this.id;
   }
 
-  /** @knipclassignore — convenience alias for source identity. */
+  /**
+   * The source the drawing sits on or, for a located one, the source a
+   * per-source read of it uses.
+   */
   get sourceId(): SourceId {
     return this.source.id;
   }
@@ -2594,13 +2635,29 @@ export class Glyph {
   readonly #projectionCell: Signal<GlyphProjection | null>;
   readonly #defaultSourceId: SourceId;
   readonly #anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
+  readonly #space: GlyphSpace;
+  /** Each drawing exactly on a source, by that source; located drawings are left out. */
   readonly #layersBySourceIdCell = computed(
     () =>
       new EntityMap(
         "source layer",
-        this.#layersCell.value.map((layer) => [layer.sourceId, layer] as const),
+        this.#layersCell.value
+          .filter((layer) => layer.placementCell.value === null)
+          .map((layer) => [layer.sourceId, layer] as const),
       ),
     { name: "glyph.layersBySourceId" },
+  );
+  readonly #axesByIdCell = computed(
+    () =>
+      new EntityMap(
+        "glyph axis",
+        this.#space.axesCell.value.map((axis) => [axis.id, axis] as const),
+      ),
+    { name: "glyph.axesById" },
+  );
+  readonly #locatedLayersCell = computed(
+    () => this.#layersCell.value.filter((layer) => layer.placementCell.value !== null),
+    { name: "glyph.locatedLayers" },
   );
   readonly #layersByIdCell = computed(
     () =>
@@ -2624,6 +2681,7 @@ export class Glyph {
     this.#layersCell = signal(options.layers, { name: "glyph.layers" });
     this.#designspace = options.designspace;
     this.#projectionCell = options.projectionCell;
+    this.#space = new GlyphSpace(options.designspace, options.axesCell);
     this.#defaultSourceId = options.defaultSourceId;
     this.#anchorCategory = options.anchorCategory;
     this.replaceComponentGlyphs(options.componentGlyphs);
@@ -2660,6 +2718,63 @@ export class Glyph {
     return this.#layersCell.peek();
   }
 
+  /** The glyph's own axes, in order, beside the font's; empty for most glyphs. */
+  get axes(): readonly Axis[] {
+    return this.#space.axes;
+  }
+
+  get axesCell(): Signal<readonly Axis[]> {
+    return this.#space.axesCell;
+  }
+
+  /** The glyph's design space: the font's axes, then its own. */
+  get space(): GlyphSpace {
+    return this.#space;
+  }
+
+  /**
+   * The drawings located off the font's sources, in layer order: a `dot` at
+   * Spread 100, an `H` at Bleed 50.
+   */
+  get locatedLayers(): readonly GlyphLayer[] {
+    track(this.#locatedLayersCell);
+    return this.#locatedLayersCell.peek();
+  }
+
+  /**
+   * Where `layer`, one of this glyph's drawings, sits in its design space.
+   *
+   * @returns null when its base names a source the font lacks.
+   */
+  drawingLocation(layer: GlyphLayer): DesignAxisLocation | null {
+    track(layer.placementCell);
+    // On a source: that source's location. Off them: where the engine places it.
+    if (!layer.placement) return designAxisLocationFromLocation(layer.source.location);
+
+    return this.#designspace.drawingLocation(layer.id);
+  }
+
+  /** The glyph's own axis `axisId`; null for another glyph's or a font axis. */
+  axis(axisId: AxisId): Axis | null {
+    track(this.#axesByIdCell);
+    return this.#axesByIdCell.peek().get(axisId);
+  }
+
+  /**
+   * What the glyph has exactly at `location`, by name: a glyph source by
+   * where it sits ("Spread 100"), a source by its own name; null for none.
+   */
+  sourceNameAt(location: ExternalAxisLocation): string | null {
+    const layer = this.layerAt(location);
+    if (layer?.isLocated) {
+      const drawnAt = this.drawingLocation(layer);
+      return drawnAt ? this.#space.locationName(drawnAt) : null;
+    }
+    if (layer) return layer.source.name;
+
+    return this.sourceAt(location)?.name ?? null;
+  }
+
   layerForSource(sourceId: SourceId): GlyphLayer | null {
     track(this.#layersBySourceIdCell);
 
@@ -2670,24 +2785,30 @@ export class Glyph {
     return this.#layersByIdCell.peek().get(layerId);
   }
 
+  /**
+   * The drawing exactly at `location`, on a source or located off them; the
+   * location's values on this glyph's own axes count, other glyphs' do not.
+   */
   layerAt(location: ExternalAxisLocation): GlyphLayer | null {
     track(this.#layersCell);
 
-    const axes = this.#designspace.axes;
-    const mappedLocation = this.#designspace.toDesign(location);
+    const mappedLocation = this.#space.toDesign(location);
     for (const layer of this.#layersCell.peek()) {
-      if (
-        designAxisLocationsEqual(
-          designAxisLocationFromLocation(layer.source.location),
-          mappedLocation,
-          axes,
-        )
-      ) {
-        return layer;
-      }
+      const drawnAt = this.drawingLocation(layer);
+      if (drawnAt && this.#space.same(drawnAt, mappedLocation)) return layer;
     }
 
     return null;
+  }
+
+  /**
+   * The font source exactly at `location`, when the location also leaves
+   * this glyph's own axes at their defaults; null otherwise.
+   */
+  sourceAt(location: ExternalAxisLocation): Source | null {
+    if (!this.#space.atOwnDefaults(location)) return null;
+
+    return this.#designspace.sourceAt(location);
   }
 
   geometryAt(externalLocation: ExternalAxisLocation): GlyphGeometry {
@@ -2701,8 +2822,10 @@ export class Glyph {
       return layer.geometry;
     }
 
-    const designLocation = this.#designspace.toDesign(externalLocation);
-    const exactSource = this.#designspace.sourceAtDesign(designLocation);
+    const designLocation = this.#space.toDesign(externalLocation);
+    const exactSource = this.#space.atOwnDefaults(designLocation)
+      ? this.#designspace.sourceAtDesign(designLocation)
+      : null;
     return this.#geometryAtDesignLocation(designLocation, exactSource?.id ?? null);
   }
 
@@ -2775,18 +2898,13 @@ export class Glyph {
 
     const interpolation = projection.interpolation;
     if (interpolation) {
-      const weights = this.#designspace.interpolationWeights(interpolation.basis, designLocation);
+      const weights = this.#designspace.glyphWeights(interpolation.basis, designLocation);
       if (!weights) return projectionGeometry(projection.fallback);
 
-      const values = interpolateSourceValues(interpolation.basis, weights, (sourceId) => {
-        const resolved =
-          interpolation.sources.find((source) => source.sourceId === sourceId)?.values ?? null;
-        const sourceLayer = this.#layersBySourceIdCell.peek().get(sourceId);
-        if (!sourceLayer) return resolved;
-
-        track(sourceLayer.geometryCell);
-        return withResolvedComponentLocations(sourceLayer.state, resolved);
-      });
+      const values = blendValues(
+        weights,
+        interpolation.sources.map((sample) => this.#sampleValues(sample)),
+      );
       if (!values) return projectionGeometry(projection.fallback);
 
       return new GlyphGeometry(
@@ -2810,6 +2928,28 @@ export class Glyph {
       values,
       projection.fallback.componentTransformKind,
     );
+  }
+
+  /**
+   * One sample's values as the glyph blends them now: its drawing's live
+   * values, drag previews included, with component locations as Rust read
+   * them; the values the projection carried when the drawing is not loaded.
+   */
+  #sampleValues(sample: GlyphSourceValues): Float64Array {
+    const layer = this.#sampleLayer(sample);
+    if (!layer) return sample.values;
+
+    track(layer.geometryCell);
+    return withResolvedComponentLocations(layer.state, sample.values);
+  }
+
+  /** The drawing a basis sample names: the one on its source, or its located layer. */
+  #sampleLayer(sample: GlyphSourceValues): GlyphLayer | null {
+    const sourceId = sample.sourceId ?? null;
+    if (sourceId) return this.#layersBySourceIdCell.peek().get(sourceId);
+
+    const layerId = sample.layerId ?? null;
+    return layerId ? this.#layersByIdCell.peek().get(layerId) : null;
   }
 
   /** @internal Returns the position-bound render model for editor infrastructure. */
@@ -2851,7 +2991,7 @@ export class Glyph {
       (location, sourceId) => {
         if (sourceId) return sourceId;
 
-        return this.#designspace.sourceAt(location)?.id ?? null;
+        return this.sourceAt(location)?.id ?? null;
       },
       (glyphId, location, sourceId) => {
         track(this.#componentGlyphsCell);
@@ -2888,6 +3028,8 @@ export class Glyph {
     // A component that sets nothing and follows this glyph has nothing to ask.
     if (component.location.size === 0 && component.inheritance === "parent") return parent;
 
+    // The engine lays the base glyph's own axes the component sets over the
+    // font's; the rest stay at their defaults, never inherited.
     const moved = this.#designspace.componentBaseLocation(
       parent,
       component.location,

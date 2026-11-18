@@ -188,6 +188,8 @@ export class Designspace {
         value: number;
     }[];
     defaultLocation(): ExternalAxisLocation;
+    drawingLocation(layerId: LayerId): DesignAxisLocation | null;
+    glyphWeights(basis: InterpolationBasis, location: DesignAxisLocation): Float64Array | null;
     interpolationWeights(basis: InterpolationBasis, location: DesignAxisLocation): Float64Array | null;
     location(coordinates: readonly {
         axisId: AxisId;
@@ -210,6 +212,9 @@ export class Designspace {
 // @beta
 export class Editor {
     constructor(options: EditorOptions);
+    // (undocumented)
+    get activeDrawing(): GlyphLayer | null;
+    get activeDrawingCell(): Signal<GlyphLayer | null>;
     activeMetricsLinks(): MetricsLinks | null;
     // (undocumented)
     get activeSource(): Source | null;
@@ -220,6 +225,7 @@ export class Editor {
     addAnchorAt(position: Point2D): boolean;
     addAnchorAtPointer(): boolean;
     addComponent(baseGlyphId: GlyphId): Promise<ComponentId | null>;
+    addDrawingHere(): LayerId | null;
     // (undocumented)
     attachRenderSurfaces(background: Canvas2DSurface, scene: Canvas2DSurface, overlay: Canvas2DSurface, markers: MarkerCanvasSurface): void;
     boolean(contourIdA: ContourId, contourIdB: ContourId, operation: "union" | "subtract" | "intersect" | "difference"): Promise<void>;
@@ -250,6 +256,7 @@ export class Editor {
     // (undocumented)
     get debugOverlaysCell(): Signal<DebugOverlays>;
     decomposeSelection(): Promise<boolean>;
+    deleteDrawing(layerId: LayerId): void;
     // (undocumented)
     deleteSelection(mode?: DeleteMode): Promise<boolean>;
     // (undocumented)
@@ -269,6 +276,9 @@ export class Editor {
     get editingSourceIds(): ReadonlySet<SourceId>;
     // (undocumented)
     get editingSourceIdsCell(): Signal<ReadonlySet<SourceId>>;
+    // (undocumented)
+    get editLocation(): ExternalAxisLocation;
+    get editLocationCell(): Signal<ExternalAxisLocation>;
     enterNode(nodeId: NodeId): void;
     exitNodes(): void;
     get externalLocation(): ExternalAxisLocation;
@@ -300,6 +310,7 @@ export class Editor {
     // (undocumented)
     getToolState(scope: ToolStateScope, toolId: string, key: string): unknown;
     glyphForId(glyphId: GlyphId): Glyph | null;
+    get glyphLocationCell(): Signal<ExternalAxisLocation>;
     readonly grid: Grid;
     handlesVisible(id: PointId | ContourId, contourId?: ContourId): boolean;
     hideHandles(id: PointId | ContourId): () => void;
@@ -318,6 +329,7 @@ export class Editor {
     get isEditing(): boolean;
     // (undocumented)
     get isEditingCell(): Signal<boolean>;
+    isEditingLayer(layer: GlyphLayer): boolean;
     layerForGeometry(ids: GlyphGeometrySelection): GlyphLayer | null;
     layerForGlyph(glyphId: GlyphId, sourceId: SourceId): GlyphLayer | null;
     nodeBounds(node: ShiftNode): SceneBounds | null;
@@ -358,6 +370,7 @@ export class Editor {
     // (undocumented)
     screenToScene(screen: ScreenPoint): ScenePoint;
     selectAll(): void;
+    selectDrawing(layerId: LayerId): void;
     selectedComponentsAnchored(): boolean | null;
     selectedComponentsAtActiveSource(): readonly Component[] | null;
     readonly selection: Selection_2;
@@ -381,6 +394,7 @@ export class Editor {
     // (undocumented)
     setDebugOverlays(overlays: DebugOverlays): void;
     setExternalLocation(location: ExternalAxisLocation): void;
+    setGlyphAxisValue(axis: Axis, value: number): void;
     setLanguageIds(ids: readonly string[]): void;
     setLeftSidebearing(value: number): void;
     setMarkColor(glyphIds: readonly GlyphId[], color: MarkColor | null): void;
@@ -578,6 +592,11 @@ export class Font {
     counterparts(reference: LayerId, target: LayerId, ids: Counterparts): Counterparts | null;
     createAxis(axis: AxisDefinition): AxisId;
     createGlyph(name: GlyphName): GlyphRecord;
+    createGlyphAxis(glyphId: GlyphId, axis: {
+        name: string;
+        tag: string | null;
+        range: AxisRange;
+    }): Promise<AxisId>;
     createGlyphForUnicode(unicode: Unicode): GlyphRecord;
     createGlyphLayer(glyphId: GlyphId, sourceId: SourceId): LayerId;
     createKerningGroup(position: KerningPairPosition, name: string, glyphIds?: readonly GlyphId[]): Promise<KerningGroupId>;
@@ -592,6 +611,7 @@ export class Font {
     // (undocumented)
     get defaultXAdvance(): number;
     deleteAxis(axisId: AxisId): void;
+    deleteGlyphLayer(layerId: LayerId): void;
     deleteKerningGroup(groupId: KerningGroupId): Promise<void>;
     deleteNamedInstance(instanceId: NamedInstanceId): void;
     // (undocumented)
@@ -602,6 +622,7 @@ export class Font {
     dispose(): void;
     duplicateGlyphs(glyphIds: readonly GlyphId[]): GlyphId[];
     get editCoordinator(): WorkspaceEditCoordinator;
+    editGlyphAxis(axisId: AxisId, edit: GlyphAxisEdit): Promise<void>;
     entryForId(glyphId: GlyphId): GlyphEntry | null;
     entryForName(name: GlyphName): GlyphEntry | null;
     entryForUnicode(unicode: Unicode): GlyphEntry | null;
@@ -653,6 +674,7 @@ export class Font {
     loadGlyphs(glyphIds: readonly GlyphId[]): Promise<readonly Glyph[]>;
     mapLocation(location: Location_2): Promise<Location_2>;
     materializeGlyphLayer(glyphId: GlyphId, sourceId: SourceId, fromLayerId: LayerId, values: Float64Array): LayerId;
+    materializeLocatedGlyphLayer(glyphId: GlyphId, baseSourceId: SourceId | null, coordinates: Location_2, fromLayerId: LayerId, values: Float64Array): LayerId;
     // (undocumented)
     get metadata(): FontMetadata;
     get metadataCell(): Signal<FontMetadata>;
@@ -773,6 +795,10 @@ export class Glyph {
     get allPoints(): Point[];
     // (undocumented)
     get anchors(): readonly Anchor[];
+    get axes(): readonly Axis[];
+    // (undocumented)
+    get axesCell(): Signal<readonly Axis[]>;
+    axis(axisId: AxisId): Axis | null;
     // (undocumented)
     get bounds(): Bounds | null;
     get components(): readonly Component[];
@@ -780,6 +806,7 @@ export class Glyph {
     contour(contourId: ContourId): Contour | null;
     // (undocumented)
     get contours(): readonly Contour[];
+    drawingLocation(layer: GlyphLayer): DesignAxisLocation | null;
     // (undocumented)
     get entry(): GlyphEntry;
     get entryCell(): Signal<GlyphEntry>;
@@ -791,7 +818,6 @@ export class Glyph {
     get handle(): GlyphHandle;
     // (undocumented)
     get id(): GlyphId;
-    // (undocumented)
     layerAt(location: ExternalAxisLocation): GlyphLayer | null;
     // (undocumented)
     layerForId(layerId: LayerId): GlyphLayer | null;
@@ -799,6 +825,7 @@ export class Glyph {
     layerForSource(sourceId: SourceId): GlyphLayer | null;
     // (undocumented)
     get layers(): readonly GlyphLayer[];
+    get locatedLayers(): readonly GlyphLayer[];
     // (undocumented)
     get name(): GlyphName;
     // (undocumented)
@@ -816,6 +843,9 @@ export class Glyph {
         contourId: ContourId;
     }>;
     get sidebearings(): GlyphSidebearings;
+    sourceAt(location: ExternalAxisLocation): Source | null;
+    sourceNameAt(location: ExternalAxisLocation): string | null;
+    get space(): GlyphSpace;
     // (undocumented)
     toState(): GlyphState;
     // (undocumented)
@@ -847,9 +877,10 @@ export interface GlyphLayerReference {
 
 // @public (undocumented)
 export interface GlyphLayerSnapshot {
+    readonly baseSourceId?: SourceId | null;
+    readonly coordinates?: Location_2 | null;
     // (undocumented)
     readonly glyphId: GlyphId;
-    // (undocumented)
     readonly sourceId: SourceId;
     // (undocumented)
     readonly state: GlyphState;
@@ -892,6 +923,7 @@ export interface GlyphReader {
 
 // @public
 export interface GlyphRecord {
+    readonly axes: readonly Axis$1[];
     readonly componentBaseGlyphIds: readonly GlyphId[];
     // (undocumented)
     readonly id: GlyphId;

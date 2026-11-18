@@ -37,8 +37,9 @@ use shift_text::layout::{LayoutError, TextLayout};
 
 pub use crate::page_layout::{NodeBox, PageLayout, PageLayoutError, PageLayoutRequest, RunLines};
 use shift_font::wire::{
-    AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphSnapshot, KerningSnapshot,
-    MetricDefinition, NamedInstance, SourceMetricsInterpolationSnapshot, VariationBasis,
+    AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphSnapshot, InterpolationBasis,
+    KerningSnapshot, Location, MetricDefinition, NamedInstance, SourceMetricsInterpolationSnapshot,
+    VariationBasis,
 };
 pub use shift_text::shape::{FeatureDefault, FeatureGroup, FontFeature};
 
@@ -226,6 +227,39 @@ pub trait EngineReads {
         variation: usize,
         location: Vec<f64>,
     ) -> Result<Vec<f64>, CompiledVariationError>;
+    /// Interns a glyph's interpolation basis whose samples include drawings
+    /// located off the font's sources (one sent with `samples`), for
+    /// [`Self::glyph_basis_weights`], and returns its number. A number stays
+    /// the basis's for the session's life.
+    fn glyph_basis_number(&self, basis: InterpolationBasis) -> usize;
+    /// One weight per sample of the glyph basis interned as `basis`, at a
+    /// design location given as numbers in the order of the basis's design
+    /// normalization (the font's axes, then the glyph's own), NaN for an
+    /// axis at its default: `InterpolationBasis::weights_at`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CompiledVariationError::NotInterned`] for a number the
+    /// session never gave, and [`CompiledVariationError::Unevaluable`] when
+    /// a region names an axis the basis's normalization lacks.
+    fn glyph_basis_weights(
+        &self,
+        basis: usize,
+        location: Vec<f64>,
+    ) -> Result<Vec<f64>, CompiledVariationError>;
+    /// The weights of the glyph basis interned as `basis` at an external
+    /// location in the font's axis order, mapped once through the font's axis
+    /// mappings, with the glyph's own axes at their defaults: a Slug atlas's
+    /// weight set for a glyph with drawings off the font's sources.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::glyph_basis_weights`].
+    fn glyph_basis_weights_at_external(
+        &self,
+        basis: usize,
+        external: Vec<f64>,
+    ) -> Result<Vec<f64>, CompiledVariationError>;
     /// The document's pages, in list order.
     fn scene_pages(&self) -> Vec<SceneNode>;
     /// Every node of the document's scene, each root (pages first among
@@ -243,17 +277,25 @@ pub trait EngineReads {
     /// The external location a design location's mapping came from, NaN on
     /// internal axes: `unmap_location_with_bases`.
     fn external_location(&self, design: Vec<f64>) -> Vec<f64>;
-    /// Where a component's base glyph draws, as an external location, when
-    /// the glyph it is placed in draws at the external location `parent` and
-    /// the component sets `set` (design units, NaN on an axis it doesn't
-    /// set): `ComponentInheritance::base_location` between the font's axis
-    /// mappings; NaN on internal axes.
+    /// Where a component's base glyph draws, when the glyph it is placed in
+    /// draws at the external location `parent` (the font's axis order, NaN
+    /// for a default) and the component sets `set` (by axis: font axes in
+    /// design units, its base glyph's own axes in theirs):
+    /// `ComponentInheritance::base_location` between the font's axis
+    /// mappings. The font's external axes come back in user units, internal
+    /// ones left out, and the base glyph's own axes the component sets as
+    /// set; the rest of its own axes are at their defaults, never inherited.
     fn component_base_location(
         &self,
         parent: Vec<f64>,
-        set: Vec<f64>,
+        set: Location,
         inheritance: ComponentInheritance,
-    ) -> Vec<f64>;
+    ) -> Location;
+    /// Where the drawing `layer_id` sits in its glyph's design space, by axis:
+    /// `Font::layer_design_location`, its base source's location with its
+    /// own coordinates laid over it. Null for a layer the session's font
+    /// lacks, or whose base is a source it lacks.
+    fn layer_design_location(&self, layer_id: LayerId) -> Option<Location>;
     /// The `target` layer's ids for `points`, `anchors` and `components` in
     /// `reference`, each in the order given, as `Font::counterparts` pairs
     /// them, unsaved edits included; null when the layers don't match
@@ -471,7 +513,7 @@ pub struct SourceSetWeights {
 }
 
 #[cfg(feature = "engine")]
-pub(crate) use exports::{CompiledVariations, FontVariation, InternedIds};
+pub(crate) use exports::{CompiledVariations, FontVariation, GlyphBases, InternedIds};
 
 #[cfg(feature = "engine")]
 mod exports {
@@ -486,11 +528,12 @@ mod exports {
     use shift_font::linked_metrics::SideLink;
     use shift_font::naming::new_anchor_name;
     use shift_font::wire::values::{self, WireParse};
-    use shift_font::wire::{self as wire, GlyphLayerSnapshot, GlyphState};
+    use shift_font::wire::{self as wire, GlyphLayerSnapshot};
     use shift_font::{
-        AxisMapping, AxisMappingBasis, AxisRole, DesignLocation, ExternalLocation, Font,
-        FontChangeImpact, FontCopyId, Glyph, GlyphId, GlyphRecords, InterpolationBasis, Kerning,
-        KerningSide, Location, MissingKerningOrigin, ResolvedKerning, SourceId, VariationBasis,
+        AxisMapping, AxisMappingBasis, AxisRole, DesignLocation, DesignNormalization,
+        ExternalLocation, Font, FontChangeImpact, FontCopyId, Glyph, GlyphId, GlyphRecords,
+        InterpolationBasis, Kerning, KerningSide, Location, MissingKerningOrigin, ResolvedKerning,
+        SourceId, VariationBasis,
     };
     use shift_text::layout::FeatureSetting;
     use wasm_bindgen::prelude::*;
@@ -529,6 +572,69 @@ mod exports {
     /// loads and evaluated by number every frame after.
     #[derive(Default)]
     pub(crate) struct CompiledVariations(RefCell<Vec<VariationBasis>>);
+
+    /// The glyph bases with located samples a session interned, by number,
+    /// each with the design normalization it is evaluated over.
+    #[derive(Default)]
+    pub(crate) struct GlyphBases(RefCell<Vec<(VariationBasis, Vec<DesignNormalization>)>>);
+
+    impl GlyphBases {
+        /// Keeps `basis` and returns its number.
+        fn intern(&self, basis: &super::InterpolationBasis) -> usize {
+            let mut bases = self.0.borrow_mut();
+            bases.push((
+                basis.basis.clone().into(),
+                basis.design_normalization.iter().map(Into::into).collect(),
+            ));
+            bases.len() - 1
+        }
+
+        /// The weights of the basis numbered `number` at `location`, as
+        /// numbers in its normalization's axis order.
+        ///
+        /// # Errors
+        ///
+        /// As [`EngineReads::glyph_basis_weights`].
+        fn weights(
+            &self,
+            number: usize,
+            location: &[f64],
+        ) -> Result<Vec<f64>, CompiledVariationError> {
+            let bases = self.0.borrow();
+            let (_, normalization) = bases
+                .get(number)
+                .ok_or(CompiledVariationError::NotInterned { variation: number })?;
+            let location: Location = normalization
+                .iter()
+                .zip(location)
+                .filter(|(_, value)| !value.is_nan())
+                .map(|(normalization, value)| (normalization.axis_id(), *value))
+                .collect();
+            drop(bases);
+            self.weights_at(number, &location)
+        }
+
+        /// The weights of the basis numbered `number` at `location`, by axis id.
+        ///
+        /// # Errors
+        ///
+        /// As [`EngineReads::glyph_basis_weights`].
+        fn weights_at(
+            &self,
+            number: usize,
+            location: &Location,
+        ) -> Result<Vec<f64>, CompiledVariationError> {
+            let bases = self.0.borrow();
+            let (basis, normalization) = bases
+                .get(number)
+                .ok_or(CompiledVariationError::NotInterned { variation: number })?;
+            basis
+                .evaluate(location, &[], Some(normalization))
+                .map_err(|error| CompiledVariationError::Unevaluable {
+                    detail: error.to_string(),
+                })
+        }
+    }
 
     impl CompiledVariations {
         /// Keeps `basis` and returns its number.
@@ -1048,21 +1154,59 @@ mod exports {
         fn component_base_location(
             &self,
             parent: Vec<f64>,
-            set: Vec<f64>,
+            set: super::Location,
             inheritance: ComponentInheritance,
-        ) -> Vec<f64> {
+        ) -> super::Location {
             let font = self.session.font();
             let axes = font.axes();
             let mappings = &self.variation().mappings;
             let parent = design_location(font, &design_values(axes, mappings, &parent));
+            let set = DesignLocation::from_untyped(set.values.into_iter().collect());
             // An empty location is the font's default location, as native projection reads it.
-            let base = inheritance.base_location(
-                &design_location(font, &set),
-                &parent,
-                &DesignLocation::new(),
-                axes,
-            );
-            external_values(axes, mappings, &base.as_untyped().values_in(axes))
+            let base = inheritance.base_location(&set, &parent, &DesignLocation::new(), axes);
+            let external = external_values(axes, mappings, &base.as_untyped().values_in(axes));
+            let on_font_axes = axes
+                .iter()
+                .zip(external)
+                .filter(|(_, value)| !value.is_nan())
+                .map(|(axis, value)| (axis.id(), value));
+            // The base glyph's own axes have no mapping: they stay as set.
+            let own = base
+                .iter()
+                .filter(|(axis_id, _)| !shift_font::axis::AxisList::contains_axis(axes, **axis_id))
+                .map(|(axis_id, value)| (*axis_id, *value));
+            super::Location {
+                values: on_font_axes.chain(own).collect(),
+            }
+        }
+
+        fn layer_design_location(&self, layer_id: LayerId) -> Option<super::Location> {
+            let font = self.session.font();
+            let location = font.layer_design_location(font.layer(layer_id)?).ok()?;
+            Some(super::Location::from(location.as_untyped()))
+        }
+
+        fn glyph_basis_number(&self, basis: super::InterpolationBasis) -> usize {
+            self.glyph_bases.intern(&basis)
+        }
+
+        fn glyph_basis_weights(
+            &self,
+            basis: usize,
+            location: Vec<f64>,
+        ) -> Result<Vec<f64>, CompiledVariationError> {
+            self.glyph_bases.weights(basis, &location)
+        }
+
+        fn glyph_basis_weights_at_external(
+            &self,
+            basis: usize,
+            external: Vec<f64>,
+        ) -> Result<Vec<f64>, CompiledVariationError> {
+            let font = self.session.font();
+            let design = design_values(font.axes(), &self.variation().mappings, &external);
+            self.glyph_bases
+                .weights_at(basis, &to_location(font.axes(), &design))
         }
 
         fn scene_pages(&self) -> Vec<SceneNode> {
@@ -1238,13 +1382,9 @@ mod exports {
                     detail: error.to_string(),
                 }
             })?;
-            let layers = font
-                .masters_with_layers(glyph)
-                .map(|(source, layer)| GlyphLayerSnapshot {
-                    glyph_id,
-                    source_id: source.id(),
-                    state: GlyphState::from_layer(layer),
-                })
+            let layers = glyph
+                .editor_drawings(font)
+                .map(|(source_id, layer)| GlyphLayerSnapshot::new(glyph_id, source_id, layer))
                 .collect();
             Ok(GlyphSnapshot {
                 glyph_id,
@@ -1701,8 +1841,20 @@ mod exports {
             let session = Session::mapped(vec![weight_curve()]);
             // External weight 900 is design 800; width is unmapped.
             let parent = values(&axes, &[("axis_weight", 900.0), ("axis_width", 125.0)]);
-            let sets_weight = values(&axes, &[("axis_weight", 400.0)]);
-            let sets_nothing = values(&axes, &[]);
+            let by_axis = |pairs: &[(&str, f64)]| wire::Location {
+                values: pairs
+                    .iter()
+                    .map(|(axis, value)| (AxisId::from_raw(*axis), *value))
+                    .collect(),
+            };
+            let sets_weight = by_axis(&[("axis_weight", 400.0)]);
+            let sets_nothing = by_axis(&[]);
+            // In the font's axis order, as the editor reads a location.
+            let ordered = |location: wire::Location| -> Vec<f64> {
+                axes.iter()
+                    .map(|axis| location.values.get(&axis.id()).copied().unwrap_or(f64::NAN))
+                    .collect()
+            };
 
             let [follows, overrides, resets, resets_and_sets] = session.read(|engine| {
                 [
@@ -1712,7 +1864,7 @@ mod exports {
                     (sets_weight.clone(), ComponentInheritance::Font),
                 ]
                 .map(|(set, inheritance)| {
-                    engine.component_base_location(parent.clone(), set, inheritance)
+                    ordered(engine.component_base_location(parent.clone(), set, inheritance))
                 })
             });
 
@@ -1720,6 +1872,24 @@ mod exports {
             assert_close(&overrides[..2], &[400.0, 125.0]);
             assert_close(&resets[..2], &[400.0, 100.0]);
             assert_close(&resets_and_sets[..2], &[400.0, 100.0]);
+        }
+
+        #[test]
+        fn keeps_the_base_glyphs_own_axes_a_component_sets_and_never_inherits_them() {
+            let axes = axes();
+            let session = Session::mapped(vec![weight_curve()]);
+            let parent = values(&axes, &[("axis_weight", 900.0)]);
+            let spread = AxisId::from_raw("axis_spread");
+            let set = wire::Location {
+                values: [(spread, 60.0)].into_iter().collect(),
+            };
+
+            let base = session.read(|engine| {
+                engine.component_base_location(parent.clone(), set, ComponentInheritance::Parent)
+            });
+
+            assert_eq!(base.values.get(&spread), Some(&60.0));
+            assert_close(&[base.values[&AxisId::from_raw("axis_weight")]], &[900.0]);
         }
 
         #[test]

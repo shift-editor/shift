@@ -39,6 +39,12 @@ export const FONT_FILES = {
   mutatorSansGlyphs: "MutatorSansVariable.glyphs",
   /** A small font in the Glyphs package format, a `.glyphspackage` directory. */
   packageFont: "PackageFont.glyphspackage",
+  /**
+   * A Bleed axis (0–100, source Bled at 100); `dot` with its own Spread and Strike
+   * axes, drawn at Regular, Bled, Spread 100 and Strike 100; `H` of two `dot`s, the
+   * first at Spread 60, with a drawing at Bleed 50. Built by `generate_solenoid.sh`.
+   */
+  solenoid: "Solenoid.shift",
 } as const;
 
 /** The name of one of {@link FONT_FILES}. */

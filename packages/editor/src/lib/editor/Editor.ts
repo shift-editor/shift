@@ -61,10 +61,15 @@ import {
   transformBounds,
 } from "./spaces";
 import {
+  asDesignAxisLocation,
+  asExternalAxisLocation,
   axisValue,
   cloneExternalAxisLocation,
   emptyExternalAxisLocation,
+  externalAxisLocationsEqual,
+  withGlyphLocation,
 } from "../variation/location";
+import type { Axis } from "../model/Axis";
 import type {
   ActiveTool,
   BaseTool,
@@ -257,6 +262,10 @@ export class Editor {
   #camera: Camera;
 
   #externalLocation: WritableSignal<ExternalAxisLocation>;
+  /** The edited glyph's values on its own axes, each set away from its default. */
+  #glyphLocationCell: WritableSignal<ExternalAxisLocation>;
+  #editLocationCell: Signal<ExternalAxisLocation>;
+  #activeDrawingCell: Signal<GlyphLayer | null>;
   #activeSourceIdCell: WritableSignal<SourceId | null>;
   #editingSourceIdsCell: WritableSignal<ReadonlySet<SourceId>>;
   #multiSourceEditing: MultiSourceEditing;
@@ -310,11 +319,34 @@ export class Editor {
       // set of sources should re-render the source lists that read it.
       { name: "editor.sources.editing", equals: sameSourceIds },
     );
+    this.#glyphLocationCell = signal(emptyExternalAxisLocation(), {
+      name: "editor.glyphLocation",
+      equals: externalAxisLocationsEqual,
+    });
+    this.#editLocationCell = computed(
+      () => withGlyphLocation(this.#externalLocation.value, this.#glyphLocationCell.value),
+      { name: "editor.editLocation", equals: externalAxisLocationsEqual },
+    );
+    // The scene glyph's located drawing exactly at the edit location, while no source is active.
+    this.#activeDrawingCell = computed(
+      () => {
+        if (this.#activeSourceIdCell.value !== null) return null;
+
+        const node = this.scene.onlyCell("glyph").value;
+        const glyph = node ? this.#fontStore.glyphForId(node.glyphId) : null;
+        const layer = glyph?.layerAt(this.#editLocationCell.value) ?? null;
+        if (!layer) return null;
+
+        return layer.placementCell.value ? layer : null;
+      },
+      { name: "editor.activeDrawing" },
+    );
     this.#multiSourceEditing = new MultiSourceEditing(
       this.font,
       (glyphId) => this.#fontStore.glyphForId(glyphId),
       this.#activeSourceIdCell,
       this.#editingSourceIdsCell,
+      this.#activeDrawingCell,
     );
     this.text = new Text(this);
     this.textEditing = new TextEditing(this.#store, this);
@@ -715,8 +747,8 @@ export class Editor {
    * @throws {Error} when the workspace rejects glyph creation or the component reference.
    */
   public async createGlyphAndAddComponent(name: GlyphName): Promise<ComponentId | null> {
-    const activeSourceId = this.activeSourceId;
-    if (this.sessionMode !== "workspace" || !activeSourceId) return null;
+    const activeLayer = this.#soleActiveLayer();
+    if (this.sessionMode !== "workspace" || !activeLayer) return null;
 
     const node = this.scene.only("glyph");
     if (!node) return null;
@@ -727,9 +759,9 @@ export class Editor {
     const componentIds = this.transaction("Create Component Glyph", () => {
       const record = this.createGlyph(name);
 
-      return layers.map((layer) => [layer.sourceId, layer.addComponent(record.id)] as const);
+      return layers.map((layer) => [layer, layer.addComponent(record.id)] as const);
     });
-    const activeComponentId = componentIds.find(([sourceId]) => sourceId === activeSourceId)?.[1];
+    const activeComponentId = componentIds.find(([layer]) => layer === activeLayer)?.[1];
     if (!activeComponentId) return null;
 
     await this.font.editCoordinator.settled();
@@ -751,8 +783,8 @@ export class Editor {
    * @throws {Error} when the workspace rejects the component reference.
    */
   public async addComponent(baseGlyphId: GlyphId): Promise<ComponentId | null> {
-    const activeSourceId = this.activeSourceId;
-    if (this.sessionMode !== "workspace" || !activeSourceId || !this.font.hasGlyph(baseGlyphId)) {
+    const activeLayer = this.#soleActiveLayer();
+    if (this.sessionMode !== "workspace" || !activeLayer || !this.font.hasGlyph(baseGlyphId)) {
       return null;
     }
 
@@ -766,9 +798,9 @@ export class Editor {
     if (!layers) return null;
 
     const componentIds = this.transaction("Add Component", () =>
-      layers.map((layer) => [layer.sourceId, layer.addComponent(baseGlyphId)] as const),
+      layers.map((layer) => [layer, layer.addComponent(baseGlyphId)] as const),
     );
-    const activeComponentId = componentIds.find(([sourceId]) => sourceId === activeSourceId)?.[1];
+    const activeComponentId = componentIds.find(([layer]) => layer === activeLayer)?.[1];
     if (!activeComponentId) return null;
 
     await this.font.editCoordinator.settled();
@@ -779,6 +811,146 @@ export class Editor {
 
   public get externalLocationCell(): Signal<ExternalAxisLocation> {
     return this.#externalLocation;
+  }
+
+  /**
+   * Where the glyph being edited is drawn: the font location, plus its
+   * values on the glyph's own axes (a `dot`'s Spread), which no other glyph
+   * reads.
+   */
+  public get editLocationCell(): Signal<ExternalAxisLocation> {
+    return this.#editLocationCell;
+  }
+
+  public get editLocation(): ExternalAxisLocation {
+    return this.#editLocationCell.peek();
+  }
+
+  /** The edited glyph's values on its own axes, each one set away from its default. */
+  public get glyphLocationCell(): Signal<ExternalAxisLocation> {
+    return this.#glyphLocationCell;
+  }
+
+  /**
+   * The drawing being edited when it is one located off the font's sources
+   * (a `dot` at Spread 100, an `H` at Bleed 50): the scene glyph's drawing
+   * exactly at {@link editLocationCell}. Null at a source or between drawings.
+   */
+  public get activeDrawingCell(): Signal<GlyphLayer | null> {
+    return this.#activeDrawingCell;
+  }
+
+  public get activeDrawing(): GlyphLayer | null {
+    return this.#activeDrawingCell.peek();
+  }
+
+  /**
+   * Moves the edited glyph along one of its own axes, as a Font axes slider
+   * moves the font location: a value at the axis default leaves it unset.
+   * Off the default, no font source is active.
+   */
+  public setGlyphAxisValue(axis: Axis, value: number): void {
+    const next = new Map(this.#glyphLocationCell.peek());
+    if (value === axis.kind.default) next.delete(axis.id);
+    else next.set(axis.id, value);
+
+    batch(() => {
+      this.#glyphLocationCell.set(asExternalAxisLocation(next));
+      this.#activateSourceAt(this.#externalLocation.peek());
+    });
+  }
+
+  /**
+   * Edits one of the scene glyph's drawings located off the font's sources,
+   * as selecting a source edits its drawing: the font axes and the glyph's
+   * own move to where it sits.
+   */
+  public selectDrawing(layerId: LayerId): void {
+    const glyphId = this.font.glyphIdForLayer(layerId);
+    const glyph = glyphId ? this.glyphForId(glyphId) : null;
+    const layer = glyph?.layerForId(layerId) ?? null;
+    if (!glyph || !layer?.isLocated) return;
+
+    const drawnAt = glyph.drawingLocation(layer);
+    if (!drawnAt) return;
+
+    const designspace = this.font.designspace;
+    const onFontAxes = asDesignAxisLocation(
+      new Map(drawnAt.entries().filter(([axisId]) => designspace.axis(axisId) !== null)),
+    );
+    const own = new Map(
+      glyph.axes
+        .filter((axis) => axisValue(drawnAt, axis) !== axis.kind.default)
+        .map((axis) => [axis.id, axisValue(drawnAt, axis)] as const),
+    );
+    batch(() => {
+      this.#externalLocation.set(designspace.toExternal(onFontAxes));
+      this.#glyphLocationCell.set(asExternalAxisLocation(own));
+      this.#activeSourceIdCell.set(null);
+      this.#editingSourceIdsCell.set(new Set());
+    });
+  }
+
+  /**
+   * Adds a drawing of the scene glyph where it is drawn now, when it has none
+   * there, starting from the outline shown: on the font source at the font
+   * location plus the glyph's own axes, or, between font sources, at the
+   * full location with no base source.
+   *
+   * @returns The new drawing's layer id, or null with no single glyph, a
+   * drawing already here, or nothing to copy from.
+   */
+  public addDrawingHere(): LayerId | null {
+    const node = this.scene.only("glyph");
+    const glyph = node ? this.glyphForId(node.glyphId) : null;
+    if (!node || !glyph) return null;
+
+    const location = this.#editLocationCell.peek();
+    if (glyph.layerAt(location) || glyph.sourceAt(location)) return null;
+
+    const from = glyph.layerForSource(this.font.defaultSource.id) ?? glyph.layers[0] ?? null;
+    if (!from) return null;
+
+    const placement = glyph.space.placementAt(
+      location,
+      this.font.sourceAt(this.#externalLocation.peek()),
+    );
+    const values = glyph.geometryAt(location).values;
+    return this.transaction("Add Drawing", () =>
+      this.font.materializeLocatedGlyphLayer(
+        node.glyphId,
+        placement.baseSourceId ?? null,
+        placement.coordinates,
+        from.id,
+        values,
+      ),
+    );
+  }
+
+  /** Deletes one of a glyph's drawings located off the font's sources. */
+  public deleteDrawing(layerId: LayerId): void {
+    this.transaction("Delete Drawing", () => this.font.deleteGlyphLayer(layerId));
+  }
+
+  /** Activates the font source exactly at `location` when the glyph's own axes are at their defaults. */
+  #activateSourceAt(location: ExternalAxisLocation): void {
+    const atOwnDefaults = this.#glyphLocationCell.peek().size === 0;
+    const sourceId = atOwnDefaults ? (this.font.sourceAt(location)?.id ?? null) : null;
+    this.#activeSourceIdCell.set(sourceId);
+    this.#editingSourceIdsCell.set(sourceId ? new Set([sourceId]) : new Set());
+  }
+
+  /**
+   * Returns the glyph's own axes to their defaults, as opening another glyph
+   * does: its values on them mean nothing to the next.
+   */
+  #resetGlyphLocation(): void {
+    if (this.#glyphLocationCell.peek().size === 0) return;
+
+    batch(() => {
+      this.#glyphLocationCell.set(emptyExternalAxisLocation());
+      this.#activateSourceAt(this.#externalLocation.peek());
+    });
   }
 
   public get activeSourceIdCell(): Signal<SourceId | null> {
@@ -815,12 +987,9 @@ export class Editor {
   public setExternalLocation(location: ExternalAxisLocation): void {
     const next = cloneExternalAxisLocation(location);
 
-    const sourceId = this.font.sourceAt(next)?.id ?? null;
-
     batch(() => {
       this.#externalLocation.set(next);
-      this.#activeSourceIdCell.set(sourceId);
-      this.#editingSourceIdsCell.set(sourceId ? new Set([sourceId]) : new Set());
+      this.#activateSourceAt(next);
     });
   }
 
@@ -917,11 +1086,10 @@ export class Editor {
     if (isComponentId(id)) {
       for (const node of this.scene.nodesOfKind("glyph")) {
         const glyph = this.glyphForId(node.glyphId);
-        const renderModel = glyph?.renderModelAt(
-          this.externalLocationCell,
-          this.activeSourceIdCell,
-        );
-        const component = renderModel?.componentAt([id]);
+        const renderModel = glyph?.renderModelAt(this.editLocationCell, this.activeSourceIdCell);
+        const component =
+          renderModel?.componentAt([id]) ??
+          renderModel?.componentAt([this.#drawnComponentId(node.glyphId, id) ?? id]);
         if (!glyph || !component) continue;
 
         return new ComponentObject(component, node, this.editableLayer(node));
@@ -986,8 +1154,7 @@ export class Editor {
 
     const layer = components[0]?.layer;
     const nodeId = components[0]?.node.id;
-    const sourceId = this.activeSourceId;
-    if (!layer || !nodeId || !sourceId || layer.sourceId !== sourceId) return null;
+    if (!layer || !nodeId || !this.isEditingLayer(layer)) return null;
     if (components.some((component) => component.layer !== layer || component.node.id !== nodeId)) {
       return null;
     }
@@ -1009,6 +1176,27 @@ export class Editor {
    *
    * @returns null when another layer's components have no counterparts in `layer`.
    */
+  /**
+   * The id the canvas draws a component of the located drawing being edited
+   * under: a located drawing is drawn with the default source's component
+   * tree, so its own ids (as the Layers panel lists them) map onto that
+   * tree's. Null for any other component.
+   */
+  #drawnComponentId(glyphId: GlyphId, id: ComponentId): ComponentId | null {
+    const drawing = this.#activeDrawingCell.peek();
+    if (!drawing?.geometry.component(id)) return null;
+
+    const drawn = this.layerForGlyph(glyphId, this.font.defaultSource.id);
+    if (!drawn) return null;
+
+    const counterparts = this.font.counterparts(drawing.id, drawn.id, {
+      points: [],
+      anchors: [],
+      components: [id],
+    });
+    return counterparts?.components[0] ?? null;
+  }
+
   #componentIdsIn(
     glyphId: GlyphId,
     layer: GlyphLayer,
@@ -1139,8 +1327,7 @@ export class Editor {
     }
 
     const layer = this.layerForGeometry({ points, anchors });
-    const sourceId = this.activeSourceId;
-    if (!layer || sourceId === null || layer.sourceId !== sourceId) return null;
+    if (!layer || !this.isEditingLayer(layer)) return null;
 
     return this.#multiSourceEditing.resolve({
       layer,
@@ -1221,7 +1408,10 @@ export class Editor {
 
     const pageId = this.scene.shownPageIdCell.peek();
     for (const node of this.scene.nodesReferencing(glyphId)) {
-      if (node.kind !== "glyph" || node.sourceId !== layer.sourceId) continue;
+      // A located drawing is shown by its glyph's node while it is the one edited.
+      if (node.kind !== "glyph") continue;
+      const shows = layer.isLocated ? this.isEditingLayer(layer) : node.sourceId === layer.sourceId;
+      if (!shows) continue;
       if (this.scene.pageOf(node.id)?.id === pageId) return node;
     }
     return null;
@@ -1229,16 +1419,35 @@ export class Editor {
 
   /** The geometry a glyph node shows at the current location; null while its glyph is not loaded. */
   #geometryShownBy(node: GlyphNode): GlyphGeometry | null {
-    return this.glyphForId(node.glyphId)?.geometryAt(this.externalLocation) ?? null;
+    return this.glyphForId(node.glyphId)?.geometryAt(this.editLocation) ?? null;
   }
 
-  /** The active source's layer of the scene's one glyph node; null without exactly one. */
+  /** The edited layer of the scene's one glyph node; null without exactly one. */
   #soleActiveLayer(): GlyphLayer | null {
-    const sourceId = this.activeSourceId;
     const node = this.scene.only("glyph");
-    if (!sourceId || !node) return null;
+    if (!node) return null;
 
-    return this.layerForGlyph(node.glyphId, sourceId);
+    const drawing = this.#activeDrawingCell.peek();
+    if (drawing) return this.font.glyphIdForLayer(drawing.id) === node.glyphId ? drawing : null;
+
+    const sourceId = this.activeSourceId;
+    return sourceId ? this.layerForGlyph(node.glyphId, sourceId) : null;
+  }
+
+  /**
+   * Whether edits may target `layer`: the active source's drawing, or the
+   * located drawing being edited.
+   *
+   * @remarks
+   * Subscribes a reactive caller to the active source and drawing.
+   */
+  public isEditingLayer(layer: GlyphLayer): boolean {
+    track(this.#activeSourceIdCell);
+    track(this.#activeDrawingCell);
+    const drawing = this.#activeDrawingCell.peek();
+    if (drawing) return drawing === layer;
+
+    return !layer.isLocated && layer.sourceId === this.#activeSourceIdCell.peek();
   }
 
   /**
@@ -1276,6 +1485,10 @@ export class Editor {
    * when the glyph has no layer at the node's source.
    */
   editableLayer(node: GlyphNode): GlyphLayer | null {
+    track(this.#activeDrawingCell);
+    const drawing = this.#activeDrawingCell.peek();
+    if (drawing) return this.font.glyphIdForLayer(drawing.id) === node.glyphId ? drawing : null;
+
     if (node.sourceId !== this.#activeSourceIdCell.peek()) return null;
 
     return this.layerForGlyph(node.glyphId, node.sourceId);
@@ -1512,6 +1725,7 @@ export class Editor {
 
     batch(() => {
       this.#externalLocation.set(location);
+      this.#glyphLocationCell.set(emptyExternalAxisLocation());
       this.#activeSourceIdCell.set(sourceId);
       this.#editingSourceIdsCell.set(new Set([sourceId]));
     });
@@ -1631,6 +1845,7 @@ export class Editor {
   ): Promise<void> {
     await this.font.editCoordinator.settled();
     if (!this.font.source(sourceId) || this.#activeSourceIdCell.peek() !== null) return;
+    if (this.#glyphLocationCell.peek().size > 0) return;
 
     const axes = this.font.getAxes();
     const currentLocation = this.#externalLocation.peek();
@@ -2132,6 +2347,8 @@ export class Editor {
    * @returns the glyph node now being edited, or null when the glyph cannot be placed.
    */
   public openGlyphInText(glyphId: GlyphId, page: PageNode): GlyphNode | null {
+    if (this.scene.only("glyph")?.glyphId !== glyphId) this.#resetGlyphLocation();
+
     const node = this.history.withoutRecording(() => {
       this.pages.activate(page.id);
       const runs = this.nodeDefinition("textRun");
@@ -2446,7 +2663,7 @@ export class Editor {
    * @returns `false` when there is no single edited glyph at an active source.
    */
   public addAnchorAt(position: Point2D): boolean {
-    const activeSourceId = this.activeSourceId;
+    const activeSourceId = this.#soleActiveLayer()?.sourceId ?? null;
     const node = this.scene.only("glyph");
     const layers = node ? this.#multiSourceEditing.layersFor(node.glyphId) : null;
     if (!layers || !activeSourceId) return false;

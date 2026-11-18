@@ -1,14 +1,15 @@
 //! What the editor reads about each glyph without loading its layers: its
-//! identity, its master layers, the glyphs its components use, and how
+//! identity, its own axes, its drawings, the glyphs its components use, and how
 //! anchor propagation and export treat it by category
 //! ([`crate::ir::glyph_category`]).
 
 use serde::{Deserialize, Serialize};
 
 use crate::ir::glyph_category::{GlyphDataCategory, Ligature, OpenTypeCategories, RecordCategory};
+use crate::wire::Location;
 use crate::{
-    Font, FontChangeSet, Glyph, GlyphId, GlyphLayer, GlyphName, LayerId, MarkColor, Source,
-    SourceId,
+    Axis, Font, FontChangeSet, Glyph, GlyphAxis, GlyphId, GlyphLayer, GlyphName, LayerId,
+    MarkColor, SourceId,
 };
 
 /// One glyph as the editor's directory lists it.
@@ -21,7 +22,10 @@ pub struct GlyphRecord {
     pub unicodes: Vec<u32>,
     /// The glyphs the components of any of its layers use, directly, in id order.
     pub component_base_glyph_ids: Vec<GlyphId>,
-    /// Its layers on the font's masters, in master order.
+    /// Its own axes, in order, beside the font's.
+    pub axes: Vec<Axis>,
+    /// Its drawings: those on the font's masters, in master order, then
+    /// those located off them ([`Glyph::editor_drawings`]).
     pub layers: Vec<GlyphLayerRecord>,
     /// In the Mark category or classed `mark`: anchor propagation keeps its own anchors.
     pub mark: bool,
@@ -35,21 +39,34 @@ pub struct GlyphRecord {
     pub mark_color: Option<MarkColor>,
 }
 
-/// A glyph layer by id, and the source it belongs to.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// A glyph layer by id, the source a per-source read of it uses, and where
+/// it sits when that is not exactly on the source.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 #[serde(rename_all = "camelCase")]
 pub struct GlyphLayerRecord {
     pub id: LayerId,
     pub source_id: SourceId,
+    /// For a drawing located off the font's sources, the source its
+    /// coordinates are laid over; `None` without one, or on a source.
+    pub base_source_id: Option<SourceId>,
+    /// For a drawing located off the font's sources, its coordinates, each in
+    /// its axis's units; `None` exactly on `source_id`.
+    pub coordinates: Option<Location>,
 }
 
 impl GlyphLayerRecord {
-    /// The record of `layer`, which sits on `source`.
-    fn on_source(source: &Source, layer: &GlyphLayer) -> Self {
+    /// The record of `layer`, read per source at `source_id`.
+    fn new(source_id: SourceId, layer: &GlyphLayer) -> Self {
+        let location = layer.location();
+        let coordinates = location
+            .off_source_coordinates()
+            .map(|coordinates| Location::from(coordinates.as_untyped()));
         Self {
             id: layer.id(),
-            source_id: source.id(),
+            source_id,
+            base_source_id: location.off_source_base_id(),
+            coordinates,
         }
     }
 }
@@ -187,9 +204,15 @@ impl Font {
             name: glyph.glyph_name().clone(),
             unicodes: glyph.unicodes().to_vec(),
             component_base_glyph_ids,
-            layers: self
-                .masters_with_layers(glyph)
-                .map(|(source, layer)| GlyphLayerRecord::on_source(source, layer))
+            axes: glyph
+                .axes()
+                .iter()
+                .map(GlyphAxis::as_axis)
+                .cloned()
+                .collect(),
+            layers: glyph
+                .editor_drawings(self)
+                .map(|(source_id, layer)| GlyphLayerRecord::new(source_id, layer))
                 .collect(),
             mark: category.mark,
             nonspacing_mark: category.nonspacing_mark,
@@ -209,6 +232,7 @@ mod tests {
             name: GlyphName::from(name),
             unicodes: Vec::new(),
             component_base_glyph_ids: Vec::new(),
+            axes: Vec::new(),
             layers: Vec::new(),
             mark: false,
             nonspacing_mark: false,

@@ -512,7 +512,8 @@ fn slug_atlas(
     .weight_sets()
     .iter()
     .map(|set| SlugWeightSet {
-      basis: InterpolationBasis::from(set.basis()),
+      // A glyph basis with drawings off the sources names no source; the editor evaluates it as sent.
+      basis: InterpolationBasis::of_glyph(set.basis()),
       source_weight_indices: set.source_weight_indices().to_vec(),
     })
     .collect();

@@ -20,6 +20,7 @@ export class MultiSourceEditing {
   readonly #glyphForId: (glyphId: GlyphId) => Glyph | null;
   readonly #activeSourceIdCell: Signal<SourceId | null>;
   readonly #editingSourceIdsCell: Signal<ReadonlySet<SourceId>>;
+  readonly #activeDrawingCell: Signal<GlyphLayer | null>;
   // non-reactive: reuses each source's render-model input cells so Glyph's cell-keyed render-model cache hits.
   readonly #sourceRenderInputs = new Map<SourceId, SourceRenderInputs>();
 
@@ -28,13 +29,16 @@ export class MultiSourceEditing {
    * @param glyphForId - Synchronous lookup for completely loaded glyphs.
    * @param activeSourceIdCell - Reference source selected for direct editing.
    * @param editingSourceIdsCell - Complete source set transformed together.
+   * @param activeDrawingCell - The located drawing edited alone, off the font's sources.
    */
   constructor(
     font: Font,
     glyphForId: (glyphId: GlyphId) => Glyph | null,
     activeSourceIdCell: Signal<SourceId | null>,
     editingSourceIdsCell: Signal<ReadonlySet<SourceId>>,
+    activeDrawingCell: Signal<GlyphLayer | null>,
   ) {
+    this.#activeDrawingCell = activeDrawingCell;
     this.#font = font;
     this.#glyphForId = glyphForId;
     this.#activeSourceIdCell = activeSourceIdCell;
@@ -42,13 +46,17 @@ export class MultiSourceEditing {
   }
 
   /**
-   * Returns a glyph's layer at each source selected for editing, in source order.
+   * Returns a glyph's layer at each source selected for editing, in source
+   * order, or the located drawing being edited, alone.
    *
    * @returns `null` when the glyph is not loaded or lacks a layer at one of them.
    */
   layersFor(glyphId: GlyphId): GlyphLayer[] | null {
     const glyph = this.#glyphForId(glyphId);
     if (!glyph) return null;
+
+    const drawing = this.#activeDrawingCell.peek();
+    if (drawing) return glyph.layerForId(drawing.id) === drawing ? [drawing] : null;
 
     const editingSourceIds = this.#editingSourceIdsCell.peek();
     const layers: GlyphLayer[] = [];

@@ -16,6 +16,7 @@ import type {
 import type { GlyphIdentityConflict as EngineGlyphIdentityConflict } from "@shift/wasm/protocol";
 import type { Designspace } from "../lib/variation/Designspace";
 import type { Glyph, GlyphLayer } from "../lib/model/Glyph";
+import type { Axis } from "../lib/model/Axis";
 import type { Signal } from "../lib/signals/signal";
 import type { DesignAxisLocation } from "./variation";
 
@@ -72,6 +73,8 @@ export interface GlyphOptions {
   readonly componentGlyphs: ReadonlyMap<GlyphId, Glyph>;
   readonly designspace: Designspace;
   readonly projectionCell: Signal<GlyphProjection | null>;
+  /** The glyph's own axes, in order, beside the font's; empty for most glyphs. */
+  readonly axesCell: Signal<readonly Axis[]>;
   readonly defaultSourceId: SourceId;
   /** Reads a glyph's propagation category; reactive callers re-run when it changes. */
   readonly anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;

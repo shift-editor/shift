@@ -63,15 +63,27 @@ pub struct NapiGlyphLayerSnapshot {
   pub glyph_id: String,
   #[napi(ts_type = "SourceId")]
   pub source_id: String,
+  #[napi(ts_type = "SourceId")]
+  pub base_source_id: Option<String>,
+  pub coordinates: Option<Location>,
   pub state: NapiGlyphState,
 }
 
 impl From<GlyphLayerSnapshot> for NapiGlyphLayerSnapshot {
   fn from(snapshot: GlyphLayerSnapshot) -> Self {
+    let GlyphLayerSnapshot {
+      glyph_id,
+      source_id,
+      base_source_id,
+      coordinates,
+      state,
+    } = snapshot;
     Self {
-      glyph_id: snapshot.glyph_id.to_string(),
-      source_id: snapshot.source_id.to_string(),
-      state: snapshot.state.into(),
+      glyph_id: glyph_id.to_string(),
+      source_id: source_id.to_string(),
+      base_source_id: base_source_id.map(|id| id.to_string()),
+      coordinates: coordinates.map(Into::into),
+      state: state.into(),
     }
   }
 }
@@ -223,14 +235,17 @@ impl From<InterpolationBasis> for NapiInterpolationBasis {
 #[napi(object)]
 pub struct NapiGlyphSourceValues {
   #[napi(ts_type = "SourceId")]
-  pub source_id: String,
+  pub source_id: Option<String>,
+  #[napi(ts_type = "LayerId")]
+  pub layer_id: Option<String>,
   pub values: Float64Array,
 }
 
 impl From<GlyphSourceValues> for NapiGlyphSourceValues {
   fn from(source: GlyphSourceValues) -> Self {
     Self {
-      source_id: source.source_id.to_string(),
+      source_id: source.source_id.map(|id| id.to_string()),
+      layer_id: source.layer_id.map(|id| id.to_string()),
       values: source.values.into(),
     }
   }

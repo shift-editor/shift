@@ -8,6 +8,8 @@ export {
   MenuCheckboxItem,
   MenuCheckboxItemIndicator,
   MenuSeparator,
+  MenuGroup,
+  MenuGroupLabel,
   MenuSubmenuRoot,
   MenuSubmenuTrigger,
   type MenuProps,
@@ -18,6 +20,8 @@ export {
   type MenuCheckboxItemProps,
   type MenuCheckboxItemIndicatorProps,
   type MenuSeparatorProps,
+  type MenuGroupProps,
+  type MenuGroupLabelProps,
   type MenuSubmenuRootProps,
   type MenuSubmenuTriggerProps,
 } from "./Menu";
