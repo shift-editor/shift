@@ -591,10 +591,10 @@ impl NativeWorkspace for Bridge {
     location: Location,
   ) -> Result<Vec<GlyphPreview>, NativeWorkspaceError> {
     let location = DesignLocation::from_untyped(location);
-    // A tile draws each glyph as text does, as the alternate picked at this
-    // location, so the alternate glyphs are acquired too.
+    // A tile draws each glyph as text does, as the swap picked at this
+    // location, so the swap glyphs are acquired too.
     let mut drawn = glyph_ids.clone();
-    drawn.extend(self.font()?.alternate_glyphs_of(&glyph_ids));
+    drawn.extend(self.font()?.swap_glyphs_of(&glyph_ids));
     let font = self.acquire_and_font(&drawn, AcquireScope::ComponentClosure)?;
     let glyphs = font
       .projection(&location)

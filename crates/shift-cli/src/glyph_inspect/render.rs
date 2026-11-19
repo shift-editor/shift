@@ -48,20 +48,16 @@ impl GlyphInspection {
             ),
         ]
         .join("\n")
-            + &self.render_alternates()
+            + &self.render_swaps()
     }
 
-    /// The alternates, one per line, or nothing when the glyph has none.
-    fn render_alternates(&self) -> String {
-        if self.alternates.is_empty() {
+    /// The swaps, one per line, or nothing when the glyph has none.
+    fn render_swaps(&self) -> String {
+        if self.swaps.is_empty() {
             return String::new();
         }
-        let mut lines = vec![String::new(), "alternates".to_string()];
-        lines.extend(
-            self.alternates
-                .iter()
-                .map(|alternate| format!("  {}", alternate.render())),
-        );
+        let mut lines = vec![String::new(), "swaps".to_string()];
+        lines.extend(self.swaps.iter().map(|swap| format!("  {}", swap.render())));
         lines.join("\n")
     }
 

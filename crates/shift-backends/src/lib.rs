@@ -51,8 +51,8 @@ pub use import::{FontImport, GlyphDirectoryEntry, ImportBatchLimit};
 pub(crate) use import_report::distinct_named_instances;
 pub use import_report::{ImportLoss, ImportLossKind, ImportReport};
 pub use shift2fontir::{
-    AlternatesError, AxisConversionError, MappingSide, PropagatedAnchor, PropagatedGlyphAnchors,
-    PropagatedSourceAnchors,
+    AxisConversionError, MappingSide, PropagatedAnchor, PropagatedGlyphAnchors,
+    PropagatedSourceAnchors, SwapsError,
 };
 pub use source_ids::SourceIds;
 pub use traits::{FontBackend, FontReader, FontView, FontWriter};

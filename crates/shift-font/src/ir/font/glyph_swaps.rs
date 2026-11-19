@@ -1,7 +1,7 @@
-//! A font's glyph alternates and the conditions on its components.
+//! A font's glyph swaps and the conditions on its components.
 //!
-//! Alternates swap a glyph for another where text is drawn
-//! ([`crate::glyph_alternate`]); component conditions say where a component
+//! Swaps draw another glyph in a glyph's place where text is drawn
+//! ([`crate::glyph_swap`]); component conditions say where a component
 //! draws at all. The font checks both against its axes when a glyph or layer
 //! is added or replaced.
 
@@ -12,20 +12,20 @@ use crate::axis::{AxisList, DesignLocation};
 use crate::component::Component;
 use crate::contour::Contour;
 use crate::entity::LayerId;
-use crate::entity::{AlternateId, GlyphId};
+use crate::entity::{GlyphId, SwapId};
 use crate::error::{CoreError, CoreResult};
 use crate::glyph::{Glyph, GlyphLayer};
-use crate::glyph_alternate::{GlyphAlternate, NeverUsedAlternate, never_used_alternates};
+use crate::glyph_swap::{GlyphSwap, NeverUsedSwap, never_used_swaps};
 
 use super::Font;
 
 impl Font {
     /// The glyph drawn for `glyph_id` at `location`: the glyph of its first
-    /// alternate whose condition holds there, else the glyph itself. This is
+    /// swap whose condition holds there, else the glyph itself. This is
     /// what text, previews and the glyph open for editing draw there; a
     /// component of `glyph_id` still draws `glyph_id`.
     /// Only font axes are read, each at its default when `location` doesn't
-    /// name it. One step: the alternate glyph's own alternates are not
+    /// name it. One step: the swap glyph's own swaps are not
     /// applied.
     ///
     /// A glyph the font lacks draws as itself, so a caller looks it up as
@@ -35,125 +35,118 @@ impl Font {
             return glyph_id;
         };
         glyph
-            .alternates()
+            .swaps()
             .iter()
-            .find(|alternate| alternate.condition().holds_at(location, self.axes()))
-            .map_or(glyph_id, GlyphAlternate::glyph)
+            .find(|swap| swap.condition().holds_at(location, self.axes()))
+            .map_or(glyph_id, GlyphSwap::glyph)
     }
 
-    /// `glyph_id`'s alternates that never win anywhere on the font's axes;
-    /// see [`never_used_alternates`].
+    /// `glyph_id`'s swaps that never win anywhere on the font's axes;
+    /// see [`never_used_swaps`].
     ///
     /// # Errors
     ///
     /// Returns [`CoreError::GlyphNotFound`] for an unknown glyph and an
     /// axis-mapping error when an authored mapping cannot compile.
-    pub fn never_used_alternates(&self, glyph_id: GlyphId) -> CoreResult<Vec<NeverUsedAlternate>> {
+    pub fn never_used_swaps(&self, glyph_id: GlyphId) -> CoreResult<Vec<NeverUsedSwap>> {
         let glyph = self.require_glyph(glyph_id)?;
-        if glyph.alternates().is_empty() {
+        if glyph.swaps().is_empty() {
             return Ok(Vec::new());
         }
-        Ok(never_used_alternates(
-            glyph.alternates(),
+        Ok(never_used_swaps(
+            glyph.swaps(),
             &self.design_normalization()?,
         ))
     }
 
-    /// Every alternate glyph of one of `glyph_ids`: what a reader that draws
+    /// Every swap glyph of one of `glyph_ids`: what a reader that draws
     /// those glyphs must have loaded besides them.
-    pub fn alternate_glyphs_of<'a>(
+    pub fn swap_glyphs_of<'a>(
         &self,
         glyph_ids: impl IntoIterator<Item = &'a GlyphId>,
     ) -> BTreeSet<GlyphId> {
         glyph_ids
             .into_iter()
             .filter_map(|glyph_id| self.glyph(*glyph_id))
-            .flat_map(Glyph::alternates)
-            .map(GlyphAlternate::glyph)
+            .flat_map(Glyph::swaps)
+            .map(GlyphSwap::glyph)
             .collect()
     }
 
-    /// Replaces `glyph_id`'s alternates with `alternates`, tried in order.
+    /// Replaces `glyph_id`'s swaps with `swaps`, tried in order.
     /// The font is unchanged on failure.
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::GlyphNotFound`] for an unknown glyph or alternate
-    /// glyph, [`CoreError::AlternateIsItself`],
-    /// [`CoreError::AlternateConditionOffFontAxes`], [`CoreError::AxisNotFound`],
+    /// Returns [`CoreError::GlyphNotFound`] for an unknown glyph or swap
+    /// glyph, [`CoreError::SwapIsItself`],
+    /// [`CoreError::SwapConditionOffFontAxes`], [`CoreError::AxisNotFound`],
     /// a condition's own error, and
-    /// [`CoreError::DuplicateAlternateId`] for an alternate id the font
+    /// [`CoreError::DuplicateSwapId`] for a swap id the font
     /// already uses.
-    pub fn set_glyph_alternates(
-        &mut self,
-        glyph_id: GlyphId,
-        alternates: Vec<GlyphAlternate>,
-    ) -> CoreResult<()> {
+    pub fn set_glyph_swaps(&mut self, glyph_id: GlyphId, swaps: Vec<GlyphSwap>) -> CoreResult<()> {
         let mut glyph = self.require_glyph(glyph_id)?.clone();
-        glyph.set_alternates(alternates);
-        self.check_glyph_alternates(&glyph)?;
-        let alternates = glyph.alternates().to_vec();
-        self.edit_indexed_glyph(glyph_id, |glyph| glyph.set_alternates(alternates))
+        glyph.set_swaps(swaps);
+        self.check_glyph_swaps(&glyph)?;
+        let swaps = glyph.swaps().to_vec();
+        self.edit_indexed_glyph(glyph_id, |glyph| glyph.set_swaps(swaps))
     }
 
-    /// The glyph that has the alternate `alternate_id`.
-    pub fn alternate_owner(&self, alternate_id: AlternateId) -> Option<GlyphId> {
-        self.index().alternate_owner(alternate_id).copied()
+    /// The glyph that has the swap `swap_id`.
+    pub fn swap_owner(&self, swap_id: SwapId) -> Option<GlyphId> {
+        self.index().swap_owner(swap_id).copied()
     }
 
-    /// Checks `glyph`'s alternates: each draws a glyph the font has, other
+    /// Checks `glyph`'s swaps: each draws a glyph the font has, other
     /// than `glyph`, and its condition is well formed and reads font axes
     /// only.
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::AlternateIsItself`], [`CoreError::GlyphNotFound`]
-    /// for an alternate glyph the font lacks,
-    /// [`CoreError::AlternateConditionOffFontAxes`] for a glyph's own axis,
+    /// Returns [`CoreError::SwapIsItself`], [`CoreError::GlyphNotFound`]
+    /// for a swap glyph the font lacks,
+    /// [`CoreError::SwapConditionOffFontAxes`] for a glyph's own axis,
     /// [`CoreError::AxisNotFound`] for an axis the font has nowhere, or a condition's own
     /// error ([`crate::Condition::check_well_formed`]) for the first
-    /// alternate that fails.
-    pub(super) fn check_glyph_alternates(&self, glyph: &Glyph) -> CoreResult<()> {
-        for alternate in glyph.alternates() {
-            let alternate_id = alternate.id();
-            if alternate.glyph() == glyph.id() {
-                return Err(CoreError::AlternateIsItself {
-                    alternate_id,
+    /// swap that fails.
+    pub(super) fn check_glyph_swaps(&self, glyph: &Glyph) -> CoreResult<()> {
+        for swap in glyph.swaps() {
+            let swap_id = swap.id();
+            if swap.glyph() == glyph.id() {
+                return Err(CoreError::SwapIsItself {
+                    swap_id,
                     glyph_id: glyph.id(),
                 });
             }
-            self.require_glyph(alternate.glyph())?;
-            alternate.condition().check_well_formed()?;
-            if let Some(axis_id) = alternate
+            self.require_glyph(swap.glyph())?;
+            swap.condition().check_well_formed()?;
+            if let Some(axis_id) = swap
                 .condition()
                 .axis_ids()
                 .find(|axis_id| !self.axes().contains_axis(*axis_id))
             {
                 self.glyph_axis_owner(axis_id).require(&axis_id)?;
-                return Err(CoreError::AlternateConditionOffFontAxes {
-                    alternate_id,
-                    axis_id,
-                });
+                return Err(CoreError::SwapConditionOffFontAxes { swap_id, axis_id });
             }
         }
         Ok(())
     }
 
-    /// Checks that `glyph_id` is no other glyph's alternate, before it goes.
+    /// Checks that `glyph_id` is no other glyph's swap, before it goes.
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::GlyphIsAlternate`] naming a glyph it is an
-    /// alternate of.
-    pub(super) fn check_not_an_alternate(&self, glyph_id: GlyphId) -> CoreResult<()> {
+    /// Returns [`CoreError::GlyphIsSwap`] naming a glyph it is a
+    /// swap of.
+    pub(super) fn check_not_a_swap(&self, glyph_id: GlyphId) -> CoreResult<()> {
         match self
             .index()
-            .glyphs_with_alternate(&glyph_id)
+            .glyphs_with_swap(&glyph_id)
             .find(|owner| **owner != glyph_id)
         {
-            Some(owner) => Err(CoreError::GlyphIsAlternate {
+            Some(owner) => Err(CoreError::GlyphIsSwap {
                 glyph_id,
-                alternate_of: *owner,
+                swap_of: *owner,
             }),
             None => Ok(()),
         }

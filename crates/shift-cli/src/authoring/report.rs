@@ -6,9 +6,9 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 use shift_font::{
-    AlternateId, AxisId, AxisNaming, EntityChange, Font, FontChange, FontChangeImpact,
-    FontChangeSet, FontEntityChange, FontMetadata, Glyph, GlyphAxis, GlyphLayer, KerningGroup,
-    KerningGroupId, KerningPair, NeverUsedReason, SourceId,
+    AxisId, AxisNaming, EntityChange, Font, FontChange, FontChangeImpact, FontChangeSet,
+    FontEntityChange, FontMetadata, Glyph, GlyphAxis, GlyphLayer, KerningGroup, KerningGroupId,
+    KerningPair, NeverUsedReason, SourceId, SwapId,
 };
 
 use super::font_info::report::SourceMetrics;
@@ -105,11 +105,11 @@ pub(crate) enum AuthoringChange {
         #[serde(flatten)]
         axis: GlyphAxisReport,
     },
-    GlyphAlternatesSet {
+    GlyphSwapsSet {
         glyph_id: String,
         glyph_name: String,
-        /// Every alternate after the change, in the order they are tried.
-        alternates: Vec<AlternateReport>,
+        /// Every swap after the change, in the order they are tried.
+        swaps: Vec<SwapReport>,
     },
     NamedInstancesUpdated {
         count: usize,
@@ -207,11 +207,11 @@ fn glyph_axis_changes(before: Option<&Glyph>, after: Option<&Glyph>) -> Vec<Auth
     changes
 }
 
-/// One alternate as a report lists it.
+/// One swap as a report lists it.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct AlternateReport {
-    pub alternate_id: String,
+pub(crate) struct SwapReport {
+    pub swap_id: String,
     /// Counting from 1.
     pub position: usize,
     pub glyph: String,
@@ -222,36 +222,35 @@ pub(crate) struct AlternateReport {
     pub never_used: Option<String>,
 }
 
-impl AlternateReport {
-    /// Each of `glyph`'s alternates in `font`, with never-used warnings.
+impl SwapReport {
+    /// Each of `glyph`'s swaps in `font`, with never-used warnings.
     pub(crate) fn of_glyph(font: &Font, glyph: &Glyph) -> Vec<Self> {
         // Both fail only when an axis mapping doesn't compile; the report then
-        // lists the alternates without condition text or warnings, and
+        // lists the swaps without condition text or warnings, and
         // `check` reports the mapping.
         let space = font.condition_space(Some(glyph.id())).ok();
-        let unused: BTreeMap<AlternateId, NeverUsedReason> = font
-            .never_used_alternates(glyph.id())
+        let unused: BTreeMap<SwapId, NeverUsedReason> = font
+            .never_used_swaps(glyph.id())
             .unwrap_or_default()
             .into_iter()
-            .map(|unused| (unused.alternate_id, unused.reason))
+            .map(|unused| (unused.swap_id, unused.reason))
             .collect();
-        let described: BTreeMap<AlternateId, String> = glyph
-            .alternates()
+        let described: BTreeMap<SwapId, String> = glyph
+            .swaps()
             .iter()
             .enumerate()
-            .map(|(index, alternate)| {
-                let name = glyph_name(font, alternate.glyph());
-                (alternate.id(), format!("{name} (alternate {})", index + 1))
+            .map(|(index, swap)| {
+                let name = glyph_name(font, swap.glyph());
+                (swap.id(), format!("{name} (swap {})", index + 1))
             })
             .collect();
-        let name_at =
-            |alternate_id: AlternateId| described.get(&alternate_id).cloned().unwrap_or_default();
+        let name_at = |swap_id: SwapId| described.get(&swap_id).cloned().unwrap_or_default();
         glyph
-            .alternates()
+            .swaps()
             .iter()
             .enumerate()
-            .map(|(index, alternate)| {
-                let never_used = unused.get(&alternate.id()).map(|reason| match reason {
+            .map(|(index, swap)| {
+                let never_used = unused.get(&swap.id()).map(|reason| match reason {
                     NeverUsedReason::OutsideAxes => {
                         "its condition holds nowhere in the axes' ranges".to_string()
                     }
@@ -261,11 +260,11 @@ impl AlternateReport {
                     }
                 });
                 Self {
-                    alternate_id: alternate.id().to_string(),
+                    swap_id: swap.id().to_string(),
                     position: index + 1,
-                    glyph: glyph_name(font, alternate.glyph()),
+                    glyph: glyph_name(font, swap.glyph()),
                     when: space.as_ref().map_or_else(Vec::new, |space| {
-                        space.format(alternate.condition(), AxisNaming::Name)
+                        space.format(swap.condition(), AxisNaming::Name)
                     }),
                     never_used,
                 }
@@ -294,23 +293,19 @@ fn glyph_name(font: &Font, glyph_id: shift_font::GlyphId) -> String {
         .map_or_else(|| glyph_id.to_string(), |glyph| glyph.name().to_string())
 }
 
-/// The alternates of `after` when they differ from those of `before`.
-fn alternate_changes(
-    font: &Font,
-    before: Option<&Glyph>,
-    after: &Glyph,
-) -> Option<AuthoringChange> {
+/// The swaps of `after` when they differ from those of `before`.
+fn swap_changes(font: &Font, before: Option<&Glyph>, after: &Glyph) -> Option<AuthoringChange> {
     let unchanged = match before {
-        Some(before) => before.alternates() == after.alternates(),
-        None => after.alternates().is_empty(),
+        Some(before) => before.swaps() == after.swaps(),
+        None => after.swaps().is_empty(),
     };
     if unchanged {
         return None;
     }
-    Some(AuthoringChange::GlyphAlternatesSet {
+    Some(AuthoringChange::GlyphSwapsSet {
         glyph_id: after.id().to_string(),
         glyph_name: after.name().to_string(),
-        alternates: AlternateReport::of_glyph(font, after),
+        swaps: SwapReport::of_glyph(font, after),
     })
 }
 
@@ -472,20 +467,14 @@ impl Report for AuthoringReport {
                 AuthoringChange::GlyphAxisCreated { axis } => lines.push(axis.render('+')),
                 AuthoringChange::GlyphAxisUpdated { axis } => lines.push(axis.render('~')),
                 AuthoringChange::GlyphAxisDeleted { axis } => lines.push(axis.render('-')),
-                AuthoringChange::GlyphAlternatesSet {
-                    glyph_name,
-                    alternates,
-                    ..
+                AuthoringChange::GlyphSwapsSet {
+                    glyph_name, swaps, ..
                 } => {
-                    lines.push(format!("~ alternates  {glyph_name}"));
-                    if alternates.is_empty() {
+                    lines.push(format!("~ swaps  {glyph_name}"));
+                    if swaps.is_empty() {
                         lines.push("    none".to_string());
                     }
-                    lines.extend(
-                        alternates
-                            .iter()
-                            .map(|alternate| format!("    {}", alternate.render())),
-                    );
+                    lines.extend(swaps.iter().map(|swap| format!("    {}", swap.render())));
                 }
                 AuthoringChange::NamedInstancesUpdated { count, instances } => {
                     lines.push(format!("~ instances  {count} product presets"));
@@ -568,7 +557,7 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
                         mark_color: glyph.mark_color().map(|color| color.to_string()),
                     }];
                     reported.extend(glyph_axis_changes(None, Some(glyph)));
-                    reported.extend(alternate_changes(font, None, glyph));
+                    reported.extend(swap_changes(font, None, glyph));
                     reported
                 }
                 FontEntityChange::Glyph(EntityChange::Updated { before, after }) => {
@@ -579,7 +568,7 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
                         mark_color: after.mark_color().map(|color| color.to_string()),
                     }];
                     reported.extend(glyph_axis_changes(Some(before), Some(after)));
-                    reported.extend(alternate_changes(font, Some(before), after));
+                    reported.extend(swap_changes(font, Some(before), after));
                     reported
                 }
                 other => entity_report(font, &other).into_iter().collect(),

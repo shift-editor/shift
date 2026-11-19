@@ -10,29 +10,29 @@ hold. The axis by tag or name, then 700, >=700, 700+ (from 700), <=80 (up to 80)
 in user units on font axes: wght>=700, \"Weight 400-600\".";
 
 #[derive(Debug, Subcommand)]
-pub(crate) enum GlyphAlternateCommand {
-    /// Add an alternate: another glyph text draws in this one's place where
+pub(crate) enum GlyphSwapCommand {
+    /// Add a swap: another glyph text draws in this one's place where
     /// a condition on the font's axes holds.
     ///
-    /// Alternates are tried in order and the first whose condition holds
-    /// wins. An alternate an earlier one always beats is reported as never
+    /// Swaps are tried in order and the first whose condition holds
+    /// wins. A swap an earlier one always beats is reported as never
     /// used.
-    Add(AddAlternateArgs),
+    Add(AddSwapArgs),
 
-    /// Remove an alternate; its glyph stays in the font.
-    Remove(RemoveAlternateArgs),
+    /// Remove a swap; its glyph stays in the font.
+    Remove(RemoveSwapArgs),
 
-    /// Move an alternate to another position in the order they are tried.
+    /// Move a swap to another position in the order they are tried.
     #[command(name = "move")]
-    Reorder(MoveAlternateArgs),
+    Reorder(MoveSwapArgs),
 
-    /// Replace an alternate's condition or the glyph it draws.
-    Set(SetAlternateArgs),
+    /// Replace a swap's condition or the glyph it draws.
+    Set(SetSwapArgs),
 }
 
-/// One of a glyph's alternates.
+/// One of a glyph's swaps.
 #[derive(Debug, Args)]
-pub(crate) struct AlternateSelectorArgs {
+pub(crate) struct SwapSelectorArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -40,12 +40,12 @@ pub(crate) struct AlternateSelectorArgs {
     /// Glyph name or full stable glyph id.
     pub glyph: String,
 
-    /// The alternate: its position, counting from 1, or the name of the glyph
-    /// it draws when only one alternate draws it.
-    pub alternate: String,
+    /// The swap: its position, counting from 1, or the name of the glyph
+    /// it draws when only one swap draws it.
+    pub swap: String,
 }
 
-/// Where an alternate applies: `--when` ranges, or `--always`.
+/// Where a swap applies: `--when` ranges, or `--always`.
 #[derive(Debug, Args)]
 pub(crate) struct ConditionArgs {
     #[arg(long, value_name = "AXIS RANGE", help = WHEN_HELP)]
@@ -57,7 +57,7 @@ pub(crate) struct ConditionArgs {
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct AddAlternateArgs {
+pub(crate) struct AddSwapArgs {
     /// Path to the canonical SQLite .shift document.
     #[arg(value_hint = ValueHint::FilePath)]
     pub path: PathBuf,
@@ -66,12 +66,12 @@ pub(crate) struct AddAlternateArgs {
     pub glyph: String,
 
     /// The glyph drawn in its place, by name or full stable glyph id.
-    pub alternate_glyph: String,
+    pub swap_glyph: String,
 
     #[command(flatten)]
     pub condition: ConditionArgs,
 
-    /// Position in the order alternates are tried, counting from 1; last
+    /// Position in the order swaps are tried, counting from 1; last
     /// when omitted.
     #[arg(long, value_name = "POSITION")]
     pub at: Option<usize>,
@@ -81,18 +81,18 @@ pub(crate) struct AddAlternateArgs {
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct RemoveAlternateArgs {
+pub(crate) struct RemoveSwapArgs {
     #[command(flatten)]
-    pub alternate: AlternateSelectorArgs,
+    pub swap: SwapSelectorArgs,
 
     #[command(flatten)]
     pub mutation: MutationArgs,
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct MoveAlternateArgs {
+pub(crate) struct MoveSwapArgs {
     #[command(flatten)]
-    pub alternate: AlternateSelectorArgs,
+    pub swap: SwapSelectorArgs,
 
     /// The new position, counting from 1.
     #[arg(long, value_name = "POSITION")]
@@ -103,9 +103,9 @@ pub(crate) struct MoveAlternateArgs {
 }
 
 #[derive(Debug, Args)]
-pub(crate) struct SetAlternateArgs {
+pub(crate) struct SetSwapArgs {
     #[command(flatten)]
-    pub alternate: AlternateSelectorArgs,
+    pub swap: SwapSelectorArgs,
 
     /// The replacement condition; the current one stays when no flag is given.
     #[command(flatten)]
@@ -113,7 +113,7 @@ pub(crate) struct SetAlternateArgs {
 
     /// The glyph to draw instead, by name or full stable glyph id.
     #[arg(long = "glyph", value_name = "GLYPH")]
-    pub alternate_glyph: Option<String>,
+    pub swap_glyph: Option<String>,
 
     #[command(flatten)]
     pub mutation: MutationArgs,

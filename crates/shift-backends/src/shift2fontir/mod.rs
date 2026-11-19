@@ -10,7 +10,6 @@
 //! Authored named instances remain external product presets; source names do
 //! not create products implicitly.
 
-mod alternates;
 mod axes;
 mod glyph;
 mod glyph_axes;
@@ -20,13 +19,14 @@ mod propagation;
 mod regions;
 mod source;
 mod stat;
+mod swaps;
 
 #[cfg(test)]
 mod tests;
 
-pub use alternates::AlternatesError;
-pub(crate) use alternates::designspace_rules;
 pub use propagation::{PropagatedAnchor, PropagatedGlyphAnchors, PropagatedSourceAnchors};
 pub(crate) use regions::Lattice;
 pub use shift_text::shaper_font::{AxisConversionError, MappingSide};
 pub(crate) use source::{ShiftIrSource, ShiftIrSourceError};
+pub use swaps::SwapsError;
+pub(crate) use swaps::designspace_rules;

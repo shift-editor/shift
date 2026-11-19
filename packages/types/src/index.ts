@@ -7,7 +7,7 @@ export type {
   PointId,
   ContourId,
   AnchorId,
-  AlternateId,
+  SwapId,
   AxisId,
   AxisLabelId,
   AxisMappingId,

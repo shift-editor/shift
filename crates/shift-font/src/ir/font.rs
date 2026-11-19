@@ -28,8 +28,8 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 mod change_set;
-mod glyph_alternates;
 mod glyph_axes;
+mod glyph_swaps;
 mod index;
 
 use index::{EntityIdTransfer, FontIndex, IndexEntries};
@@ -1048,8 +1048,8 @@ impl Font {
     /// Returns [`CoreError::DuplicateGlyphId`] when the id is taken,
     /// [`CoreError::DuplicateGlyphName`] when the name is, and [`CoreError::DuplicateLayerId`] or
     /// [`CoreError::DuplicateGlyphLayer`] when one of its layers clashes with the font's;
-    /// [`CoreError::AlternateIsItself`], [`CoreError::AlternateConditionOffFontAxes`] or
-    /// [`CoreError::GlyphNotFound`] for an alternate glyph the font lacks (so an alternate glyph
+    /// [`CoreError::SwapIsItself`], [`CoreError::SwapConditionOffFontAxes`] or
+    /// [`CoreError::GlyphNotFound`] for a swap glyph the font lacks (so a swap glyph
     /// is added first); [`CoreError::ComponentConditionOffSpace`] or [`CoreError::AxisNotFound`]
     /// for a component condition on an axis the glyph doesn't draw along; and a condition's own error for a
     /// range that is reversed or not finite.
@@ -1058,7 +1058,7 @@ impl Font {
         if self.data().glyphs.contains(&glyph_id) {
             return Err(CoreError::DuplicateGlyphId(glyph_id));
         }
-        self.check_glyph_alternates(&glyph)?;
+        self.check_glyph_swaps(&glyph)?;
         for layer in glyph.layers().values() {
             self.check_layer_conditions(&glyph, layer)?;
         }
@@ -1288,7 +1288,7 @@ impl Font {
         if tail_id != glyph_id {
             return Err(CoreError::GlyphNotAtTail(glyph_id));
         }
-        self.check_not_an_alternate(glyph_id)?;
+        self.check_not_a_swap(glyph_id)?;
 
         self.remove_glyph(glyph_id).require(&glyph_id)
     }
@@ -1298,7 +1298,7 @@ impl Font {
     }
 
     /// This font with only `kept`, the glyphs their components use and their
-    /// alternate glyphs, transitively, in the font's order, and with no kerning or feature
+    /// swap glyphs, transitively, in the font's order, and with no kerning or feature
     /// code, which may name glyphs it leaves out: a font that shows a few
     /// glyphs, as a memory session opens one.
     ///
@@ -1313,7 +1313,7 @@ impl Font {
             self.require_glyph(glyph_id)?;
             if closure.insert(glyph_id) {
                 frontier.extend(self.component_glyph_ids_of_glyphs([&glyph_id]));
-                frontier.extend(self.alternate_glyphs_of([&glyph_id]));
+                frontier.extend(self.swap_glyphs_of([&glyph_id]));
             }
         }
         let mut subset = self.clone();

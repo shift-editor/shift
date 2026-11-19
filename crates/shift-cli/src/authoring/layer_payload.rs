@@ -14,10 +14,10 @@ use shift_font::{
 };
 use svgtypes::{PathParser, PathSegment};
 
-use super::alternate::parse_when;
 use super::input::{LayerInput, TransformInput};
 use super::metrics_keys::WrittenKey;
 use super::require_finite;
+use super::swap::parse_when;
 
 /// A component location keyed by axis tag, as design coordinates on `font`'s
 /// axes and the base glyph's own axes.

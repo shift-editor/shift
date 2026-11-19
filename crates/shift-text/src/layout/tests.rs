@@ -294,7 +294,7 @@ fn a_direction_boundary_has_a_second_caret() {
 }
 
 #[test]
-fn text_draws_and_advances_the_alternate_glyph() {
+fn text_draws_and_advances_the_swap_glyph() {
     let fixture = Fixture::of(shift_font::test_support::conditions_font());
     let weight = fixture.font.axis_id_by_tag("wght").unwrap();
     let heavy = DesignLocation::from([(weight, 800.0)]);

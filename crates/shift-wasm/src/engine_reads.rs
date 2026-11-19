@@ -340,7 +340,7 @@ pub trait EngineReads {
     -> Result<Vec<GlyphSnapshot>, FontRecordsError>;
     /// The glyph drawn for `glyph_id` at the design location `location`, in
     /// the font's axis order with NaN for an axis default: the glyph of its
-    /// first alternate that holds there, else `glyph_id` itself
+    /// first swap that holds there, else `glyph_id` itself
     /// (`Font::drawn_glyph_at`). What the canvas draws, and edits, for the
     /// glyph open at that location; a glyph the font lacks is itself.
     fn drawn_glyph(&self, glyph_id: GlyphId, location: Vec<f64>) -> GlyphId;
@@ -1324,10 +1324,10 @@ mod exports {
         ) -> Result<Vec<GlyphPreview>, FontRecordsError> {
             let font = self.session.font();
             let residency = self.session.residency();
-            // A tile draws each glyph as text does, as the alternate picked at
-            // this location, so the alternate glyphs must be loaded too.
+            // A tile draws each glyph as text does, as the swap picked at
+            // this location, so the swap glyphs must be loaded too.
             let mut drawn = glyphs.clone();
-            drawn.extend(font.alternate_glyphs_of(&glyphs));
+            drawn.extend(font.swap_glyphs_of(&glyphs));
             for glyph_id in self.component_closure(drawn) {
                 let Some(glyph) = font.glyph(glyph_id) else {
                     continue;
@@ -1756,7 +1756,7 @@ mod exports {
         }
 
         #[test]
-        fn the_glyph_open_at_a_location_draws_its_alternate_there() {
+        fn the_glyph_open_at_a_location_draws_its_swap_there() {
             let font = shift_font::test_support::conditions_font();
             let id = |name: &str| font.glyph_id_by_name(name).unwrap();
             let session = Session::over(&font);

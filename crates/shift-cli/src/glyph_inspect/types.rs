@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::authoring::AlternateReport;
+use crate::authoring::SwapReport;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -10,10 +10,10 @@ pub(crate) struct GlyphInspection {
     pub glyph: GlyphIdentity,
     pub location: GlyphLocation,
     /// The glyph text draws in this one's place at the location: the glyph
-    /// itself, or the first alternate whose condition holds.
+    /// itself, or the first swap whose condition holds.
     pub drawn_glyph: String,
-    /// The glyph's alternates, in the order they are tried.
-    pub alternates: Vec<AlternateReport>,
+    /// The glyph's swaps, in the order they are tried.
+    pub swaps: Vec<SwapReport>,
     pub summary: GlyphSummary,
     pub structure: GlyphStructure,
     pub components: Vec<ComponentInspection>,

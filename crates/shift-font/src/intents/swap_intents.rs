@@ -1,69 +1,69 @@
-//! Intents for a glyph's alternates and for where its components draw.
+//! Intents for a glyph's swaps and for where its components draw.
 //!
 //! Conditions are in design units, as the font stores them; see
 //! [`crate::condition`]. Text written in user units, such as `Weight ≥ 700`,
 //! is turned into a [`Condition`] by [`crate::ConditionSpace`].
 
 use super::*;
-use crate::{AlternateId, Condition, GlyphAlternate};
+use crate::{Condition, GlyphSwap, SwapId};
 
-/// Replaces a glyph's alternates with `alternates`, tried in order: the
+/// Replaces a glyph's swaps with `swaps`, tried in order: the
 /// whole list at once, as a batch import writes it.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
-pub struct SetGlyphAlternates {
+pub struct SetGlyphSwaps {
     pub glyph_id: GlyphId,
     /// Each with a caller-minted id unique in the font.
-    pub alternates: Vec<GlyphAlternate>,
+    pub swaps: Vec<GlyphSwap>,
 }
 
-impl FontLevelIntent for SetGlyphAlternates {
+impl FontLevelIntent for SetGlyphSwaps {
     fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)> {
-        font.set_glyph_alternates(self.glyph_id, self.alternates.clone())?;
+        font.set_glyph_swaps(self.glyph_id, self.swaps.clone())?;
         Ok((Vec::new(), vec![self.glyph_id]))
     }
 }
 
-/// Adds one alternate to a glyph, such as `dollar.bled` where Bleed is at
+/// Adds one swap to a glyph, such as `dollar.bled` where Bleed is at
 /// least 70.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
-pub struct AddGlyphAlternate {
+pub struct AddGlyphSwap {
     pub glyph_id: GlyphId,
     /// With a caller-minted id unique in the font.
-    pub alternate: GlyphAlternate,
+    pub swap: GlyphSwap,
     /// Zero-based position in the list, which is tried in order; `None`
     /// adds it last, where it is tried after every other.
     pub position: Option<usize>,
 }
 
-impl FontLevelIntent for AddGlyphAlternate {
+impl FontLevelIntent for AddGlyphSwap {
     fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)> {
         let Self {
             glyph_id,
-            alternate,
+            swap,
             position,
         } = self;
-        font.edit_glyph_alternates(*glyph_id, |alternates| {
-            let position = position.unwrap_or(alternates.len());
-            if position > alternates.len() {
-                return Err(CoreError::AlternatePositionOutOfRange {
+        font.edit_glyph_swaps(*glyph_id, |swaps| {
+            let position = position.unwrap_or(swaps.len());
+            if position > swaps.len() {
+                return Err(CoreError::SwapPositionOutOfRange {
                     glyph_id: *glyph_id,
                     position,
-                    count: alternates.len(),
+                    count: swaps.len(),
                 });
             }
-            alternates.insert(position, alternate.clone());
+            swaps.insert(position, swap.clone());
             Ok(())
         })?;
         Ok((Vec::new(), vec![*glyph_id]))
     }
 }
 
-/// What [`EditGlyphAlternate`] does to one alternate.
+/// What [`EditGlyphSwap`] does to one swap.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
-pub enum GlyphAlternateEdit {
+pub enum GlyphSwapEdit {
     /// Replaces where it applies.
     Condition(Condition),
     /// Replaces the glyph it draws.
@@ -75,47 +75,45 @@ pub enum GlyphAlternateEdit {
     Remove,
 }
 
-/// Edits or removes one alternate, wherever its glyph is.
+/// Edits or removes one swap, wherever its glyph is.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
-pub struct EditGlyphAlternate {
-    pub alternate_id: AlternateId,
-    pub edit: GlyphAlternateEdit,
+pub struct EditGlyphSwap {
+    pub swap_id: SwapId,
+    pub edit: GlyphSwapEdit,
 }
 
-impl FontLevelIntent for EditGlyphAlternate {
+impl FontLevelIntent for EditGlyphSwap {
     fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)> {
-        let Self { alternate_id, edit } = self;
-        let glyph_id = font.alternate_owner(*alternate_id).require(alternate_id)?;
-        font.edit_glyph_alternates(glyph_id, |alternates| {
-            let index = alternates
+        let Self { swap_id, edit } = self;
+        let glyph_id = font.swap_owner(*swap_id).require(swap_id)?;
+        font.edit_glyph_swaps(glyph_id, |swaps| {
+            let index = swaps
                 .iter()
-                .map(GlyphAlternate::id)
-                .position(|id| id == *alternate_id)
-                .require(alternate_id)?;
-            let current = alternates.get_mut(index).require(alternate_id)?;
+                .map(GlyphSwap::id)
+                .position(|id| id == *swap_id)
+                .require(swap_id)?;
+            let current = swaps.get_mut(index).require(swap_id)?;
             match edit {
-                GlyphAlternateEdit::Condition(condition) => {
-                    *current =
-                        GlyphAlternate::new(*alternate_id, condition.clone(), current.glyph());
+                GlyphSwapEdit::Condition(condition) => {
+                    *current = GlyphSwap::new(*swap_id, condition.clone(), current.glyph());
                 }
-                GlyphAlternateEdit::Glyph(glyph) => {
-                    *current =
-                        GlyphAlternate::new(*alternate_id, current.condition().clone(), *glyph);
+                GlyphSwapEdit::Glyph(glyph) => {
+                    *current = GlyphSwap::new(*swap_id, current.condition().clone(), *glyph);
                 }
-                GlyphAlternateEdit::Move(position) => {
-                    let alternate = alternates.remove(index);
-                    if *position > alternates.len() {
-                        return Err(CoreError::AlternatePositionOutOfRange {
+                GlyphSwapEdit::Move(position) => {
+                    let swap = swaps.remove(index);
+                    if *position > swaps.len() {
+                        return Err(CoreError::SwapPositionOutOfRange {
                             glyph_id,
                             position: *position,
-                            count: alternates.len() + 1,
+                            count: swaps.len() + 1,
                         });
                     }
-                    alternates.insert(*position, alternate);
+                    swaps.insert(*position, swap);
                 }
-                GlyphAlternateEdit::Remove => {
-                    alternates.remove(index);
+                GlyphSwapEdit::Remove => {
+                    swaps.remove(index);
                 }
             }
             Ok(())
@@ -196,21 +194,21 @@ impl FontLevelIntent for SetComponentCondition {
 }
 
 impl Font {
-    /// Edits `glyph_id`'s list of alternates through `edit`, then checks
-    /// and keeps it; see [`Self::set_glyph_alternates`]. The font is
+    /// Edits `glyph_id`'s list of swaps through `edit`, then checks
+    /// and keeps it; see [`Self::set_glyph_swaps`]. The font is
     /// unchanged on failure.
     ///
     /// # Errors
     ///
     /// Returns [`CoreError::GlyphNotFound`] for an unknown glyph, `edit`'s
-    /// error, and the errors of [`Self::set_glyph_alternates`].
-    fn edit_glyph_alternates(
+    /// error, and the errors of [`Self::set_glyph_swaps`].
+    fn edit_glyph_swaps(
         &mut self,
         glyph_id: GlyphId,
-        edit: impl FnOnce(&mut Vec<GlyphAlternate>) -> CoreResult<()>,
+        edit: impl FnOnce(&mut Vec<GlyphSwap>) -> CoreResult<()>,
     ) -> CoreResult<()> {
-        let mut alternates = self.require_glyph(glyph_id)?.alternates().to_vec();
-        edit(&mut alternates)?;
-        self.set_glyph_alternates(glyph_id, alternates)
+        let mut swaps = self.require_glyph(glyph_id)?.swaps().to_vec();
+        edit(&mut swaps)?;
+        self.set_glyph_swaps(glyph_id, swaps)
     }
 }

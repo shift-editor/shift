@@ -11,7 +11,7 @@
 // Branded type symbols (never exported, just for type branding)
 declare const PointIdBrand: unique symbol;
 declare const ContourIdBrand: unique symbol;
-declare const AlternateIdBrand: unique symbol;
+declare const SwapIdBrand: unique symbol;
 declare const AnchorIdBrand: unique symbol;
 declare const AxisIdBrand: unique symbol;
 declare const AxisLabelIdBrand: unique symbol;
@@ -52,11 +52,11 @@ export type AnchorId = string & {
 };
 
 /**
- * A glyph alternate identifier from Rust: one of the glyphs text draws in a
+ * A glyph swap identifier from Rust: one of the glyphs text draws in a
  * glyph's place where a condition holds. Unique in the font.
  */
-export type AlternateId = string & {
-  readonly [AlternateIdBrand]: typeof AlternateIdBrand;
+export type SwapId = string & {
+  readonly [SwapIdBrand]: typeof SwapIdBrand;
 };
 
 /**

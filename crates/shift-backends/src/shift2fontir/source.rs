@@ -18,7 +18,6 @@ use write_fonts::tables::gdef::GlyphClassDef;
 
 use shift_text::shaper_font::{AxisConversionError, ToGlyphClassDef, UnitsPerEm, to_ir_axes};
 
-use super::alternates::{self, AlternatesError};
 use super::axes::{normalized_design_location, normalized_source_location};
 use super::glyph::GlyphWork;
 use super::glyph_axes::{GlyphAxesError, HiddenAxes, normalized};
@@ -27,6 +26,7 @@ use super::metadata::{
     ColorGlyphsWork, ColorPaletteWork, FeatureWork, GlobalMetricsWork, StaticMetadataWork,
 };
 use super::regions::Lattice;
+use super::swaps::{self, SwapsError};
 
 /// Describes a Shift font that cannot become an in-memory fontir source.
 #[derive(Debug, thiserror::Error)]
@@ -51,8 +51,8 @@ pub(crate) enum ShiftIrSourceError {
     #[error("cannot compile the glyph axes: {0}")]
     GlyphAxes(#[from] GlyphAxesError),
 
-    #[error("cannot compile the alternates: {0}")]
-    Alternates(#[from] AlternatesError),
+    #[error("cannot compile the swaps: {0}")]
+    Swaps(#[from] SwapsError),
 }
 
 /// Provides fontir work backed by an immutable, shared Shift snapshot.
@@ -92,7 +92,7 @@ pub(super) struct ShiftSnapshot {
     /// Glyphs the source marks as not exported, by name. They stay available
     /// as components, which the compiler decomposes, but are not emitted.
     pub skipped_glyphs: HashSet<String>,
-    /// The `rvrn` substitutions that swap in glyphs' alternates.
+    /// The `rvrn` substitutions that swap in glyphs' swaps.
     pub feature_variations: Option<VariableFeature>,
 }
 
@@ -259,8 +259,7 @@ impl ShiftIrSource {
         // Export compiles each anchored component where its anchors place it.
         let glyphs = font.glyphs_with_derived_placements()?;
         let lattice = Lattice::new(font.axes(), &ir_axes);
-        let feature_variations =
-            alternates::feature_variations(&glyphs, &lattice, &skipped_glyphs)?;
+        let feature_variations = swaps::feature_variations(&glyphs, &lattice, &skipped_glyphs)?;
 
         Ok(Self {
             snapshot: Arc::new(ShiftSnapshot {

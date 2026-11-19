@@ -1,4 +1,4 @@
-//! Glyph alternates and component conditions: `glyph alternate add`,
+//! Glyph swaps and component conditions: `glyph swap add`,
 //! `remove`, `move` and `set`, and `component condition set`.
 //!
 //! Conditions are written as shift-font's condition text reads them (see
@@ -6,102 +6,102 @@
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use shift_font::{
-    AddGlyphAlternate, AlternateId, ComponentId, Condition, EditGlyphAlternate, Font,
-    FontIntentSet, GlyphAlternate, GlyphAlternateEdit, GlyphId, SetComponentCondition,
+    AddGlyphSwap, ComponentId, Condition, EditGlyphSwap, Font, FontIntentSet, GlyphId, GlyphSwap,
+    GlyphSwapEdit, SetComponentCondition, SwapId,
 };
 
 use shift_store::ShiftStore;
 
 use crate::cli::{
-    AddAlternateArgs, AlternateSelectorArgs, ConditionArgs, MoveAlternateArgs, MutationArgs,
-    RemoveAlternateArgs, SetAlternateArgs, SetComponentConditionArgs,
+    AddSwapArgs, ConditionArgs, MoveSwapArgs, MutationArgs, RemoveSwapArgs,
+    SetComponentConditionArgs, SetSwapArgs, SwapSelectorArgs,
 };
 use crate::selector::FontSelectors;
 
 use super::glyph::load_font;
 use super::{AuthoringReport, apply_mutation};
 
-/// Adds one alternate to a glyph.
+/// Adds one swap to a glyph.
 ///
 /// # Errors
 ///
 /// Rejects a missing condition, unreadable condition text, an unknown glyph
 /// or axis, and what the font refuses: the glyph itself, a glyph axis, a
 /// reversed range or a position past the end.
-pub(crate) fn add_alternate(args: &AddAlternateArgs) -> Result<AuthoringReport> {
+pub(crate) fn add_swap(args: &AddSwapArgs) -> Result<AuthoringReport> {
     let font = load_font(&args.path)?;
     let glyph_id = font.glyph_id_for(&args.glyph)?;
-    let alternate_glyph = font.glyph_id_for(&args.alternate_glyph)?;
+    let swap_glyph = font.glyph_id_for(&args.swap_glyph)?;
     let condition = parse_condition(&font, Some(glyph_id), &args.condition)?
-        .ok_or_else(|| miette!("give the alternate's condition with --when, or --always"))?;
+        .ok_or_else(|| miette!("give the swap's condition with --when, or --always"))?;
     let position = args.at.map(|at| zero_based(at, "--at")).transpose()?;
-    let set = FontIntentSet::from(AddGlyphAlternate {
+    let set = FontIntentSet::from(AddGlyphSwap {
         glyph_id,
-        alternate: GlyphAlternate::new(AlternateId::new(), condition, alternate_glyph),
+        swap: GlyphSwap::new(SwapId::new(), condition, swap_glyph),
         position,
     });
 
     apply_mutation(&args.path, &args.mutation, &set)
 }
 
-/// Removes one alternate of a glyph.
+/// Removes one swap of a glyph.
 ///
 /// # Errors
 ///
-/// Rejects an unknown glyph or alternate.
-pub(crate) fn remove_alternate(args: &RemoveAlternateArgs) -> Result<AuthoringReport> {
-    edit_alternate(&args.alternate, &args.mutation, GlyphAlternateEdit::Remove)
+/// Rejects an unknown glyph or swap.
+pub(crate) fn remove_swap(args: &RemoveSwapArgs) -> Result<AuthoringReport> {
+    edit_swap(&args.swap, &args.mutation, GlyphSwapEdit::Remove)
 }
 
-/// Moves one alternate of a glyph to another position.
+/// Moves one swap of a glyph to another position.
 ///
 /// # Errors
 ///
-/// Rejects an unknown glyph or alternate and a position past the end.
-pub(crate) fn move_alternate(args: &MoveAlternateArgs) -> Result<AuthoringReport> {
-    let edit = GlyphAlternateEdit::Move(zero_based(args.to, "--to")?);
-    edit_alternate(&args.alternate, &args.mutation, edit)
+/// Rejects an unknown glyph or swap and a position past the end.
+pub(crate) fn move_swap(args: &MoveSwapArgs) -> Result<AuthoringReport> {
+    let edit = GlyphSwapEdit::Move(zero_based(args.to, "--to")?);
+    edit_swap(&args.swap, &args.mutation, edit)
 }
 
-/// Applies `edit` to the alternate `selector` names.
-fn edit_alternate(
-    selector: &AlternateSelectorArgs,
+/// Applies `edit` to the swap `selector` names.
+fn edit_swap(
+    selector: &SwapSelectorArgs,
     mutation: &MutationArgs,
-    edit: GlyphAlternateEdit,
+    edit: GlyphSwapEdit,
 ) -> Result<AuthoringReport> {
     let font = load_font(&selector.path)?;
-    let alternate_id = alternate_for(&font, selector)?;
-    let set = FontIntentSet::from(EditGlyphAlternate { alternate_id, edit });
+    let swap_id = swap_for(&font, selector)?;
+    let set = FontIntentSet::from(EditGlyphSwap { swap_id, edit });
     apply_mutation(&selector.path, mutation, &set)
 }
 
-/// Replaces an alternate's condition, the glyph it draws, or both, as one
+/// Replaces a swap's condition, the glyph it draws, or both, as one
 /// edit.
 ///
 /// # Errors
 ///
 /// Rejects an empty edit, unreadable condition text, an unknown glyph,
-/// alternate or axis, and what the font refuses.
-pub(crate) fn set_alternate(args: &SetAlternateArgs) -> Result<AuthoringReport> {
-    let font = load_font(&args.alternate.path)?;
-    let glyph_id = font.glyph_id_for(&args.alternate.glyph)?;
-    let alternate_id = alternate_for(&font, &args.alternate)?;
+/// swap or axis, and what the font refuses.
+pub(crate) fn set_swap(args: &SetSwapArgs) -> Result<AuthoringReport> {
+    let font = load_font(&args.swap.path)?;
+    let glyph_id = font.glyph_id_for(&args.swap.glyph)?;
+    let swap_id = swap_for(&font, &args.swap)?;
     let mut edits = Vec::new();
     if let Some(condition) = parse_condition(&font, Some(glyph_id), &args.condition)? {
-        edits.push(GlyphAlternateEdit::Condition(condition));
+        edits.push(GlyphSwapEdit::Condition(condition));
     }
-    if let Some(selector) = &args.alternate_glyph {
-        edits.push(GlyphAlternateEdit::Glyph(font.glyph_id_for(selector)?));
+    if let Some(selector) = &args.swap_glyph {
+        edits.push(GlyphSwapEdit::Glyph(font.glyph_id_for(selector)?));
     }
     if edits.is_empty() {
-        bail!("alternate set needs --when, --always or --glyph");
+        bail!("swap set needs --when, --always or --glyph");
     }
     let set = edits
         .into_iter()
-        .map(|edit| EditGlyphAlternate { alternate_id, edit }.into())
+        .map(|edit| EditGlyphSwap { swap_id, edit }.into())
         .collect();
 
-    apply_mutation(&args.alternate.path, &args.mutation, &set)
+    apply_mutation(&args.swap.path, &args.mutation, &set)
 }
 
 /// Sets where one component draws, in every drawing of its glyph.
@@ -183,43 +183,41 @@ pub(super) fn parse_when(
         .wrap_err("invalid condition")
 }
 
-/// The alternate `args` names: by position from 1, or by the glyph it
+/// The swap `args` names: by position from 1, or by the glyph it
 /// draws.
-fn alternate_for(font: &Font, args: &AlternateSelectorArgs) -> Result<AlternateId> {
+fn swap_for(font: &Font, args: &SwapSelectorArgs) -> Result<SwapId> {
     let glyph_id = font.glyph_id_for(&args.glyph)?;
-    let alternates = font
+    let swaps = font
         .glyph(glyph_id)
-        .map(shift_font::Glyph::alternates)
+        .map(shift_font::Glyph::swaps)
         .unwrap_or_default();
-    if let Ok(position) = args.alternate.parse::<usize>() {
+    if let Ok(position) = args.swap.parse::<usize>() {
         return position
             .checked_sub(1)
-            .and_then(|index| alternates.get(index))
-            .map(GlyphAlternate::id)
+            .and_then(|index| swaps.get(index))
+            .map(GlyphSwap::id)
             .ok_or_else(|| {
                 miette!(
-                    "glyph {:?} has {} alternates; give a position from 1 to {}",
+                    "glyph {:?} has {} swaps; give a position from 1 to {}",
                     args.glyph,
-                    alternates.len(),
-                    alternates.len()
+                    swaps.len(),
+                    swaps.len()
                 )
             });
     }
-    let drawn = font.glyph_id_for(&args.alternate)?;
-    let mut matching = alternates
-        .iter()
-        .filter(|alternate| alternate.glyph() == drawn);
+    let drawn = font.glyph_id_for(&args.swap)?;
+    let mut matching = swaps.iter().filter(|swap| swap.glyph() == drawn);
     match (matching.next(), matching.next()) {
-        (Some(alternate), None) => Ok(alternate.id()),
+        (Some(swap), None) => Ok(swap.id()),
         (None, _) => bail!(
-            "glyph {:?} has no alternate that draws {:?}",
+            "glyph {:?} has no swap that draws {:?}",
             args.glyph,
-            args.alternate
+            args.swap
         ),
         (Some(_), Some(_)) => bail!(
-            "several alternates of {:?} draw {:?}; give its position instead",
+            "several swaps of {:?} draw {:?}; give its position instead",
             args.glyph,
-            args.alternate
+            args.swap
         ),
     }
 }

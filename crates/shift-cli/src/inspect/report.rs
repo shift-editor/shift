@@ -1,4 +1,4 @@
-use crate::authoring::AlternateReport;
+use crate::authoring::SwapReport;
 use shift_font::AxisNaming;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -178,7 +178,7 @@ pub(crate) struct GlyphSummary {
     pub layers: Vec<GlyphLayerSummary>,
     /// The glyphs text draws in its place, in the order they are tried,
     /// with never-used warnings.
-    pub alternates: Vec<AlternateReport>,
+    pub swaps: Vec<SwapReport>,
     /// Where each component of its default drawing draws, by position from
     /// 1; components that always draw are left out.
     pub component_conditions: Vec<ComponentConditionSummary>,
@@ -256,7 +256,7 @@ impl InspectReport {
             .glyphs()
             .map(|glyph| {
                 let mut summary = GlyphSummary::from_glyph(glyph, &source_names_by_id, &axes_by_id);
-                summary.alternates = AlternateReport::of_glyph(font, glyph);
+                summary.swaps = SwapReport::of_glyph(font, glyph);
                 summary.component_conditions = component_conditions(font, glyph);
                 summary
             })
@@ -509,7 +509,7 @@ impl GlyphSummary {
             axes: glyph.axes().to_vec(),
             layer_count: layers.len(),
             layers,
-            alternates: Vec::new(),
+            swaps: Vec::new(),
             component_conditions: Vec::new(),
         }
     }

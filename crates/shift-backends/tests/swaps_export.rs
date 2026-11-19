@@ -1,14 +1,14 @@
-//! A glyph's alternates compile to `rvrn` feature variations: shaping the
-//! compiled font draws the first alternate that holds, as the editor does.
+//! A glyph's swaps compile to `rvrn` feature variations: shaping the
+//! compiled font draws the first swap that holds, as the editor does.
 
 use std::str::FromStr;
 
 use harfrust::{ShapeOptions, ShaperData, ShaperInstance, Tag, UnicodeBuffer, Variation};
 use shift_backends::{ExportFormat, FontExportRequest, FontExporter};
 use shift_font::{
-    AlternateId, Axis, AxisId, AxisMapping, AxisMappingPoint, Condition, ConditionRange, Contour,
-    DesignLocation, Font, Glyph, GlyphAlternate, GlyphId, GlyphLayer, LayerId, Location, PointType,
-    Source, SourceId,
+    Axis, AxisId, AxisMapping, AxisMappingPoint, Condition, ConditionRange, Contour,
+    DesignLocation, Font, Glyph, GlyphId, GlyphLayer, GlyphSwap, LayerId, Location, PointType,
+    Source, SourceId, SwapId,
 };
 use skrifa::raw::TableProvider;
 use skrifa::{FontRef, GlyphId as CompiledGlyphId, MetadataProvider};
@@ -74,25 +74,24 @@ impl Axes {
         Ok(self.font.insert_glyph(glyph)?)
     }
 
-    /// Sets `glyph`'s alternates, each a glyph and the Bleed it starts at,
+    /// Sets `glyph`'s swaps, each a glyph and the Bleed it starts at,
     /// with an optional Width it ends at.
-    fn alternates(&mut self, glyph: &str, alternates: &[(&str, f64, Option<f64>)]) -> Fixture<()> {
-        let alternates = alternates
+    fn swaps(&mut self, glyph: &str, swaps: &[(&str, f64, Option<f64>)]) -> Fixture<()> {
+        let swaps = swaps
             .iter()
             .map(|(name, bleed, width)| {
                 let mut ranges = vec![ConditionRange::new(self.bleed, Some(*bleed), None)];
                 if let Some(width) = width {
                     ranges.push(ConditionRange::new(self.width, None, Some(*width)));
                 }
-                GlyphAlternate::new(
-                    AlternateId::new(),
+                GlyphSwap::new(
+                    SwapId::new(),
                     Condition::all(ranges),
                     GlyphId::from_raw(name),
                 )
             })
             .collect();
-        self.font
-            .set_glyph_alternates(GlyphId::from_raw(glyph), alternates)?;
+        self.font.set_glyph_swaps(GlyphId::from_raw(glyph), swaps)?;
         Ok(())
     }
 
@@ -135,28 +134,28 @@ fn shape_at(binary: &[u8], text: &str, bleed: f32, width: f32) -> Fixture<Vec<St
         .collect()
 }
 
-/// A glyph's alternates: each a glyph, the Bleed it starts at, and an
+/// A glyph's swaps: each a glyph, the Bleed it starts at, and an
 /// optional Width it ends at.
-type AlternateList<'a> = &'a [(&'a str, f64, Option<f64>)];
+type SwapList<'a> = &'a [(&'a str, f64, Option<f64>)];
 
-/// The fixture with `alternates` set, glyph by glyph, compiled.
-fn compile_with_alternates(alternates: &[(&str, AlternateList)]) -> Fixture<Vec<u8>> {
+/// The fixture with `swaps` set, glyph by glyph, compiled.
+fn compile_with_swaps(swaps: &[(&str, SwapList)]) -> Fixture<Vec<u8>> {
     let mut axes = Axes::new()?;
-    for (glyph, list) in alternates {
-        axes.alternates(glyph, list)?;
+    for (glyph, list) in swaps {
+        axes.swaps(glyph, list)?;
     }
     axes.compile()
 }
 
-/// What `text` shapes to in the fixture with `alternates`, at each user
+/// What `text` shapes to in the fixture with `swaps`, at each user
 /// (Bleed, Width), as space-separated glyph names.
 fn drawn_glyphs(
-    alternates: &[(&str, AlternateList)],
+    swaps: &[(&str, SwapList)],
     text: &str,
     locations: &[(f32, f32)],
 ) -> Result<Vec<String>, String> {
     let read = || -> Fixture<Vec<String>> {
-        let binary = compile_with_alternates(alternates)?;
+        let binary = compile_with_swaps(swaps)?;
         locations
             .iter()
             .map(|(bleed, width)| Ok(shape_at(&binary, text, *bleed, *width)?.join(" ")))
@@ -166,9 +165,9 @@ fn drawn_glyphs(
 }
 
 /// What `$` shapes to at each Bleed, at full Width.
-fn dollar_at(alternates: AlternateList, bleeds: &[f32]) -> Result<Vec<String>, String> {
+fn dollar_at(swaps: SwapList, bleeds: &[f32]) -> Result<Vec<String>, String> {
     let locations: Vec<_> = bleeds.iter().map(|bleed| (*bleed, 100.0)).collect();
-    drawn_glyphs(&[("dollar", alternates)], "$", &locations)
+    drawn_glyphs(&[("dollar", swaps)], "$", &locations)
 }
 
 fn expected_glyphs(names: &[&str]) -> Vec<String> {
@@ -176,7 +175,7 @@ fn expected_glyphs(names: &[&str]) -> Vec<String> {
 }
 
 #[test]
-fn an_alternate_is_drawn_from_its_condition_on() {
+fn a_swap_is_drawn_from_its_condition_on() {
     assert_eq!(
         dollar_at(&[("dollar.bled", 70.0, None)], &[0.0, 69.0, 70.0, 100.0]),
         Ok(expected_glyphs(&[
@@ -189,7 +188,7 @@ fn an_alternate_is_drawn_from_its_condition_on() {
 }
 
 #[test]
-fn the_first_alternate_that_holds_wins_where_two_overlap() {
+fn the_first_swap_that_holds_wins_where_two_overlap() {
     // dollar.heavy from Bleed 80 overlaps dollar.bled from 70, and comes first.
     assert_eq!(
         dollar_at(
@@ -215,15 +214,15 @@ fn the_first_alternate_that_holds_wins_where_two_overlap() {
 }
 
 #[test]
-fn a_narrower_alternate_first_holds_only_inside_its_box() {
+fn a_narrower_swap_first_holds_only_inside_its_box() {
     // dollar.narrow from Bleed 70 up to Width 80, then dollar.bled from Bleed 70.
-    let alternates: AlternateList = &[
+    let swaps: SwapList = &[
         ("dollar.narrow", 70.0, Some(80.0)),
         ("dollar.bled", 70.0, None),
     ];
     assert_eq!(
         drawn_glyphs(
-            &[("dollar", alternates)],
+            &[("dollar", swaps)],
             "$",
             &[(90.0, 80.0), (90.0, 81.0), (69.0, 60.0), (70.0, 50.0)]
         ),
@@ -237,13 +236,13 @@ fn a_narrower_alternate_first_holds_only_inside_its_box() {
 }
 
 #[test]
-fn an_alternate_glyphs_own_alternates_are_not_applied() {
-    let alternates: &[(&str, AlternateList)] = &[
+fn a_swap_glyphs_own_swaps_are_not_applied() {
+    let swaps: &[(&str, SwapList)] = &[
         ("dollar", &[("dollar.bled", 70.0, None)]),
         ("dollar.bled", &[("dollar.heavy", 50.0, None)]),
     ];
     assert_eq!(
-        drawn_glyphs(alternates, "$", &[(60.0, 100.0), (90.0, 100.0)]),
+        drawn_glyphs(swaps, "$", &[(60.0, 100.0), (90.0, 100.0)]),
         Ok(expected_glyphs(&["dollar", "dollar.bled"])),
     );
 }
@@ -260,7 +259,7 @@ fn feature_variation_records(binary: &[u8]) -> Fixture<usize> {
 
 #[test]
 fn glyphs_with_the_same_condition_share_feature_variation_records() {
-    let alternates: &[(&str, AlternateList)] = &[
+    let swaps: &[(&str, SwapList)] = &[
         (
             "dollar",
             &[("dollar.heavy", 80.0, None), ("dollar.bled", 70.0, None)],
@@ -268,24 +267,24 @@ fn glyphs_with_the_same_condition_share_feature_variation_records() {
         ("cent", &[("cent.bled", 70.0, None)]),
     ];
     assert_eq!(
-        drawn_glyphs(alternates, "$¢", &[(75.0, 100.0), (90.0, 100.0)]),
+        drawn_glyphs(swaps, "$¢", &[(75.0, 100.0), (90.0, 100.0)]),
         Ok(expected_glyphs(&[
             "dollar.bled cent.bled",
             "dollar.heavy cent.bled"
         ])),
     );
-    // Two regions draw alternates, Bleed 70–80 and 80–100: one record each.
-    let records = compile_with_alternates(alternates)
+    // Two regions draw swaps, Bleed 70–80 and 80–100: one record each.
+    let records = compile_with_swaps(swaps)
         .and_then(|binary| feature_variation_records(&binary))
         .map_err(|error| error.to_string());
     assert_eq!(records, Ok(2));
 }
 
-/// The fixture with `alternates` exported as a designspace, then compiled
+/// The fixture with `swaps` exported as a designspace, then compiled
 /// from that designspace by fontc's own designspace reader.
 fn compile_through_designspace(axes: &Axes) -> Fixture<Vec<u8>> {
     let directory = tempfile::tempdir()?;
-    let path = directory.path().join("Alternates.designspace");
+    let path = directory.path().join("Swaps.designspace");
     FontExporter::new().export(
         &axes.font,
         FontExportRequest {
@@ -298,15 +297,15 @@ fn compile_through_designspace(axes: &Axes) -> Fixture<Vec<u8>> {
 }
 
 /// What `$` shapes to at each user Bleed, at full Width, in the fixture
-/// with `dollar`'s `alternates` exported as a designspace and compiled
+/// with `dollar`'s `swaps` exported as a designspace and compiled
 /// from it, and in the fixture compiled directly.
 fn dollar_through_designspace(
     axes: &mut Axes,
-    alternates: AlternateList,
+    swaps: SwapList,
     bleeds: &[f32],
 ) -> Result<[Vec<String>; 2], String> {
     let mut read = || -> Fixture<[Vec<String>; 2]> {
-        axes.alternates("dollar", alternates)?;
+        axes.swaps("dollar", swaps)?;
         let shape = |binary: &[u8]| -> Fixture<Vec<String>> {
             bleeds
                 .iter()
@@ -322,8 +321,8 @@ fn dollar_through_designspace(
 }
 
 #[test]
-fn designspace_rules_compile_in_fontc_as_shift_compiles_the_alternates() {
-    let cases: [(AlternateList, &[f32], &[&str]); 2] = [
+fn designspace_rules_compile_in_fontc_as_shift_compiles_the_swaps() {
+    let cases: [(SwapList, &[f32], &[&str]); 2] = [
         (
             &[("dollar.bled", 70.0, None)],
             &[0.0, 69.0, 70.0, 100.0],
@@ -338,14 +337,14 @@ fn designspace_rules_compile_in_fontc_as_shift_compiles_the_alternates() {
             &["dollar", "dollar.bled", "dollar.heavy", "dollar.heavy"],
         ),
     ];
-    for (alternates, bleeds, drawn) in cases {
+    for (swaps, bleeds, drawn) in cases {
         let drawn = expected_glyphs(drawn);
         assert_eq!(
             Axes::new()
                 .map_err(|error| error.to_string())
-                .and_then(|mut axes| dollar_through_designspace(&mut axes, alternates, bleeds)),
+                .and_then(|mut axes| dollar_through_designspace(&mut axes, swaps, bleeds)),
             Ok([drawn.clone(), drawn]),
-            "{alternates:?}"
+            "{swaps:?}"
         );
     }
 }
@@ -390,17 +389,17 @@ type ReadRule = (
     Vec<(String, String)>,
 );
 
-/// The fixture with `alternates` exported as a designspace, and the rules
+/// The fixture with `swaps` exported as a designspace, and the rules
 /// that designspace holds, with their processing.
 fn exported_rules(
-    alternates: &[(&str, AlternateList)],
+    swaps: &[(&str, SwapList)],
 ) -> Fixture<(norad::designspace::RuleProcessing, Vec<ReadRule>)> {
     let mut axes = Axes::new()?;
-    for (glyph, list) in alternates {
-        axes.alternates(glyph, list)?;
+    for (glyph, list) in swaps {
+        axes.swaps(glyph, list)?;
     }
     let directory = tempfile::tempdir()?;
-    let path = directory.path().join("Alternates.designspace");
+    let path = directory.path().join("Swaps.designspace");
     FontExporter::new().export(
         &axes.font,
         FontExportRequest {
@@ -431,7 +430,7 @@ fn exported_rules(
 }
 
 #[test]
-fn designspace_rules_carry_alternates_that_never_overlap_as_authored() {
+fn designspace_rules_carry_swaps_that_never_overlap_as_authored() {
     let rules = exported_rules(&[
         ("dollar", &[("dollar.narrow", 70.0, Some(80.0))]),
         ("cent", &[("cent.bled", 70.0, None)]),

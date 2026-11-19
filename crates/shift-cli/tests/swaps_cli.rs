@@ -55,7 +55,7 @@ impl DollarFont {
         glyphs
     }
 
-    /// Runs `command` (such as `glyph alternate add`) on the font with
+    /// Runs `command` (such as `glyph swap add`) on the font with
     /// `args` after its path.
     fn run(&self, command: &str, args: &[&str]) -> std::process::Output {
         let mut full: Vec<&str> = command.split(' ').collect();
@@ -103,18 +103,18 @@ impl DollarFont {
         serde_json::from_str(&self.ok("glyph inspect", &args)).ok()
     }
 
-    /// `dollar`'s alternates, as `glyph inspect` lists them: the glyph each
+    /// `dollar`'s swaps, as `glyph inspect` lists them: the glyph each
     /// draws and its condition text.
-    fn alternates(&self) -> Option<Vec<(String, Vec<String>)>> {
+    fn swaps(&self) -> Option<Vec<(String, Vec<String>)>> {
         let text = |value: &Value| value.as_str().map(str::to_string);
         self.inspect_dollar(None)?
-            .get("alternates")?
+            .get("swaps")?
             .as_array()?
             .iter()
-            .map(|alternate| {
-                let when = alternate.get("when")?.as_array()?;
+            .map(|swap| {
+                let when = swap.get("when")?.as_array()?;
                 let when = when.iter().map(text).collect::<Option<Vec<_>>>()?;
-                Some((text(alternate.get("glyph")?)?, when))
+                Some((text(swap.get("glyph")?)?, when))
             })
             .collect()
     }
@@ -138,11 +138,11 @@ fn texts(values: &[&str]) -> Vec<String> {
 }
 
 #[test]
-fn the_first_alternate_whose_condition_holds_is_drawn() {
+fn the_first_swap_whose_condition_holds_is_drawn() {
     let font = DollarFont::new().unwrap();
 
     font.ok(
-        "glyph alternate add",
+        "glyph swap add",
         &["dollar", "dollar.bled", "--when", "Bleed >= 70"],
     );
     let heavy = [
@@ -153,7 +153,7 @@ fn the_first_alternate_whose_condition_holds_is_drawn() {
         "--at",
         "1",
     ];
-    font.ok("glyph alternate add", &heavy);
+    font.ok("glyph swap add", &heavy);
 
     assert_eq!(font.drawn_at("BLED=95").unwrap(), "dollar.heavy");
     assert_eq!(font.drawn_at("BLED=80").unwrap(), "dollar.bled");
@@ -161,27 +161,21 @@ fn the_first_alternate_whose_condition_holds_is_drawn() {
 }
 
 #[test]
-fn alternates_are_moved_set_and_removed() {
+fn swaps_are_moved_set_and_removed() {
     let font = DollarFont::new().unwrap();
     font.ok(
-        "glyph alternate add",
+        "glyph swap add",
         &["dollar", "dollar.heavy", "--when", "BLED 90-100"],
     );
     font.ok(
-        "glyph alternate add",
+        "glyph swap add",
         &["dollar", "dollar.bled", "--when", "BLED>=70"],
     );
 
-    font.ok(
-        "glyph alternate move",
-        &["dollar", "dollar.heavy", "--to", "2"],
-    );
-    font.ok(
-        "glyph alternate set",
-        &["dollar", "1", "--when", "BLED<=20"],
-    );
-    let moved_and_set = font.alternates().unwrap();
-    font.ok("glyph alternate remove", &["dollar", "1"]);
+    font.ok("glyph swap move", &["dollar", "dollar.heavy", "--to", "2"]);
+    font.ok("glyph swap set", &["dollar", "1", "--when", "BLED<=20"]);
+    let moved_and_set = font.swaps().unwrap();
+    font.ok("glyph swap remove", &["dollar", "1"]);
 
     assert_eq!(
         moved_and_set,
@@ -190,43 +184,39 @@ fn alternates_are_moved_set_and_removed() {
             ("dollar.heavy".into(), texts(&["Bleed 90–100"])),
         ]
     );
-    let left = font.alternates().unwrap();
+    let left = font.swaps().unwrap();
     assert_eq!(left, [("dollar.heavy".into(), texts(&["Bleed 90–100"]))]);
     assert!(load_font(&font.path).glyph_by_name("dollar.bled").is_some());
 }
 
 #[test]
-fn an_alternate_an_earlier_one_covers_is_reported_as_never_used() {
+fn a_swap_an_earlier_one_covers_is_reported_as_never_used() {
     let font = DollarFont::new().unwrap();
     font.ok(
-        "glyph alternate add",
+        "glyph swap add",
         &["dollar", "dollar.bled", "--when", "BLED>=70"],
     );
 
     let report = font.ok(
-        "glyph alternate add",
+        "glyph swap add",
         &["dollar", "dollar.heavy", "--when", "BLED>=80"],
     );
     let check = String::from_utf8_lossy(&font.run("check", &[]).stdout).into_owned();
 
     let warning = "2. dollar.heavy  when Bleed ≥ 80\n     warning: never used";
     assert!(report.contains(warning), "{report}");
-    let finding =
-        "A001 warning[never-used-alternate]: dollar: dollar.heavy (alternate 2) is never used";
+    let finding = "A001 warning[never-used-swap]: dollar: dollar.heavy (swap 2) is never used";
     assert!(check.contains(finding), "{check}");
 }
 
-/// What `glyph alternate add` says when it refuses `dollar.bled` as an
-/// alternate of `glyph` where `when` holds.
+/// What `glyph swap add` says when it refuses `dollar.bled` as a
+/// swap of `glyph` where `when` holds.
 fn add_refusal(font: &DollarFont, glyph: &str, when: &str) -> String {
-    font.refused(
-        "glyph alternate add",
-        &[glyph, "dollar.bled", "--when", when],
-    )
+    font.refused("glyph swap add", &[glyph, "dollar.bled", "--when", when])
 }
 
 #[test]
-fn an_alternate_is_refused_on_a_glyph_axis_or_a_reversed_range() {
+fn a_swap_is_refused_on_a_glyph_axis_or_a_reversed_range() {
     let font = DollarFont::new().unwrap();
     let spread = [
         "dot",
@@ -245,8 +235,10 @@ fn an_alternate_is_refused_on_a_glyph_axis_or_a_reversed_range() {
     let reversed = add_refusal(&font, "dollar", "BLED 80-20");
     let unknown = add_refusal(&font, "dollar", "wght>=7");
 
+    // The report wraps its lines, so compare the words alone.
+    let words = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(
-        on_glyph_axis.contains("which is not a font axis"),
+        words(&on_glyph_axis).contains("which is not a font axis"),
         "{on_glyph_axis}"
     );
     assert!(
@@ -257,7 +249,7 @@ fn an_alternate_is_refused_on_a_glyph_axis_or_a_reversed_range() {
         unknown.contains("no axis is named or tagged \"wght\""),
         "{unknown}"
     );
-    assert_eq!(font.alternates(), Some(Vec::new()));
+    assert_eq!(font.swaps(), Some(Vec::new()));
 }
 
 #[test]
@@ -325,12 +317,12 @@ fn a_component_condition_may_not_read_the_axes_of_the_glyph_it_draws() {
 }
 
 #[test]
-fn alternates_and_component_conditions_round_trip_through_glyph_set_and_export() {
+fn swaps_and_component_conditions_round_trip_through_glyph_set_and_export() {
     let font = DollarFont::new().unwrap();
     let moved =
         json!({"base": "dot", "transform": [1, 0, 0, 1, 50, 0], "condition": ["RSLN >= 50"]});
-    let alternate = json!({"glyph": "dollar.bled", "when": ["Bleed ≥ 70", "RSLN<=50"]});
-    let dollar = json!({"name": "dollar", "alternates": [alternate],
+    let swap = json!({"glyph": "dollar.bled", "when": ["Bleed ≥ 70", "RSLN<=50"]});
+    let dollar = json!({"name": "dollar", "swaps": [swap],
         "layer": {"advance": 100, "components": [{"base": "dot"}, moved]}});
     font.set_glyphs(&json!({"format": 1, "glyphs": [dollar]}));
 
@@ -344,7 +336,7 @@ fn alternates_and_component_conditions_round_trip_through_glyph_set_and_export()
         .unwrap();
 
     let written = json!([{"glyph": "dollar.bled", "when": ["BLED ≥ 70", "RSLN ≤ 50"]}]);
-    assert_eq!(dollar["alternates"], written);
+    assert_eq!(dollar["swaps"], written);
     assert_eq!(
         dollar["layer"]["components"][1]["condition"],
         json!(["RSLN ≥ 50"])
@@ -352,7 +344,7 @@ fn alternates_and_component_conditions_round_trip_through_glyph_set_and_export()
     // What export wrote, glyph set reads back as the same.
     let again = font.set_glyphs_with(&json!({"format": 1, "glyphs": [dollar]}), &["--dry-run"]);
     assert!(
-        again.contains("No files written") && !again.contains("alternates"),
+        again.contains("No files written") && !again.contains("swaps"),
         "{again}"
     );
 }

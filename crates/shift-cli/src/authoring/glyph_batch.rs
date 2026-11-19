@@ -1,8 +1,7 @@
 //! Batch planning over directory facts; geometry is acquired by the workspace only when needed.
 
 use shift_font::{
-    AlternateId, CreateGlyph, Glyph, GlyphAlternate, LayerLocation, SetGlyphAlternates,
-    SetMarkColor, UpdateGlyph,
+    CreateGlyph, Glyph, GlyphSwap, LayerLocation, SetGlyphSwaps, SetMarkColor, SwapId, UpdateGlyph,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -11,14 +10,12 @@ use shift_font::{FontIntentSet, GlyphId, GlyphName};
 
 use crate::cli::SetGlyphsArgs;
 
-use super::alternate::parse_when;
 use super::glyph::{load_font, parse_unicodes};
-use super::input::{
-    AlternateInput, GlyphBatchInput, GlyphEntryInput, MarkColorEdit, MetricsKeysInput,
-};
+use super::input::{GlyphBatchInput, GlyphEntryInput, MarkColorEdit, MetricsKeysInput, SwapInput};
 use super::layer_payload::read_json_input;
 use super::layer_place::{create_layer, layer_at, layer_location_from_values};
 use super::metrics_keys::check_written_keys;
+use super::swap::parse_when;
 use super::{AuthoringReport, apply_checked_mutation};
 use crate::selector::FontSelectors;
 
@@ -81,7 +78,7 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
     let mut glyphs = HashMap::<String, (GlyphId, Vec<u32>)>::new();
     let mut unicodes = BTreeMap::<String, Vec<u32>>::new();
     let mut glyph_keys = BTreeMap::<String, MetricsKeysInput>::new();
-    let mut glyph_alternates = BTreeMap::<String, Vec<AlternateInput>>::new();
+    let mut glyph_swaps = BTreeMap::<String, Vec<SwapInput>>::new();
     let mut mark_colors = BTreeMap::<String, MarkColorEdit>::new();
     let mut seen: Vec<(String, LayerLocation)> = Vec::new();
     let mut intents = Vec::new();
@@ -142,9 +139,8 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
             record_once(&mut glyph_keys, &name, keys, "glyph metrics keys")
                 .wrap_err_with(context)?;
         }
-        if let Some(alternates) = entry.alternates {
-            record_once(&mut glyph_alternates, &name, alternates, "alternates")
-                .wrap_err_with(context)?;
+        if let Some(swaps) = entry.swaps {
+            record_once(&mut glyph_swaps, &name, swaps, "swaps").wrap_err_with(context)?;
         }
         if entry.mark_color != MarkColorEdit::Keep {
             record_once(&mut mark_colors, &name, entry.mark_color, "mark colours")
@@ -228,21 +224,15 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
         );
     }
 
-    // Alternates follow the glyphs, so an alternate glyph the batch creates
+    // Swaps follow the glyphs, so a swap glyph the batch creates
     // exists.
-    for (name, inputs) in &glyph_alternates {
+    for (name, inputs) in &glyph_swaps {
         let Some(&(glyph_id, _)) = glyphs.get(name) else {
-            bail!("alternates name glyph `{name}`, which the batch did not create");
+            bail!("swaps name glyph `{name}`, which the batch did not create");
         };
-        let alternates = planned_alternates(&font, glyph_id, inputs, &base_glyph)
-            .wrap_err_with(|| format!("glyph {name:?} alternates"))?;
-        intents.push(
-            SetGlyphAlternates {
-                glyph_id,
-                alternates,
-            }
-            .into(),
-        );
+        let swaps = planned_swaps(&font, glyph_id, inputs, &base_glyph)
+            .wrap_err_with(|| format!("glyph {name:?} swaps"))?;
+        intents.push(SetGlyphSwaps { glyph_id, swaps }.into());
     }
 
     // Glyph keys come last, so the glyphs and layers they read already exist.
@@ -261,36 +251,33 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
     )
 }
 
-/// The alternates `inputs` give `glyph_id`, in order. Each keeps the id of
-/// an existing alternate with the same glyph and condition, so a batch that
+/// The swaps `inputs` give `glyph_id`, in order. Each keeps the id of
+/// an existing swap with the same glyph and condition, so a batch that
 /// writes the list back unchanged changes nothing.
 ///
 /// # Errors
 ///
-/// Rejects an alternate glyph `base_glyph` can't find and condition text the
+/// Rejects a swap glyph `base_glyph` can't find and condition text the
 /// font can't read.
-fn planned_alternates(
+fn planned_swaps(
     font: &shift_font::Font,
     glyph_id: GlyphId,
-    inputs: &[AlternateInput],
+    inputs: &[SwapInput],
     base_glyph: &dyn Fn(&str) -> Result<GlyphId>,
-) -> Result<Vec<GlyphAlternate>> {
-    let existing = font
-        .glyph(glyph_id)
-        .map(Glyph::alternates)
-        .unwrap_or_default();
-    let mut alternates: Vec<GlyphAlternate> = Vec::with_capacity(inputs.len());
+) -> Result<Vec<GlyphSwap>> {
+    let existing = font.glyph(glyph_id).map(Glyph::swaps).unwrap_or_default();
+    let mut swaps: Vec<GlyphSwap> = Vec::with_capacity(inputs.len());
     for input in inputs {
-        let context = || format!("alternate {:?}", input.glyph);
-        let alternate_glyph = base_glyph(&input.glyph).wrap_err_with(context)?;
+        let context = || format!("swap {:?}", input.glyph);
+        let swap_glyph = base_glyph(&input.glyph).wrap_err_with(context)?;
         let condition = parse_when(font, Some(glyph_id), &input.when).wrap_err_with(context)?;
-        let kept = existing.iter().find(|alternate| {
-            alternate.glyph() == alternate_glyph
-                && *alternate.condition() == condition
-                && !alternates.iter().any(|taken| taken.id() == alternate.id())
+        let kept = existing.iter().find(|swap| {
+            swap.glyph() == swap_glyph
+                && *swap.condition() == condition
+                && !swaps.iter().any(|taken| taken.id() == swap.id())
         });
-        let id = kept.map_or_else(AlternateId::new, GlyphAlternate::id);
-        alternates.push(GlyphAlternate::new(id, condition, alternate_glyph));
+        let id = kept.map_or_else(SwapId::new, GlyphSwap::id);
+        swaps.push(GlyphSwap::new(id, condition, swap_glyph));
     }
-    Ok(alternates)
+    Ok(swaps)
 }

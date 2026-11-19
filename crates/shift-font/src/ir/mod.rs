@@ -10,10 +10,10 @@ pub mod entity;
 pub mod features;
 pub mod font;
 pub mod glyph;
-pub mod glyph_alternate;
 pub mod glyph_axis;
 pub mod glyph_category;
 pub mod glyph_name;
+pub mod glyph_swap;
 pub mod grid;
 pub mod guideline;
 pub mod kerning;
@@ -43,22 +43,20 @@ pub use component::{
 pub use condition::{Condition, ConditionRange};
 pub use contour::{Contour, Contours};
 pub use entity::{
-    AlternateId, AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, EntityId,
-    GlyphEntityId, GlyphId, GuidelineId, KerningGroupId, LayerId, MetricId, NamedInstanceId,
-    NodeId, PointId, RunId, SourceId, TextItemId,
+    AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, EntityId, GlyphEntityId,
+    GlyphId, GuidelineId, KerningGroupId, LayerId, MetricId, NamedInstanceId, NodeId, PointId,
+    RunId, SourceId, SwapId, TextItemId,
 };
 pub use features::FeatureData;
 pub use font::{Font, FontCopyId, FontMetadata, LANGUAGES_LIB_KEY};
 pub use glyph::{Glyph, GlyphLayer};
-pub use glyph_alternate::{
-    GlyphAlternate, NeverUsedAlternate, NeverUsedReason, never_used_alternates,
-};
 pub use glyph_axis::{AxisValueUse, GlyphAxis, GlyphAxisEdit};
 pub use glyph_category::{
     GlyphCategory, GlyphClasses, GlyphDataCategory, GlyphSubcategory, Ligature, NamedGlyph,
     OpenTypeCategories, OpenTypeCategory, RecordCategory, UnknownGlyphCategory,
 };
 pub use glyph_name::{GlyphName, GlyphNameError};
+pub use glyph_swap::{GlyphSwap, NeverUsedReason, NeverUsedSwap, never_used_swaps};
 pub use grid::{GRID_LIB_KEY, Grid, MAX_GRID_SUBDIVISIONS};
 pub use guideline::{Guideline, GuidelineOrientation};
 pub use kerning::{
