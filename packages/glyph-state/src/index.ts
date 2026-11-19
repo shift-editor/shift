@@ -1,5 +1,6 @@
 export { Anchor, type AnchorHit } from "./Anchor";
 export { Component, type ComponentLocation, type Matrix } from "./Component";
+export { sameCondition, sameConditionRange } from "./condition";
 export { Contour } from "./Contour";
 export { IdIndex } from "./IdIndex";
 export {

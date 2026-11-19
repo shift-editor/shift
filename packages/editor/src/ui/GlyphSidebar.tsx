@@ -9,6 +9,8 @@ import { GlyphIdentityFields } from "./GlyphIdentityFields";
 import { ShiftIcon } from "./ShiftIcon";
 import type { EditorUISession } from "./types";
 import { useGlyphMetrics } from "./useGlyphMetrics";
+import type { Font } from "../lib/model/Font";
+import type { EditedGlyph } from "../types/glyph";
 
 /** Application content merged into the glyph sidebar. */
 export interface GlyphSidebarHost {
@@ -118,7 +120,13 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
   const sidebearingsEditable = editable && leftSidebearing !== null && rightSidebearing !== null;
   const page = useSignalState(editor.scene.shownPageCell);
   // A glyph opened in its own tab sits on an unnamed glyph page; the glyph names it.
-  const title = page?.role === "glyph" ? (glyph?.name ?? page.name) : (page?.name ?? "Untitled");
+  const edited = useSignalState(editor.editedGlyphCell);
+  const title =
+    page?.role === "glyph" ? (
+      <GlyphTitle opened={edited} drawn={glyph?.name ?? page.name} font={editor.font} />
+    ) : (
+      (page?.name ?? "Untitled")
+    );
 
   return (
     <aside
@@ -239,4 +247,29 @@ function keyChipPosition(side: MetricsKeySide): "left" | "right" | "center" {
     case "width":
       return "center";
   }
+}
+
+/**
+ * A glyph page's title: the glyph's name, or `dollar → dollar.bled` while
+ * the canvas draws, and edits, one of its alternates at the current
+ * location.
+ */
+function GlyphTitle({
+  opened,
+  drawn,
+  font,
+}: {
+  opened: EditedGlyph | null;
+  drawn: string;
+  font: Font;
+}) {
+  if (!opened || opened.glyphId === opened.drawnGlyphId) return <>{drawn}</>;
+
+  const name = font.glyphName(opened.glyphId) ?? opened.glyphId;
+  return (
+    <span title={`${name} is drawn as its alternate ${drawn} here`}>
+      <span className="text-muted">{name} → </span>
+      {drawn}
+    </span>
+  );
 }

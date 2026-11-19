@@ -1,4 +1,6 @@
 import type {
+  AxisId,
+  ConditionRange,
   EngineFontHeader,
   EngineFontRecords,
   FontIntent,
@@ -12,12 +14,14 @@ import type {
 } from "@shift/types";
 import {
   FontChangeFlagSchema,
+  type ConditionValue,
   type Counterparts,
   type FeatureSubstitution,
   type FontChangeFlag,
   type FontFeature,
   type GlyphIdentityChange,
   type GlyphPreview,
+  type NeverUsedAlternate,
   type PlacedText,
   type SideLink,
   type RevisedNode,
@@ -398,6 +402,18 @@ export class SessionEngine implements FontEngine {
 
   metricsKeyProblem(text: string): string | null {
     return this.#require().metricsKeyProblem(text);
+  }
+
+  neverUsedAlternates(glyphId: GlyphId): readonly NeverUsedAlternate[] {
+    return this.#session?.neverUsedAlternates(glyphId) ?? [];
+  }
+
+  conditionValue(glyph: GlyphId | null, axis: AxisId, text: string): ConditionValue {
+    return this.#require().conditionValue(glyph, axis, text);
+  }
+
+  conditionValueText(glyph: GlyphId | null, range: ConditionRange): string {
+    return this.#require().conditionValueText(glyph, range);
   }
 
   nextGlyphName(name: string): GlyphName {

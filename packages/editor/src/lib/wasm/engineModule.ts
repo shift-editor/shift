@@ -1,8 +1,11 @@
 import type {
+  AxisId,
   EngineFontHeader,
   EngineFontRecords,
   EngineStorelessRecords,
   ComponentInheritance,
+  Condition,
+  ConditionRange,
   FontIntent,
   FontReplacement,
   GlyphId,
@@ -52,6 +55,7 @@ import {
   type EngineStage,
 } from "@shift/wasm/engine";
 import type {
+  ConditionValue,
   Counterparts,
   EditLocation,
   EditablePair,
@@ -61,6 +65,7 @@ import type {
   SideLink,
   InterpolatedMetrics,
   MissingKerningOrigin,
+  NeverUsedAlternate,
   FeatureSubstitution,
   FontChangeFlag,
   FontFeature,
@@ -518,6 +523,48 @@ export class EngineSession {
     inheritance: ComponentInheritance,
   ): Location {
     return this.#reads.componentBaseLocation(parent, set, inheritance);
+  }
+
+  /**
+   * The glyph drawn for `glyphId` at a design location: its first alternate
+   * that holds there, else itself (`Font::drawn_glyph_at`).
+   *
+   * @param location - Design coordinates in the font's axis order, NaN for an axis default.
+   */
+  drawnGlyph(glyphId: GlyphId, location: readonly number[]): GlyphId {
+    return this.#reads.drawnGlyph(glyphId, location);
+  }
+
+  /** `glyphId`'s alternates that never draw, and why: `Font::never_used_alternates`. */
+  neverUsedAlternates(glyphId: GlyphId): readonly NeverUsedAlternate[] {
+    return this.#reads.neverUsedAlternates(glyphId);
+  }
+
+  /**
+   * A condition chip's value read on `axis`, a font axis or one of
+   * `glyph`'s own: shift-font's `ConditionSpace::parse_value`.
+   */
+  conditionValue(glyphId: GlyphId | null, axisId: AxisId, text: string): ConditionValue {
+    return this.#reads.conditionValue(glyphId, axisId, text);
+  }
+
+  /** A range's value as its chip shows it, `≥ 700`: `ConditionSpace::format_value`. */
+  conditionValueText(glyph: GlyphId | null, range: ConditionRange): string {
+    return this.#reads.conditionValueText(glyph, range);
+  }
+
+  /**
+   * Whether a component with `condition`, placed in `parent`, draws where
+   * `parent` is drawn: at the external location `location` (the font's
+   * axis order) and its own axes at `own` (`Font::component_condition_holds`).
+   */
+  componentDraws(
+    parent: GlyphId,
+    condition: Condition,
+    location: readonly number[],
+    own: Location,
+  ): boolean {
+    return this.#reads.componentDraws(parent, condition, location, own);
   }
 
   /** Where the drawing `layer` sits in its glyph's design space: `Font::layer_design_location`. */

@@ -11,6 +11,8 @@ import { SidebarRowButton } from "./SidebarRowButton";
 
 export interface CollapsibleSectionProps {
   title: string;
+  /** Muted text after the title, such as "First match wins". */
+  hint?: string;
   defaultOpen?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -22,6 +24,7 @@ export interface CollapsibleSectionProps {
 
 export const CollapsibleSection = ({
   title,
+  hint,
   defaultOpen,
   open,
   onOpenChange,
@@ -46,7 +49,8 @@ export const CollapsibleSection = ({
         render={<SidebarRowButton variant="transparent" className="w-auto flex-1" />}
       >
         <CollapsibleChevron />
-        <h3 className="truncate text-ui font-medium text-primary">{title}</h3>
+        <h3 className="shrink-0 truncate text-ui font-medium text-primary">{title}</h3>
+        {hint && <span className="min-w-0 truncate text-ui text-muted">{hint}</span>}
       </CollapsibleTrigger>
       {actions && <SidebarActionSlot isVisible={isActive}>{actions}</SidebarActionSlot>}
     </div>

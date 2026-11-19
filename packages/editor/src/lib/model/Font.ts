@@ -42,8 +42,15 @@ import type {
   SidebearingEdit,
   GlyphAxisEdit,
   AxisRange,
+  AlternateId,
+  Condition,
+  ConditionRange,
+  GlyphAlternate,
+  GlyphAlternateEdit,
+  SetComponentCondition,
 } from "@shift/types";
 import {
+  mintAlternateId,
   mintAxisId,
   mintGlyphId,
   mintKerningGroupId,
@@ -70,10 +77,12 @@ import type {
 } from "../../types/font";
 import type { InterpolatedMetrics, MissingKerningOrigin } from "../wasm/engine";
 import type {
+  ConditionValue,
   Counterparts,
   FeatureSubstitution,
   FontFeature,
   GlyphIdentityChange,
+  NeverUsedAlternate,
   SideLink,
   PlacedText,
   TextRun,
@@ -856,6 +865,134 @@ export class Font {
   }
 
   /**
+   * A glyph's alternates, tried in order, as its directory record lists
+   * them: where on the font's axes another glyph is drawn in its place.
+   * Subscribed to the directory, so it reads again after each edit.
+   *
+   * @returns Empty for a glyph with none, or one the font lacks.
+   */
+  alternatesOf(glyphId: GlyphId): readonly GlyphAlternate[] {
+    track(this.#directoryCell);
+    return this.#directoryCell.peek().recordForId(glyphId)?.alternates ?? NO_ALTERNATES;
+  }
+
+  /**
+   * The glyph drawn for `glyphId` where the font is drawn at `location`:
+   * its first alternate that holds there, else itself, as the engine
+   * decides it (`Font::drawn_glyph_at`). One step: the alternate glyph's
+   * own alternates are not applied, and components are never swapped.
+   */
+  drawnGlyphAt(glyphId: GlyphId, location: ExternalAxisLocation): GlyphId {
+    if (this.alternatesOf(glyphId).length === 0) return glyphId;
+
+    return this.#designspace.drawnGlyph(glyphId, location);
+  }
+
+  /**
+   * A glyph's alternates that never draw anywhere on the font's axes, and
+   * why: outside the axes, or covered by earlier ones. Subscribed to the
+   * directory and the axes.
+   */
+  neverUsedAlternates(glyphId: GlyphId): readonly NeverUsedAlternate[] {
+    if (this.alternatesOf(glyphId).length === 0) return [];
+
+    track(this.#axesCell);
+    track(this.#axisMappingBasesCell);
+    return this.#store.engine.neverUsedAlternates(glyphId);
+  }
+
+  /**
+   * A condition chip's value `text` read on `axisId`, a font axis or one of
+   * `glyphId`'s own: `700`, `>=700`, `≥700` or `700+` (from), `<=80` or
+   * `≤80` (up to), `400-600` or `400–600` (both), in user units on a font
+   * axis users see. The range in design units, or why it can't be read,
+   * such as "Weight only goes to 900".
+   *
+   * @param glyphId - The glyph whose own axes the text may name too; null
+   *   for font axes only.
+   */
+  conditionValue(glyphId: GlyphId | null, axisId: AxisId, text: string): ConditionValue {
+    return this.#store.engine.conditionValue(glyphId, axisId, text);
+  }
+
+  /**
+   * A condition range's value as its chip shows it after the axis's name:
+   * `≥ 700`, `≤ 80` or `400–600`, in the units {@link conditionValue} reads.
+   */
+  conditionValueText(glyphId: GlyphId | null, range: ConditionRange): string {
+    track(this.#axesCell);
+    track(this.#axisMappingBasesCell);
+    return this.#store.engine.conditionValueText(glyphId, range);
+  }
+
+  /**
+   * Adds an alternate to `glyphId`: where `condition` holds, `alternateGlyphId`
+   * is drawn in its place. One undoable edit.
+   *
+   * @param position - Zero-based place in the list, which is tried in order;
+   *   null adds it last.
+   * @returns The new alternate's id.
+   * @throws {Error} when the engine refuses it: the glyph itself, a glyph
+   *   the font lacks, or a condition off the font's axes.
+   */
+  async addGlyphAlternate(
+    glyphId: GlyphId,
+    alternateGlyphId: GlyphId,
+    condition: Condition,
+    position: number | null = null,
+  ): Promise<AlternateId> {
+    const id = mintAlternateId();
+    await this.editCoordinator.apply(
+      [
+        {
+          kind: "addGlyphAlternate",
+          addGlyphAlternate: {
+            glyphId,
+            alternate: { id, condition, glyph: alternateGlyphId },
+            position,
+          },
+        },
+      ],
+      "Add Alternate",
+    );
+    return id;
+  }
+
+  /**
+   * Changes one alternate's condition or glyph, moves it, or removes it, as
+   * one undoable edit.
+   *
+   * @throws {Error} when the engine refuses it, such as a position past the
+   *   end of the list.
+   */
+  async editGlyphAlternate(alternateId: AlternateId, edit: GlyphAlternateEdit): Promise<void> {
+    await this.editCoordinator.apply(
+      [{ kind: "editGlyphAlternate", editGlyphAlternate: { alternateId, edit } }],
+      ALTERNATE_EDIT_LABELS[edit.kind],
+    );
+  }
+
+  /**
+   * Sets where components draw, each the same in every drawing of its glyph:
+   * the component in `layerId` and its counterparts in the glyph's other
+   * drawings. One undoable edit for them all.
+   *
+   * @throws {Error} when the engine refuses a condition, such as one on a
+   *   base glyph's own axes.
+   */
+  async setComponentConditions(conditions: readonly SetComponentCondition[]): Promise<void> {
+    if (conditions.length === 0) return;
+
+    await this.editCoordinator.apply(
+      conditions.map((setComponentCondition) => ({
+        kind: "setComponentCondition",
+        setComponentCondition,
+      })),
+      "Set Component Condition",
+    );
+  }
+
+  /**
    * Why `text` is not a metrics key this font can read, such as a name no
    * glyph has; null when it is.
    */
@@ -932,6 +1069,7 @@ export class Font {
       unicodes,
       componentBaseGlyphIds: [],
       axes: [],
+      alternates: [],
       layers: [{ id: layerId, sourceId, baseSourceId: null, coordinates: null }],
       mark: false,
       nonspacingMark: false,
@@ -1301,7 +1439,12 @@ export class Font {
       }
     }
 
-    await this.#glyphRequests(glyphIds.filter((id) => !this.#store.glyphForId(id)));
+    // Each glyph's alternates load with it: where one holds, it is what the canvas draws.
+    const alternates = glyphIds.flatMap((glyphId) =>
+      untracked(() => this.alternatesOf(glyphId)).map((alternate) => alternate.glyph),
+    );
+    const wanted = uniqueInOrder([...glyphIds, ...alternates]);
+    await this.#glyphRequests(wanted.filter((id) => !this.#store.glyphForId(id)));
 
     return glyphIds.map((glyphId) => {
       const glyph = this.#store.glyphForId(glyphId);
@@ -2398,6 +2541,15 @@ export class Font {
 /** Never changes: the revision of reads a font without an engine answers. */
 
 const NO_AXES: readonly AxisRecord[] = [];
+const NO_ALTERNATES: readonly GlyphAlternate[] = [];
+
+/** The undo label of each kind of alternate edit. */
+const ALTERNATE_EDIT_LABELS = {
+  condition: "Edit Alternate Condition",
+  glyph: "Change Alternate Glyph",
+  move: "Move Alternate",
+  remove: "Delete Alternate",
+} as const satisfies Record<GlyphAlternateEdit["kind"], string>;
 
 /** Whether a read glyph has something to draw: a projection, or authored layers. */
 function hasGeometry(snapshot: GlyphSnapshot): boolean {

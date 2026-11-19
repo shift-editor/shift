@@ -41,6 +41,12 @@ export class ComponentGlyph {
 
   /** Where this occurrence draws its base glyph. */
   readonly locationCell: Signal<ExternalAxisLocation>;
+  /**
+   * Whether this occurrence draws where it is: its condition holds where
+   * the glyph it sits in is drawn, and so does every enclosing
+   * occurrence's. One that doesn't stays selectable but draws as a ghost.
+   */
+  readonly drawsCell: Signal<boolean>;
 
   readonly transformCell: Signal<MatModel>;
   readonly resolvedTransformCell: Signal<MatModel>;
@@ -78,6 +84,17 @@ export class ComponentGlyph {
       if (component?.baseGlyphId !== definition.baseGlyphId) return parent;
 
       return this.#renderModel.baseLocation(parent, component);
+    });
+    this.drawsCell = computed(() => {
+      if (this.#parent()?.drawsCell.value === false) return false;
+
+      const definition = this.#definitionCell.value;
+      const parent = this.#parentLocationCell.value;
+      const component = this.#renderModel.geometryWhere(definition.parentGlyphId, parent)
+        .components[definition.componentIndex];
+      if (component?.baseGlyphId !== definition.baseGlyphId) return true;
+
+      return this.#renderModel.componentDraws(definition.parentGlyphId, component, parent);
     });
     this.transformCell = computed(() => {
       const definition = this.#definitionCell.value;
@@ -166,6 +183,11 @@ export class ComponentGlyph {
 
   get transform(): MatModel {
     return this.transformCell.peek();
+  }
+
+  /** Whether this occurrence draws where it is; see {@link drawsCell}. */
+  get draws(): boolean {
+    return this.drawsCell.peek();
   }
 
   get resolvedTransform(): MatModel {

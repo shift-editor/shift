@@ -1,7 +1,10 @@
 import type { SceneDocument, SceneIntent } from "./sceneDocument";
 import type {
   AppliedChange,
+  AxisId,
   ComponentInheritance,
+  Condition,
+  ConditionRange,
   FontIntent,
   FontSnapshot,
   GlyphEntry,
@@ -35,12 +38,14 @@ import type {
   SourceSetWeights,
 } from "../lib/wasm/engine";
 import type {
+  ConditionValue,
   Counterparts,
   FeatureSubstitution,
   EditLocation,
   FontChangeFlag,
   FontFeature,
   GlyphIdentityChange,
+  NeverUsedAlternate,
   SideLink,
   TextRun,
   PlacedText,
@@ -183,6 +188,26 @@ export interface FontEngine {
    * it is (`Font::metrics_key_problem`).
    */
   metricsKeyProblem(text: string): string | null;
+
+  /**
+   * `glyphId`'s alternates that never draw anywhere on the font's axes, and
+   * why (`Font::never_used_alternates`); none while the engine is not open.
+   */
+  neverUsedAlternates(glyphId: GlyphId): readonly NeverUsedAlternate[];
+
+  /**
+   * A condition chip's value `text` read on `axis`, a font axis or one of
+   * `glyph`'s own (`ConditionSpace::parse_value`): the range in design
+   * units, or why it can't be read.
+   */
+  conditionValue(glyph: GlyphId | null, axis: AxisId, text: string): ConditionValue;
+
+  /**
+   * A range's value as its chip shows it after the axis's name, `≥ 700`,
+   * `≤ 80` or `400–600`, in user units on a font axis users see
+   * (`ConditionSpace::format_value`).
+   */
+  conditionValueText(glyph: GlyphId | null, range: ConditionRange): string;
 
   /**
    * Interpolates the masters' source metrics at a design location.
@@ -334,6 +359,22 @@ export interface EngineVariation {
     set: Location,
     inheritance: ComponentInheritance,
   ): Location;
+  /**
+   * The glyph drawn for `glyphId` at a design location: its first
+   * alternate that holds there, else itself.
+   */
+  drawnGlyph(glyphId: GlyphId, location: readonly number[]): GlyphId;
+  /**
+   * Whether a component with `condition`, placed in `parent`, draws where
+   * `parent` is drawn: at the external location `location` and its own axes
+   * at `own`.
+   */
+  componentDraws(
+    parent: GlyphId,
+    condition: Condition,
+    location: readonly number[],
+    own: Location,
+  ): boolean;
   /**
    * Where the drawing `layer` sits in its glyph's design space, by axis;
    * null for a layer the session lacks.

@@ -16,6 +16,7 @@ import {
   type AxisId,
   type ComponentId,
   type ComponentInheritance,
+  type Condition,
   type Location,
   type PointId,
   type ContourId,
@@ -119,7 +120,7 @@ import type { FontStore } from "../model/FontStore";
 import type { Glyph, GlyphLayer } from "../model/Glyph";
 import { MetricsLinks } from "../model/MetricsLinks";
 import { AnchorEdits } from "../model/anchors/AnchorEdits";
-import type { DeleteMode, GlyphGeometrySelection } from "../../types/glyph";
+import type { DeleteMode, EditedGlyph, GlyphGeometrySelection } from "../../types/glyph";
 import type { Modifiers } from "../tools/core/GestureDetector";
 import { Text } from "../text/Text";
 import { TextEditing } from "../text/TextEditing";
@@ -271,6 +272,9 @@ export class Editor {
   #multiSourceEditing: MultiSourceEditing;
 
   #cursorEffect: Effect;
+  readonly #editedGlyphCell: Signal<EditedGlyph | null>;
+  /** Loads the alternate the edited glyph draws here when it is not loaded yet. */
+  readonly #alternateLoadEffect: Effect;
 
   #clipboard: Clipboard;
 
@@ -333,7 +337,7 @@ export class Editor {
         if (this.#activeSourceIdCell.value !== null) return null;
 
         const node = this.scene.onlyCell("glyph").value;
-        const glyph = node ? this.#fontStore.glyphForId(node.glyphId) : null;
+        const glyph = node ? this.#fontStore.glyphForId(this.drawnGlyphId(node)) : null;
         const layer = glyph?.layerAt(this.#editLocationCell.value) ?? null;
         if (!layer) return null;
 
@@ -474,6 +478,28 @@ export class Editor {
     this.#clipboard = new Clipboard(options.clipboard);
 
     this.#renderer = new Renderer(this);
+
+    this.#editedGlyphCell = computed(
+      () => {
+        const node = this.scene.onlyCell("glyph").value;
+        if (!node) return null;
+
+        return { glyphId: node.glyphId, drawnGlyphId: this.drawnGlyphId(node) };
+      },
+      { name: "editor.editedGlyph", equals: sameEditedGlyph },
+    );
+    this.#alternateLoadEffect = effect(
+      () => {
+        const node = this.scene.onlyCell("glyph").value;
+        if (!node) return;
+
+        const drawn = this.font.drawnGlyphAt(node.glyphId, this.#externalLocation.value);
+        if (drawn !== node.glyphId && !this.#fontStore.glyphForId(drawn)) {
+          void this.#loadAlternate(drawn);
+        }
+      },
+      { name: "editor.loadAlternate" },
+    );
 
     this.#cursorEffect = effect(
       () => {
@@ -753,7 +779,7 @@ export class Editor {
     const node = this.scene.only("glyph");
     if (!node) return null;
 
-    const layers = this.#multiSourceEditing.layersFor(node.glyphId);
+    const layers = this.#multiSourceEditing.layersFor(this.drawnGlyphId(node));
     if (!layers) return null;
 
     const componentIds = this.transaction("Create Component Glyph", () => {
@@ -792,9 +818,9 @@ export class Editor {
     await this.font.loadGlyph(baseGlyphId);
 
     const node = this.scene.only("glyph");
-    if (!node || node.glyphId === baseGlyphId) return null;
+    if (!node || this.drawnGlyphId(node) === baseGlyphId) return null;
 
-    const layers = this.#multiSourceEditing.layersFor(node.glyphId);
+    const layers = this.#multiSourceEditing.layersFor(this.drawnGlyphId(node));
     if (!layers) return null;
 
     const componentIds = this.transaction("Add Component", () =>
@@ -838,6 +864,33 @@ export class Editor {
    */
   public get activeDrawingCell(): Signal<GlyphLayer | null> {
     return this.#activeDrawingCell;
+  }
+
+  /**
+   * The glyph `node` draws, and the canvas edits, where the font is drawn
+   * now: the node's glyph's first alternate that holds here, else the glyph
+   * itself (`Font::drawn_glyph_at`). An alternate not loaded yet draws the
+   * glyph itself until it is; see {@link editedGlyphCell}.
+   *
+   * @remarks
+   * Subscribes to the location and the glyph's alternates, so a reactive
+   * reader follows the canvas into and out of an alternate's region.
+   */
+  public drawnGlyphId(node: GlyphNode): GlyphId {
+    track(this.#externalLocation);
+    const drawn = this.font.drawnGlyphAt(node.glyphId, this.#externalLocation.peek());
+    if (drawn === node.glyphId) return drawn;
+
+    return this.#fontStore.glyphForId(drawn) ? drawn : node.glyphId;
+  }
+
+  /**
+   * The scene's one glyph node's glyph and the glyph drawn for it here,
+   * which differ inside one of its alternates' regions (`dollar` drawn as
+   * `dollar.heavy`); null without exactly one glyph node.
+   */
+  public get editedGlyphCell(): Signal<EditedGlyph | null> {
+    return this.#editedGlyphCell;
   }
 
   public get activeDrawing(): GlyphLayer | null {
@@ -902,7 +955,7 @@ export class Editor {
    */
   public addDrawingHere(): LayerId | null {
     const node = this.scene.only("glyph");
-    const glyph = node ? this.glyphForId(node.glyphId) : null;
+    const glyph = node ? this.glyphForId(this.drawnGlyphId(node)) : null;
     if (!node || !glyph) return null;
 
     const location = this.#editLocationCell.peek();
@@ -918,7 +971,7 @@ export class Editor {
     const values = glyph.geometryAt(location).values;
     return this.transaction("Add Drawing", () =>
       this.font.materializeLocatedGlyphLayer(
-        node.glyphId,
+        this.drawnGlyphId(node),
         placement.baseSourceId ?? null,
         placement.coordinates,
         from.id,
@@ -1085,11 +1138,11 @@ export class Editor {
 
     if (isComponentId(id)) {
       for (const node of this.scene.nodesOfKind("glyph")) {
-        const glyph = this.glyphForId(node.glyphId);
+        const glyph = this.glyphForId(this.drawnGlyphId(node));
         const renderModel = glyph?.renderModelAt(this.editLocationCell, this.activeSourceIdCell);
         const component =
           renderModel?.componentAt([id]) ??
-          renderModel?.componentAt([this.#drawnComponentId(node.glyphId, id) ?? id]);
+          renderModel?.componentAt([this.#drawnComponentId(this.drawnGlyphId(node), id) ?? id]);
         if (!glyph || !component) continue;
 
         return new ComponentObject(component, node, this.editableLayer(node));
@@ -1160,7 +1213,7 @@ export class Editor {
     }
 
     const componentIds = this.#componentIdsIn(
-      components[0]!.node.glyphId,
+      this.drawnGlyphId(components[0]!.node),
       layer,
       components.map((component) => component.componentId),
     );
@@ -1419,7 +1472,7 @@ export class Editor {
 
   /** The geometry a glyph node shows at the current location; null while its glyph is not loaded. */
   #geometryShownBy(node: GlyphNode): GlyphGeometry | null {
-    return this.glyphForId(node.glyphId)?.geometryAt(this.editLocation) ?? null;
+    return this.glyphForId(this.drawnGlyphId(node))?.geometryAt(this.editLocation) ?? null;
   }
 
   /** The edited layer of the scene's one glyph node; null without exactly one. */
@@ -1428,10 +1481,11 @@ export class Editor {
     if (!node) return null;
 
     const drawing = this.#activeDrawingCell.peek();
-    if (drawing) return this.font.glyphIdForLayer(drawing.id) === node.glyphId ? drawing : null;
+    if (drawing)
+      return this.font.glyphIdForLayer(drawing.id) === this.drawnGlyphId(node) ? drawing : null;
 
     const sourceId = this.activeSourceId;
-    return sourceId ? this.layerForGlyph(node.glyphId, sourceId) : null;
+    return sourceId ? this.layerForGlyph(this.drawnGlyphId(node), sourceId) : null;
   }
 
   /**
@@ -1460,7 +1514,7 @@ export class Editor {
     const layer = this.#soleActiveLayer();
     if (!node || !layer) return null;
 
-    return new MetricsLinks(this.font, node.glyphId, layer);
+    return new MetricsLinks(this.font, this.drawnGlyphId(node), layer);
   }
 
   /**
@@ -1487,11 +1541,12 @@ export class Editor {
   editableLayer(node: GlyphNode): GlyphLayer | null {
     track(this.#activeDrawingCell);
     const drawing = this.#activeDrawingCell.peek();
-    if (drawing) return this.font.glyphIdForLayer(drawing.id) === node.glyphId ? drawing : null;
+    if (drawing)
+      return this.font.glyphIdForLayer(drawing.id) === this.drawnGlyphId(node) ? drawing : null;
 
     if (node.sourceId !== this.#activeSourceIdCell.peek()) return null;
 
-    return this.layerForGlyph(node.glyphId, node.sourceId);
+    return this.layerForGlyph(this.drawnGlyphId(node), node.sourceId);
   }
 
   /**
@@ -1864,14 +1919,19 @@ export class Editor {
     const node = this.scene.only("glyph");
     if (!node) return;
 
-    const glyph = this.#fontStore.glyphForId(node.glyphId);
+    const glyph = this.#fontStore.glyphForId(this.drawnGlyphId(node));
     if (!glyph) return;
 
     if (!glyph.layerForSource(sourceId)) {
       const defaultLayer = glyph.layerForSource(this.font.defaultSource.id);
       if (!defaultLayer) return;
 
-      this.font.materializeGlyphLayer(node.glyphId, sourceId, defaultLayer.id, valuesFor(glyph));
+      this.font.materializeGlyphLayer(
+        this.drawnGlyphId(node),
+        sourceId,
+        defaultLayer.id,
+        valuesFor(glyph),
+      );
     }
 
     this.scene.updateNode({ id: node.id, sourceId });
@@ -2665,7 +2725,7 @@ export class Editor {
   public addAnchorAt(position: Point2D): boolean {
     const activeSourceId = this.#soleActiveLayer()?.sourceId ?? null;
     const node = this.scene.only("glyph");
-    const layers = node ? this.#multiSourceEditing.layersFor(node.glyphId) : null;
+    const layers = node ? this.#multiSourceEditing.layersFor(this.drawnGlyphId(node)) : null;
     if (!layers || !activeSourceId) return false;
 
     const name = this.font.newAnchorName(layers.map((layer) => layer.layerId));
@@ -2795,6 +2855,43 @@ export class Editor {
       (location) => location,
       () => inheritance,
     );
+  }
+
+  /** Loads an alternate the canvas draws, so it shows once it arrives. */
+  async #loadAlternate(glyphId: GlyphId): Promise<void> {
+    try {
+      await this.font.loadGlyph(glyphId);
+    } catch (error) {
+      console.error("Failed to load an alternate glyph", error);
+    }
+  }
+
+  /**
+   * Sets where each selected component draws, the same in every drawing of
+   * the glyph, as one undo step.
+   *
+   * @param condition - Each selected component's new condition, from its
+   *   current one.
+   * @returns `false` when the selection is not entirely components on the
+   *   drawing being edited.
+   * @throws {Error} when the engine refuses a condition.
+   */
+  public async setSelectedComponentsCondition(
+    condition: (current: Condition) => Condition,
+  ): Promise<boolean> {
+    const targets = this.#componentTargets(this.selection.ids);
+    if (!targets) return false;
+
+    const { layer, componentIds } = targets;
+    await this.font.setComponentConditions(
+      componentIds.flatMap((componentId) => {
+        const component = layer.geometry.component(componentId);
+        if (!component) return [];
+
+        return [{ layerId: layer.id, componentId, condition: condition(component.condition) }];
+      }),
+    );
+    return true;
   }
 
   async #editSelectedComponentLocations(
@@ -2937,6 +3034,7 @@ export class Editor {
   public destroy() {
     this.#events.emit("destroying");
     this.#cursorEffect.dispose();
+    this.#alternateLoadEffect.dispose();
     this.nodeDefinition("glyph").outlines.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();
@@ -2970,6 +3068,11 @@ function targetNode(scene: Scene, target: PointerTarget): ShiftNode | null {
     case "component":
       return scene.node(target.nodeId);
   }
+}
+
+function sameEditedGlyph(a: EditedGlyph | null, b: EditedGlyph | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.glyphId === b.glyphId && a.drawnGlyphId === b.drawnGlyphId;
 }
 
 function sameSourceIds(a: ReadonlySet<SourceId>, b: ReadonlySet<SourceId>): boolean {

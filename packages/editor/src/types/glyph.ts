@@ -20,6 +20,18 @@ import type { Axis } from "../lib/model/Axis";
 import type { Signal } from "../lib/signals/signal";
 import type { DesignAxisLocation } from "./variation";
 
+/**
+ * The glyph a glyph node shows and the glyph drawn for it where the font is
+ * drawn now: `dollar` and `dollar.heavy` inside one of `dollar`'s
+ * alternates' regions, the same glyph twice outside them.
+ */
+export interface EditedGlyph {
+  /** The node's own glyph, the one opened. */
+  readonly glyphId: GlyphId;
+  /** The glyph the canvas draws and edits for it here. */
+  readonly drawnGlyphId: GlyphId;
+}
+
 /** Determines whether on-curve deletion reconnects surviving endpoints or leaves a gap. */
 export type DeleteMode = "fit" | "gap";
 

@@ -24,7 +24,7 @@ export type {
   NewMemoryFont,
 } from "./types/fontSession";
 export type { CursorType } from "./types/editor";
-export type { DeleteMode, GlyphReader } from "./types/glyph";
+export type { DeleteMode, EditedGlyph, GlyphReader } from "./types/glyph";
 export type {
   HistoryEffect,
   HistoryEntry,
