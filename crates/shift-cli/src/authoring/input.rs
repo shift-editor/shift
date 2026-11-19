@@ -1,9 +1,11 @@
 //! Identity-free JSON contracts for CLI authoring.
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use std::collections::BTreeMap;
 
-use shift_font::{ComponentInheritance, DecomposedTransform, MetricsKeySide, PointType};
+use shift_font::{ComponentInheritance, DecomposedTransform, MarkColor, MetricsKeySide, PointType};
+
+use super::mark_color::parse_mark_color;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -150,6 +152,32 @@ pub(super) struct GlyphEntryInput {
     /// has; omitted keeps them, and an empty list removes them.
     #[serde(default)]
     pub alternates: Option<Vec<AlternateInput>>,
+    /// The glyph's mark colour; an entry without `markColor` keeps it.
+    #[serde(default)]
+    pub mark_color: MarkColorEdit,
     #[serde(default)]
     pub layer: Option<LayerInput>,
+}
+
+/// What a glyph entry does to the glyph's mark colour.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub(super) enum MarkColorEdit {
+    /// No `markColor`: the glyph keeps its colour.
+    #[default]
+    Keep,
+    /// A named colour such as `"red"`, or `"r,g,b,a"` text for any other.
+    Set(MarkColor),
+    /// `null`: the glyph's colour is removed.
+    Clear,
+}
+
+impl<'de> Deserialize<'de> for MarkColorEdit {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        match Option::<String>::deserialize(deserializer)? {
+            None => Ok(Self::Clear),
+            Some(text) => parse_mark_color(&text)
+                .map(Self::Set)
+                .map_err(serde::de::Error::custom),
+        }
+    }
 }

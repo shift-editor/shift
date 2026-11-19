@@ -96,6 +96,7 @@ impl GlyphInspection {
                     .iter()
                     .map(|unicode| format!("U+{unicode:04X}"))
                     .collect(),
+                mark_color: glyph.mark_color().map(|color| color.to_string()),
             },
             location: GlyphLocation {
                 external: location_values(external.as_untyped(), font.axes()),

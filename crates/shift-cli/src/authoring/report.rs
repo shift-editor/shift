@@ -71,11 +71,15 @@ pub(crate) enum AuthoringChange {
         glyph_id: String,
         name: String,
         unicodes: Vec<String>,
+        /// The glyph's mark colour as `glyph set` reads it, `None` without one.
+        mark_color: Option<String>,
     },
     GlyphUpdated {
         glyph_id: String,
         name: String,
         unicodes: Vec<String>,
+        /// The glyph's mark colour as `glyph set` reads it, `None` without one.
+        mark_color: Option<String>,
     },
     GlyphLayerUpdated {
         #[serde(flatten)]
@@ -435,6 +439,7 @@ impl Report for AuthoringReport {
                     glyph_id,
                     name,
                     unicodes,
+                    mark_color,
                 } => {
                     let unicodes = unicodes.join(", ");
                     let suffix = if unicodes.is_empty() {
@@ -442,16 +447,21 @@ impl Report for AuthoringReport {
                     } else {
                         format!("  {unicodes}")
                     };
-                    lines.push(format!("+ glyph   {name}  {glyph_id}{suffix}"));
+                    lines.push(format!(
+                        "+ glyph   {name}  {glyph_id}{suffix}{}",
+                        mark_color_suffix(mark_color.as_deref())
+                    ));
                 }
                 AuthoringChange::GlyphUpdated {
                     glyph_id,
                     name,
                     unicodes,
+                    mark_color,
                 } => {
                     lines.push(format!(
-                        "~ glyph   {name}  {glyph_id}  [{}]",
-                        unicodes.join(", ")
+                        "~ glyph   {name}  {glyph_id}  [{}]{}",
+                        unicodes.join(", "),
+                        mark_color_suffix(mark_color.as_deref())
                     ));
                 }
                 AuthoringChange::GlyphLayerCreated { layer } => lines.push(layer.render('+')),
@@ -555,6 +565,7 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
                         glyph_id: glyph.id().to_string(),
                         name: glyph.glyph_name().to_string(),
                         unicodes: format_unicodes(glyph.unicodes()),
+                        mark_color: glyph.mark_color().map(|color| color.to_string()),
                     }];
                     reported.extend(glyph_axis_changes(None, Some(glyph)));
                     reported.extend(alternate_changes(font, None, glyph));
@@ -565,6 +576,7 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
                         glyph_id: after.id().to_string(),
                         name: after.glyph_name().to_string(),
                         unicodes: format_unicodes(after.unicodes()),
+                        mark_color: after.mark_color().map(|color| color.to_string()),
                     }];
                     reported.extend(glyph_axis_changes(Some(before), Some(after)));
                     reported.extend(alternate_changes(font, Some(before), after));
@@ -727,6 +739,11 @@ fn axis_tag(font: &Font, axis_id: AxisId) -> String {
         .map(|axis| axis.tag().to_string())
         .or_else(|| font.glyph_axis(axis_id).map(|axis| axis.tag().to_string()))
         .unwrap_or_else(|| axis_id.to_string())
+}
+
+/// A glyph line's mark colour, or nothing for a glyph without one.
+fn mark_color_suffix(mark_color: Option<&str>) -> String {
+    mark_color.map_or_else(String::new, |color| format!("  mark {color}"))
 }
 
 fn format_unicodes(unicodes: &[u32]) -> Vec<String> {

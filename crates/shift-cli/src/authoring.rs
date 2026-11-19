@@ -31,6 +31,7 @@ mod instance;
 mod kerning;
 mod layer_payload;
 mod layer_place;
+mod mark_color;
 mod metrics_keys;
 mod report;
 
@@ -49,6 +50,7 @@ pub(crate) use kerning::{
     rename_kerning_group, set_kerning, unassign_kerning_group,
 };
 pub(crate) use layer_place::{move_layer, remove_layer};
+pub(crate) use mark_color::{parse_mark_color, set_mark_color};
 use report::report_changes;
 pub(crate) use report::{AlternateReport, AuthoringChange, AuthoringReport};
 

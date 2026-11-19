@@ -262,6 +262,28 @@ shift glyph set Lab.shift --input - --dry-run --json < glyphs.json
 - `"format": 1` names the batch format; a `shift-cli` that reads another format refuses the file.
 - `metricsKeys` on an entry sets the glyph's keys for every source; entries for the same glyph
   must agree on them, as on `unicodes`.
+- `markColor` on an entry sets the glyph's mark colour (see [Mark colours](#mark-colours)); `null`
+  clears it and an omitted `markColor` keeps it. Entries for the same glyph must agree on it.
+
+### Mark colours
+
+A mark colour is the colour a glyph is tagged with, which the app's glyph grid shows and filters
+by. A glyph has one, whatever the source. `glyph color` tags several glyphs in one edit, or clears
+their tags:
+
+```sh
+shift glyph color Lab.shift --glyphs A,B,C --color red
+shift glyph color Lab.shift --glyphs a.ss01 --color 0.1,0.5,1,1
+shift glyph color Lab.shift --glyphs A --clear
+```
+
+- A colour is one of the twelve names Glyphs uses (`red`, `orange`, `brown`, `yellow`,
+  `lightGreen`, `darkGreen`, `lightBlue`, `darkBlue`, `purple`, `magenta`, `lightGray`,
+  `charcoal`), or any other colour as `r,g,b,a` with each channel from 0 to 1.
+- Glyphs are names or full IDs. A glyph that does not exist fails the command and no glyph changes.
+- `glyph set` entries take the same text in `markColor`, and `glyph export` writes it, so exported
+  glyphs keep their colours. `glyph inspect` prints it, and `--json` reports it as `glyph.markColor`
+  (`null` without one).
 
 ### Metrics keys
 

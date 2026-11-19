@@ -26,7 +26,7 @@ pub(crate) enum ExportSources {
 }
 
 /// Reads `names` and every glyph their components use from the font at `path`, as a
-/// glyph batch: names, Unicode values, glyph metrics keys, and each layer's advance,
+/// glyph batch: names, Unicode values, mark colours, glyph metrics keys, and each layer's advance,
 /// outlines, anchors, components, and own metrics keys.
 ///
 /// # Errors
@@ -146,6 +146,9 @@ fn glyph_entry(
             })
             .collect();
         entry.insert("alternates".into(), json!(alternates));
+    }
+    if let Some(color) = glyph.mark_color() {
+        entry.insert("markColor".into(), json!(color.to_string()));
     }
     if let Some(layer) = layer {
         entry.insert("layer".into(), layer_value(layer, space));
