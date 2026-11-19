@@ -24,6 +24,9 @@ mod stat;
 #[cfg(test)]
 mod tests;
 
+pub use alternates::AlternatesError;
+pub(crate) use alternates::designspace_rules;
 pub use propagation::{PropagatedAnchor, PropagatedGlyphAnchors, PropagatedSourceAnchors};
+pub(crate) use regions::Lattice;
 pub use shift_text::shaper_font::{AxisConversionError, MappingSide};
 pub(crate) use source::{ShiftIrSource, ShiftIrSourceError};
