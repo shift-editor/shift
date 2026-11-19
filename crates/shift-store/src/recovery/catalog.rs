@@ -112,10 +112,10 @@ pub(super) const GLYPHS: RecoveryTable =
     RecoveryTable::overlay_rows("glyphs", Some("glyph"), NO_BASE_FALLBACK_COLUMNS);
 pub(super) const GLYPH_AXES: RecoveryTable =
     RecoveryTable::replace_collection("glyph_axes", Some("glyph_id"), false);
-pub(super) const GLYPH_ALTERNATES: RecoveryTable =
-    RecoveryTable::replace_collection("glyph_alternates", Some("glyph_id"), false);
-pub(super) const GLYPH_ALTERNATE_CONDITIONS: RecoveryTable =
-    RecoveryTable::replace_collection("glyph_alternate_conditions", Some("glyph_id"), false);
+pub(super) const GLYPH_SWAPS: RecoveryTable =
+    RecoveryTable::replace_collection("glyph_swaps", Some("glyph_id"), false);
+pub(super) const GLYPH_SWAP_CONDITIONS: RecoveryTable =
+    RecoveryTable::replace_collection("glyph_swap_conditions", Some("glyph_id"), false);
 pub(super) const GLYPH_UNICODES: RecoveryTable =
     RecoveryTable::replace_collection("glyph_unicodes", Some("glyph_id"), false);
 pub(super) const FONT_GUIDELINES: RecoveryTable = RecoveryTable::canonical_only("font_guidelines");
@@ -164,8 +164,8 @@ const RECOVERY_TABLES: &[RecoveryTable] = &[
     SOURCES,
     GLYPHS,
     GLYPH_AXES,
-    GLYPH_ALTERNATES,
-    GLYPH_ALTERNATE_CONDITIONS,
+    GLYPH_SWAPS,
+    GLYPH_SWAP_CONDITIONS,
     GLYPH_UNICODES,
     FONT_GUIDELINES,
     SOURCE_LOCATIONS,

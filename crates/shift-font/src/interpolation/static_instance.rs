@@ -35,12 +35,12 @@ impl Font {
     /// glyph pair whose compiled value differs from what those pairs resolve
     /// to in the static font gains a pair of its own.
     ///
-    /// A glyph with an alternate that holds at `location` is drawn as text
+    /// A glyph with a swap that holds at `location` is drawn as text
     /// draws it there ([`Self::drawn_glyph_at`]): it keeps its name and
-    /// code points but takes the alternate's layer, so its outline, advance
+    /// code points but takes the swap's layer, so its outline, advance
     /// and anchors. A component of such a glyph still draws the glyph
     /// itself, so it is decomposed into the glyph's own outline. Kerning
-    /// stays the glyph's own. The static font has no alternates.
+    /// stays the glyph's own. The static font has no swaps.
     ///
     /// # Errors
     ///
@@ -52,11 +52,11 @@ impl Font {
         let default_id = self
             .default_source_id()
             .ok_or(CoreError::MissingDefaultSource)?;
-        let swaps: Vec<AlternateSwap> = self
+        let swaps: Vec<DrawnSwap> = self
             .glyphs()
             .filter_map(|glyph| {
                 let drawn = self.drawn_glyph_at(glyph.id(), location);
-                (drawn != glyph.id()).then_some(AlternateSwap {
+                (drawn != glyph.id()).then_some(DrawnSwap {
                     glyph: glyph.id(),
                     drawn,
                 })
@@ -91,26 +91,22 @@ impl Font {
         }
         font.replace_source(master)?;
         *font.kerning_mut() = kerning;
-        font.draw_alternates_in_place(default_id, &swaps)?;
+        font.draw_swaps_in_place(default_id, &swaps)?;
         Ok(font)
     }
 
-    /// Gives each swapped glyph of this static font its alternate's layer,
-    /// then drops every glyph's alternates. Components of a swapped glyph are
+    /// Gives each swapped glyph of this static font its swap's layer,
+    /// then drops every glyph's swaps. Components of a swapped glyph are
     /// decomposed first, from the glyph's own layer, because a component
-    /// draws its base glyph and never that glyph's alternate.
-    fn draw_alternates_in_place(
-        &mut self,
-        default_id: SourceId,
-        swaps: &[AlternateSwap],
-    ) -> CoreResult<()> {
-        let with_alternates: Vec<GlyphId> = self
+    /// draws its base glyph and never that glyph's swap.
+    fn draw_swaps_in_place(&mut self, default_id: SourceId, swaps: &[DrawnSwap]) -> CoreResult<()> {
+        let with_swaps: Vec<GlyphId> = self
             .glyphs()
-            .filter(|glyph| !glyph.alternates().is_empty())
+            .filter(|glyph| !glyph.swaps().is_empty())
             .map(Glyph::id)
             .collect();
-        for glyph_id in with_alternates {
-            self.set_glyph_alternates(glyph_id, Vec::new())?;
+        for glyph_id in with_swaps {
+            self.set_glyph_swaps(glyph_id, Vec::new())?;
         }
         if swaps.is_empty() {
             return Ok(());
@@ -132,12 +128,12 @@ impl Font {
         }
 
         // Every replacement is read before any is written, so a glyph that
-        // is both swapped and another's alternate lends its own layer.
+        // is both swapped and another's swap lends its own layer.
         let mut replacements = Vec::new();
         for swap in swaps {
             let glyph = self.require_glyph(swap.glyph)?;
             let drawn = self.require_glyph(swap.drawn)?;
-            // An alternate without a layer here has nothing to lend; the
+            // A swap without a layer here has nothing to lend; the
             // glyph keeps its own.
             let Some(drawn_layer) = self.default_master_layer(drawn) else {
                 continue;
@@ -251,8 +247,8 @@ impl Font {
     }
 }
 
-/// A glyph a static font draws with its alternate's layer.
-struct AlternateSwap {
+/// A glyph a static font draws with its swap's layer.
+struct DrawnSwap {
     glyph: GlyphId,
     drawn: GlyphId,
 }
@@ -403,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn a_static_instance_draws_the_alternate_that_holds_there_in_its_glyphs_place() {
+    fn a_static_instance_draws_the_swap_that_holds_there_in_its_glyphs_place() {
         let font = crate::test_support::conditions_font();
         let weight = font.axes()[0].id();
 
@@ -418,11 +414,11 @@ mod tests {
         assert_eq!(black.default_master_layer(dollar).unwrap().width(), 600.0);
         assert_eq!(outline(&black, "dollar"), [(2.0, 0.0), (12.0, 0.0)]);
         assert_eq!(outline(&black, "dollarcomp"), [(1.0, 0.0), (11.0, 0.0)]);
-        assert!(black.glyphs().all(|glyph| glyph.alternates().is_empty()));
+        assert!(black.glyphs().all(|glyph| glyph.swaps().is_empty()));
     }
 
     #[test]
-    fn a_static_instance_where_no_alternate_holds_draws_each_glyph_itself() {
+    fn a_static_instance_where_no_swap_holds_draws_each_glyph_itself() {
         let font = crate::test_support::conditions_font();
         let weight = font.axes()[0].id();
 

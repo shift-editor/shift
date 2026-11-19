@@ -1,10 +1,10 @@
-//! Glyph alternates, which swap a glyph for another where text is drawn, and
+//! Glyph swaps, which swap a glyph for another where text is drawn, and
 //! component conditions, which say where a component draws at all.
 
 use crate::test_support::conditions_font;
 use crate::{
-    AlternateId, AxisId, Component, Condition, ConditionRange, CoreError, DesignLocation, Font,
-    Glyph, GlyphAlternate, GlyphAxis, GlyphId, GlyphLayer, LayerId,
+    AxisId, Component, Condition, ConditionRange, CoreError, DesignLocation, Font, Glyph,
+    GlyphAxis, GlyphId, GlyphLayer, GlyphSwap, LayerId, SwapId,
 };
 
 fn glyph_id_of(font: &Font, name: &str) -> GlyphId {
@@ -51,7 +51,7 @@ fn drawn_starts_at(font: &Font, name: &str, location: &DesignLocation) -> (Vec<f
 }
 
 #[test]
-fn the_first_alternate_that_holds_is_the_glyph_text_draws() {
+fn the_first_swap_that_holds_is_the_glyph_text_draws() {
     let font = conditions_font();
 
     let cases = [
@@ -73,12 +73,12 @@ fn the_first_alternate_that_holds_is_the_glyph_text_draws() {
 }
 
 #[test]
-fn alternates_are_tried_in_order() {
+fn swaps_are_tried_in_order() {
     let mut font = conditions_font();
     let dollar = glyph_id_of(&font, "dollar");
-    let mut alternates = font.glyph(dollar).unwrap().alternates().to_vec();
-    alternates.reverse();
-    font.set_glyph_alternates(dollar, alternates).unwrap();
+    let mut swaps = font.glyph(dollar).unwrap().swaps().to_vec();
+    swaps.reverse();
+    font.set_glyph_swaps(dollar, swaps).unwrap();
 
     assert_eq!(
         drawn_glyph_name(&font, "dollar", 800.0, 50.0),
@@ -87,7 +87,7 @@ fn alternates_are_tried_in_order() {
 }
 
 #[test]
-fn text_draws_the_alternates_outline_and_advance_under_the_glyphs_name() {
+fn text_draws_the_swaps_outline_and_advance_under_the_glyphs_name() {
     let font = conditions_font();
     let dollar = glyph_id_of(&font, "dollar");
     let mut projection = font.projection(&weight_width(&font, 800.0, 100.0));
@@ -110,15 +110,15 @@ fn text_draws_the_alternates_outline_and_advance_under_the_glyphs_name() {
 }
 
 #[test]
-fn an_alternate_glyphs_own_alternates_are_not_applied() {
+fn a_swap_glyphs_own_swaps_are_not_applied() {
     let mut font = conditions_font();
     let heavy = glyph_id_of(&font, "dollar.heavy");
-    let alternate = GlyphAlternate::new(
-        AlternateId::new(),
+    let swap = GlyphSwap::new(
+        SwapId::new(),
         Condition::always(),
         glyph_id_of(&font, "dollar.compact-heavy"),
     );
-    font.set_glyph_alternates(heavy, vec![alternate]).unwrap();
+    font.set_glyph_swaps(heavy, vec![swap]).unwrap();
 
     assert_eq!(
         drawn_glyph_name(&font, "dollar", 800.0, 100.0),
@@ -133,78 +133,72 @@ fn a_component_of_the_glyph_is_not_swapped() {
     assert_eq!(drawn_starts(&font, "dollarcomp", 800.0, 100.0).0, vec![1.0]);
 }
 
-/// Why the font refuses a glyph `cent` with one alternate, `alternate_id`, that draws
-/// `alternate_glyph` where `condition` holds.
-fn refusal_of_alternate(
-    alternate_id: &str,
-    condition: Condition,
-    alternate_glyph: &str,
-) -> CoreError {
+/// Why the font refuses a glyph `cent` with one swap, `swap_id`, that draws
+/// `swap_glyph` where `condition` holds.
+fn refusal_of_swap(swap_id: &str, condition: Condition, swap_glyph: &str) -> CoreError {
     let mut font = conditions_font();
     let mut cent = Glyph::with_id(GlyphId::from_raw("cent"), "cent");
-    cent.set_alternates(vec![GlyphAlternate::new(
-        AlternateId::from_raw(alternate_id),
+    cent.set_swaps(vec![GlyphSwap::new(
+        SwapId::from_raw(swap_id),
         condition,
-        GlyphId::from_raw(alternate_glyph),
+        GlyphId::from_raw(swap_glyph),
     )]);
     font.insert_glyph(cent).unwrap_err()
 }
 
 #[test]
-fn an_alternate_must_be_another_glyph_the_font_has() {
-    let itself = refusal_of_alternate("r", Condition::always(), "cent");
-    let missing = refusal_of_alternate("r", Condition::always(), "missing");
+fn a_swap_must_be_another_glyph_the_font_has() {
+    let itself = refusal_of_swap("r", Condition::always(), "cent");
+    let missing = refusal_of_swap("r", Condition::always(), "missing");
 
-    assert!(matches!(itself, CoreError::AlternateIsItself { .. }));
+    assert!(matches!(itself, CoreError::SwapIsItself { .. }));
     assert!(matches!(missing, CoreError::GlyphNotFound(id) if id == GlyphId::from_raw("missing")));
 }
 
 #[test]
-fn an_alternate_condition_reads_font_axes_only() {
+fn a_swap_condition_reads_font_axes_only() {
     // `H`'s Crossbar, whose id is the same in every copy of the fixture.
     let crossbar = AxisId::from_raw("crossbar");
     let on_glyph_axis = Condition::all([ConditionRange::new(crossbar, Some(1.0), None)]);
 
-    let refused = refusal_of_alternate("r", on_glyph_axis, "dollar");
+    let refused = refusal_of_swap("r", on_glyph_axis, "dollar");
 
     assert!(matches!(
         refused,
-        CoreError::AlternateConditionOffFontAxes { alternate_id, axis_id }
-            if alternate_id == AlternateId::from_raw("r") && axis_id == crossbar
+        CoreError::SwapConditionOffFontAxes { swap_id, axis_id }
+            if swap_id == SwapId::from_raw("r") && axis_id == crossbar
     ));
 }
 
 #[test]
-fn an_alternate_must_have_a_well_formed_condition_and_an_unused_id() {
+fn a_swap_must_have_a_well_formed_condition_and_an_unused_id() {
     let font = conditions_font();
     let weight = axis_tagged(&font, "wght");
     let reversed = Condition::all([ConditionRange::new(weight, Some(800.0), Some(700.0))]);
 
-    let reversed = refusal_of_alternate("r", reversed, "dollar");
-    let duplicate = refusal_of_alternate("heavy", Condition::always(), "dollar");
+    let reversed = refusal_of_swap("r", reversed, "dollar");
+    let duplicate = refusal_of_swap("heavy", Condition::always(), "dollar");
 
     assert!(matches!(reversed, CoreError::ConditionRangeReversed { .. }));
-    assert!(
-        matches!(duplicate, CoreError::DuplicateAlternateId(id) if id == AlternateId::from_raw("heavy"))
-    );
+    assert!(matches!(duplicate, CoreError::DuplicateSwapId(id) if id == SwapId::from_raw("heavy")));
 }
 
 #[test]
-fn a_glyph_that_is_an_alternate_cannot_be_removed() {
+fn a_glyph_that_is_a_swap_cannot_be_removed() {
     let mut font = conditions_font();
-    let alternate_glyph = font.insert_glyph(Glyph::new("dollar.light")).unwrap();
+    let swap_glyph = font.insert_glyph(Glyph::new("dollar.light")).unwrap();
     let dollar = glyph_id_of(&font, "dollar");
-    let alternate = GlyphAlternate::new(AlternateId::new(), Condition::always(), alternate_glyph);
-    font.set_glyph_alternates(dollar, vec![alternate]).unwrap();
+    let swap = GlyphSwap::new(SwapId::new(), Condition::always(), swap_glyph);
+    font.set_glyph_swaps(dollar, vec![swap]).unwrap();
 
-    let refused = font.pop_glyph(alternate_glyph).unwrap_err();
+    let refused = font.pop_glyph(swap_glyph).unwrap_err();
 
     assert!(matches!(
         refused,
-        CoreError::GlyphIsAlternate { glyph_id, alternate_of }
-            if glyph_id == alternate_glyph && alternate_of == dollar
+        CoreError::GlyphIsSwap { glyph_id, swap_of }
+            if glyph_id == swap_glyph && swap_of == dollar
     ));
-    assert!(font.glyph(alternate_glyph).is_some());
+    assert!(font.glyph(swap_glyph).is_some());
 }
 
 /// Each contour's first x of `name` drawn at Weight `weight` with `H`'s

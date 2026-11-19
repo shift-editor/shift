@@ -202,10 +202,10 @@ impl<'a> LayoutFont<'a> {
     }
 
     /// The glyph drawn for the text glyph `glyph_id` at the location: the
-    /// glyph of its first alternate that holds there, as an `rvrn`
+    /// glyph of its first swap that holds there, as an `rvrn`
     /// substitution swaps it in a compiled font ([`Font::drawn_glyph_at`]).
     /// Layout keeps the text glyph throughout and asks every per-glyph
-    /// question of the glyph drawn for it, so a alternate glyph's own alternates are
+    /// question of the glyph drawn for it, so a swap glyph's own swaps are
     /// never applied. A compiled font, or one known only by its advances,
     /// draws each glyph as itself.
     pub(crate) fn drawn(&self, glyph_id: GlyphId) -> GlyphId {

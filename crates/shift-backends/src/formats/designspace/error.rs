@@ -78,10 +78,10 @@ pub enum DesignspaceError {
         source: norad::error::NamingError,
     },
 
-    #[error("cannot write the alternates as designspace rules: {0}")]
-    Alternates(#[from] crate::shift2fontir::AlternatesError),
+    #[error("cannot write the swaps as designspace rules: {0}")]
+    Swaps(#[from] crate::shift2fontir::SwapsError),
 
-    #[error("cannot write the alternates as designspace rules: {0}")]
+    #[error("cannot write the swaps as designspace rules: {0}")]
     RuleAxes(#[from] crate::shift2fontir::AxisConversionError),
 
     #[error(transparent)]

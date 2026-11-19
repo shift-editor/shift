@@ -368,16 +368,16 @@ impl DesignspaceWriter {
             .collect()
     }
 
-    /// The glyphs' alternates as designspace rules applied first
+    /// The glyphs' swaps as designspace rules applied first
     /// (`processing="first"`, the `rvrn` feature), as compiled fonts apply
-    /// them; see [`designspace_rules`] for how overlapping alternates are
+    /// them; see [`designspace_rules`] for how overlapping swaps are
     /// written. Condition ranges are design-space values, as source
     /// locations are.
     ///
     /// # Errors
     ///
     /// Returns [`DesignspaceError::RuleAxes`] when the axes cannot be
-    /// normalized, [`DesignspaceError::Alternates`] when the alternates cannot
+    /// normalized, [`DesignspaceError::Swaps`] when the swaps cannot
     /// compile, and [`DesignspaceError::RuleGlyphName`] for a glyph name a
     /// UFO can't hold.
     fn rules(font: &impl FontView, axes: &[Axis]) -> DesignspaceResult<DsRules> {
@@ -394,7 +394,7 @@ impl DesignspaceWriter {
             .enumerate()
             .map(|(index, rule)| {
                 Ok(DsRule {
-                    name: Some(format!("alternates.{}", index + 1)),
+                    name: Some(format!("swaps.{}", index + 1)),
                     condition_sets: rule
                         .conditions
                         .iter()

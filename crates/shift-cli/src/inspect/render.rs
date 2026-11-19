@@ -322,13 +322,13 @@ impl InspectReport {
 
         let mut lines = vec![mode.section_with_table("Glyphs", &table)];
         for glyph in &self.glyphs {
-            if !glyph.alternates.is_empty() {
-                lines.push(format!("\n{} alternates", glyph.name));
+            if !glyph.swaps.is_empty() {
+                lines.push(format!("\n{} swaps", glyph.name));
                 lines.extend(
                     glyph
-                        .alternates
+                        .swaps
                         .iter()
-                        .map(|alternate| format!("  {}", alternate.render())),
+                        .map(|swap| format!("  {}", swap.render())),
                 );
             }
             if !glyph.component_conditions.is_empty() {

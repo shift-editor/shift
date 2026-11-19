@@ -30,17 +30,17 @@ use crate::{
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
-mod alternate_intents;
 mod font_intents;
 mod glyph_axis_intents;
 mod glyph_intents;
 mod layer_intents;
+mod swap_intents;
 
-pub use alternate_intents::*;
 pub use font_intents::*;
 pub use glyph_axis_intents::*;
 pub use glyph_intents::*;
 pub use layer_intents::*;
+pub use swap_intents::*;
 
 /// A point to create, with stable identity minted by a trusted caller.
 #[derive(Clone, Debug)]
@@ -204,9 +204,9 @@ font_intents! {
         MaterializeLocatedGlyphLayer,
         SetGlyphLayerLocation,
         DeleteGlyphLayer,
-        SetGlyphAlternates,
-        AddGlyphAlternate,
-        EditGlyphAlternate,
+        SetGlyphSwaps,
+        AddGlyphSwap,
+        EditGlyphSwap,
         SetComponentCondition,
     }
 }
@@ -1280,7 +1280,7 @@ mod mark_color_tests;
 mod consistency_tests;
 
 #[cfg(test)]
-mod alternate_tests;
+mod swap_tests;
 
 /// A kerning group name trimmed of surrounding space.
 ///

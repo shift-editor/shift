@@ -8,9 +8,9 @@ use shift_font as font;
 use super::{
     RecoveryOverlay, RecoveryState,
     catalog::{
-        AXES, AXIS_MAPPINGS, FONT_LIB, GLYPH_ALTERNATE_CONDITIONS, GLYPH_ALTERNATES, GLYPH_AXES,
-        GLYPH_COMPONENT_CONDITIONS, GLYPH_COMPONENTS, GLYPH_LAYER_LOCATIONS, GLYPH_LAYERS,
-        GLYPH_LIB, GLYPH_UNICODES, GLYPHS, KERNING_GROUP_MEMBERS, KERNING_GROUPS, KERNING_PAIRS,
+        AXES, AXIS_MAPPINGS, FONT_LIB, GLYPH_AXES, GLYPH_COMPONENT_CONDITIONS, GLYPH_COMPONENTS,
+        GLYPH_LAYER_LOCATIONS, GLYPH_LAYERS, GLYPH_LIB, GLYPH_SWAP_CONDITIONS, GLYPH_SWAPS,
+        GLYPH_UNICODES, GLYPHS, KERNING_GROUP_MEMBERS, KERNING_GROUPS, KERNING_PAIRS,
         METRIC_DEFINITIONS, NAMED_INSTANCES, RecoveryTable, SCENE_NODES, SOURCE_LIB,
         SOURCE_LOCATIONS, SOURCE_METRIC_VALUES, SOURCES,
     },
@@ -188,8 +188,8 @@ impl RecoveryOverlay {
                 mark_replaced(&tx, GLYPH_UNICODES, glyph_id.as_str())?;
                 mark_replaced(&tx, GLYPH_LIB, glyph_id.as_str())?;
                 mark_replaced(&tx, GLYPH_AXES, glyph_id.as_str())?;
-                mark_replaced(&tx, GLYPH_ALTERNATES, glyph_id.as_str())?;
-                mark_replaced(&tx, GLYPH_ALTERNATE_CONDITIONS, glyph_id.as_str())?;
+                mark_replaced(&tx, GLYPH_SWAPS, glyph_id.as_str())?;
+                mark_replaced(&tx, GLYPH_SWAP_CONDITIONS, glyph_id.as_str())?;
             } else {
                 delete_glyph_override(&tx, glyph_id)?;
                 mark_tombstone(&tx, GLYPHS, glyph_id.as_str())?;
@@ -343,13 +343,10 @@ fn delete_glyph_override(tx: &Transaction<'_>, glyph_id: font::GlyphId) -> Resul
     tx.execute("DELETE FROM glyph_lib WHERE glyph_id = ?1", [glyph_id])?;
     tx.execute("DELETE FROM glyph_axes WHERE glyph_id = ?1", [glyph_id])?;
     tx.execute(
-        "DELETE FROM glyph_alternate_conditions WHERE glyph_id = ?1",
+        "DELETE FROM glyph_swap_conditions WHERE glyph_id = ?1",
         [glyph_id],
     )?;
-    tx.execute(
-        "DELETE FROM glyph_alternates WHERE glyph_id = ?1",
-        [glyph_id],
-    )?;
+    tx.execute("DELETE FROM glyph_swaps WHERE glyph_id = ?1", [glyph_id])?;
     tx.execute("DELETE FROM glyphs WHERE id = ?1", [glyph_id])?;
     Ok(())
 }

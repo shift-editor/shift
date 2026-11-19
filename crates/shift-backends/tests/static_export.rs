@@ -267,8 +267,8 @@ fn an_instance_without_a_postscript_name_drops_what_postscript_names_leave_out()
 /// Regular (400) and Black (900).
 fn heavy_dollar_font() -> Fixture<Font> {
     use shift_font::{
-        AlternateId, Axis, Condition, ConditionRange, Contour, DesignLocation, ExternalLocation,
-        Glyph, GlyphAlternate, GlyphLayer, LayerId, PointType, Source,
+        Axis, Condition, ConditionRange, Contour, DesignLocation, ExternalLocation, Glyph,
+        GlyphLayer, GlyphSwap, LayerId, PointType, Source, SwapId,
     };
 
     let mut font = Font::new();
@@ -303,10 +303,10 @@ fn heavy_dollar_font() -> Fixture<Font> {
     };
     let heavy = bar("dollar.heavy", None, 300.0, 650.0)?;
     let dollar = bar("dollar", Some('$'), 100.0, 500.0)?;
-    font.set_glyph_alternates(
+    font.set_glyph_swaps(
         dollar,
-        vec![GlyphAlternate::new(
-            AlternateId::new(),
+        vec![GlyphSwap::new(
+            SwapId::new(),
             Condition::all([ConditionRange::new(weight_id, Some(800.0), None)]),
             heavy,
         )],
@@ -341,7 +341,7 @@ fn mapped_glyph(bytes: &[u8], character: char) -> Fixture<(String, f64, f32)> {
 }
 
 #[test]
-fn a_static_instance_draws_the_alternate_that_holds_there_as_its_glyph() {
+fn a_static_instance_draws_the_swap_that_holds_there_as_its_glyph() {
     let temp = tempfile::tempdir().unwrap();
 
     let drawn = static_dollars(temp.path()).map_err(|error| error.to_string());

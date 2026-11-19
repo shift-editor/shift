@@ -211,8 +211,8 @@ fn downgrade_to_version_6(path: &Path) -> TestResult<()> {
         "PRAGMA foreign_keys = OFF;
          BEGIN;
          DROP TABLE glyph_component_conditions;
-         DROP TABLE glyph_alternate_conditions;
-         DROP TABLE glyph_alternates;
+         DROP TABLE glyph_swap_conditions;
+         DROP TABLE glyph_swaps;
          DROP TABLE glyph_layer_locations;
          DROP TABLE glyph_axes;
          CREATE TABLE glyph_layers_v6 (

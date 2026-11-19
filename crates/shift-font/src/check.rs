@@ -12,7 +12,6 @@ use serde::Serialize;
 
 use crate::{CoreResult, Font, GlyphId, SourceId};
 
-mod alternates;
 mod coverage;
 mod designspace;
 mod health;
@@ -20,6 +19,7 @@ mod kerning;
 mod outline;
 mod polygon;
 mod roles;
+mod swaps;
 
 pub use coverage::Charset;
 pub use outline::OutlineThresholds;
@@ -65,7 +65,7 @@ pub enum Severity {
 /// One kind of problem, with a stable code.
 ///
 /// Codes group by subject: `D` axes and masters, `I` interpolation, `O`
-/// outlines, `A` alternates and component conditions, `K` kerning, `C` character set, `M` monospace.
+/// outlines, `A` swaps and component conditions, `K` kerning, `C` character set, `M` monospace.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Check {
@@ -111,10 +111,10 @@ pub enum Check {
     EmptyOutline,
     /// A glyph can't be drawn, for example because of a component cycle.
     UnresolvedGlyph,
-    /// An alternate never wins anywhere on the font's axes: its condition
-    /// holds nowhere in their ranges, or earlier alternates already apply
+    /// A swap never wins anywhere on the font's axes: its condition
+    /// holds nowhere in their ranges, or earlier swaps already apply
     /// wherever it does.
-    NeverUsedAlternate,
+    NeverUsedSwap,
     /// A component carries a condition, which compiled fonts can't hold
     /// yet, so the font can't be exported.
     ComponentConditionNotExported,
@@ -155,7 +155,7 @@ impl Check {
         Self::ContourDirection,
         Self::EmptyOutline,
         Self::UnresolvedGlyph,
-        Self::NeverUsedAlternate,
+        Self::NeverUsedSwap,
         Self::ComponentConditionNotExported,
         Self::EmptyKerningGroup,
         Self::UnresolvedKerning,
@@ -202,7 +202,7 @@ impl Check {
             Self::ContourDirection => ("O005", "contour-direction", Severity::Warning),
             Self::EmptyOutline => ("O006", "empty-outline", Severity::Error),
             Self::UnresolvedGlyph => ("O007", "unresolved-glyph", Severity::Error),
-            Self::NeverUsedAlternate => ("A001", "never-used-alternate", Severity::Warning),
+            Self::NeverUsedSwap => ("A001", "never-used-swap", Severity::Warning),
             Self::ComponentConditionNotExported => (
                 "A002",
                 "component-condition-not-exported",
@@ -285,7 +285,7 @@ impl Font {
         for glyph in self.glyphs() {
             findings.extend(health::check(self, glyph));
             findings.extend(outline::check(self, glyph.id(), &thresholds)?);
-            findings.extend(self.never_used_alternate_findings(glyph)?);
+            findings.extend(self.never_used_swap_findings(glyph)?);
             findings.extend(glyph.component_condition_findings());
         }
         findings.extend(kerning::check(self));
@@ -314,7 +314,7 @@ impl Font {
             glyph_id,
             &OutlineThresholds::default(),
         )?);
-        findings.extend(self.never_used_alternate_findings(glyph)?);
+        findings.extend(self.never_used_swap_findings(glyph)?);
         findings.extend(glyph.component_condition_findings());
         Ok(findings)
     }

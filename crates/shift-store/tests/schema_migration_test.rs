@@ -14,8 +14,8 @@ fn downgrade_to_version_2(path: &Path) {
     let conn = rusqlite::Connection::open(path).unwrap();
     conn.execute_batch(
         "DROP TABLE glyph_component_conditions;
-         DROP TABLE glyph_alternate_conditions;
-         DROP TABLE glyph_alternates;
+         DROP TABLE glyph_swap_conditions;
+         DROP TABLE glyph_swaps;
          DROP TABLE glyph_layer_locations;
          DROP TABLE glyph_axes;
          ALTER TABLE glyphs DROP COLUMN category;
@@ -141,8 +141,8 @@ fn opening_a_version_5_document_upgrades_it_and_its_glyphs_have_no_mark_colour()
         .unwrap()
         .execute_batch(
             "DROP TABLE glyph_component_conditions;
-             DROP TABLE glyph_alternate_conditions;
-             DROP TABLE glyph_alternates;
+             DROP TABLE glyph_swap_conditions;
+             DROP TABLE glyph_swaps;
              DROP TABLE glyph_layer_locations;
              DROP TABLE glyph_axes;
              ALTER TABLE glyphs DROP COLUMN mark_color;

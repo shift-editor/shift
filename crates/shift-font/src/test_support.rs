@@ -618,14 +618,14 @@ pub fn glyph_axis_font() -> Font {
     font
 }
 
-/// A font with glyph alternates and component conditions, built in code.
+/// A font with glyph swaps and component conditions, built in code.
 ///
 /// - Axes: Weight (`wght`, 100–400–900) and Width (`wdth`, 50–100–100), one
 ///   master, Regular, at their defaults.
 /// - Each simple glyph is one line from `(x, 0)` to `(x + 10, 0)`, its `x`
 ///   telling it apart: `dollar` 1 (advance 500, U+0024 `$`), `dollar.heavy` 2 (600),
 ///   `dollar.compact-heavy` 3 (450), `bar` 4, `dot` 5.
-/// - `dollar` has two alternates, tried in order: Weight ≥ 700 and Width ≤ 80
+/// - `dollar` has two swaps, tried in order: Weight ≥ 700 and Width ≤ 80
 ///   draws `dollar.compact-heavy`; Weight ≥ 700 draws `dollar.heavy`.
 /// - `dollarcomp` is one component of `dollar`.
 /// - `dot` has a glyph axis, Spread (`SPRD`, 0–100).
@@ -641,7 +641,7 @@ pub fn glyph_axis_font() -> Font {
 ///
 /// Panics if the font refuses one of the glyphs it is built from.
 pub fn conditions_font() -> Font {
-    use crate::{AlternateId, Condition, ConditionRange, GlyphAlternate, GlyphAxis};
+    use crate::{Condition, ConditionRange, GlyphAxis, GlyphSwap, SwapId};
 
     let line = |source: SourceId, x: f64, advance: f64| {
         let mut layer = GlyphLayer::with_width(LayerId::new(), source, advance);
@@ -679,14 +679,14 @@ pub fn conditions_font() -> Font {
     let mut dollar = Glyph::with_id(GlyphId::from_raw("dollar"), "dollar");
     dollar.set_unicodes(vec![u32::from('$')]);
     dollar.set_layer(line(regular, 1.0, 500.0));
-    dollar.set_alternates(vec![
-        GlyphAlternate::new(
-            AlternateId::from_raw("compact-heavy"),
+    dollar.set_swaps(vec![
+        GlyphSwap::new(
+            SwapId::from_raw("compact-heavy"),
             Condition::all([heavy_weight, ConditionRange::new(wdth, None, Some(80.0))]),
             compact_heavy,
         ),
-        GlyphAlternate::new(
-            AlternateId::from_raw("heavy"),
+        GlyphSwap::new(
+            SwapId::from_raw("heavy"),
             Condition::all([heavy_weight]),
             heavy,
         ),

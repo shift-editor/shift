@@ -187,41 +187,38 @@ pub enum CoreError {
         axis_id: AxisId,
     },
 
-    #[error("alternate id {0} already exists")]
-    DuplicateAlternateId(crate::AlternateId),
+    #[error("swap id {0} already exists")]
+    DuplicateSwapId(crate::SwapId),
 
-    #[error("alternate {0} not found")]
-    AlternateNotFound(crate::AlternateId),
+    #[error("swap {0} not found")]
+    SwapNotFound(crate::SwapId),
 
-    /// An alternate placed or moved past the end of its glyph's list.
-    #[error("glyph {glyph_id} has {count} alternates, so position {position} is out of range")]
-    AlternatePositionOutOfRange {
+    /// A swap placed or moved past the end of its glyph's list.
+    #[error("glyph {glyph_id} has {count} swaps, so position {position} is out of range")]
+    SwapPositionOutOfRange {
         glyph_id: GlyphId,
         position: usize,
         count: usize,
     },
 
-    /// A glyph's alternate draws the glyph itself.
-    #[error("alternate {alternate_id} of glyph {glyph_id} is the glyph itself")]
-    AlternateIsItself {
-        alternate_id: crate::AlternateId,
+    /// A glyph's swap draws the glyph itself.
+    #[error("swap {swap_id} of glyph {glyph_id} is the glyph itself")]
+    SwapIsItself {
+        swap_id: crate::SwapId,
         glyph_id: GlyphId,
     },
 
-    /// An alternate's condition reads an axis that is not a font axis:
-    /// alternates are chosen where text is drawn, on the font's axes alone.
-    #[error("alternate {alternate_id} has a condition on axis {axis_id}, which is not a font axis")]
-    AlternateConditionOffFontAxes {
-        alternate_id: crate::AlternateId,
+    /// A swap's condition reads an axis that is not a font axis:
+    /// swaps are chosen where text is drawn, on the font's axes alone.
+    #[error("swap {swap_id} has a condition on axis {axis_id}, which is not a font axis")]
+    SwapConditionOffFontAxes {
+        swap_id: crate::SwapId,
         axis_id: AxisId,
     },
 
-    /// A glyph can't be removed while it is another glyph's alternate.
-    #[error("glyph {glyph_id} is an alternate of glyph {alternate_of}")]
-    GlyphIsAlternate {
-        glyph_id: GlyphId,
-        alternate_of: GlyphId,
-    },
+    /// A glyph can't be removed while it is another glyph's swap.
+    #[error("glyph {glyph_id} is a swap of glyph {swap_of}")]
+    GlyphIsSwap { glyph_id: GlyphId, swap_of: GlyphId },
 
     /// A condition range whose minimum is above its maximum.
     #[error("condition range on axis {axis_id} runs from {min} down to {max}")]
@@ -445,7 +442,7 @@ entity_ref! {
     LayerId => LayerNotFound,
     SourceId => SourceNotFound,
     AxisId => AxisNotFound,
-    crate::AlternateId => AlternateNotFound,
+    crate::SwapId => SwapNotFound,
     NamedInstanceId => NamedInstanceNotFound,
     KerningGroupId => KerningGroupNotFound,
 }

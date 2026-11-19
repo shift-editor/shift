@@ -129,30 +129,30 @@ CREATE TABLE IF NOT EXISTS glyph_axes (
 CREATE INDEX IF NOT EXISTS glyph_axes_glyph_id_idx
 ON glyph_axes(glyph_id);
 
-CREATE TABLE IF NOT EXISTS glyph_alternates (
+CREATE TABLE IF NOT EXISTS glyph_swaps (
     id TEXT PRIMARY KEY,
     glyph_id TEXT NOT NULL,
-    alternate_glyph_id TEXT NOT NULL,
+    swap_glyph_id TEXT NOT NULL,
     order_index INTEGER NOT NULL,
     FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS glyph_alternates_glyph_id_idx
-ON glyph_alternates(glyph_id);
+CREATE INDEX IF NOT EXISTS glyph_swaps_glyph_id_idx
+ON glyph_swaps(glyph_id);
 
-CREATE TABLE IF NOT EXISTS glyph_alternate_conditions (
-    alternate_id TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS glyph_swap_conditions (
+    swap_id TEXT NOT NULL,
     glyph_id TEXT NOT NULL,
     order_index INTEGER NOT NULL,
     axis_id TEXT NOT NULL,
     min_value REAL,
     max_value REAL,
-    PRIMARY KEY (alternate_id, order_index),
+    PRIMARY KEY (swap_id, order_index),
     FOREIGN KEY (glyph_id) REFERENCES glyphs(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS glyph_alternate_conditions_glyph_id_idx
-ON glyph_alternate_conditions(glyph_id);
+CREATE INDEX IF NOT EXISTS glyph_swap_conditions_glyph_id_idx
+ON glyph_swap_conditions(glyph_id);
 
 CREATE TABLE IF NOT EXISTS glyph_layers (
     id TEXT PRIMARY KEY,
@@ -346,7 +346,7 @@ CREATE TABLE IF NOT EXISTS workspace_state (
 ";
 
 pub const SHIFT_APPLICATION_ID: i64 = 0x5348_4654;
-pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 8;
+pub const SHIFT_DOCUMENT_SCHEMA_VERSION: i64 = 9;
 
 /// The oldest schema version [`migrate`] can upgrade.
 pub(crate) const OLDEST_MIGRATABLE_SCHEMA_VERSION: i64 = 1;
@@ -622,6 +622,43 @@ CREATE TABLE glyph_component_conditions (
 CREATE INDEX glyph_component_conditions_layer_id_idx ON glyph_component_conditions(layer_id);
 ";
 
+/// Version 8 to 9: glyph alternates are renamed swaps.
+///
+/// `glyph_alternates` becomes `glyph_swaps` and `glyph_alternate_conditions`
+/// becomes `glyph_swap_conditions`, with their indexes and the columns that
+/// named an alternate. Ids written as `alternate_…` are rewritten as `swap_…`,
+/// the prefix `SwapId` reads, in both tables so each condition still names its
+/// swap. Rows keep their order and values. This SQL is frozen.
+const MIGRATE_V8_TO_V9: &str = r"
+ALTER TABLE glyph_alternates RENAME TO glyph_swaps;
+ALTER TABLE glyph_swaps RENAME COLUMN alternate_glyph_id TO swap_glyph_id;
+DROP INDEX glyph_alternates_glyph_id_idx;
+CREATE INDEX glyph_swaps_glyph_id_idx ON glyph_swaps(glyph_id);
+
+ALTER TABLE glyph_alternate_conditions RENAME TO glyph_swap_conditions;
+ALTER TABLE glyph_swap_conditions RENAME COLUMN alternate_id TO swap_id;
+DROP INDEX glyph_alternate_conditions_glyph_id_idx;
+CREATE INDEX glyph_swap_conditions_glyph_id_idx ON glyph_swap_conditions(glyph_id);
+
+UPDATE glyph_swaps SET id = 'swap_' || substr(id, 11)
+WHERE substr(id, 1, 10) = 'alternate_';
+UPDATE glyph_swap_conditions SET swap_id = 'swap_' || substr(swap_id, 11)
+WHERE substr(swap_id, 1, 10) = 'alternate_';
+";
+
+/// The version that renamed glyph alternates swaps.
+const SWAPS_SCHEMA_VERSION: i64 = 9;
+
+/// The recovery overlay's half of [`MIGRATE_V8_TO_V9`]: the replacement
+/// markers name the renamed tables, so unsaved swaps still replace the
+/// document's. Only overlays have the table. This SQL is frozen.
+const MIGRATE_RECOVERY_V8_TO_V9: &str = r"
+UPDATE recovery_replacements SET collection = 'glyph_swaps'
+WHERE collection = 'glyph_alternates';
+UPDATE recovery_replacements SET collection = 'glyph_swap_conditions'
+WHERE collection = 'glyph_alternate_conditions';
+";
+
 /// The version that added the scene.
 const SCENE_SCHEMA_VERSION: i64 = 4;
 
@@ -637,7 +674,7 @@ pub(crate) enum SceneUpgrade {
 
 /// Steps that bring authored tables from one schema version to the next, as
 /// `(version reached, SQL)`, in ascending order.
-const MIGRATIONS: [(i64, &str); 7] = [
+const MIGRATIONS: [(i64, &str); 8] = [
     (2, MIGRATE_V1_TO_V2),
     (3, MIGRATE_V2_TO_V3),
     (4, MIGRATE_V3_TO_V4),
@@ -645,6 +682,7 @@ const MIGRATIONS: [(i64, &str); 7] = [
     (6, MIGRATE_V5_TO_V6),
     (7, MIGRATE_V6_TO_V7),
     (8, MIGRATE_V7_TO_V8),
+    (9, MIGRATE_V8_TO_V9),
 ];
 
 /// Upgrades the authored tables of a store at `version` to
@@ -703,6 +741,9 @@ fn run_migrations(
     }
     if version < SCENE_SCHEMA_VERSION && scene == SceneUpgrade::AddFirstPage {
         crate::scene::insert_first_page_in_tx(&tx)?;
+    }
+    if version < SWAPS_SCHEMA_VERSION && scene == SceneUpgrade::TableOnly {
+        tx.execute_batch(MIGRATE_RECOVERY_V8_TO_V9)?;
     }
     tx.pragma_update(None, "user_version", upgraded_version)?;
     tx.commit()?;

@@ -6,9 +6,9 @@ use crate::entity::{
     AnchorId, AxisId, ComponentId, ContourId, GlyphEntityId, GlyphId, GuidelineId, LayerId,
     PointId, SourceId,
 };
-use crate::glyph_alternate::GlyphAlternate;
 use crate::glyph_axis::GlyphAxis;
 use crate::glyph_category::{GlyphCategory, GlyphSubcategory};
+use crate::glyph_swap::GlyphSwap;
 use crate::guideline::Guideline;
 use crate::lib_data::LibData;
 use crate::located_layer::LayerLocation;
@@ -43,9 +43,9 @@ pub struct Glyph {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     axes: Vec<GlyphAxis>,
     /// Where text draws another glyph in this one's place: the first
-    /// alternate whose condition holds; see [`crate::glyph_alternate`].
+    /// swap whose condition holds; see [`crate::glyph_swap`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    alternates: Vec<GlyphAlternate>,
+    swaps: Vec<GlyphSwap>,
 }
 
 impl Identified for Glyph {
@@ -576,7 +576,7 @@ impl Glyph {
             metrics_keys: MetricsKeys::new(),
             mark_color: None,
             axes: Vec::new(),
-            alternates: Vec::new(),
+            swaps: Vec::new(),
         }
     }
 
@@ -741,15 +741,15 @@ impl Glyph {
         self.axes = axes;
     }
 
-    /// The glyph's alternates, in the order they are tried.
-    pub fn alternates(&self) -> &[GlyphAlternate] {
-        &self.alternates
+    /// The glyph's swaps, in the order they are tried.
+    pub fn swaps(&self) -> &[GlyphSwap] {
+        &self.swaps
     }
 
-    /// Gives the glyph `alternates`, tried in order, as a reader of stored glyphs
+    /// Gives the glyph `swaps`, tried in order, as a reader of stored glyphs
     /// does before adding the glyph to a font, which checks them.
-    pub fn set_alternates(&mut self, alternates: Vec<GlyphAlternate>) {
-        self.alternates = alternates;
+    pub fn set_swaps(&mut self, swaps: Vec<GlyphSwap>) {
+        self.swaps = swaps;
     }
 
     /// The components that carry a condition in any of the glyph's

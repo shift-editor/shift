@@ -74,7 +74,7 @@ pub(crate) fn export_glyphs(
             for (_, component) in layer.components().iter() {
                 queued.push(component.base_glyph_name().to_string());
             }
-            queued.extend(alternate_glyph_names(&font, glyph));
+            queued.extend(swap_glyph_names(&font, glyph));
             let source_name = named
                 .then(|| {
                     font.source(*source_id)
@@ -85,7 +85,7 @@ pub(crate) fn export_glyphs(
             wrote_layer = true;
         }
         if !wrote_layer {
-            queued.extend(alternate_glyph_names(&font, glyph));
+            queued.extend(swap_glyph_names(&font, glyph));
             entries.push(glyph_entry(glyph, None, None, &space));
         }
     }
@@ -133,19 +133,19 @@ fn glyph_entry(
     if let Some(keys) = metrics_keys_value(glyph.metrics_keys()) {
         entry.insert("metricsKeys".into(), keys);
     }
-    if !glyph.alternates().is_empty() {
-        let alternates: Vec<Value> = glyph
-            .alternates()
+    if !glyph.swaps().is_empty() {
+        let swaps: Vec<Value> = glyph
+            .swaps()
             .iter()
-            .map(|alternate| {
+            .map(|swap| {
                 let name = font
-                    .glyph(alternate.glyph())
-                    .map_or_else(|| alternate.glyph().to_string(), |g| g.name().to_string());
-                let when = space.format(alternate.condition(), AxisNaming::Tag);
+                    .glyph(swap.glyph())
+                    .map_or_else(|| swap.glyph().to_string(), |g| g.name().to_string());
+                let when = space.format(swap.condition(), AxisNaming::Tag);
                 json!({ "glyph": name, "when": when })
             })
             .collect();
-        entry.insert("alternates".into(), json!(alternates));
+        entry.insert("swaps".into(), json!(swaps));
     }
     if let Some(color) = glyph.mark_color() {
         entry.insert("markColor".into(), json!(color.to_string()));
@@ -239,13 +239,13 @@ fn layer_value(layer: &GlyphLayer, space: &ConditionSpace<'_>) -> Value {
     Value::Object(value)
 }
 
-/// The names of the glyphs `glyph`'s alternates draw.
-fn alternate_glyph_names(font: &Font, glyph: &Glyph) -> Vec<String> {
+/// The names of the glyphs `glyph`'s swaps draw.
+fn swap_glyph_names(font: &Font, glyph: &Glyph) -> Vec<String> {
     glyph
-        .alternates()
+        .swaps()
         .iter()
-        .filter_map(|alternate| font.glyph(alternate.glyph()))
-        .map(|alternate| alternate.name().to_string())
+        .filter_map(|swap| font.glyph(swap.glyph()))
+        .map(|swap| swap.name().to_string())
         .collect()
 }
 
