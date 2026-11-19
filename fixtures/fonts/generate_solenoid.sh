@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds Solenoid.shift, a small font with glyph axes, alternates and component
+# Builds Solenoid.shift, a small font with glyph axes, swaps and component
 # conditions, through shift-cli.
 # Usage: generate_solenoid.sh [shift-cli] [output]
 set -euo pipefail
@@ -39,9 +39,9 @@ cat > "$work/glyphs.json" <<'JSON'
 JSON
 "$cli" glyph set "$out" --input "$work/glyphs.json"
 
-# dollar draws dollar.bled from Bleed 70; dollar.heavy, from 80, is never used.
-"$cli" glyph alternate add "$out" dollar dollar.bled --when "Bleed >= 70"
-"$cli" glyph alternate add "$out" dollar dollar.heavy --when "Bleed >= 80"
+# dollar swaps to dollar.bled from Bleed 70; dollar.heavy, from 80, is never used.
+"$cli" glyph swap add "$out" dollar dollar.bled --when "Bleed >= 70"
+"$cli" glyph swap add "$out" dollar dollar.heavy --when "Bleed >= 80"
 # colon's second and third dots draw up to Bleed 50, its first everywhere.
 "$cli" component condition set "$out" colon 2 --when "Bleed <= 50"
 "$cli" component condition set "$out" colon 3 --when "Bleed <= 50"

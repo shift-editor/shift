@@ -49,7 +49,7 @@ export interface ConditionChipsProps {
   /** Commits a chip's range: in place of the chip at `index`, or a new one when null. */
   onCommit: (index: number | null, range: ConditionRange) => Promise<void>;
   onRemove: (index: number) => Promise<void>;
-  /** Starts a new chip at once, as adding an alternate does. */
+  /** Starts a new chip at once, as adding a swap does. */
   startNew?: boolean;
   /** A new chip was cancelled with Escape: the caller drops what it began. */
   onNewCancelled?: () => void;
@@ -60,7 +60,7 @@ export interface ConditionChipsProps {
 
 /**
  * A condition as a row of chips, `wght ≥ 694`, each with × on hover, and a
- * + after them: one shared editor for alternates and component conditions.
+ * + after them: one shared editor for swaps and component conditions.
  *
  * @remarks
  * Clicking a chip opens its equation beside the sidebar, `[min] ≤ wght ≤

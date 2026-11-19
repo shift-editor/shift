@@ -10,7 +10,7 @@ use shift_font::{
     Font, GlyphId, GlyphLayer, LayerDifference, Point, Source,
 };
 
-use crate::authoring::AlternateReport;
+use crate::authoring::SwapReport;
 
 use super::types::{
     AffineTransform, AnchorInspection, Bounds, ComponentInspection, ContourInspection,
@@ -103,7 +103,7 @@ impl GlyphInspection {
                 design: location_values(design.as_untyped(), font.axes()),
             },
             drawn_glyph,
-            alternates: AlternateReport::of_glyph(&font, glyph),
+            swaps: SwapReport::of_glyph(&font, glyph),
             summary: GlyphSummary {
                 advance: resolved.advance,
                 bounds: resolved.bounds,

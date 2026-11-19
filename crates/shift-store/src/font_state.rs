@@ -84,19 +84,19 @@ pub(crate) fn load_font_from_conn(
         font.set_default_source_id(default_source_id);
     }
 
-    // A glyph's alternates must name glyphs the font has, and an alternate
+    // A glyph's swaps must name glyphs the font has, and a swap
     // glyph may come later in glyph order (or name this one back), so they
     // are attached once every glyph is in.
-    let mut alternates = Vec::new();
+    let mut swaps = Vec::new();
     for mut glyph in load_glyphs(conn, read)? {
-        if !glyph.alternates().is_empty() {
-            alternates.push((glyph.id(), glyph.alternates().to_vec()));
-            glyph.set_alternates(Vec::new());
+        if !glyph.swaps().is_empty() {
+            swaps.push((glyph.id(), glyph.swaps().to_vec()));
+            glyph.set_swaps(Vec::new());
         }
         font.insert_glyph(glyph)?;
     }
-    for (glyph_id, glyph_alternates) in alternates {
-        font.set_glyph_alternates(glyph_id, glyph_alternates)?;
+    for (glyph_id, glyph_swaps) in swaps {
+        font.set_glyph_swaps(glyph_id, glyph_swaps)?;
     }
 
     *font.kerning_mut() = load_kerning(conn)?;
@@ -473,7 +473,7 @@ fn load_glyphs(
     };
     let mut coordinates = load_layer_coordinates(conn)?;
     let mut glyph_axes = load_glyph_axes(conn)?;
-    let mut glyph_alternates = load_glyph_alternates(conn)?;
+    let mut glyph_swaps = load_glyph_swaps(conn)?;
     let mut loaded_layers = HashMap::new();
     if read == FontRead::WithLayerPayloads {
         let layer_ids = layer_rows.iter().map(|row| row.id).collect::<Vec<_>>();
@@ -522,7 +522,7 @@ fn load_glyphs(
         );
         *glyph.lib_mut() = font::LibData::from_map(libs.remove(&glyph_id).unwrap_or_default());
         glyph.set_axes(glyph_axes.remove(&glyph_id).unwrap_or_default());
-        glyph.set_alternates(glyph_alternates.remove(&glyph_id).unwrap_or_default());
+        glyph.set_swaps(glyph_swaps.remove(&glyph_id).unwrap_or_default());
         for layer in layers.remove(&glyph_id).unwrap_or_default() {
             glyph.set_layer(layer);
         }
@@ -552,52 +552,48 @@ fn load_layer_coordinates(
     Ok(coordinates)
 }
 
-/// Every glyph's alternates, by glyph, in the order they are tried, each with
+/// Every glyph's swaps, by glyph, in the order they are tried, each with
 /// its condition's ranges in order.
-fn load_glyph_alternates(
+fn load_glyph_swaps(
     conn: &rusqlite::Connection,
-) -> Result<HashMap<font::GlyphId, Vec<font::GlyphAlternate>>, StoreError> {
-    let mut ranges: HashMap<font::AlternateId, Vec<font::ConditionRange>> = HashMap::new();
+) -> Result<HashMap<font::GlyphId, Vec<font::GlyphSwap>>, StoreError> {
+    let mut ranges: HashMap<font::SwapId, Vec<font::ConditionRange>> = HashMap::new();
     let mut stmt = conn.prepare(
-        "SELECT alternate_id, axis_id, min_value, max_value FROM glyph_alternate_conditions
-         ORDER BY alternate_id, order_index",
+        "SELECT swap_id, axis_id, min_value, max_value FROM glyph_swap_conditions
+         ORDER BY swap_id, order_index",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok((
-            row.get::<_, font::AlternateId>(0)?,
+            row.get::<_, font::SwapId>(0)?,
             font::ConditionRange::new(row.get(1)?, row.get(2)?, row.get(3)?),
         ))
     })?;
     for row in rows {
-        let (alternate_id, range) = row?;
-        ranges.entry(alternate_id).or_default().push(range);
+        let (swap_id, range) = row?;
+        ranges.entry(swap_id).or_default().push(range);
     }
 
     let mut stmt = conn.prepare(
-        "SELECT id, glyph_id, alternate_glyph_id FROM glyph_alternates
+        "SELECT id, glyph_id, swap_glyph_id FROM glyph_swaps
          ORDER BY glyph_id, order_index, id",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok((
-            row.get::<_, font::AlternateId>(0)?,
+            row.get::<_, font::SwapId>(0)?,
             row.get::<_, font::GlyphId>(1)?,
             row.get::<_, font::GlyphId>(2)?,
         ))
     })?;
-    let mut alternates: HashMap<font::GlyphId, Vec<font::GlyphAlternate>> = HashMap::new();
+    let mut swaps: HashMap<font::GlyphId, Vec<font::GlyphSwap>> = HashMap::new();
     for row in rows {
-        let (alternate_id, glyph_id, alternate_glyph) = row?;
-        let condition = font::Condition::all(ranges.remove(&alternate_id).unwrap_or_default());
-        alternates
+        let (swap_id, glyph_id, swap_glyph) = row?;
+        let condition = font::Condition::all(ranges.remove(&swap_id).unwrap_or_default());
+        swaps
             .entry(glyph_id)
             .or_default()
-            .push(font::GlyphAlternate::new(
-                alternate_id,
-                condition,
-                alternate_glyph,
-            ));
+            .push(font::GlyphSwap::new(swap_id, condition, swap_glyph));
     }
-    Ok(alternates)
+    Ok(swaps)
 }
 
 /// Every glyph's own axes, by glyph, in order.

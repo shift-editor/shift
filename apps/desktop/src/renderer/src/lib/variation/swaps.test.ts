@@ -1,22 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { FONTS, useTestEditor } from "@/testing/fontFixture";
-import { GlyphAlternates } from "./GlyphAlternates";
+import { GlyphSwaps } from "./GlyphSwaps";
 import { boundsOnAxis, chipDisplayText } from "./ConditionChipSpace";
 import { GlyphDesignspace } from "./GlyphDesignspace";
 
 // Solenoid: a Bleed axis (0–100, source Bled at 100). `dollar` draws
 // `dollar.bled` from Bleed 70, then `dollar.heavy` from 80, which the first
-// always beats. Both alternates are drawn at Regular and Bled.
+// always beats. Both swaps are drawn at Regular and Bled.
 const editor = useTestEditor({ file: FONTS.solenoid, glyph: "dollar" });
 
-/** The open glyph's alternates, as the Designspace tab's Alternates section uses them. */
-function alternates() {
-  return new GlyphAlternates(editor.asEditor());
+/** The open glyph's swaps, as the Designspace tab's Swaps section uses them. */
+function swaps() {
+  return new GlyphSwaps(editor.asEditor());
 }
 
-/** What the Alternates section lists, by glyph name; null when it is not shown. */
+/** What the Swaps section lists, by glyph name; null when it is not shown. */
 function rows() {
-  const section = alternates().sectionCell.peek();
+  const section = swaps().sectionCell.peek();
   if (!section) return null;
 
   return section.rows.map(({ glyphName, chips, inUse, neverUsed }) => ({
@@ -27,23 +27,23 @@ function rows() {
   }));
 }
 
-/** The row of the alternate drawing `glyph`. */
+/** The row of the swap drawing `glyph`. */
 function row(glyph: string) {
-  const section = alternates().sectionCell.peek();
+  const section = swaps().sectionCell.peek();
   // oxlint-disable-next-line shift/no-lookup-in-tests -- the section names rows by glyph; no selector reads them
   const found = section?.rows.find((candidate) => candidate.glyphName === glyph);
-  if (!found) throw new Error(`no alternate draws ${glyph}`);
+  if (!found) throw new Error(`no swap draws ${glyph}`);
   return found;
 }
 
 function bleed() {
-  const axis = alternates().chips.axisGroups[0]?.axes[0];
+  const axis = swaps().chips.axisGroups[0]?.axes[0];
   if (!axis) throw new Error("no Bleed axis");
   return axis;
 }
 
-describe("the Alternates section", () => {
-  it("lists the alternates in the order they are tried, with their chips", () => {
+describe("the Swaps section", () => {
+  it("lists the swaps in the order they are tried, with their chips", () => {
     expect(rows()).toEqual([
       { glyph: "dollar.bled", chips: ["Bleed ≥ 70"], inUse: false, neverUsed: null },
       {
@@ -55,13 +55,13 @@ describe("the Alternates section", () => {
     ]);
   });
 
-  it("shows for a glyph without alternates, listing none", async () => {
+  it("shows for a glyph without swaps, listing none", async () => {
     await editor.openGlyph("H");
 
     expect(rows()).toEqual([]);
   });
 
-  it("marks the alternate the canvas draws here", () => {
+  it("marks the swap the canvas draws here", () => {
     editor.setLocation({ BLED: 90 });
 
     expect(rows()?.map(({ glyph, inUse }) => [glyph, inUse])).toEqual([
@@ -70,8 +70,8 @@ describe("the Alternates section", () => {
     ]);
   });
 
-  it("reorders, so the narrower alternate is tried first and used", async () => {
-    await alternates().move(row("dollar.heavy").id, 0);
+  it("reorders, so the narrower swap is tried first and used", async () => {
+    await swaps().move(row("dollar.heavy").id, 0);
     editor.setLocation({ BLED: 90 });
 
     expect(rows()).toMatchObject([
@@ -80,22 +80,22 @@ describe("the Alternates section", () => {
     ]);
   });
 
-  it("adds an alternate on a glyph the font has, and deletes it", async () => {
-    const reading = alternates().chips.read(bleed(), "<=20");
+  it("adds a swap on a glyph the font has, and deletes it", async () => {
+    const reading = swaps().chips.read(bleed(), "<=20");
     if (reading.kind !== "range") throw new Error(reading.message);
-    await alternates().add(editor.glyphNamed("dot")!.id, reading.range);
+    await swaps().add(editor.glyphNamed("dot")!.id, reading.range);
 
     expect(rows()?.at(-1)).toMatchObject({ glyph: "dot", chips: ["Bleed ≤ 20"] });
 
-    await alternates().remove(row("dot").id);
+    await swaps().remove(row("dot").id);
     expect(rows()?.map(({ glyph }) => glyph)).toEqual(["dollar.bled", "dollar.heavy"]);
   });
 
-  it("creates dollar.alt for a new alternate", async () => {
-    const reading = alternates().chips.read(bleed(), "10-20");
+  it("creates dollar.alt for a new swap", async () => {
+    const reading = swaps().chips.read(bleed(), "10-20");
     if (reading.kind !== "range") throw new Error(reading.message);
-    const name = alternates().newGlyphName()!;
-    await alternates().createAndAdd(name, reading.range);
+    const name = swaps().newGlyphName()!;
+    await swaps().createAndAdd(name, reading.range);
 
     expect(name).toBe("dollar.alt");
     expect(editor.glyphNamed("dollar.alt")).not.toBeNull();
@@ -105,7 +105,7 @@ describe("the Alternates section", () => {
 
 describe("condition chips", () => {
   it("read every form of the grammar, in user units", () => {
-    const chips = alternates().chips;
+    const chips = swaps().chips;
     const read = (text: string) => {
       const reading = chips.read(bleed(), text);
       return reading.kind === "range"
@@ -119,7 +119,7 @@ describe("condition chips", () => {
   });
 
   it("say why text can't be read, and commit nothing", () => {
-    const chips = alternates().chips;
+    const chips = swaps().chips;
 
     expect(chips.read(bleed(), "150")).toEqual({
       kind: "problem",
@@ -132,25 +132,25 @@ describe("condition chips", () => {
   it("start a new chip from where the canvas draws", () => {
     editor.setLocation({ BLED: 35 });
 
-    expect(alternates().chips.prefill(bleed())).toBe("≥ 35");
+    expect(swaps().chips.prefill(bleed())).toBe("≥ 35");
   });
 
   it("edit a range in place, end to end", async () => {
-    const chips = alternates().chips;
+    const chips = swaps().chips;
     const reading = chips.read(bleed(), "≤ 90");
     if (reading.kind !== "range") throw new Error(reading.message);
-    await alternates().setRange(row("dollar.heavy").id, null, reading.range);
+    await swaps().setRange(row("dollar.heavy").id, null, reading.range);
 
     expect(row("dollar.heavy").chips.map(({ valueText }) => valueText)).toEqual(["≥ 80", "≤ 90"]);
 
-    await alternates().removeRange(row("dollar.heavy").id, 1);
+    await swaps().removeRange(row("dollar.heavy").id, 1);
     expect(row("dollar.heavy").chips.map(({ valueText }) => valueText)).toEqual(["≥ 80"]);
   });
 });
 
 describe("a chip's equation", () => {
   const ends = (bounds: { min: string; max: string }) => {
-    const reading = alternates().chips.rangeOf(bleed(), bounds);
+    const reading = swaps().chips.rangeOf(bleed(), bounds);
     return reading.kind === "range"
       ? [reading.range.min ?? null, reading.range.max ?? null]
       : reading;
@@ -171,7 +171,7 @@ describe("a chip's equation", () => {
   });
 
   it("fills both fields from a range pasted into either", () => {
-    const chips = alternates().chips;
+    const chips = swaps().chips;
     const empty = { min: "", max: "" };
 
     expect(chips.boundsFromField(bleed(), empty, "min", "40-60")).toEqual({
@@ -213,9 +213,9 @@ describe("a chip's shown value", () => {
   });
 
   it("is whole from 100 up, while editing starts from the exact value", async () => {
-    const reading = alternates().chips.read(bleed(), "≥ 69.444");
+    const reading = swaps().chips.read(bleed(), "≥ 69.444");
     if (reading.kind !== "range") throw new Error(reading.message);
-    await alternates().setRange(row("dollar.bled").id, 0, reading.range);
+    await swaps().setRange(row("dollar.bled").id, 0, reading.range);
 
     expect(row("dollar.bled").chips[0]).toMatchObject({
       valueText: "≥ 69.444",
@@ -225,8 +225,8 @@ describe("a chip's shown value", () => {
   });
 });
 
-describe("the canvas inside an alternate's region", () => {
-  it("draws the alternate there, and the glyph again outside it", async () => {
+describe("the canvas inside a swap's region", () => {
+  it("draws the swap there, and the glyph again outside it", async () => {
     editor.setLocation({ BLED: 100 });
     expect(await editor.drawnGlyph()).toMatchObject({
       glyph: "dollar.bled",
@@ -237,7 +237,7 @@ describe("the canvas inside an alternate's region", () => {
     expect(await editor.drawnGlyph()).toMatchObject({ glyph: "dollar" });
   });
 
-  it("edits the alternate, leaving the glyph as it was", async () => {
+  it("edits the swap, leaving the glyph as it was", async () => {
     editor.setLocation({ BLED: 100 });
     editor.selectTool("select");
     editor.selectAll();

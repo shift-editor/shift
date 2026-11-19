@@ -251,7 +251,7 @@ function keyChipPosition(side: MetricsKeySide): "left" | "right" | "center" {
 
 /**
  * A glyph page's title: the glyph's name, or `dollar → dollar.bled` while
- * the canvas draws, and edits, one of its alternates at the current
+ * the canvas draws, and edits, one of its swaps at the current
  * location.
  */
 function GlyphTitle({
@@ -267,7 +267,7 @@ function GlyphTitle({
 
   const name = font.glyphName(opened.glyphId) ?? opened.glyphId;
   return (
-    <span title={`${name} is drawn as its alternate ${drawn} here`}>
+    <span title={`${name} is drawn as its swap ${drawn} here`}>
       <span className="text-muted">{name}</span>
       <span className="mx-1 inline-flex align-text-bottom text-muted">
         <ArrowLeftRight aria-hidden className="size-3.25" />

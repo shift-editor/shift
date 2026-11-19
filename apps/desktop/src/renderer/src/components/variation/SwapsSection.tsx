@@ -1,6 +1,6 @@
 import { useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { useSignalState } from "@shift/editor/signals";
-import { asAlternateId, type AlternateId, type ConditionRange } from "@shift/types";
+import { asSwapId, type SwapId, type ConditionRange } from "@shift/types";
 import {
   cn,
   ContextMenu,
@@ -20,25 +20,25 @@ import {
   type CollapsibleSectionProps,
 } from "@/components/sidebar";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
-import { GlyphAlternates } from "@/lib/variation/GlyphAlternates";
-import type { AlternateGlyphChoice, AlternateRow } from "@/types/conditions";
+import { GlyphSwaps } from "@/lib/variation/GlyphSwaps";
+import type { SwapGlyphChoice, SwapRow } from "@/types/conditions";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 import PlusIcon from "@/assets/general/plus.svg";
 import { ConditionChips } from "./ConditionChips";
-import { NewAlternatePanel } from "./NewAlternatePanel";
+import { NewSwapPanel } from "./NewSwapPanel";
 
 /**
- * The Designspace tab's Alternates section, after Glyph sources, shown while
+ * The Designspace tab's Swaps section, after Glyph sources, shown while
  * a glyph is edited: the glyphs drawn in its place where their conditions
  * hold, tried in order, the first match winning. Each is a small tree
- * node: the alternate glyph's name, with its condition's chips on
+ * node: the swap glyph's name, with its condition's chips on
  * a rail under it; a dot under the header's + marks the one the canvas draws
- * here, and one an earlier alternate always beats is greyed with a note.
+ * here, and one an earlier swap always beats is greyed with a note.
  * Nodes reorder by dragging the name; right-clicking one opens or deletes it.
  * **+** picks a glyph (or creates `<glyph>.alt`) and starts its first chip;
- * the alternate is added when that chip is committed.
+ * the swap is added when that chip is committed.
  */
-export const AlternatesSection = ({
+export const SwapsSection = ({
   section: Section = CollapsibleSection,
 }: {
   /** Draws the section, so it can match the sections around it. */
@@ -46,30 +46,30 @@ export const AlternatesSection = ({
 }) => {
   const editor = useEditor();
   const canAuthor = useFontSession().mode === "workspace";
-  const alternates = useMemo(() => new GlyphAlternates(editor), [editor]);
-  const section = useSignalState(alternates.sectionCell);
+  const swaps = useMemo(() => new GlyphSwaps(editor), [editor]);
+  const section = useSignalState(swaps.sectionCell);
   const [open, setOpen] = useState(true);
-  const [draft, setDraft] = useState<AlternateGlyphChoice | null>(null);
+  const [draft, setDraft] = useState<SwapGlyphChoice | null>(null);
 
   if (!section) return null;
 
   const commitDraft = async (range: ConditionRange) => {
     if (!draft) return;
 
-    if (draft.kind === "create") await alternates.createAndAdd(draft.name, range);
-    else await alternates.add(draft.glyphId, range);
+    if (draft.kind === "create") await swaps.createAndAdd(draft.name, range);
+    else await swaps.add(draft.glyphId, range);
     setDraft(null);
   };
 
   const actions = canAuthor ? (
-    <NewAlternatePanel
+    <NewSwapPanel
       glyphId={section.glyphId}
-      newGlyphName={alternates.newGlyphName() ?? section.glyphName}
+      newGlyphName={swaps.newGlyphName() ?? section.glyphName}
       onPick={setDraft}
     />
   ) : (
-    <Tooltip content="Add an alternate">
-      <SidebarActionButton label="Add an alternate" aria-disabled>
+    <Tooltip content="Add a swap">
+      <SidebarActionButton label="Add a swap" aria-disabled>
         <PlusIcon className="h-3 w-3" />
       </SidebarActionButton>
     </Tooltip>
@@ -80,29 +80,24 @@ export const AlternatesSection = ({
     <>
       <Separator className="-mx-1 w-auto" />
       <Section
-        title="Alternates"
+        title="Swaps"
         open={open}
         onOpenChange={setOpen}
         actions={actions}
         panelClassName="pt-0"
       >
         {empty ? (
-          <p className="pl-2 text-ui text-muted">None</p>
+          <p className="pl-2 text-ui text-muted">Draw another glyph in part of the designspace.</p>
         ) : (
           <SortableList
             ids={section.rows.map((row) => row.id)}
             orientation="vertical"
             itemLabel={(id) => section.rows.find((row) => row.id === id)?.glyphName ?? id}
-            onMove={(id, index) => void alternates.move(asAlternateId(id), index)}
+            onMove={(id, index) => void swaps.move(asSwapId(id), index)}
           >
-            <div role="list" aria-label="Alternates" className="flex flex-col gap-1">
+            <div role="list" aria-label="Swaps" className="flex flex-col gap-1">
               {section.rows.map((row) => (
-                <AlternateRowView
-                  key={row.id}
-                  row={row}
-                  alternates={alternates}
-                  canAuthor={canAuthor}
-                />
+                <SwapRowView key={row.id} row={row} swaps={swaps} canAuthor={canAuthor} />
               ))}
               {draft && (
                 <div role="listitem" className="flex flex-col gap-1 pb-1">
@@ -111,7 +106,7 @@ export const AlternatesSection = ({
                     <ConditionChips
                       label={`${draft.name} condition`}
                       chips={[]}
-                      space={alternates.chips}
+                      space={swaps.chips}
                       startNew
                       onCommit={(_, range) => commitDraft(range)}
                       onRemove={async () => setDraft(null)}
@@ -129,20 +124,20 @@ export const AlternatesSection = ({
 };
 
 /**
- * One alternate as a small tree node, like an Objects panel row with a
- * child: the alternate glyph's name, the in-use dot at the right under the header's +; under
+ * One swap as a small tree node, like an Objects panel row with a
+ * child: the swap glyph's name, the in-use dot at the right under the header's +; under
  * it, on a rail, its
  * condition's chips. The name drags the node; right-clicking it opens the
- * glyph or deletes the alternate. A never-used one is greyed, with its
+ * glyph or deletes the swap. A never-used one is greyed, with its
  * note under the chips.
  */
-const AlternateRowView = ({
+const SwapRowView = ({
   row,
-  alternates,
+  swaps,
   canAuthor,
 }: {
-  row: AlternateRow;
-  alternates: GlyphAlternates;
+  row: SwapRow;
+  swaps: GlyphSwaps;
   canAuthor: boolean;
 }) => {
   const sortable = useSortableItem(row.id, !canAuthor);
@@ -153,10 +148,10 @@ const AlternateRowView = ({
       style={sortable.itemStyle}
       role="listitem"
       aria-label={row.glyphName}
-      data-testid={`alternate-${row.id}`}
+      data-testid={`swap-${row.id}`}
       className={cn("relative w-full", sortable.dragging && "z-10 opacity-50")}
     >
-      <AlternateMenu row={row} alternates={alternates} canAuthor={canAuthor}>
+      <SwapMenu row={row} swaps={swaps} canAuthor={canAuthor}>
         <div
           className={cn("flex flex-col rounded px-1 pb-1", row.neverUsed !== null && "opacity-50")}
         >
@@ -192,28 +187,28 @@ const AlternateRowView = ({
             <ConditionChips
               label={`${row.glyphName} condition`}
               chips={row.chips}
-              space={alternates.chips}
+              space={swaps.chips}
               disabled={!canAuthor}
-              onCommit={(index, range) => alternates.setRange(row.id, index, range)}
-              onRemove={(index) => alternates.removeRange(row.id, index)}
+              onCommit={(index, range) => swaps.setRange(row.id, index, range)}
+              onRemove={(index) => swaps.removeRange(row.id, index)}
             />
             {row.neverUsed && <p className="text-ui text-muted">{row.neverUsed}</p>}
           </div>
         </div>
-      </AlternateMenu>
+      </SwapMenu>
     </div>
   );
 };
 
-/** A row's context menu: open the alternate glyph, or delete the alternate (the glyph stays). */
-const AlternateMenu = ({
+/** A row's context menu: open the swap glyph, or delete the swap (the glyph stays). */
+const SwapMenu = ({
   row,
-  alternates,
+  swaps,
   canAuthor,
   children,
 }: {
-  row: AlternateRow;
-  alternates: GlyphAlternates;
+  row: SwapRow;
+  swaps: GlyphSwaps;
   canAuthor: boolean;
   children: ReactNode;
 }) => {
@@ -225,14 +220,14 @@ const AlternateMenu = ({
     try {
       await catalog.openGlyph(glyph);
     } catch (error) {
-      console.error("could not open the alternate glyph", error);
+      console.error("could not open the swap glyph", error);
     }
   };
-  const remove = async (id: AlternateId) => {
+  const remove = async (id: SwapId) => {
     try {
-      await alternates.remove(id);
+      await swaps.remove(id);
     } catch (error) {
-      console.error("could not delete the alternate", error);
+      console.error("could not delete the swap", error);
     }
   };
 

@@ -1,7 +1,7 @@
-//! Glyph alternates and component conditions in stored documents: they save and
+//! Glyph swaps and component conditions in stored documents: they save and
 //! reopen as they were, leave layer payloads as they were, a version 7
-//! document upgrades with none, and unsaved ones survive in the recovery
-//! overlay.
+//! document upgrades with none, a version 8 document's alternates open as
+//! swaps, and unsaved ones survive in the recovery overlay.
 
 use std::path::{Path, PathBuf};
 
@@ -73,7 +73,7 @@ fn conditioned_h_layer(font: &Font) -> TestResult<&GlyphLayer> {
 }
 
 #[test]
-fn alternates_and_component_conditions_save_and_reopen_as_they_were() {
+fn swaps_and_component_conditions_save_and_reopen_as_they_were() {
     let font = conditions_font();
     let paths = DocumentPaths::holding(&font).unwrap();
 
@@ -90,7 +90,7 @@ fn alternates_and_component_conditions_save_and_reopen_as_they_were() {
 }
 
 #[test]
-fn a_glyph_whose_alternate_comes_later_in_glyph_order_reopens() {
+fn a_glyph_whose_swap_comes_later_in_glyph_order_reopens() {
     let mut font = conditions_font();
     let dollar = font
         .glyph_by_name("dollar")
@@ -100,9 +100,8 @@ fn a_glyph_whose_alternate_comes_later_in_glyph_order_reopens() {
     let later = font
         .insert_glyph(shift_font::Glyph::new("dollar.later"))
         .unwrap();
-    let alternate =
-        shift_font::GlyphAlternate::new(shift_font::AlternateId::new(), Condition::always(), later);
-    font.set_glyph_alternates(dollar, vec![alternate]).unwrap();
+    let swap = shift_font::GlyphSwap::new(shift_font::SwapId::new(), Condition::always(), later);
+    font.set_glyph_swaps(dollar, vec![swap]).unwrap();
     let paths = DocumentPaths::holding(&font).unwrap();
 
     let store = ShiftStore::open_document(&paths.document).unwrap();
@@ -114,13 +113,13 @@ fn a_glyph_whose_alternate_comes_later_in_glyph_order_reopens() {
             .unwrap()
             .glyph(dollar)
             .unwrap()
-            .alternates(),
-        font.glyph(dollar).unwrap().alternates()
+            .swaps(),
+        font.glyph(dollar).unwrap().swaps()
     );
 }
 
 #[test]
-fn an_imported_font_keeps_its_alternates_and_component_conditions() {
+fn an_imported_font_keeps_its_swaps_and_component_conditions() {
     let font = conditions_font();
     let mut store = ShiftStore::open_memory_for_test().unwrap();
 
@@ -134,7 +133,7 @@ fn an_imported_font_keeps_its_alternates_and_component_conditions() {
 }
 
 #[test]
-fn the_directory_has_every_glyphs_alternates() {
+fn the_directory_has_every_glyphs_swaps() {
     let mut store = ShiftStore::open_memory_for_test().unwrap();
     let font = conditions_font();
     store.replace_font_state(&font).unwrap();
@@ -142,10 +141,7 @@ fn the_directory_has_every_glyphs_alternates() {
     let directory = store.load_font_directory().unwrap();
 
     for glyph in font.glyphs() {
-        assert_eq!(
-            directory.glyph(glyph.id()).unwrap().alternates(),
-            glyph.alternates()
-        );
+        assert_eq!(directory.glyph(glyph.id()).unwrap().swaps(), glyph.swaps());
     }
 }
 
@@ -176,32 +172,38 @@ fn a_layer_payload_keeps_the_bytes_it_has_without_component_conditions() {
     );
 }
 
-/// Rewrites a current document into the version 7 shape: no alternate or
+/// Rewrites a current document into the version 7 shape: no swap or
 /// component condition tables.
 fn downgrade_to_version_7(path: &Path) -> TestResult<()> {
     rusqlite::Connection::open(path)?.execute_batch(
         "DROP TABLE glyph_component_conditions;
-         DROP TABLE glyph_alternate_conditions;
-         DROP TABLE glyph_alternates;
+         DROP TABLE glyph_swap_conditions;
+         DROP TABLE glyph_swaps;
          PRAGMA user_version = 7;",
     )?;
     Ok(())
 }
 
-/// The names of the tables in `path` that hold alternates and conditions.
-fn condition_tables(path: &Path) -> TestResult<Vec<String>> {
+/// The first column of each row `sql` reads from `path`, as text.
+fn text_column(path: &Path, sql: &str) -> TestResult<Vec<String>> {
     let conn = rusqlite::Connection::open(path)?;
-    let mut statement = conn.prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table'
-           AND name IN ('glyph_alternates', 'glyph_alternate_conditions', 'glyph_component_conditions')
-         ORDER BY name",
-    )?;
+    let mut statement = conn.prepare(sql)?;
     let rows = statement.query_map([], |row| row.get(0))?;
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
+/// The names of the tables in `path` that hold swaps and conditions.
+fn condition_tables(path: &Path) -> TestResult<Vec<String>> {
+    text_column(
+        path,
+        "SELECT name FROM sqlite_master WHERE type = 'table'
+           AND name IN ('glyph_swaps', 'glyph_swap_conditions', 'glyph_component_conditions')
+         ORDER BY name",
+    )
+}
+
 #[test]
-fn a_version_7_document_upgrades_with_no_alternates_or_conditions_and_its_payloads_untouched() {
+fn a_version_7_document_upgrades_with_no_swaps_or_conditions_and_its_payloads_untouched() {
     let font = sample_variable_font();
     let paths = DocumentPaths::holding(&font).unwrap();
     downgrade_to_version_7(&paths.document).unwrap();
@@ -212,7 +214,7 @@ fn a_version_7_document_upgrades_with_no_alternates_or_conditions_and_its_payloa
     drop(store);
 
     assert_eq!(migrated, font);
-    assert!(migrated.glyphs().all(|glyph| glyph.alternates().is_empty()));
+    assert!(migrated.glyphs().all(|glyph| glyph.swaps().is_empty()));
     assert_eq!(payloads(&paths.document).unwrap(), stored);
     let conn = rusqlite::Connection::open(&paths.document).unwrap();
     let version: i64 = conn
@@ -222,16 +224,127 @@ fn a_version_7_document_upgrades_with_no_alternates_or_conditions_and_its_payloa
     assert_eq!(
         condition_tables(&paths.document).unwrap(),
         [
-            "glyph_alternate_conditions",
-            "glyph_alternates",
-            "glyph_component_conditions"
+            "glyph_component_conditions",
+            "glyph_swap_conditions",
+            "glyph_swaps"
         ]
     );
 }
 
+/// Rewrites a current document, or with `overlay` a recovery overlay, into
+/// the version 8 shape nightly builds wrote: swaps stored as alternates, in
+/// `glyph_alternates` and `glyph_alternate_conditions`, with `alternate_` ids.
+fn downgrade_to_version_8(path: &Path, overlay: bool) -> TestResult<()> {
+    let conn = rusqlite::Connection::open(path)?;
+    conn.execute_batch(
+        "ALTER TABLE glyph_swaps RENAME COLUMN swap_glyph_id TO alternate_glyph_id;
+         ALTER TABLE glyph_swaps RENAME TO glyph_alternates;
+         DROP INDEX glyph_swaps_glyph_id_idx;
+         CREATE INDEX glyph_alternates_glyph_id_idx ON glyph_alternates(glyph_id);
+         ALTER TABLE glyph_swap_conditions RENAME COLUMN swap_id TO alternate_id;
+         ALTER TABLE glyph_swap_conditions RENAME TO glyph_alternate_conditions;
+         DROP INDEX glyph_swap_conditions_glyph_id_idx;
+         CREATE INDEX glyph_alternate_conditions_glyph_id_idx
+             ON glyph_alternate_conditions(glyph_id);
+         UPDATE glyph_alternates SET id = 'alternate_' || substr(id, 6);
+         UPDATE glyph_alternate_conditions SET alternate_id = 'alternate_' || substr(alternate_id, 6);
+         PRAGMA user_version = 8;",
+    )?;
+    if overlay {
+        conn.execute_batch(
+            "UPDATE recovery_replacements SET collection = 'glyph_alternates'
+               WHERE collection = 'glyph_swaps';
+             UPDATE recovery_replacements SET collection = 'glyph_alternate_conditions'
+               WHERE collection = 'glyph_swap_conditions';",
+        )?;
+    }
+    Ok(())
+}
+
+/// The ids stored in `path`'s `glyph_swaps`, in order.
+fn stored_swap_ids(path: &Path) -> TestResult<Vec<String>> {
+    text_column(
+        path,
+        "SELECT id FROM glyph_swaps ORDER BY glyph_id, order_index",
+    )
+}
+
 #[test]
-fn an_upgraded_document_saves_alternates_and_component_conditions() {
-    let (full, saved, added) = without_alternate_and_condition_glyphs().unwrap();
+fn a_version_8_documents_alternates_open_as_its_swaps() {
+    let font = conditions_font();
+    let paths = DocumentPaths::holding(&font).unwrap();
+    downgrade_to_version_8(&paths.document, false).unwrap();
+
+    let store = ShiftStore::open_document(&paths.document).unwrap();
+    let migrated = store.load_font_state().unwrap();
+    drop(store);
+
+    assert_eq!(migrated, font);
+    assert_eq!(
+        text_outlines(&migrated).unwrap(),
+        text_outlines(&font).unwrap()
+    );
+    assert_eq!(
+        stored_swap_ids(&paths.document).unwrap(),
+        ["swap_compact-heavy", "swap_heavy"]
+    );
+    assert_eq!(
+        condition_tables(&paths.document).unwrap(),
+        [
+            "glyph_component_conditions",
+            "glyph_swap_conditions",
+            "glyph_swaps"
+        ]
+    );
+}
+
+/// The change that drops `dollar`'s first swap from `saved`, and the font
+/// it leads to.
+fn without_first_swap_of_dollar(saved: &Font) -> TestResult<(FontChangeSet, Font)> {
+    let before = saved.glyph_by_name("dollar").ok_or("no dollar")?.clone();
+    let mut after = before.clone();
+    after.set_swaps(
+        after
+            .swaps()
+            .get(1..)
+            .ok_or("dollar has no swaps")?
+            .to_vec(),
+    );
+    let change = FontChangeSet::new(vec![FontChange::Glyph(Box::new(Replacement::new(
+        Some(before),
+        Some(after),
+    )))]);
+    let mut expected = saved.clone();
+    expected.apply_change_set(&change)?;
+    Ok((change, expected))
+}
+
+#[test]
+fn unsaved_alternates_in_a_version_8_recovery_overlay_reopen_as_swaps() {
+    let saved = conditions_font();
+    let paths = DocumentPaths::holding(&saved).unwrap();
+    let (change, expected) = without_first_swap_of_dollar(&saved).unwrap();
+    let open = || ShiftStore::open_document_with_recovery(&paths.document, &paths.recovery);
+    let mut store = open().unwrap();
+    store
+        .apply_change_set_with_font(&change, &expected, SaveState::Unsaved)
+        .unwrap();
+    drop(store);
+    downgrade_to_version_8(&paths.document, false).unwrap();
+    downgrade_to_version_8(&paths.recovery, true).unwrap();
+
+    let recovered = open().unwrap();
+
+    assert_eq!(
+        recovered.recovery_state().unwrap(),
+        Some(RecoveryState::Dirty)
+    );
+    assert_eq!(recovered.load_font_state().unwrap(), expected);
+}
+
+#[test]
+fn an_upgraded_document_saves_swaps_and_component_conditions() {
+    let (full, saved, added) = without_swap_and_condition_glyphs().unwrap();
     let paths = DocumentPaths::holding(&saved).unwrap();
     downgrade_to_version_7(&paths.document).unwrap();
 
@@ -248,9 +361,9 @@ fn an_upgraded_document_saves_alternates_and_component_conditions() {
 }
 
 /// The conditions font, the same font without its glyphs from `dollar` on
-/// (the one with alternates, and those with component conditions), and the
+/// (the one with swaps, and those with component conditions), and the
 /// change set that adds them back as unsaved edits.
-fn without_alternate_and_condition_glyphs() -> TestResult<(Font, Font, FontChangeSet)> {
+fn without_swap_and_condition_glyphs() -> TestResult<(Font, Font, FontChangeSet)> {
     let full = conditions_font();
     let tail = ["U", "T", "mid", "HX", "H", "dollarcomp", "dollar"];
     let (saved, added) = without_tail(&full, &tail)?;
@@ -306,8 +419,8 @@ fn after_a_crash(
 }
 
 #[test]
-fn unsaved_alternates_and_component_conditions_survive_a_crash() {
-    let (expected, saved, added) = without_alternate_and_condition_glyphs().unwrap();
+fn unsaved_swaps_and_component_conditions_survive_a_crash() {
+    let (expected, saved, added) = without_swap_and_condition_glyphs().unwrap();
     let paths = DocumentPaths::holding(&saved).unwrap();
 
     assert_eq!(
@@ -341,18 +454,10 @@ fn an_unsaved_change_to_a_component_condition_survives_a_crash() {
 }
 
 #[test]
-fn an_unsaved_change_to_a_glyphs_alternates_survives_a_crash() {
+fn an_unsaved_change_to_a_glyphs_swaps_survives_a_crash() {
     let saved = conditions_font();
     let paths = DocumentPaths::holding(&saved).unwrap();
-    let before = saved.glyph_by_name("dollar").unwrap().clone();
-    let mut after = before.clone();
-    after.set_alternates(after.alternates()[1..].to_vec());
-    let change = FontChangeSet::new(vec![FontChange::Glyph(Box::new(Replacement::new(
-        Some(before),
-        Some(after),
-    )))]);
-    let mut expected = saved.clone();
-    expected.apply_change_set(&change).unwrap();
+    let (change, expected) = without_first_swap_of_dollar(&saved).unwrap();
 
     assert_eq!(
         after_a_crash(&paths, &change, &expected).unwrap(),

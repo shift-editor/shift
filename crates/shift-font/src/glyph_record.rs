@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::ir::glyph_category::{GlyphDataCategory, Ligature, OpenTypeCategories, RecordCategory};
 use crate::wire::Location;
 use crate::{
-    Axis, Font, FontChangeSet, Glyph, GlyphAlternate, GlyphAxis, GlyphId, GlyphLayer, GlyphName,
+    Axis, Font, FontChangeSet, Glyph, GlyphAxis, GlyphId, GlyphLayer, GlyphName, GlyphSwap,
     LayerId, MarkColor, SourceId,
 };
 
@@ -25,9 +25,9 @@ pub struct GlyphRecord {
     /// Its own axes, in order, beside the font's.
     pub axes: Vec<Axis>,
     /// Where text draws another glyph in its place, tried in order
-    /// ([`Glyph::alternates`]).
+    /// ([`Glyph::swaps`]).
     #[serde(default)]
-    pub alternates: Vec<GlyphAlternate>,
+    pub swaps: Vec<GlyphSwap>,
     /// Its drawings: those on the font's masters, in master order, then
     /// those located off them ([`Glyph::editor_drawings`]).
     pub layers: Vec<GlyphLayerRecord>,
@@ -214,7 +214,7 @@ impl Font {
                 .map(GlyphAxis::as_axis)
                 .cloned()
                 .collect(),
-            alternates: glyph.alternates().to_vec(),
+            swaps: glyph.swaps().to_vec(),
             layers: glyph
                 .editor_drawings(self)
                 .map(|(source_id, layer)| GlyphLayerRecord::new(source_id, layer))
@@ -238,7 +238,7 @@ mod tests {
             unicodes: Vec::new(),
             component_base_glyph_ids: Vec::new(),
             axes: Vec::new(),
-            alternates: Vec::new(),
+            swaps: Vec::new(),
             layers: Vec::new(),
             mark: false,
             nonspacing_mark: false,

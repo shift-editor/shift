@@ -31,8 +31,8 @@ use shift_font::linked_metrics::SideLink;
 use shift_font::{
     AnchorId, Axis, AxisId, ComponentId, ComponentInheritance, Condition, ConditionRange,
     Counterparts, CounterpartsError, FontChangeFlag, GlyphId, GlyphPreview, GlyphRecords, LayerId,
-    MetricValue, MissingKerningOrigin, NeverUsedAlternate, NodeId, PointId, ResolvedKerning,
-    Source, SourceId,
+    MetricValue, MissingKerningOrigin, NeverUsedSwap, NodeId, PointId, ResolvedKerning, Source,
+    SourceId,
 };
 use shift_text::layout::{LayoutError, TextLayout};
 
@@ -341,14 +341,14 @@ pub trait EngineReads {
     -> Result<Vec<GlyphSnapshot>, FontRecordsError>;
     /// The glyph drawn for `glyph_id` at the design location `location`, in
     /// the font's axis order with NaN for an axis default: the glyph of its
-    /// first alternate that holds there, else `glyph_id` itself
+    /// first swap that holds there, else `glyph_id` itself
     /// (`Font::drawn_glyph_at`). What the canvas draws, and edits, for the
     /// glyph open at that location; a glyph the font lacks is itself.
     fn drawn_glyph(&self, glyph_id: GlyphId, location: Vec<f64>) -> GlyphId;
-    /// `glyph_id`'s alternates that never draw anywhere on the font's axes,
-    /// and why (`Font::never_used_alternates`); none for a glyph the font
+    /// `glyph_id`'s swaps that never draw anywhere on the font's axes,
+    /// and why (`Font::never_used_swaps`); none for a glyph the font
     /// lacks or whose axis mappings cannot compile.
-    fn never_used_alternates(&self, glyph_id: GlyphId) -> Vec<NeverUsedAlternate>;
+    fn never_used_swaps(&self, glyph_id: GlyphId) -> Vec<NeverUsedSwap>;
     /// A condition chip's value `text` read on `axis_id`, a font axis or one
     /// of `glyph_id`'s own: `700`, `>=700`, `≥700` or `700+`, `<=80` or `≤80`,
     /// `400-600` or `400–600`, in user units on a font axis users see, each
@@ -591,7 +591,7 @@ mod exports {
         Condition, ConditionRange, ConditionValue, Counterparts, CounterpartsReadError,
         EditablePair, EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag,
         FontFeature, FontHeader, FontRecordsError, GlyphIdentityChange, GlyphSnapshot,
-        InterpolatedMetrics, KerningSnapshot, LayerId, LayoutError, NeverUsedAlternate, NodeId,
+        InterpolatedMetrics, KerningSnapshot, LayerId, LayoutError, NeverUsedSwap, NodeId,
         PageLayout, PageLayoutError, PageLayoutRequest, PlacedText, PointId, RevisedNode,
         SceneNode, Source, SourceSetWeights, TextLayoutRequest, engine_reads_request,
     };
@@ -1359,10 +1359,10 @@ mod exports {
             font.drawn_glyph_at(glyph_id, &design_location(font, &location))
         }
 
-        fn never_used_alternates(&self, glyph_id: GlyphId) -> Vec<NeverUsedAlternate> {
+        fn never_used_swaps(&self, glyph_id: GlyphId) -> Vec<NeverUsedSwap> {
             self.session
                 .font()
-                .never_used_alternates(glyph_id)
+                .never_used_swaps(glyph_id)
                 .unwrap_or_default()
         }
 
@@ -1418,10 +1418,10 @@ mod exports {
         ) -> Result<Vec<GlyphPreview>, FontRecordsError> {
             let font = self.session.font();
             let residency = self.session.residency();
-            // A tile draws each glyph as text does, as the alternate picked at
-            // this location, so the alternate glyphs must be loaded too.
+            // A tile draws each glyph as text does, as the swap picked at
+            // this location, so the swap glyphs must be loaded too.
             let mut drawn = glyphs.clone();
-            drawn.extend(font.alternate_glyphs_of(&glyphs));
+            drawn.extend(font.swap_glyphs_of(&glyphs));
             for glyph_id in self.component_closure(drawn) {
                 let Some(glyph) = font.glyph(glyph_id) else {
                     continue;
@@ -1850,7 +1850,7 @@ mod exports {
         }
 
         #[test]
-        fn the_glyph_open_at_a_location_draws_its_alternate_there() {
+        fn the_glyph_open_at_a_location_draws_its_swap_there() {
             let font = shift_font::test_support::conditions_font();
             let id = |name: &str| font.glyph_id_by_name(name).unwrap();
             let session = Session::over(&font);
@@ -1922,22 +1922,22 @@ mod exports {
         }
 
         #[test]
-        fn an_alternate_an_earlier_one_covers_is_never_used() {
+        fn a_swap_an_earlier_one_covers_is_never_used() {
             let mut font = shift_font::test_support::conditions_font();
             let dollar = font.glyph_id_by_name("dollar").unwrap();
-            let alternates = font.glyph(dollar).unwrap().alternates().to_vec();
-            let reversed = alternates.iter().rev().cloned().collect();
-            font.set_glyph_alternates(dollar, reversed).unwrap();
+            let swaps = font.glyph(dollar).unwrap().swaps().to_vec();
+            let reversed = swaps.iter().rev().cloned().collect();
+            font.set_glyph_swaps(dollar, reversed).unwrap();
             let session = Session::over(&font);
 
-            let never_used = session.read(|engine| engine.never_used_alternates(dollar));
+            let never_used = session.read(|engine| engine.never_used_swaps(dollar));
 
             assert_eq!(
                 never_used
                     .iter()
-                    .map(|never_used| never_used.alternate_id)
+                    .map(|never_used| never_used.swap_id)
                     .collect::<Vec<_>>(),
-                [alternates[0].id()]
+                [swaps[0].id()]
             );
         }
 

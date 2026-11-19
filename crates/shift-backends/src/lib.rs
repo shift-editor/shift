@@ -27,7 +27,7 @@ pub use binary_encoding::{BinaryEncoding, BinaryEncodings};
 pub use errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
 pub use export::{
     ComponentConditions, ConditionalComponentRef, ExportError, ExportFormat, FontExportRequest,
-    FontExportResult, FontExporter, VariableComponents,
+    FontExportResult, FontExporter, PreviewBinary, VariableComponents,
 };
 pub use export_static::StaticInstanceFile;
 pub use font_source::{
@@ -52,7 +52,7 @@ pub(crate) use import_report::distinct_named_instances;
 pub use import_report::{ImportLoss, ImportLossKind, ImportReport};
 pub use shift2fontir::{
     AxisConversionError, MappingSide, PropagatedAnchor, PropagatedGlyphAnchors,
-    PropagatedSourceAnchors,
+    PropagatedSourceAnchors, SwapsError,
 };
 pub use source_ids::SourceIds;
 pub use traits::{FontBackend, FontReader, FontView, FontWriter};

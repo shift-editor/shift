@@ -4,11 +4,14 @@ use crate::atomic::write_file_atomic;
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::formats::ufo::UfoWriter;
 use crate::numeric::lossy_f32;
+use crate::shift2fontir::{Lattice, designspace_rules};
 use crate::traits::{FontView, FontWriter};
+use fontir::ir::ConditionSet as IrConditionSet;
 use norad::designspace::{
     Axis as DsAxis, AxisMapping as DsAxisMapping, AxisMappingEntry as DsAxisMappingEntry,
-    AxisMappings as DsAxisMappings, DesignSpaceDocument, Dimension, Instance as DsInstance,
-    Source as DsSource,
+    AxisMappings as DsAxisMappings, Condition as DsCondition, ConditionSet as DsConditionSet,
+    DesignSpaceDocument, Dimension, Instance as DsInstance, Rule as DsRule, RuleProcessing,
+    Rules as DsRules, Source as DsSource, Substitution as DsSubstitution,
 };
 use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
@@ -18,6 +21,7 @@ use shift_font::{
     ExternalLocation, FeatureData, Font, FontMetadata, FontMetrics, Glyph, Guideline, Kerning,
     LibData, Location, MetricDefinition, NamedInstance, Source, SourceId,
 };
+use shift_text::shaper_font::to_ir_axes;
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
@@ -364,6 +368,74 @@ impl DesignspaceWriter {
             .collect()
     }
 
+    /// The glyphs' swaps as designspace rules applied first
+    /// (`processing="first"`, the `rvrn` feature), as compiled fonts apply
+    /// them; see [`designspace_rules`] for how overlapping swaps are
+    /// written. Condition ranges are design-space values, as source
+    /// locations are.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DesignspaceError::RuleAxes`] when the axes cannot be
+    /// normalized, [`DesignspaceError::Swaps`] when the swaps cannot
+    /// compile, and [`DesignspaceError::RuleGlyphName`] for a glyph name a
+    /// UFO can't hold.
+    fn rules(font: &impl FontView, axes: &[Axis]) -> DesignspaceResult<DsRules> {
+        let lattice = Lattice::new(axes, &to_ir_axes(axes, font.axis_mappings())?);
+        let skipped: HashSet<String> = font
+            .lib()
+            .skipped_export_glyphs()
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        let glyphs: Vec<Glyph> = font.glyphs().cloned().collect();
+        let rules = designspace_rules(&glyphs, &lattice, &skipped)?
+            .into_iter()
+            .enumerate()
+            .map(|(index, rule)| {
+                Ok(DsRule {
+                    name: Some(format!("swaps.{}", index + 1)),
+                    condition_sets: rule
+                        .conditions
+                        .iter()
+                        .map(|set| Self::condition_set(set, axes))
+                        .collect(),
+                    substitutions: rule
+                        .substitutions
+                        .iter()
+                        .map(|substitution| {
+                            Ok(DsSubstitution {
+                                name: rule_glyph_name(substitution.replace.as_str())?,
+                                with: rule_glyph_name(substitution.with.as_str())?,
+                            })
+                        })
+                        .collect::<DesignspaceResult<_>>()?,
+                })
+            })
+            .collect::<DesignspaceResult<_>>()?;
+        Ok(DsRules {
+            processing: RuleProcessing::First,
+            rules,
+        })
+    }
+
+    /// `set` as a `<conditionset>`, each axis by its name.
+    fn condition_set(set: &IrConditionSet, axes: &[Axis]) -> DsConditionSet {
+        DsConditionSet {
+            conditions: set
+                .into_iter()
+                .filter_map(|condition| {
+                    let axis = axes.iter().find(|axis| condition.axis == axis.tag())?;
+                    Some(DsCondition {
+                        name: axis.name().to_string(),
+                        minimum: condition.min.map(|value| lossy_f32(value.to_f64())),
+                        maximum: condition.max.map(|value| lossy_f32(value.to_f64())),
+                    })
+                })
+                .collect(),
+        }
+    }
+
     fn user_location(location: &ExternalLocation, axes: &[Axis]) -> Vec<Dimension> {
         axes.iter()
             .map(|axis| Dimension {
@@ -597,6 +669,7 @@ impl DesignspaceWriter {
                 .map(|axis| Self::axis(axis, font.axis_mappings()))
                 .collect(),
             axis_mappings,
+            rules: Self::rules(font, axes)?,
             sources,
             instances,
             ..Default::default()
@@ -604,6 +677,14 @@ impl DesignspaceWriter {
 
         Self::save_document_atomic(&document, axes, path)
     }
+}
+
+/// `name` as a designspace rule names a glyph.
+fn rule_glyph_name(name: &str) -> DesignspaceResult<norad::Name> {
+    norad::Name::new(name).map_err(|source| DesignspaceError::RuleGlyphName {
+        name: name.to_string(),
+        source,
+    })
 }
 
 impl Default for DesignspaceWriter {

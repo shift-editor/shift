@@ -21,7 +21,7 @@ import {
   type FontFeature,
   type GlyphIdentityChange,
   type GlyphPreview,
-  type NeverUsedAlternate,
+  type NeverUsedSwap,
   type PlacedText,
   type SideLink,
   type RevisedNode,
@@ -404,8 +404,8 @@ export class SessionEngine implements FontEngine {
     return this.#require().metricsKeyProblem(text);
   }
 
-  neverUsedAlternates(glyphId: GlyphId): readonly NeverUsedAlternate[] {
-    return this.#session?.neverUsedAlternates(glyphId) ?? [];
+  neverUsedSwaps(glyphId: GlyphId): readonly NeverUsedSwap[] {
+    return this.#session?.neverUsedSwaps(glyphId) ?? [];
   }
 
   conditionValue(glyph: GlyphId | null, axis: AxisId, text: string): ConditionValue {

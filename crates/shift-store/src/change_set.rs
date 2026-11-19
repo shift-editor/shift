@@ -247,9 +247,8 @@ impl<'a> StoreWriter<'a> {
             .execute("DELETE FROM glyph_component_conditions", [])?;
         self.tx.execute("DELETE FROM glyph_layers", [])?;
         self.tx.execute("DELETE FROM glyph_axes", [])?;
-        self.tx
-            .execute("DELETE FROM glyph_alternate_conditions", [])?;
-        self.tx.execute("DELETE FROM glyph_alternates", [])?;
+        self.tx.execute("DELETE FROM glyph_swap_conditions", [])?;
+        self.tx.execute("DELETE FROM glyph_swaps", [])?;
         self.tx.execute("DELETE FROM glyph_unicodes", [])?;
         self.tx.execute("DELETE FROM glyphs", [])?;
         self.tx.execute("DELETE FROM source_locations", [])?;
@@ -363,7 +362,7 @@ impl<'a> StoreWriter<'a> {
                         .execute(params![glyph.id(), key, lib_value_json(value)?])?;
                 }
                 self.insert_glyph_axes(glyph)?;
-                self.insert_glyph_alternates(glyph)
+                self.insert_glyph_swaps(glyph)
             }
             WriteMode::Upsert => {
                 self.upsert_glyph(glyph, order_index)?;
@@ -379,12 +378,12 @@ impl<'a> StoreWriter<'a> {
                     .execute([glyph.id()])?;
                 self.insert_glyph_axes(glyph)?;
                 self.tx
-                    .prepare_cached("DELETE FROM glyph_alternate_conditions WHERE glyph_id = ?1")?
+                    .prepare_cached("DELETE FROM glyph_swap_conditions WHERE glyph_id = ?1")?
                     .execute([glyph.id()])?;
                 self.tx
-                    .prepare_cached("DELETE FROM glyph_alternates WHERE glyph_id = ?1")?
+                    .prepare_cached("DELETE FROM glyph_swaps WHERE glyph_id = ?1")?
                     .execute([glyph.id()])?;
-                self.insert_glyph_alternates(glyph)
+                self.insert_glyph_swaps(glyph)
             }
         }
     }
@@ -412,30 +411,30 @@ impl<'a> StoreWriter<'a> {
         Ok(())
     }
 
-    /// Inserts `glyph`'s alternates in the order they are tried, each with its
+    /// Inserts `glyph`'s swaps in the order they are tried, each with its
     /// condition's ranges.
-    fn insert_glyph_alternates(&self, glyph: &font::Glyph) -> Result<(), StoreError> {
-        for (order_index, alternate) in glyph.alternates().iter().enumerate() {
+    fn insert_glyph_swaps(&self, glyph: &font::Glyph) -> Result<(), StoreError> {
+        for (order_index, swap) in glyph.swaps().iter().enumerate() {
             self.tx
                 .prepare_cached(
-                    "INSERT INTO glyph_alternates (id, glyph_id, alternate_glyph_id, order_index)
+                    "INSERT INTO glyph_swaps (id, glyph_id, swap_glyph_id, order_index)
                      VALUES (?1, ?2, ?3, ?4)",
                 )?
                 .execute(params![
-                    alternate.id(),
+                    swap.id(),
                     glyph.id(),
-                    alternate.glyph(),
+                    swap.glyph(),
                     sql_int(order_index)
                 ])?;
-            for (range_index, range) in alternate.condition().ranges().iter().enumerate() {
+            for (range_index, range) in swap.condition().ranges().iter().enumerate() {
                 self.tx
                     .prepare_cached(
-                        "INSERT INTO glyph_alternate_conditions (
-                            alternate_id, glyph_id, order_index, axis_id, min_value, max_value
+                        "INSERT INTO glyph_swap_conditions (
+                            swap_id, glyph_id, order_index, axis_id, min_value, max_value
                          ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                     )?
                     .execute(params![
-                        alternate.id(),
+                        swap.id(),
                         glyph.id(),
                         sql_int(range_index),
                         range.axis_id,

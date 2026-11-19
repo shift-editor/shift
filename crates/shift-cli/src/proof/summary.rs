@@ -2,6 +2,7 @@
 
 use crate::Report;
 use serde::Serialize;
+use shift_backends::ConditionalComponentRef;
 use shift_proof::{ImageFormat, ProofMode, ProofReport};
 
 /// A written proof: where the image went plus everything it shows.
@@ -10,6 +11,68 @@ pub(crate) struct ProofSummary {
     pub output: String,
     #[serde(flatten)]
     pub report: ProofReport,
+    /// Where the proof draws the font differently from the editor.
+    pub warnings: Vec<ProofWarning>,
+}
+
+/// Conditional components named in a warning's text before the rest are
+/// counted.
+const LISTED_COMPONENTS: usize = 5;
+
+/// Something the proof draws differently from the editor.
+#[derive(Debug, Serialize)]
+#[serde(tag = "code", rename_all = "kebab-case")]
+pub(crate) enum ProofWarning {
+    /// The compiled font has no place for component conditions, so it draws
+    /// these components everywhere, where the editor draws each only where
+    /// its condition holds.
+    ComponentConditionsDrawnEverywhere {
+        message: String,
+        components: Vec<ConditionalComponentRef>,
+    },
+}
+
+impl ProofWarning {
+    /// The warning for `components`, drawn everywhere; `None` when there are
+    /// none.
+    pub(crate) fn components_drawn_everywhere(
+        components: &[ConditionalComponentRef],
+    ) -> Option<Self> {
+        if components.is_empty() {
+            return None;
+        }
+        let mut listed: Vec<String> = components
+            .iter()
+            .take(LISTED_COMPONENTS)
+            .map(|component| {
+                format!(
+                    "{}: component {} ({})",
+                    component.glyph, component.position, component.base
+                )
+            })
+            .collect();
+        if let Some(more) = components.len().checked_sub(LISTED_COMPONENTS)
+            && more > 0
+        {
+            listed.push(format!("and {more} more"));
+        }
+        let count = components.len();
+        let plural = if count == 1 { "" } else { "s" };
+        Some(Self::ComponentConditionsDrawnEverywhere {
+            message: format!(
+                "compiled fonts can't hold component conditions yet, so this proof draws {count} conditional component{plural} everywhere: {}",
+                listed.join(", ")
+            ),
+            components: components.to_vec(),
+        })
+    }
+
+    /// The warning as one line of text.
+    pub(crate) fn message(&self) -> &str {
+        match self {
+            Self::ComponentConditionsDrawnEverywhere { message, .. } => message,
+        }
+    }
 }
 
 impl ProofSummary {

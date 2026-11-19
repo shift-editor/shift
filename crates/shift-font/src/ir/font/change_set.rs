@@ -262,28 +262,28 @@ impl Font {
         }
 
         self.require_layer_sources_after(change_set)?;
-        self.check_alternates_and_conditions_after(change_set)
+        self.check_swaps_and_conditions_after(change_set)
     }
 
-    /// Checks the alternates and component conditions of every glyph the
-    /// change set touches, every glyph's alternates when it replaces the
-    /// axes, and that no glyph it removes is another glyph's alternate.
+    /// Checks the swaps and component conditions of every glyph the
+    /// change set touches, every glyph's swaps when it replaces the
+    /// axes, and that no glyph it removes is another glyph's swap.
     ///
     /// # Errors
     ///
-    /// Returns the first error of [`Self::check_glyph_alternates`],
-    /// [`Self::check_layer_conditions`] or [`Self::check_not_an_alternate`].
-    fn check_alternates_and_conditions_after(&self, change_set: &FontChangeSet) -> CoreResult<()> {
+    /// Returns the first error of [`Self::check_glyph_swaps`],
+    /// [`Self::check_layer_conditions`] or [`Self::check_not_a_swap`].
+    fn check_swaps_and_conditions_after(&self, change_set: &FontChangeSet) -> CoreResult<()> {
         if change_set.replaces_axes() {
             self.glyphs()
-                .try_for_each(|glyph| self.check_glyph_alternates(glyph))?;
+                .try_for_each(|glyph| self.check_glyph_swaps(glyph))?;
         }
         for glyph_id in change_set.touched_glyph_ids() {
             let Some(glyph) = self.glyph(glyph_id) else {
-                self.check_not_an_alternate(glyph_id)?;
+                self.check_not_a_swap(glyph_id)?;
                 continue;
             };
-            self.check_glyph_alternates(glyph)?;
+            self.check_glyph_swaps(glyph)?;
             for layer in glyph.layers().values() {
                 self.check_layer_conditions(glyph, layer)?;
             }

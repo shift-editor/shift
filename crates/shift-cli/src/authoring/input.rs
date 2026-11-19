@@ -77,11 +77,11 @@ pub(super) struct ComponentInput {
     pub condition: Vec<String>,
 }
 
-/// One of a glyph's alternates: the glyph drawn in its place where every
+/// One of a glyph's swaps: the glyph drawn in its place where every
 /// range of `when` holds.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct AlternateInput {
+pub(super) struct SwapInput {
     pub glyph: String,
     /// One range per text as `--when` reads them; empty always applies.
     #[serde(default)]
@@ -148,10 +148,10 @@ pub(super) struct GlyphEntryInput {
     /// Metrics keys that apply in every source the glyph's layers do not override.
     #[serde(default)]
     pub metrics_keys: Option<MetricsKeysInput>,
-    /// The glyph's alternates, in the order they are tried, replacing any it
+    /// The glyph's swaps, in the order they are tried, replacing any it
     /// has; omitted keeps them, and an empty list removes them.
     #[serde(default)]
-    pub alternates: Option<Vec<AlternateInput>>,
+    pub swaps: Option<Vec<SwapInput>>,
     /// The glyph's mark colour; an entry without `markColor` keeps it.
     #[serde(default)]
     pub mark_color: MarkColorEdit,

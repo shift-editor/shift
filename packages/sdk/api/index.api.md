@@ -583,8 +583,7 @@ export function externalAxisLocationFromRecord(values: Readonly<Record<string, n
 // @beta
 export class Font {
     constructor(input: FontOptions);
-    addGlyphAlternate(glyphId: GlyphId, alternateGlyphId: GlyphId, condition: Condition, position?: number | null): Promise<AlternateId>;
-    alternatesOf(glyphId: GlyphId): readonly GlyphAlternate[];
+    addGlyphSwap(glyphId: GlyphId, swapGlyphId: GlyphId, condition: Condition, position?: number | null): Promise<SwapId>;
     assignKerningGroup(position: KerningPairPosition, glyphIds: readonly GlyphId[], groupId: KerningGroupId | null): Promise<void>;
     get axesCell(): Signal<readonly Axis[]>;
     axis(axisId: AxisId): Axis | null;
@@ -632,8 +631,8 @@ export class Font {
     drawnGlyphAt(glyphId: GlyphId, location: ExternalAxisLocation): GlyphId;
     duplicateGlyphs(glyphIds: readonly GlyphId[]): GlyphId[];
     get editCoordinator(): WorkspaceEditCoordinator;
-    editGlyphAlternate(alternateId: AlternateId, edit: GlyphAlternateEdit): Promise<void>;
     editGlyphAxis(axisId: AxisId, edit: GlyphAxisEdit): Promise<void>;
+    editGlyphSwap(swapId: SwapId, edit: GlyphSwapEdit): Promise<void>;
     entryForId(glyphId: GlyphId): GlyphEntry | null;
     entryForName(name: GlyphName): GlyphEntry | null;
     entryForUnicode(unicode: Unicode): GlyphEntry | null;
@@ -706,7 +705,7 @@ export class Font {
     nameForUnicode(unicode: Unicode): GlyphName;
     // (undocumented)
     nearestSource(location: ExternalAxisLocation): Source | null;
-    neverUsedAlternates(glyphId: GlyphId): readonly NeverUsedAlternate[];
+    neverUsedSwaps(glyphId: GlyphId): readonly NeverUsedSwap[];
     newAnchorName(layerIds: readonly LayerId[]): string;
     nextAvailableGlyphName(name: GlyphName): GlyphName;
     pointIdsForSegment(segmentId: SegmentId): readonly PointId[] | null;
@@ -739,6 +738,7 @@ export class Font {
     sourceNamed(name: string): Source | null;
     get sources(): readonly Source[];
     get sourcesCell(): Signal<readonly Source[]>;
+    swapsOf(glyphId: GlyphId): readonly GlyphSwap[];
     // (undocumented)
     get unicodes(): readonly Unicode[];
     get unicodesCell(): Signal<Unicode[]>;
@@ -936,7 +936,6 @@ export interface GlyphReader {
 
 // @public
 export interface GlyphRecord {
-    readonly alternates: readonly GlyphAlternate[];
     readonly axes: readonly Axis$1[];
     readonly componentBaseGlyphIds: readonly GlyphId[];
     // (undocumented)
@@ -948,6 +947,7 @@ export interface GlyphRecord {
     // (undocumented)
     readonly name: GlyphName;
     readonly nonspacingMark: boolean;
+    readonly swaps: readonly GlyphSwap[];
     // (undocumented)
     readonly unicodes: readonly number[];
 }

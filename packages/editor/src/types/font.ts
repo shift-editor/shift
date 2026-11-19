@@ -45,7 +45,7 @@ import type {
   FontChangeFlag,
   FontFeature,
   GlyphIdentityChange,
-  NeverUsedAlternate,
+  NeverUsedSwap,
   SideLink,
   TextRun,
   PlacedText,
@@ -190,10 +190,10 @@ export interface FontEngine {
   metricsKeyProblem(text: string): string | null;
 
   /**
-   * `glyphId`'s alternates that never draw anywhere on the font's axes, and
-   * why (`Font::never_used_alternates`); none while the engine is not open.
+   * `glyphId`'s swaps that never draw anywhere on the font's axes, and
+   * why (`Font::never_used_swaps`); none while the engine is not open.
    */
-  neverUsedAlternates(glyphId: GlyphId): readonly NeverUsedAlternate[];
+  neverUsedSwaps(glyphId: GlyphId): readonly NeverUsedSwap[];
 
   /**
    * A condition chip's value `text` read on `axis`, a font axis or one of
@@ -361,7 +361,7 @@ export interface EngineVariation {
   ): Location;
   /**
    * The glyph drawn for `glyphId` at a design location: its first
-   * alternate that holds there, else itself.
+   * swap that holds there, else itself.
    */
   drawnGlyph(glyphId: GlyphId, location: readonly number[]): GlyphId;
   /**

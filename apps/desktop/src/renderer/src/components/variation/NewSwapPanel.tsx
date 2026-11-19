@@ -22,27 +22,27 @@ import { SidebarActionButton } from "@/components/sidebar";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
 import { useSidebarPanelAnchor } from "@/hooks/useSidebarPanelAnchor";
 import { NameQuery } from "@/lib/utils/NameQuery";
-import type { AlternateGlyphChoice } from "@/types/conditions";
+import type { SwapGlyphChoice } from "@/types/conditions";
 
 /** The most glyphs the picker lists at once; typing narrows them. */
 const SHOWN = 100;
 
 /**
- * The Alternates section's **+** and the panel it opens beside the sidebar:
+ * The Swaps section's **+** and the panel it opens beside the sidebar:
  * a search over the font's glyphs, the edited glyph left out, with "Create
  * `<glyph>.alt`" first. Picking one hands it back; the section then starts
  * its first chip.
  */
-export const NewAlternatePanel = ({
+export const NewSwapPanel = ({
   glyphId,
   newGlyphName,
   onPick,
 }: {
-  /** The edited glyph, which can't be its own alternate. */
+  /** The edited glyph, which can't be its own swap. */
   glyphId: GlyphId;
-  /** The name a created alternate glyph takes, `dollar.alt`. */
+  /** The name a created swap glyph takes, `dollar.alt`. */
   newGlyphName: GlyphName;
-  onPick: (choice: AlternateGlyphChoice) => void;
+  onPick: (choice: SwapGlyphChoice) => void;
 }) => {
   const catalog = useGlyphCatalog();
   const panelAnchor = useSidebarPanelAnchor();
@@ -56,14 +56,12 @@ export const NewAlternatePanel = ({
         (glyph) => [glyph.name, glyph.displayName],
       )
       .slice(0, SHOWN)
-      .map(
-        (glyph): AlternateGlyphChoice => ({ kind: "glyph", glyphId: glyph.id, name: glyph.name }),
-      );
-    const create: AlternateGlyphChoice = { kind: "create", name: newGlyphName };
+      .map((glyph): SwapGlyphChoice => ({ kind: "glyph", glyphId: glyph.id, name: glyph.name }));
+    const create: SwapGlyphChoice = { kind: "create", name: newGlyphName };
     return [create, ...glyphs];
   }, [catalog.availableGlyphs, glyphId, newGlyphName, query]);
 
-  const pick = (choice: AlternateGlyphChoice) => {
+  const pick = (choice: SwapGlyphChoice) => {
     setOpen(false);
     setQuery("");
     onPick(choice);
@@ -71,11 +69,11 @@ export const NewAlternatePanel = ({
 
   return (
     <Popover open={open} onOpenChange={setOpen} modal={false}>
-      <Tooltip content="Add an alternate">
+      <Tooltip content="Add a swap">
         <PopoverTrigger
           ref={panelAnchor.triggerRef}
           render={
-            <SidebarActionButton label="Add an alternate">
+            <SidebarActionButton label="Add a swap">
               <PlusIcon className="h-3 w-3" />
             </SidebarActionButton>
           }
@@ -85,7 +83,7 @@ export const NewAlternatePanel = ({
         <PopoverPositioner {...panelAnchor.positioner}>
           <PopoverPopup className="flex h-80 w-60 flex-col overflow-hidden p-0">
             <div className="flex h-8 shrink-0 items-center justify-between border-b border-line-subtle px-2">
-              <PopoverTitle>New Alternate</PopoverTitle>
+              <PopoverTitle>New Swap</PopoverTitle>
               <Tooltip content="Close">
                 <PopoverClose variant="icon" aria-label="Close">
                   <X className="h-4 w-4" />
@@ -115,7 +113,7 @@ export const NewAlternatePanel = ({
                 No matching glyphs
               </AutocompleteEmpty>
               <AutocompleteList className="min-h-0 flex-1 overflow-y-auto">
-                {(choice: AlternateGlyphChoice) => (
+                {(choice: SwapGlyphChoice) => (
                   <AutocompleteItem
                     key={choice.kind === "create" ? "create" : choice.glyphId}
                     value={choice}

@@ -273,8 +273,8 @@ export class Editor {
 
   #cursorEffect: Effect;
   readonly #editedGlyphCell: Signal<EditedGlyph | null>;
-  /** Loads the alternate the edited glyph draws here when it is not loaded yet. */
-  readonly #alternateLoadEffect: Effect;
+  /** Loads the swap the edited glyph draws here when it is not loaded yet. */
+  readonly #swapLoadEffect: Effect;
 
   #clipboard: Clipboard;
 
@@ -488,17 +488,17 @@ export class Editor {
       },
       { name: "editor.editedGlyph", equals: sameEditedGlyph },
     );
-    this.#alternateLoadEffect = effect(
+    this.#swapLoadEffect = effect(
       () => {
         const node = this.scene.onlyCell("glyph").value;
         if (!node) return;
 
         const drawn = this.font.drawnGlyphAt(node.glyphId, this.#externalLocation.value);
         if (drawn !== node.glyphId && !this.#fontStore.glyphForId(drawn)) {
-          void this.#loadAlternate(drawn);
+          void this.#loadSwap(drawn);
         }
       },
-      { name: "editor.loadAlternate" },
+      { name: "editor.loadSwap" },
     );
 
     this.#cursorEffect = effect(
@@ -868,13 +868,13 @@ export class Editor {
 
   /**
    * The glyph `node` draws, and the canvas edits, where the font is drawn
-   * now: the node's glyph's first alternate that holds here, else the glyph
-   * itself (`Font::drawn_glyph_at`). An alternate not loaded yet draws the
+   * now: the node's glyph's first swap that holds here, else the glyph
+   * itself (`Font::drawn_glyph_at`). A swap not loaded yet draws the
    * glyph itself until it is; see {@link editedGlyphCell}.
    *
    * @remarks
-   * Subscribes to the location and the glyph's alternates, so a reactive
-   * reader follows the canvas into and out of an alternate's region.
+   * Subscribes to the location and the glyph's swaps, so a reactive
+   * reader follows the canvas into and out of a swap's region.
    */
   public drawnGlyphId(node: GlyphNode): GlyphId {
     track(this.#externalLocation);
@@ -886,7 +886,7 @@ export class Editor {
 
   /**
    * The scene's one glyph node's glyph and the glyph drawn for it here,
-   * which differ inside one of its alternates' regions (`dollar` drawn as
+   * which differ inside one of its swaps' regions (`dollar` drawn as
    * `dollar.heavy`); null without exactly one glyph node.
    */
   public get editedGlyphCell(): Signal<EditedGlyph | null> {
@@ -2857,12 +2857,12 @@ export class Editor {
     );
   }
 
-  /** Loads an alternate the canvas draws, so it shows once it arrives. */
-  async #loadAlternate(glyphId: GlyphId): Promise<void> {
+  /** Loads a swap the canvas draws, so it shows once it arrives. */
+  async #loadSwap(glyphId: GlyphId): Promise<void> {
     try {
       await this.font.loadGlyph(glyphId);
     } catch (error) {
-      console.error("Failed to load an alternate glyph", error);
+      console.error("Failed to load a swap glyph", error);
     }
   }
 
@@ -3034,7 +3034,7 @@ export class Editor {
   public destroy() {
     this.#events.emit("destroying");
     this.#cursorEffect.dispose();
-    this.#alternateLoadEffect.dispose();
+    this.#swapLoadEffect.dispose();
     this.nodeDefinition("glyph").outlines.dispose();
     this.#renderer.destroy();
     this.#toolManager.dispose();

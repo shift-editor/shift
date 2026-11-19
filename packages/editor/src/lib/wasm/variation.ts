@@ -136,7 +136,7 @@ export class FontVariation {
 
   /**
    * The glyph drawn for `glyphId` where the font is drawn at `location`:
-   * its first alternate that holds there, else itself. Only the font's
+   * its first swap that holds there, else itself. Only the font's
    * axes are read.
    */
   drawnGlyph(glyphId: GlyphId, location: ExternalAxisLocation): GlyphId {

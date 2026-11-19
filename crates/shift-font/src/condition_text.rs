@@ -189,7 +189,7 @@ pub struct ConditionSpace<'a> {
 
 impl Font {
     /// The axes conditions on `glyph_id` are written on: font axes and, with
-    /// a glyph, its own axes. A glyph's alternates read font axes only; the
+    /// a glyph, its own axes. A glyph's swaps read font axes only; the
     /// font refuses a glyph axis there when the condition is set.
     ///
     /// # Errors

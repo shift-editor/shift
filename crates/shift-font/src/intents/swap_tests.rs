@@ -1,15 +1,15 @@
-//! Alternates and component conditions edited through intents.
+//! Swaps and component conditions edited through intents.
 //!
-//! Alternates are tried on `conditions_font`: `dollar` has `compact-heavy`
+//! Swaps are tried on `conditions_font`: `dollar` has `compact-heavy`
 //! (Weight ≥ 700, Width ≤ 80) then `heavy` (Weight ≥ 700). Component
 //! conditions are set on `glyph_axis_font`'s `H`: two `dot` components in
 //! its Regular, Bled and Bleed 50 drawings.
 
 use crate::test_support::{apply_undo_redo, conditions_font, glyph_axis_font, refused_edit};
 use crate::{
-    AddGlyphAlternate, AlternateId, AxisId, Component, Condition, ConditionRange, CoreError,
-    DesignLocation, EditGlyphAlternate, Font, FontIntentSet, GlyphAlternate, GlyphAlternateEdit,
-    GlyphId, LayerId, ReplaceGlyphLayerContent, SetComponentCondition, SetGlyphAlternates,
+    AddGlyphSwap, AxisId, Component, Condition, ConditionRange, CoreError, DesignLocation,
+    EditGlyphSwap, Font, FontIntentSet, GlyphId, GlyphSwap, GlyphSwapEdit, LayerId,
+    ReplaceGlyphLayerContent, SetComponentCondition, SetGlyphSwaps, SwapId,
 };
 
 fn id_of_glyph(font: &Font, name: &str) -> GlyphId {
@@ -34,38 +34,38 @@ fn drawn_dollar(font: &Font, weight: f64, width: f64) -> String {
     font.glyph(drawn).unwrap().name().to_string()
 }
 
-/// `dollar`'s alternates, as the raw ids they were made with.
-fn dollar_alternates(font: &Font) -> Vec<String> {
+/// `dollar`'s swaps, as the raw ids they were made with.
+fn dollar_swaps(font: &Font) -> Vec<String> {
     font.glyph_by_name("dollar")
         .unwrap()
-        .alternates()
+        .swaps()
         .iter()
-        .map(|alternate| {
-            let id = alternate.id().as_str();
-            id.strip_prefix("alternate_").unwrap_or(id).to_string()
+        .map(|swap| {
+            let id = swap.id().as_str();
+            id.strip_prefix("swap_").unwrap_or(id).to_string()
         })
         .collect()
 }
 
-fn alternate_edit(alternate: &str, edit: GlyphAlternateEdit) -> EditGlyphAlternate {
-    EditGlyphAlternate {
-        alternate_id: AlternateId::from_raw(alternate),
+fn swap_edit(swap: &str, edit: GlyphSwapEdit) -> EditGlyphSwap {
+    EditGlyphSwap {
+        swap_id: SwapId::from_raw(swap),
         edit,
     }
 }
 
-/// An alternate of `dollar` drawing `glyph_name` where `condition` holds.
+/// A swap of `dollar` drawing `glyph_name` where `condition` holds.
 fn add_to_dollar(
     font: &Font,
     id: &str,
     condition: Condition,
     glyph_name: &str,
     position: Option<usize>,
-) -> AddGlyphAlternate {
-    AddGlyphAlternate {
+) -> AddGlyphSwap {
+    AddGlyphSwap {
         glyph_id: id_of_glyph(font, "dollar"),
-        alternate: GlyphAlternate::new(
-            AlternateId::from_raw(id),
+        swap: GlyphSwap::new(
+            SwapId::from_raw(id),
             condition,
             id_of_glyph(font, glyph_name),
         ),
@@ -74,7 +74,7 @@ fn add_to_dollar(
 }
 
 #[test]
-fn an_added_alternate_is_tried_at_its_position() {
+fn an_added_swap_is_tried_at_its_position() {
     let mut font = conditions_font();
     let light = font
         .insert_glyph(crate::Glyph::new("dollar.light"))
@@ -93,7 +93,7 @@ fn an_added_alternate_is_tried_at_its_position() {
     );
 
     assert_eq!(
-        dollar_alternates(&font),
+        dollar_swaps(&font),
         ["light", "compact-heavy", "heavy", "x"]
     );
     assert_eq!(drawn_dollar(&font, 200.0, 100.0), "dollar.light");
@@ -103,20 +103,17 @@ fn an_added_alternate_is_tried_at_its_position() {
 }
 
 #[test]
-fn moving_an_alternate_changes_which_one_wins() {
+fn moving_a_swap_changes_which_one_wins() {
     let mut font = conditions_font();
 
-    let font = apply_undo_redo(
-        &mut font,
-        alternate_edit("heavy", GlyphAlternateEdit::Move(0)),
-    );
+    let font = apply_undo_redo(&mut font, swap_edit("heavy", GlyphSwapEdit::Move(0)));
 
-    assert_eq!(dollar_alternates(&font), ["heavy", "compact-heavy"]);
+    assert_eq!(dollar_swaps(&font), ["heavy", "compact-heavy"]);
     assert_eq!(drawn_dollar(&font, 800.0, 60.0), "dollar.heavy");
 }
 
 #[test]
-fn an_alternates_condition_and_glyph_can_be_replaced() {
+fn a_swaps_condition_and_glyph_can_be_replaced() {
     let mut font = conditions_font();
     let narrow = Condition::all([ConditionRange::new(
         font_axis(&font, "wdth"),
@@ -124,12 +121,8 @@ fn an_alternates_condition_and_glyph_can_be_replaced() {
         Some(80.0),
     )]);
     let set = FontIntentSet::from_iter([
-        alternate_edit("compact-heavy", GlyphAlternateEdit::Condition(narrow)).into(),
-        alternate_edit(
-            "heavy",
-            GlyphAlternateEdit::Glyph(id_of_glyph(&font, "bar")),
-        )
-        .into(),
+        swap_edit("compact-heavy", GlyphSwapEdit::Condition(narrow)).into(),
+        swap_edit("heavy", GlyphSwapEdit::Glyph(id_of_glyph(&font, "bar"))).into(),
     ]);
 
     let font = apply_undo_redo(&mut font, set);
@@ -139,53 +132,50 @@ fn an_alternates_condition_and_glyph_can_be_replaced() {
 }
 
 #[test]
-fn a_removed_alternate_no_longer_applies_and_its_glyph_stays() {
+fn a_removed_swap_no_longer_applies_and_its_glyph_stays() {
     let mut font = conditions_font();
 
-    let font = apply_undo_redo(
-        &mut font,
-        alternate_edit("compact-heavy", GlyphAlternateEdit::Remove),
-    );
+    let font = apply_undo_redo(&mut font, swap_edit("compact-heavy", GlyphSwapEdit::Remove));
 
-    assert_eq!(dollar_alternates(&font), ["heavy"]);
+    assert_eq!(dollar_swaps(&font), ["heavy"]);
     assert_eq!(drawn_dollar(&font, 800.0, 60.0), "dollar.heavy");
     assert!(font.glyph_by_name("dollar.compact-heavy").is_some());
 }
 
 #[test]
-fn setting_the_whole_list_replaces_every_alternate() {
+fn setting_the_whole_list_replaces_every_swap() {
     let mut font = conditions_font();
-    let only = GlyphAlternate::new(
-        AlternateId::from_raw("only"),
+    let only = GlyphSwap::new(
+        SwapId::from_raw("only"),
         from(&font, "wght", 500.0),
         id_of_glyph(&font, "bar"),
     );
-    let set = SetGlyphAlternates {
+    let set = SetGlyphSwaps {
         glyph_id: id_of_glyph(&font, "dollar"),
-        alternates: vec![only],
+        swaps: vec![only],
     };
 
     let font = apply_undo_redo(&mut font, set);
 
-    assert_eq!(dollar_alternates(&font), ["only"]);
+    assert_eq!(dollar_swaps(&font), ["only"]);
     assert_eq!(drawn_dollar(&font, 800.0, 60.0), "bar");
 }
 
 #[test]
-fn an_alternate_must_draw_another_glyph_the_font_has() {
+fn a_swap_must_draw_another_glyph_the_font_has() {
     let mut font = conditions_font();
     let dollar = id_of_glyph(&font, "dollar");
     let itself = add_to_dollar(&font, "r", Condition::always(), "dollar", None);
     let mut missing = add_to_dollar(&font, "r", Condition::always(), "bar", None);
-    missing.alternate = GlyphAlternate::new(
-        AlternateId::from_raw("r"),
+    missing.swap = GlyphSwap::new(
+        SwapId::from_raw("r"),
         Condition::always(),
         GlyphId::from_raw("missing"),
     );
 
     assert!(matches!(
         refused_edit(&mut font, itself),
-        CoreError::AlternateIsItself { glyph_id, .. } if glyph_id == dollar
+        CoreError::SwapIsItself { glyph_id, .. } if glyph_id == dollar
     ));
     assert!(matches!(
         refused_edit(&mut font, missing),
@@ -199,13 +189,13 @@ fn one_range(axis_id: AxisId, min: Option<f64>, max: Option<f64>) -> Condition {
 }
 
 #[test]
-fn an_alternate_condition_must_not_run_downwards() {
+fn a_swap_condition_must_not_run_downwards() {
     let mut font = conditions_font();
     let weight = font_axis(&font, "wght");
     let added = one_range(weight, Some(800.0), Some(700.0));
     let reversed = add_to_dollar(&font, "r", added, "bar", None);
     let edited = one_range(weight, Some(900.0), Some(100.0));
-    let reversed_edit = alternate_edit("heavy", GlyphAlternateEdit::Condition(edited));
+    let reversed_edit = swap_edit("heavy", GlyphSwapEdit::Condition(edited));
 
     assert!(matches!(
         refused_edit(&mut font, reversed),
@@ -226,7 +216,7 @@ fn an_alternate_condition_must_not_run_downwards() {
 }
 
 #[test]
-fn an_alternate_condition_reads_only_axes_the_font_has() {
+fn a_swap_condition_reads_only_axes_the_font_has() {
     let mut font = conditions_font();
     let dot = Some(id_of_glyph(&font, "dot"));
     let spread = font.axis_id_in_glyph_space(dot, "SPRD").unwrap();
@@ -236,7 +226,7 @@ fn an_alternate_condition_reads_only_axes_the_font_has() {
 
     assert!(matches!(
         refused_edit(&mut font, glyph_axis),
-        CoreError::AlternateConditionOffFontAxes { axis_id, .. } if axis_id == spread
+        CoreError::SwapConditionOffFontAxes { axis_id, .. } if axis_id == spread
     ));
     assert!(matches!(
         refused_edit(&mut font, nowhere),
@@ -245,32 +235,29 @@ fn an_alternate_condition_reads_only_axes_the_font_has() {
 }
 
 #[test]
-fn an_alternate_must_exist_and_stay_within_the_list() {
+fn a_swap_must_exist_and_stay_within_the_list() {
     let mut font = conditions_font();
     let past_end = add_to_dollar(&font, "r", Condition::always(), "bar", Some(3));
 
     assert!(matches!(
         refused_edit(&mut font, past_end),
-        CoreError::AlternatePositionOutOfRange {
+        CoreError::SwapPositionOutOfRange {
             position: 3,
             count: 2,
             ..
         }
     ));
     assert!(matches!(
-        refused_edit(
-            &mut font,
-            alternate_edit("heavy", GlyphAlternateEdit::Move(2))
-        ),
-        CoreError::AlternatePositionOutOfRange {
+        refused_edit(&mut font, swap_edit("heavy", GlyphSwapEdit::Move(2))),
+        CoreError::SwapPositionOutOfRange {
             position: 2,
             count: 2,
             ..
         }
     ));
     assert!(matches!(
-        refused_edit(&mut font, alternate_edit("nope", GlyphAlternateEdit::Remove)),
-        CoreError::AlternateNotFound(id) if id == AlternateId::from_raw("nope")
+        refused_edit(&mut font, swap_edit("nope", GlyphSwapEdit::Remove)),
+        CoreError::SwapNotFound(id) if id == SwapId::from_raw("nope")
     ));
 }
 

@@ -39,7 +39,7 @@ struct LatticeAxis {
 
 /// The font's axes as F2Dot14 normalized values.
 #[derive(Debug, Default)]
-pub(super) struct Lattice {
+pub(crate) struct Lattice {
     axes: Vec<LatticeAxis>,
 }
 
@@ -52,7 +52,7 @@ impl Lattice {
     /// The lattice of `axes`, normalized through `ir_axes` as the compiled
     /// font normalizes them (the axis mappings included). An axis without
     /// a compiled counterpart is left out.
-    pub(super) fn new(axes: &[Axis], ir_axes: &[IrAxis]) -> Self {
+    pub(crate) fn new(axes: &[Axis], ir_axes: &[IrAxis]) -> Self {
         let axes = axes
             .iter()
             .filter_map(|axis| {
@@ -110,6 +110,29 @@ impl Lattice {
         }
         // A range on an axis the lattice lacks holds nowhere.
         (placed == condition.ranges().len()).then_some(region)
+    }
+
+    /// `condition`'s ranges as fontir's conditions, in the design units they
+    /// were authored in and in axis order, leaving out ranges open on both
+    /// sides and ranges on an axis the lattice lacks.
+    pub(super) fn authored_condition_set(&self, condition: &Condition) -> ConditionSet {
+        self.axes
+            .iter()
+            .flat_map(|axis| {
+                condition
+                    .ranges()
+                    .iter()
+                    .filter(move |range| range.axis_id == axis.id)
+                    .filter(|range| range.min.is_some() || range.max.is_some())
+                    .map(|range| {
+                        IrCondition::new(
+                            axis.ir_axis.tag,
+                            range.min.map(DesignCoord::new),
+                            range.max.map(DesignCoord::new),
+                        )
+                    })
+            })
+            .collect()
     }
 
     /// `region` as fontir's conditions, in design units, leaving out each
@@ -186,7 +209,7 @@ impl Region {
     }
 
     /// The locations in both regions, or `None` when they share none.
-    fn intersection(&self, other: &Self) -> Option<Self> {
+    pub(super) fn intersection(&self, other: &Self) -> Option<Self> {
         self.0
             .iter()
             .zip(&other.0)

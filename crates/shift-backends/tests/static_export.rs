@@ -260,3 +260,112 @@ fn an_instance_without_a_postscript_name_drops_what_postscript_names_leave_out()
 
     assert_eq!(files[0].file_name, "Solenoid-CoarseWiden2.ttf");
 }
+
+/// Weight 100–900 with masters at 400 and 900, `dollar` (a 100-wide bar,
+/// advance 500) and `dollar.heavy` (a 300-wide bar, advance 650), with
+/// `dollar.heavy` drawn for `dollar` from Weight 800, and instances
+/// Regular (400) and Black (900).
+fn heavy_dollar_font() -> Fixture<Font> {
+    use shift_font::{
+        Axis, Condition, ConditionRange, Contour, DesignLocation, ExternalLocation, Glyph,
+        GlyphLayer, GlyphSwap, LayerId, PointType, Source, SwapId,
+    };
+
+    let mut font = Font::new();
+    font.metadata_mut().family_name = Some("Heavy Dollar".to_string());
+    let weight = Axis::new("wght".into(), "Weight".into(), 100.0, 400.0, 900.0);
+    let weight_id = weight.id();
+    font.add_axis(weight)?;
+    let regular = font.default_source_id().ok_or("no default source")?;
+    font.source_mut(regular)
+        .ok_or("no default source")?
+        .set_location(DesignLocation::from([(weight_id, 400.0)]));
+    let black = font.add_source(Source::new(
+        "Black".into(),
+        DesignLocation::from([(weight_id, 900.0)]),
+    ));
+    let mut bar = |name: &str, unicode: Option<char>, width: f64, advance: f64| -> Fixture<_> {
+        let mut glyph = Glyph::new(name);
+        if let Some(unicode) = unicode {
+            glyph.set_unicodes(vec![u32::from(unicode)]);
+        }
+        for source in [regular, black] {
+            let mut layer = GlyphLayer::with_width(LayerId::new(), source, advance);
+            let mut contour = Contour::new();
+            for (x, y) in [(0.0, 0.0), (width, 0.0), (width, 700.0), (0.0, 700.0)] {
+                contour.add_point(x, y, PointType::OnCurve, false);
+            }
+            contour.close();
+            layer.add_contour(contour);
+            glyph.set_layer(layer);
+        }
+        Ok(font.insert_glyph(glyph)?)
+    };
+    let heavy = bar("dollar.heavy", None, 300.0, 650.0)?;
+    let dollar = bar("dollar", Some('$'), 100.0, 500.0)?;
+    font.set_glyph_swaps(
+        dollar,
+        vec![GlyphSwap::new(
+            SwapId::new(),
+            Condition::all([ConditionRange::new(weight_id, Some(800.0), None)]),
+            heavy,
+        )],
+    )?;
+    let instance = |name: &str, value: f64| {
+        NamedInstance::new(
+            name.to_string(),
+            ExternalLocation::from([(weight_id, value)]),
+            None,
+        )
+    };
+    font.set_named_instances(vec![instance("Regular", 400.0), instance("Black", 900.0)])?;
+    Ok(font)
+}
+
+/// The name, ink width and advance of the glyph `character` maps to in a
+/// static binary.
+fn mapped_glyph(bytes: &[u8], character: char) -> Fixture<(String, f64, f32)> {
+    let font = FontRef::new(bytes)?;
+    let gid = font
+        .charmap()
+        .map(character)
+        .ok_or_else(|| format!("{character:?} is not mapped"))?;
+    let name = font
+        .glyph_names()
+        .get(gid)
+        .ok_or("mapped glyphs have names")?
+        .to_string();
+    let (outline, advance) = outline_and_advance(bytes, &[], character)?;
+    let ink = kurbo::Shape::bounding_box(&outline).width();
+    Ok((name, ink, advance))
+}
+
+#[test]
+fn a_static_instance_draws_the_swap_that_holds_there_as_its_glyph() {
+    let temp = tempfile::tempdir().unwrap();
+
+    let drawn = static_dollars(temp.path()).map_err(|error| error.to_string());
+
+    // Regular draws dollar itself; Black draws dollar.heavy under dollar's name.
+    assert_eq!(
+        drawn,
+        Ok(vec![
+            ("dollar".to_string(), 100.0, 500.0),
+            ("dollar".to_string(), 300.0, 650.0)
+        ])
+    );
+}
+
+/// The glyph `$` maps to in each static instance of [`heavy_dollar_font`]
+/// exported into `directory`, as [`mapped_glyph`] reads it.
+fn static_dollars(directory: &Path) -> Fixture<Vec<(String, f64, f32)>> {
+    let written = FontExporter::new().export_static_instances_with(
+        &heavy_dollar_font()?,
+        directory,
+        &BinaryEncodings::ttf(),
+    )?;
+    written
+        .iter()
+        .map(|result| mapped_glyph(&std::fs::read(&result.path)?, '$'))
+        .collect()
+}

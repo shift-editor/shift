@@ -28,7 +28,7 @@ export class ConditionChipSpace {
 
   /**
    * @param glyphId - The glyph whose own axes a condition may read (the
-   *   glyph a component sits in); null for font axes only, as alternates read.
+   *   glyph a component sits in); null for font axes only, as swaps read.
    */
   constructor(editor: Editor, glyphId: GlyphId | null) {
     this.#editor = editor;

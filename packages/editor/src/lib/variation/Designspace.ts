@@ -162,7 +162,7 @@ export class Designspace {
 
   /**
    * The glyph drawn for `glyphId` where the font is drawn at `location`, as
-   * the engine decides it (`Font::drawn_glyph_at`): its first alternate
+   * the engine decides it (`Font::drawn_glyph_at`): its first swap
    * that holds there, else itself.
    *
    * @throws When the font has axes and its engine is not open.

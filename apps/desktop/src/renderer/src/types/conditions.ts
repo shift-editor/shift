@@ -1,5 +1,5 @@
 import type { Axis } from "@shift/editor/model";
-import type { AlternateId, ConditionRange, GlyphId, GlyphName } from "@shift/types";
+import type { SwapId, ConditionRange, GlyphId, GlyphName } from "@shift/types";
 
 /** One range of a condition as its chip shows it: `Weight ≥ 700`. */
 export interface ConditionChip {
@@ -25,24 +25,24 @@ export type ChipReading =
   | { readonly kind: "range"; readonly range: ConditionRange }
   | { readonly kind: "problem"; readonly message: string };
 
-/** One of the edited glyph's alternates, as the Alternates section lists it. */
-export interface AlternateRow {
-  readonly id: AlternateId;
+/** One of the edited glyph's swaps, as the Swaps section lists it. */
+export interface SwapRow {
+  readonly id: SwapId;
   readonly glyphId: GlyphId;
   readonly glyphName: GlyphName;
   readonly chips: readonly ConditionChip[];
-  /** Whether the canvas draws this alternate at the current location. */
+  /** Whether the canvas draws this swap at the current location. */
   readonly inUse: boolean;
   /** Why it never draws, as the row's note says it; null when it draws somewhere. */
   readonly neverUsed: string | null;
 }
 
-/** What the Designspace tab's Alternates section shows for the glyph being edited. */
-export interface AlternatesSection {
+/** What the Designspace tab's Swaps section shows for the glyph being edited. */
+export interface SwapsSection {
   readonly glyphId: GlyphId;
   readonly glyphName: GlyphName;
-  /** In the order they are tried; empty reads "None". */
-  readonly rows: readonly AlternateRow[];
+  /** In the order they are tried; empty says how to add one. */
+  readonly rows: readonly SwapRow[];
 }
 
 /**
@@ -57,8 +57,8 @@ export interface SelectedComponentCondition {
   readonly mixed: boolean;
 }
 
-/** The glyph a new alternate draws, picked in the New Alternate panel: one the font has, or one to create. */
-export type AlternateGlyphChoice =
+/** The glyph a new swap draws, picked in the New Swap panel: one the font has, or one to create. */
+export type SwapGlyphChoice =
   | { readonly kind: "glyph"; readonly glyphId: GlyphId; readonly name: GlyphName }
   | { readonly kind: "create"; readonly name: GlyphName };
 

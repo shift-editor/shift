@@ -110,7 +110,7 @@ export interface Modifiers {
  * Test-only: agents read authored layers, not the canvas.
  */
 export interface DrawnGlyph {
-  /** The glyph drawn: the open glyph's alternate where one holds, else the glyph itself. */
+  /** The glyph drawn: the open glyph's swap where one holds, else the glyph itself. */
   readonly glyph: string;
   readonly advanceWidth: number;
   readonly bounds: Bounds | null;
@@ -636,7 +636,7 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   editGhost(ids: readonly PointId[]): Record<PointId, LocalPoint> | null;
   /**
    * The open glyph and the glyph the canvas draws and edits for it here, by
-   * name: `dollar` drawn as `dollar.bled` inside one of its alternates'
+   * name: `dollar` drawn as `dollar.bled` inside one of its swaps'
    * regions. Null without one open glyph. Test-only.
    */
   editedGlyph(): { readonly glyph: string; readonly drawnAs: string } | null;

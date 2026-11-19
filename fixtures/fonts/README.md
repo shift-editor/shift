@@ -129,7 +129,7 @@ export.
 `generate_solenoid.sh`: a Bleed axis (0–100, source Bled at 100); `dot` with its
 own Spread and Strike axes (0–100), drawn at Regular, Bled, Spread 100 and
 Strike 100; `H`, two `dot` components (the first at Spread 60) with a
-drawing at Bleed 50 off the font's sources; `dollar`, which draws
+drawing at Bleed 50 off the font's sources; `dollar`, which swaps to
 `dollar.bled` from Bleed 70 and then `dollar.heavy` from 80 (never used: the
 first always wins); and `colon`, three `dot`s whose second and third draw up
 to Bleed 50. Regenerate it with:
@@ -138,6 +138,6 @@ to Bleed 50. Regenerate it with:
 ./generate_solenoid.sh path/to/shift-cli Solenoid.shift
 ```
 
-Used by the desktop glyph sources, glyph axes, alternates and component condition tests
-(`lib/variation/glyphAxes.test.ts`, `componentGlyphAxes.test.ts`, `alternates.test.ts`,
+Used by the desktop glyph sources, glyph axes, swaps and component condition tests
+(`lib/variation/glyphAxes.test.ts`, `componentGlyphAxes.test.ts`, `swaps.test.ts`,
 `componentConditions.test.ts`) and `e2e/glyph-axes.spec.ts`.

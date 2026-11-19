@@ -118,16 +118,16 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
 
   /**
    * The glyph editing `item` opens while it shows `shown`: the item's own
-   * glyph when `shown` is one of its alternates, so the canvas follows it
-   * into and out of its alternates' regions; else `shown`, such as a
+   * glyph when `shown` is one of its swaps, so the canvas follows it
+   * into and out of its swaps' regions; else `shown`, such as a
    * ligature or a glyph a feature substitutes.
    */
   #openedGlyph(item: ParagraphItem, shown: GlyphId): GlyphId {
     const own = glyphIdForItem(item, this.editor.font);
     if (!own || own === shown) return shown;
 
-    const alternates = this.editor.font.alternatesOf(own);
-    return alternates.some((alternate) => alternate.glyph === shown) ? own : shown;
+    const swaps = this.editor.font.swapsOf(own);
+    return swaps.some((swap) => swap.glyph === shown) ? own : shown;
   }
 
   /** Deletes the child glyph when its item is no longer in the run. */
@@ -608,7 +608,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   #editedChildGlyph(node: TextRunNode, layout: TextLayout): PlacedGlyph | null {
     const child = this.childGlyph(node);
     if (!child?.itemId || !this.editor.editing.has(child.id)) return null;
-    // The layout places the glyph drawn here: the child's alternate inside its region.
+    // The layout places the glyph drawn here: the child's swap inside its region.
     return layout.placedGlyph(child.itemId, this.editor.drawnGlyphId(child));
   }
 

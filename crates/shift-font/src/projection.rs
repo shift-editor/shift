@@ -691,7 +691,7 @@ impl FontProjection<'_> {
     }
 
     /// Resolves `glyph_id` as it is drawn here, in text, a preview or open
-    /// for editing: the glyph of its first alternate that holds at this
+    /// for editing: the glyph of its first swap that holds at this
     /// location, else the glyph itself ([`Font::drawn_glyph_at`]). The
     /// result keeps `glyph_id`, the glyph asked for, with the outline and
     /// advance of the glyph drawn. Components are never swapped, so

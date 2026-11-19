@@ -15,7 +15,7 @@ use std::sync::Arc;
 use indexmap::IndexSet;
 
 use crate::collection::PersistentEntityList;
-use crate::entity::{AlternateId, AxisId, GlyphEntityId, GlyphId, LayerId, SourceId};
+use crate::entity::{AxisId, GlyphEntityId, GlyphId, LayerId, SourceId, SwapId};
 use crate::glyph_axis::GlyphAxis;
 use crate::persistent::{PersistentListMultiMap, PersistentMultiMap, PersistentSet, UniqueIndex};
 use crate::{CoreError, CoreResult, Glyph, GlyphLayer, GlyphName};
@@ -42,11 +42,11 @@ pub(super) struct FontIndex {
     /// Each glyph axis's tag. Font axis tags are checked against these, and
     /// these against them, by [`Font`](super::Font).
     glyph_axis_tags: UniqueIndex<AxisTag, AxisId>,
-    /// The glyph that owns each alternate.
-    alternates: UniqueIndex<AlternateId, GlyphId>,
-    /// The glyphs each glyph is an alternate of, so removing a glyph finds
-    /// the alternates that draw it without scanning every glyph.
-    alternate_owners: PersistentMultiMap<GlyphId, GlyphId>,
+    /// The glyph that owns each swap.
+    swaps: UniqueIndex<SwapId, GlyphId>,
+    /// The glyphs each glyph is a swap of, so removing a glyph finds
+    /// the swaps that draw it without scanning every glyph.
+    swap_owners: PersistentMultiMap<GlyphId, GlyphId>,
 }
 
 impl FontIndex {
@@ -94,17 +94,14 @@ impl FontIndex {
         self.glyph_axis_tags.get(tag)
     }
 
-    /// The glyph that has the alternate `alternate_id`.
-    pub(super) fn alternate_owner(&self, alternate_id: AlternateId) -> Option<&GlyphId> {
-        self.alternates.get(&alternate_id)
+    /// The glyph that has the swap `swap_id`.
+    pub(super) fn swap_owner(&self, swap_id: SwapId) -> Option<&GlyphId> {
+        self.swaps.get(&swap_id)
     }
 
-    /// The glyphs `glyph_id` is an alternate of.
-    pub(super) fn glyphs_with_alternate(
-        &self,
-        glyph_id: &GlyphId,
-    ) -> impl Iterator<Item = &GlyphId> {
-        self.alternate_owners.get(glyph_id)
+    /// The glyphs `glyph_id` is a swap of.
+    pub(super) fn glyphs_with_swap(&self, glyph_id: &GlyphId) -> impl Iterator<Item = &GlyphId> {
+        self.swap_owners.get(glyph_id)
     }
 
     /// Layers with at least one component of `base_glyph_id`.
@@ -151,10 +148,8 @@ impl FontIndex {
         self.glyph_axis_tags
             .try_extend(entries.glyph_axis_tags)
             .or_duplicate()?;
-        self.alternates
-            .try_extend(entries.alternates)
-            .or_duplicate()?;
-        self.alternate_owners.extend(entries.alternate_owners);
+        self.swaps.try_extend(entries.swaps).or_duplicate()?;
+        self.swap_owners.extend(entries.swap_owners);
         self.by_unicode.extend(entries.unicodes);
         self.by_component_base.extend(entries.component_bases);
         self.metrics_keyed.extend(entries.metrics_keyed);
@@ -171,8 +166,8 @@ impl FontIndex {
         self.entity_ids.remove_all(&entries.entity_ids);
         self.glyph_axes.remove_all(&entries.glyph_axes);
         self.glyph_axis_tags.remove_all(&entries.glyph_axis_tags);
-        self.alternates.remove_all(&entries.alternates);
-        self.alternate_owners.remove_all(&entries.alternate_owners);
+        self.swaps.remove_all(&entries.swaps);
+        self.swap_owners.remove_all(&entries.swap_owners);
     }
 
     /// Indexes the touched glyphs again after a change set replaced them.
@@ -244,8 +239,8 @@ pub(super) struct IndexEntries {
     entity_ids: Vec<GlyphEntityId>,
     glyph_axes: Vec<(AxisId, GlyphId)>,
     glyph_axis_tags: Vec<(AxisTag, AxisId)>,
-    alternates: Vec<(AlternateId, GlyphId)>,
-    alternate_owners: Vec<(GlyphId, GlyphId)>,
+    swaps: Vec<(SwapId, GlyphId)>,
+    swap_owners: Vec<(GlyphId, GlyphId)>,
 }
 
 impl IndexEntries {
@@ -278,9 +273,9 @@ impl IndexEntries {
         for axis in glyph.axes() {
             entries.add_glyph_axis(glyph_id, axis);
         }
-        for alternate in glyph.alternates() {
-            entries.alternates.push((alternate.id(), glyph_id));
-            entries.alternate_owners.push((alternate.glyph(), glyph_id));
+        for swap in glyph.swaps() {
+            entries.swaps.push((swap.id(), glyph_id));
+            entries.swap_owners.push((swap.glyph(), glyph_id));
         }
         entries
     }
@@ -360,9 +355,9 @@ impl DuplicateKey for AxisTag {
     }
 }
 
-impl DuplicateKey for AlternateId {
+impl DuplicateKey for SwapId {
     fn duplicate_error(&self) -> CoreError {
-        CoreError::DuplicateAlternateId(*self)
+        CoreError::DuplicateSwapId(*self)
     }
 }
 

@@ -23,7 +23,7 @@ import type { DesignAxisLocation } from "./variation";
 /**
  * The glyph a glyph node shows and the glyph drawn for it where the font is
  * drawn now: `dollar` and `dollar.heavy` inside one of `dollar`'s
- * alternates' regions, the same glyph twice outside them.
+ * swaps' regions, the same glyph twice outside them.
  */
 export interface EditedGlyph {
   /** The node's own glyph, the one opened. */

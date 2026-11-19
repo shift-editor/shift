@@ -42,15 +42,15 @@ import type {
   SidebearingEdit,
   GlyphAxisEdit,
   AxisRange,
-  AlternateId,
+  SwapId,
   Condition,
   ConditionRange,
-  GlyphAlternate,
-  GlyphAlternateEdit,
+  GlyphSwap,
+  GlyphSwapEdit,
   SetComponentCondition,
 } from "@shift/types";
 import {
-  mintAlternateId,
+  mintSwapId,
   mintAxisId,
   mintGlyphId,
   mintKerningGroupId,
@@ -82,7 +82,7 @@ import type {
   FeatureSubstitution,
   FontFeature,
   GlyphIdentityChange,
-  NeverUsedAlternate,
+  NeverUsedSwap,
   SideLink,
   PlacedText,
   TextRun,
@@ -865,40 +865,40 @@ export class Font {
   }
 
   /**
-   * A glyph's alternates, tried in order, as its directory record lists
+   * A glyph's swaps, tried in order, as its directory record lists
    * them: where on the font's axes another glyph is drawn in its place.
    * Subscribed to the directory, so it reads again after each edit.
    *
    * @returns Empty for a glyph with none, or one the font lacks.
    */
-  alternatesOf(glyphId: GlyphId): readonly GlyphAlternate[] {
+  swapsOf(glyphId: GlyphId): readonly GlyphSwap[] {
     track(this.#directoryCell);
-    return this.#directoryCell.peek().recordForId(glyphId)?.alternates ?? NO_ALTERNATES;
+    return this.#directoryCell.peek().recordForId(glyphId)?.swaps ?? NO_SWAPS;
   }
 
   /**
    * The glyph drawn for `glyphId` where the font is drawn at `location`:
-   * its first alternate that holds there, else itself, as the engine
-   * decides it (`Font::drawn_glyph_at`). One step: the alternate glyph's
-   * own alternates are not applied, and components are never swapped.
+   * its first swap that holds there, else itself, as the engine
+   * decides it (`Font::drawn_glyph_at`). One step: the swap glyph's
+   * own swaps are not applied, and components are never swapped.
    */
   drawnGlyphAt(glyphId: GlyphId, location: ExternalAxisLocation): GlyphId {
-    if (this.alternatesOf(glyphId).length === 0) return glyphId;
+    if (this.swapsOf(glyphId).length === 0) return glyphId;
 
     return this.#designspace.drawnGlyph(glyphId, location);
   }
 
   /**
-   * A glyph's alternates that never draw anywhere on the font's axes, and
+   * A glyph's swaps that never draw anywhere on the font's axes, and
    * why: outside the axes, or covered by earlier ones. Subscribed to the
    * directory and the axes.
    */
-  neverUsedAlternates(glyphId: GlyphId): readonly NeverUsedAlternate[] {
-    if (this.alternatesOf(glyphId).length === 0) return [];
+  neverUsedSwaps(glyphId: GlyphId): readonly NeverUsedSwap[] {
+    if (this.swapsOf(glyphId).length === 0) return [];
 
     track(this.#axesCell);
     track(this.#axisMappingBasesCell);
-    return this.#store.engine.neverUsedAlternates(glyphId);
+    return this.#store.engine.neverUsedSwaps(glyphId);
   }
 
   /**
@@ -926,49 +926,49 @@ export class Font {
   }
 
   /**
-   * Adds an alternate to `glyphId`: where `condition` holds, `alternateGlyphId`
+   * Adds a swap to `glyphId`: where `condition` holds, `swapGlyphId`
    * is drawn in its place. One undoable edit.
    *
    * @param position - Zero-based place in the list, which is tried in order;
    *   null adds it last.
-   * @returns The new alternate's id.
+   * @returns The new swap's id.
    * @throws {Error} when the engine refuses it: the glyph itself, a glyph
    *   the font lacks, or a condition off the font's axes.
    */
-  async addGlyphAlternate(
+  async addGlyphSwap(
     glyphId: GlyphId,
-    alternateGlyphId: GlyphId,
+    swapGlyphId: GlyphId,
     condition: Condition,
     position: number | null = null,
-  ): Promise<AlternateId> {
-    const id = mintAlternateId();
+  ): Promise<SwapId> {
+    const id = mintSwapId();
     await this.editCoordinator.apply(
       [
         {
-          kind: "addGlyphAlternate",
-          addGlyphAlternate: {
+          kind: "addGlyphSwap",
+          addGlyphSwap: {
             glyphId,
-            alternate: { id, condition, glyph: alternateGlyphId },
+            swap: { id, condition, glyph: swapGlyphId },
             position,
           },
         },
       ],
-      "Add Alternate",
+      "Add Swap",
     );
     return id;
   }
 
   /**
-   * Changes one alternate's condition or glyph, moves it, or removes it, as
+   * Changes one swap's condition or glyph, moves it, or removes it, as
    * one undoable edit.
    *
    * @throws {Error} when the engine refuses it, such as a position past the
    *   end of the list.
    */
-  async editGlyphAlternate(alternateId: AlternateId, edit: GlyphAlternateEdit): Promise<void> {
+  async editGlyphSwap(swapId: SwapId, edit: GlyphSwapEdit): Promise<void> {
     await this.editCoordinator.apply(
-      [{ kind: "editGlyphAlternate", editGlyphAlternate: { alternateId, edit } }],
-      ALTERNATE_EDIT_LABELS[edit.kind],
+      [{ kind: "editGlyphSwap", editGlyphSwap: { swapId, edit } }],
+      SWAP_EDIT_LABELS[edit.kind],
     );
   }
 
@@ -1069,7 +1069,7 @@ export class Font {
       unicodes,
       componentBaseGlyphIds: [],
       axes: [],
-      alternates: [],
+      swaps: [],
       layers: [{ id: layerId, sourceId, baseSourceId: null, coordinates: null }],
       mark: false,
       nonspacingMark: false,
@@ -1439,11 +1439,11 @@ export class Font {
       }
     }
 
-    // Each glyph's alternates load with it: where one holds, it is what the canvas draws.
-    const alternates = glyphIds.flatMap((glyphId) =>
-      untracked(() => this.alternatesOf(glyphId)).map((alternate) => alternate.glyph),
+    // Each glyph's swaps load with it: where one holds, it is what the canvas draws.
+    const swaps = glyphIds.flatMap((glyphId) =>
+      untracked(() => this.swapsOf(glyphId)).map((swap) => swap.glyph),
     );
-    const wanted = uniqueInOrder([...glyphIds, ...alternates]);
+    const wanted = uniqueInOrder([...glyphIds, ...swaps]);
     await this.#glyphRequests(wanted.filter((id) => !this.#store.glyphForId(id)));
 
     return glyphIds.map((glyphId) => {
@@ -2541,15 +2541,15 @@ export class Font {
 /** Never changes: the revision of reads a font without an engine answers. */
 
 const NO_AXES: readonly AxisRecord[] = [];
-const NO_ALTERNATES: readonly GlyphAlternate[] = [];
+const NO_SWAPS: readonly GlyphSwap[] = [];
 
-/** The undo label of each kind of alternate edit. */
-const ALTERNATE_EDIT_LABELS = {
-  condition: "Edit Alternate Condition",
-  glyph: "Change Alternate Glyph",
-  move: "Move Alternate",
-  remove: "Delete Alternate",
-} as const satisfies Record<GlyphAlternateEdit["kind"], string>;
+/** The undo label of each kind of swap edit. */
+const SWAP_EDIT_LABELS = {
+  condition: "Edit Swap Condition",
+  glyph: "Change Swap Glyph",
+  move: "Move Swap",
+  remove: "Delete Swap",
+} as const satisfies Record<GlyphSwapEdit["kind"], string>;
 
 /** Whether a read glyph has something to draw: a projection, or authored layers. */
 function hasGeometry(snapshot: GlyphSnapshot): boolean {

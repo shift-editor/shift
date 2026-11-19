@@ -6,12 +6,12 @@ import { openVariationControls } from "./fixtures/appLocators";
 // from 80, which `dollar.bled` always beats.
 test.use({ startupFontPath: FONTS.solenoid });
 
-/** The chips of the alternate drawing `glyph`, as a screen reader finds them. */
+/** The chips of the swap drawing `glyph`, as a screen reader finds them. */
 function chipsOf(controls: Locator, glyph: string): Locator {
   return controls.getByRole("group", { name: `${glyph} condition` });
 }
 
-test.describe("alternates in the Designspace tab", () => {
+test.describe("swaps in the Designspace tab", () => {
   test("edits a chip in place, keeping text it can't read", async ({ page, editor }) => {
     await editor.openGlyphByName("dollar");
     const controls = await openVariationControls(page);
@@ -34,7 +34,7 @@ test.describe("alternates in the Designspace tab", () => {
     await expect(chips.getByRole("button", { name: "Edit Bleed ≤ 90" })).toBeVisible();
   });
 
-  test("notes an alternate an earlier one always beats", async ({ page, editor }) => {
+  test("notes a swap an earlier one always beats", async ({ page, editor }) => {
     await editor.openGlyphByName("dollar");
     const controls = await openVariationControls(page);
 

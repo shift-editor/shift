@@ -65,7 +65,7 @@ import type {
   SideLink,
   InterpolatedMetrics,
   MissingKerningOrigin,
-  NeverUsedAlternate,
+  NeverUsedSwap,
   FeatureSubstitution,
   FontChangeFlag,
   FontFeature,
@@ -526,7 +526,7 @@ export class EngineSession {
   }
 
   /**
-   * The glyph drawn for `glyphId` at a design location: its first alternate
+   * The glyph drawn for `glyphId` at a design location: its first swap
    * that holds there, else itself (`Font::drawn_glyph_at`).
    *
    * @param location - Design coordinates in the font's axis order, NaN for an axis default.
@@ -535,9 +535,9 @@ export class EngineSession {
     return this.#reads.drawnGlyph(glyphId, location);
   }
 
-  /** `glyphId`'s alternates that never draw, and why: `Font::never_used_alternates`. */
-  neverUsedAlternates(glyphId: GlyphId): readonly NeverUsedAlternate[] {
-    return this.#reads.neverUsedAlternates(glyphId);
+  /** `glyphId`'s swaps that never draw, and why: `Font::never_used_swaps`. */
+  neverUsedSwaps(glyphId: GlyphId): readonly NeverUsedSwap[] {
+    return this.#reads.neverUsedSwaps(glyphId);
   }
 
   /**

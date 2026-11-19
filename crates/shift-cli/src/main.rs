@@ -21,16 +21,14 @@ use authoring::{
     remove_instance, remove_kerning, remove_layer, rename_kerning_group, set_axis, set_font,
     set_glyphs, set_instance, set_kerning, set_layer, set_mark_color, unassign_kerning_group,
 };
-use authoring::{
-    add_alternate, move_alternate, remove_alternate, set_alternate, set_component_condition,
-};
+use authoring::{add_swap, move_swap, remove_swap, set_component_condition, set_swap};
 use clap::Parser;
 use cli::{
     AxisCommand, Cli, Command, CompileArgs, ExportArgs, FontCommand, GlyphAxisCommand,
     GlyphCommand, InstanceCommand, KerningCommand, KerningGroupCommand, LayerCommand, SkillCommand,
     SourceCommand,
 };
-use cli::{ComponentCommand, ComponentConditionCommand, GlyphAlternateCommand};
+use cli::{ComponentCommand, ComponentConditionCommand, GlyphSwapCommand};
 use glyph_inspect::GlyphInspection;
 use inspect::{InspectReport, RenderMode};
 use kerning::{get_kerning, kerning_groups, list_kerning};
@@ -67,6 +65,9 @@ fn main() -> miette::Result<()> {
         Command::Import(args) => write_report(&import::import(&args)?, args.json),
         Command::Proof(args) => {
             let summary = proof::proof(&args)?;
+            for warning in &summary.warnings {
+                write_stderr(&format!("warning: {}", warning.message()))?;
+            }
             write_report(&summary, args.json)
         }
         Command::Font { command } => match command {
@@ -146,22 +147,22 @@ fn main() -> miette::Result<()> {
                     write_authoring_result(remove_glyph_axis(&args), json)
                 }
             },
-            GlyphCommand::Alternate { command } => match command {
-                GlyphAlternateCommand::Add(args) => {
+            GlyphCommand::Swap { command } => match command {
+                GlyphSwapCommand::Add(args) => {
                     let json = args.mutation.json;
-                    write_authoring_result(add_alternate(&args), json)
+                    write_authoring_result(add_swap(&args), json)
                 }
-                GlyphAlternateCommand::Remove(args) => {
+                GlyphSwapCommand::Remove(args) => {
                     let json = args.mutation.json;
-                    write_authoring_result(remove_alternate(&args), json)
+                    write_authoring_result(remove_swap(&args), json)
                 }
-                GlyphAlternateCommand::Reorder(args) => {
+                GlyphSwapCommand::Reorder(args) => {
                     let json = args.mutation.json;
-                    write_authoring_result(move_alternate(&args), json)
+                    write_authoring_result(move_swap(&args), json)
                 }
-                GlyphAlternateCommand::Set(args) => {
+                GlyphSwapCommand::Set(args) => {
                     let json = args.mutation.json;
-                    write_authoring_result(set_alternate(&args), json)
+                    write_authoring_result(set_swap(&args), json)
                 }
             },
         },
@@ -407,9 +408,17 @@ fn load_document(path: &Path) -> miette::Result<shift_font::Font> {
         .into_diagnostic()
 }
 
+fn write_stderr(output: &str) -> miette::Result<()> {
+    write_line(io::stderr().lock(), output)
+}
+
 fn write_stdout(output: &str) -> miette::Result<()> {
-    let mut stdout = io::stdout().lock();
-    match writeln!(stdout, "{output}") {
+    write_line(io::stdout().lock(), output)
+}
+
+/// Writes `output` and a newline to `stream`; a closed pipe is not an error.
+fn write_line(mut stream: impl Write, output: &str) -> miette::Result<()> {
+    match writeln!(stream, "{output}") {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(()),
         Err(error) => Err(error).into_diagnostic(),
