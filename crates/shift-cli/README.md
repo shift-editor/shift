@@ -105,7 +105,7 @@ Findings carry a stable code, a fixed severity, the glyph, master, and contour c
 - `D` axes and masters: no master at the default (`D001`), masters at the same location (`D002`), a master outside its axis (`D003`), a mapping that turns back on itself (`D004`), an axis that runs past its last master (`D005`).
 - `I` interpolation against the default master: a glyph missing from the default master (`I001`), incompatible structure (`I002`), compatible layers that can't interpolate (`I003`), a contour whose different start point breaks the shape halfway (`I004`), a contour running the other way (`I005`), contours in each other's place (`I006`), a contour that turns inside out between masters (`I007`), masters using components differently (`I008`, a warning: compilers decompose these, Shift's preview leaves the master out).
 - `O` drawing, per master: open contours (`O001`), contours too small to draw (`O002`), coordinates that aren't numbers (`O003`), invalid advances (`O004`), a contour wholly inside another and winding the same way (`O005`), an encoded glyph that draws nothing in the default master (`O006`), a glyph that can't be drawn (`O007`). Glyphs marked not to export, and unencoded `_` part glyphs, are skipped.
-- `A` alternates: an alternate that never wins (`A001`, a warning), because its condition holds nowhere in the axes' ranges or earlier alternates already apply wherever it does.
+- `A` alternates and component conditions: an alternate that never wins (`A001`, a warning), because its condition holds nowhere in the axes' ranges or earlier alternates already apply wherever it does; a component with a condition (`A002`, a warning), because export can't write component conditions yet and refuses the font until they are removed.
 - `K` kerning: a pair through an empty group (`K001`), a pair naming a glyph or group not in the font (`K002`).
 - `C` and `M`, opt-in: `--charset ascii|latin1|FILE` requires characters (a file lists characters, `U+XXXX` scalars, and `U+XXXX..U+YYYY` ranges, one per line); `--mono [--width N]` requires one advance width, the most common one per master when no width is given.
 
@@ -408,7 +408,10 @@ shift component condition set Solenoid.shift H 2 --when "RSLN >= 50"     # every
 - A component condition is set in every drawing of the glyph whose components draw the same
   glyphs in the same order, since a component exists in all of them.
 - A report, `glyph inspect` and `inspect --view glyphs` list the alternates in order and warn about
-  one that is never used; `check` reports it as `A001`. `glyph inspect --location` says which
+  one that is never used; `check` reports it as `A001`. Compiled fonts carry alternates as `rvrn`
+  substitutions (`compile`, `export`, the compiled path of `proof`). They don't carry component
+  conditions: `compile` and `export` refuse a font with any, listing each, and `check` warns
+  about them as `A002`. `glyph inspect --location` says which
   glyph is `drawn as` there, and its structure view marks each component condition `draws here`
   or `hidden here`; the resolved outline leaves hidden components out.
 - In `glyph set`, an entry's `alternates` replaces the glyph's list (`[]` removes them; omitted

@@ -74,6 +74,16 @@ impl ComponentInheritance {
     }
 }
 
+/// A component that carries a condition in at least one of its glyph's
+/// drawings ([`crate::Glyph::conditional_components`]).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ConditionalComponent {
+    /// Its position in the drawing, counting from 1.
+    pub position: usize,
+    /// The glyph it draws.
+    pub base: GlyphName,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Component {
