@@ -30,6 +30,7 @@ import {
   boundsInMode,
   boundsOfText,
   boundsOnAxis,
+  isPlainNumber,
   modeOf,
   roundedValue,
   type ConditionChipSpace,
@@ -71,7 +72,9 @@ export interface ConditionChipsProps {
  * @remarks
  * Clicking a chip opens its equation beside the sidebar, in the mode its
  * condition has: `wght ≥ [694]`, `wght ≤ [80]` or `[400] ≤ wght ≤ [600]`;
- * an operator's menu switches the mode, keeping the numbers. Typing or pasting `400-600`,
+ * an operator's menu switches the mode, keeping the numbers. A range in
+ * the chips' grammar, pasted into a field or there when it commits, fills
+ * the fields and sets the mode. Typing or pasting `400-600`,
  * `>=700`, `700+` or `<=80` into either field fills both, as the engine reads
  * it. Enter, or clicking away, commits as one undo step; Escape reverts. A
  * minimum above the maximum stays, with the reason, and nothing is
@@ -110,6 +113,26 @@ export const ConditionChips = ({
   const openEdit = (index: number, axis: Axis, bounds: ChipBounds) =>
     setEdit({ index, axis, bounds, mode: modeOf(bounds), problem: null });
 
+  /** `edit` with `text` read into `side`: a range in the grammar fills both fields and sets the mode. */
+  const withFieldRead = (current: ChipEdit, side: keyof ChipBounds, text: string): ChipEdit => {
+    const reading = space.boundsFromField(current.axis, current.bounds, side, text);
+    if (reading.kind === "problem") {
+      return { ...current, bounds: { ...current.bounds, [side]: text }, problem: reading.message };
+    }
+    return {
+      ...current,
+      bounds: reading.bounds,
+      mode: reading.mode ?? current.mode,
+      problem: null,
+    };
+  };
+
+  /** `edit` with any range typed into a field it shows read, as committing reads it. */
+  const withGrammarRead = (current: ChipEdit): ChipEdit => {
+    const typed = shownSides(current.mode).find((side) => !isPlainNumber(current.bounds[side]));
+    return typed ? withFieldRead(current, typed, current.bounds[typed]) : current;
+  };
+
   const cancel = () => {
     const wasNew = edit !== null && edit.index === null;
     setEdit(null);
@@ -119,9 +142,15 @@ export const ConditionChips = ({
   const commit = async () => {
     if (!edit) return;
 
-    const reading = space.rangeOf(edit.axis, edit.bounds, edit.mode);
+    const read = withGrammarRead(edit);
+    if (read.problem !== null) {
+      setEdit(read);
+      return;
+    }
+
+    const reading = space.rangeOf(read.axis, read.bounds, read.mode);
     if (reading.kind === "problem") {
-      setEdit({ ...edit, problem: reading.message });
+      setEdit({ ...read, problem: reading.message });
       return;
     }
 
@@ -145,19 +174,12 @@ export const ConditionChips = ({
       edit={edit}
       groups={space.axisGroups}
       used={chips.flatMap((chip, index) => (index === edit.index ? [] : [chip.axis.id]))}
-      onBounds={(side, text) => {
-        const reading = space.boundsFromField(edit.axis, edit.bounds, side, text);
-        if (reading.kind === "problem") {
-          setEdit({ ...edit, bounds: { ...edit.bounds, [side]: text }, problem: reading.message });
-          return;
-        }
-        setEdit({
-          ...edit,
-          bounds: reading.bounds,
-          mode: reading.mode ?? edit.mode,
-          problem: null,
-        });
-      }}
+      // Typing keeps the text as it is: a range in the grammar is read when
+      // it is pasted, or when the equation is committed.
+      onBounds={(side, text) =>
+        setEdit({ ...edit, bounds: { ...edit.bounds, [side]: text }, problem: null })
+      }
+      onPaste={(side, text) => setEdit(withFieldRead(edit, side, text))}
       onMode={(mode) =>
         setEdit({
           ...edit,
@@ -313,6 +335,7 @@ const ConditionEquation = ({
   groups,
   used,
   onBounds,
+  onPaste,
   onMode,
   onAxis,
   onCommit,
@@ -322,6 +345,7 @@ const ConditionEquation = ({
   /** Axes another chip of the condition is on: the axis menu disables them. */
   used: readonly AxisId[];
   onBounds: (side: keyof ChipBounds, text: string) => void;
+  onPaste: (side: keyof ChipBounds, text: string) => void;
   onMode: (mode: ConditionMode) => void;
   onAxis: (axis: Axis) => void;
   onCommit: () => void;
@@ -334,6 +358,7 @@ const ConditionEquation = ({
       text={bounds[side]}
       invalid={problem !== null}
       onText={(text) => onBounds(side, text)}
+      onPaste={(text) => onPaste(side, text)}
       onCommit={onCommit}
     />
   );
@@ -370,6 +395,18 @@ const ConditionEquation = ({
     </div>
   );
 };
+
+/** The fields a mode shows. */
+function shownSides(mode: ConditionMode): readonly (keyof ChipBounds)[] {
+  switch (mode) {
+    case "atLeast":
+      return ["min"];
+    case "atMost":
+      return ["max"];
+    case "between":
+      return ["min", "max"];
+  }
+}
 
 /** The equation's modes, as the operator's menu lists them. */
 const MODES: readonly { readonly mode: ConditionMode; readonly label: string }[] = [
@@ -434,12 +471,15 @@ const BoundField = ({
   text,
   invalid,
   onText,
+  onPaste,
   onCommit,
 }: {
   ariaLabel: string;
   text: string;
   invalid: boolean;
   onText: (text: string) => void;
+  /** Pasted text, read at once: a range in the grammar fills both fields. */
+  onPaste: (text: string) => void;
   onCommit: () => void;
 }) => {
   const [focused, setFocused] = useState(false);
@@ -459,6 +499,10 @@ const BoundField = ({
       }}
       onBlur={() => setFocused(false)}
       onChange={(event) => onText(event.target.value)}
+      onPaste={(event) => {
+        event.preventDefault();
+        onPaste(event.clipboardData.getData("text"));
+      }}
       onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
         if (event.key !== "Enter") return;
         event.preventDefault();

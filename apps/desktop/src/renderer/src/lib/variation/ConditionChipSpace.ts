@@ -103,7 +103,7 @@ export class ConditionChipSpace {
     side: keyof ChipBounds,
     text: string,
   ): BoundsReading {
-    if (PLAIN_NUMBER.test(text.trim())) {
+    if (isPlainNumber(text)) {
       return { kind: "bounds", bounds: { ...bounds, [side]: text }, mode: null };
     }
 
@@ -151,6 +151,11 @@ export class ConditionChipSpace {
 
 /** A plain number as a field holds it while typed: `694`, `-20`, `16.8`, or nothing yet. */
 const PLAIN_NUMBER = /^-?\d*\.?\d*$/;
+
+/** Whether a field's text is a plain number (or nothing yet), not a range in the grammar. */
+export function isPlainNumber(text: string): boolean {
+  return PLAIN_NUMBER.test(text.trim());
+}
 
 /**
  * A chip's exact value text, as the engine writes it (`≥ 694.444`, `≤ 80`,

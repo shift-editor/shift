@@ -24,10 +24,9 @@ test.describe("swaps in the Designspace tab", () => {
     await expect(page.getByRole("alert")).toHaveText("Bleed only goes to 100.");
     await expect(atLeast).toHaveValue("150");
 
-    // A range in the grammar switches the equation to at most.
+    // A range in the grammar, committed, switches the condition to at most.
     await atLeast.fill("<=90");
-    const atMost = page.getByLabel("Bleed at most");
-    await atMost.press("Enter");
+    await atLeast.press("Enter");
     await expect(chips.getByRole("button", { name: "Edit Bleed ≤ 90" })).toBeVisible();
 
     await chips.getByRole("button", { name: "Edit Bleed ≤ 90" }).click();
