@@ -1,4 +1,4 @@
-//! Checks on a glyph's alternates.
+//! Checks on a glyph's alternates and component conditions.
 
 use std::collections::BTreeMap;
 
@@ -49,5 +49,27 @@ impl Font {
                 )
             })
             .collect())
+    }
+}
+
+impl Glyph {
+    /// A finding for each component that carries a condition: compiled
+    /// fonts can't hold component conditions yet, so export refuses them.
+    pub(super) fn component_condition_findings(&self) -> Vec<Finding> {
+        self.conditional_components()
+            .into_iter()
+            .map(|component| {
+                Finding::glyph(
+                    Check::ComponentConditionNotExported,
+                    self.id(),
+                    format!(
+                        "{}: component {} ({}) has a condition; component conditions can't be exported yet",
+                        self.name(),
+                        component.position,
+                        component.base
+                    ),
+                )
+            })
+            .collect()
     }
 }

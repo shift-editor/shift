@@ -37,7 +37,8 @@ pub use axis::{
 pub use binary_data::BinaryData;
 pub use boolean::{BooleanOp, boolean};
 pub use component::{
-    Component, ComponentAlignment, ComponentInheritance, DecomposedTransform, Transform,
+    Component, ComponentAlignment, ComponentInheritance, ConditionalComponent, DecomposedTransform,
+    Transform,
 };
 pub use condition::{Condition, ConditionRange};
 pub use contour::{Contour, Contours};

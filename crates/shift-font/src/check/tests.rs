@@ -374,3 +374,35 @@ fn reports_an_alternate_an_earlier_one_covers() {
          dollar.heavy (alternate 1) already applies wherever its condition holds"
     );
 }
+
+#[test]
+fn warns_that_a_component_condition_cant_be_exported() {
+    let font = crate::test_support::conditions_font();
+    let messages: Vec<String> = font
+        .check()
+        .unwrap()
+        .into_iter()
+        .filter(|finding| finding.check == Check::ComponentConditionNotExported)
+        .map(|finding| finding.message)
+        .collect();
+
+    let cant = "has a condition; component conditions can't be exported yet";
+    assert_eq!(
+        messages,
+        [
+            format!("H: component 1 (bar) {cant}"),
+            format!("H: component 2 (dot) {cant}"),
+            format!("H: component 3 (bar) {cant}"),
+            format!("mid: component 1 (bar) {cant}"),
+        ]
+    );
+    let h = font.glyph_by_name("H").unwrap().id();
+    assert_eq!(
+        font.check_glyph(h)
+            .unwrap()
+            .iter()
+            .filter(|finding| finding.check == Check::ComponentConditionNotExported)
+            .count(),
+        3
+    );
+}

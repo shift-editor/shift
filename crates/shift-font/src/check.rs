@@ -65,7 +65,7 @@ pub enum Severity {
 /// One kind of problem, with a stable code.
 ///
 /// Codes group by subject: `D` axes and masters, `I` interpolation, `O`
-/// outlines, `A` alternates, `K` kerning, `C` character set, `M` monospace.
+/// outlines, `A` alternates and component conditions, `K` kerning, `C` character set, `M` monospace.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Check {
@@ -115,6 +115,9 @@ pub enum Check {
     /// holds nowhere in their ranges, or earlier alternates already apply
     /// wherever it does.
     NeverUsedAlternate,
+    /// A component carries a condition, which compiled fonts can't hold
+    /// yet, so the font can't be exported.
+    ComponentConditionNotExported,
     /// A kerning group has no members, so its pairs do nothing.
     EmptyKerningGroup,
     /// A pair names a glyph or group that isn't in the font, or a group on the wrong side, so it never applies.
@@ -131,7 +134,7 @@ pub enum Check {
 
 impl Check {
     /// Every check, in code order.
-    pub const ALL: [Self; 27] = [
+    pub const ALL: [Self; 28] = [
         Self::NoDefaultMaster,
         Self::DuplicateMasterLocation,
         Self::MasterOutsideAxis,
@@ -153,6 +156,7 @@ impl Check {
         Self::EmptyOutline,
         Self::UnresolvedGlyph,
         Self::NeverUsedAlternate,
+        Self::ComponentConditionNotExported,
         Self::EmptyKerningGroup,
         Self::UnresolvedKerning,
         Self::CharsetMissingGlyph,
@@ -199,6 +203,11 @@ impl Check {
             Self::EmptyOutline => ("O006", "empty-outline", Severity::Error),
             Self::UnresolvedGlyph => ("O007", "unresolved-glyph", Severity::Error),
             Self::NeverUsedAlternate => ("A001", "never-used-alternate", Severity::Warning),
+            Self::ComponentConditionNotExported => (
+                "A002",
+                "component-condition-not-exported",
+                Severity::Warning,
+            ),
             Self::EmptyKerningGroup => ("K001", "empty-kerning-group", Severity::Warning),
             Self::UnresolvedKerning => ("K002", "unresolved-kerning", Severity::Warning),
             Self::CharsetMissingGlyph => ("C001", "charset-missing-glyph", Severity::Error),
@@ -277,6 +286,7 @@ impl Font {
             findings.extend(health::check(self, glyph));
             findings.extend(outline::check(self, glyph.id(), &thresholds)?);
             findings.extend(self.never_used_alternate_findings(glyph)?);
+            findings.extend(glyph.component_condition_findings());
         }
         findings.extend(kerning::check(self));
         if let Some(charset) = &options.charset {
@@ -305,6 +315,7 @@ impl Font {
             &OutlineThresholds::default(),
         )?);
         findings.extend(self.never_used_alternate_findings(glyph)?);
+        findings.extend(glyph.component_condition_findings());
         Ok(findings)
     }
 }

@@ -1,6 +1,6 @@
 use crate::anchor::Anchor;
 use crate::collection::{EntityList, Identified};
-use crate::component::Component;
+use crate::component::{Component, ConditionalComponent};
 use crate::contour::Contour;
 use crate::entity::{
     AnchorId, AxisId, ComponentId, ContourId, GlyphEntityId, GlyphId, GuidelineId, LayerId,
@@ -17,7 +17,7 @@ use crate::metrics_keys::{MetricsKey, MetricsKeySide, MetricsKeys};
 use crate::point::{Canonical, Point};
 use crate::{CoreError, CoreResult, GlyphName};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -750,6 +750,24 @@ impl Glyph {
     /// does before adding the glyph to a font, which checks them.
     pub fn set_alternates(&mut self, alternates: Vec<GlyphAlternate>) {
         self.alternates = alternates;
+    }
+
+    /// The components that carry a condition in any of the glyph's
+    /// drawings, by position, each once.
+    pub fn conditional_components(&self) -> BTreeSet<ConditionalComponent> {
+        self.layers
+            .values()
+            .flat_map(|layer| {
+                layer
+                    .components_iter()
+                    .enumerate()
+                    .filter(|(_, component)| !component.condition().is_always())
+                    .map(|(index, component)| ConditionalComponent {
+                        position: index + 1,
+                        base: component.base_glyph_name().clone(),
+                    })
+            })
+            .collect()
     }
 
     pub(crate) fn axes_mut(&mut self) -> &mut Vec<GlyphAxis> {
