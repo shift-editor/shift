@@ -2,7 +2,6 @@ import { useState, type KeyboardEvent, type ReactNode } from "react";
 import type { Axis } from "@shift/editor/model";
 import type { AxisId, ConditionRange } from "@shift/types";
 import {
-  ChevronDown,
   cn,
   Input,
   Menu,
@@ -64,7 +63,7 @@ export interface ConditionChipsProps {
  * + after them: one shared editor for alternates and component conditions.
  *
  * @remarks
- * Clicking a chip opens its equation beside the sidebar, `[min] ≤ wght ⌄ ≤
+ * Clicking a chip opens its equation beside the sidebar, `[min] ≤ wght ≤
  * [max]`: an empty field leaves that side open. Typing or pasting `400-600`,
  * `>=700`, `700+` or `<=80` into either field fills both, as the engine reads
  * it. Enter, or clicking away, commits as one undo step; Escape reverts. A
@@ -276,7 +275,7 @@ const ChipView = ({
 };
 
 /**
- * The equation a chip's popover edits, `[min] ≤ wght ⌄ ≤ [max]`, and why it
+ * The equation a chip's popover edits, `[min] ≤ wght ≤ [max]`, and why it
  * can't be committed, if it can't.
  */
 const ConditionEquation = ({
@@ -312,9 +311,13 @@ const ConditionEquation = ({
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-1.5 text-ui text-muted">
         {field("min", axis.minimum, `${axis.name} from`)}
-        <span aria-hidden>≤</span>
+        <span aria-hidden className="text-body">
+          ≤
+        </span>
         <AxisButton axis={axis} groups={groups} used={used} onAxis={onAxis} />
-        <span aria-hidden>≤</span>
+        <span aria-hidden className="text-body">
+          ≤
+        </span>
         {field("max", axis.maximum, `${axis.name} up to`)}
       </div>
       {problem && (
@@ -372,7 +375,7 @@ const BoundField = ({
   );
 };
 
-/** The equation's axis, `wght ⌄`: a menu of the axes the condition may move to. */
+/** The equation's axis, `wght`, a button: a menu of the axes the condition may move to. */
 const AxisButton = ({
   axis,
   groups,
@@ -398,9 +401,6 @@ const AxisButton = ({
         }
       >
         <span className="font-mono">{axis.tag}</span>
-        <span className="text-muted">
-          <ChevronDown aria-hidden className="h-3 w-3" />
-        </span>
       </MenuTrigger>
     </Tooltip>
     <MenuPortal>
