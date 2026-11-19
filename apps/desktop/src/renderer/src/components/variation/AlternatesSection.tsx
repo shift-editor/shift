@@ -30,10 +30,11 @@ import { NewAlternatePanel } from "./NewAlternatePanel";
 /**
  * The Designspace tab's Alternates section, after Glyph sources, shown while
  * a glyph is edited: the glyphs drawn in its place where their conditions
- * hold, tried in order, the first match winning. Each row is one line: a
- * the alternate glyph's icon, as the Layers panel draws it (its name the tooltip), its
- * condition's chips, and a dot on the one the canvas draws here, which is
- * tinted; one an earlier alternate always beats is greyed with a note. Rows reorder by dragging the icon; right-clicking a row opens or deletes it.
+ * hold, tried in order, the first match winning. Each is a small tree
+ * node: the alternate glyph's name, with its condition's chips on
+ * a rail under it; a dot marks, and a tint covers, the one the canvas draws
+ * here, and one an earlier alternate always beats is greyed with a note.
+ * Nodes reorder by dragging the name; right-clicking one opens or deletes it.
  * **+** picks a glyph (or creates `<glyph>.alt`) and starts its first chip;
  * the alternate is added when that chip is committed.
  */
@@ -122,11 +123,12 @@ export const AlternatesSection = ({
 };
 
 /**
- * One alternate on one line: its glyph's icon where the font is drawn now,
- * as the Layers panel draws a glyph (its name the tooltip), its condition's
- * chips, and the in-use dot. The icon drags the row; right-clicking the row
- * opens the glyph or deletes the alternate. A never-used alternate greys its
- * icon and chips, with the note below.
+ * One alternate as a small tree node, like an Objects panel row with a
+ * child: the alternate glyph's name, with the in-use dot at the right; under
+ * it, on a rail, its
+ * condition's chips. The name drags the node; right-clicking it opens the
+ * glyph or deletes the alternate. The one drawn here is tinted; a
+ * never-used one is greyed, with its note under the chips.
  */
 const AlternateRowView = ({
   row,
@@ -138,7 +140,6 @@ const AlternateRowView = ({
   canAuthor: boolean;
 }) => {
   const sortable = useSortableItem(row.id, !canAuthor);
-  const greyed = row.neverUsed !== null;
 
   return (
     <div
@@ -147,32 +148,42 @@ const AlternateRowView = ({
       role="listitem"
       aria-label={row.glyphName}
       data-testid={`alternate-${row.id}`}
-      className={cn("relative flex w-full flex-col gap-1", sortable.dragging && "z-10 opacity-50")}
+      className={cn("relative w-full", sortable.dragging && "z-10 opacity-50")}
     >
       <AlternateMenu row={row} alternates={alternates} canAuthor={canAuthor}>
         <div
           className={cn(
-            "flex w-full items-start gap-2 rounded px-1 py-1",
+            "flex flex-col rounded px-1 pb-1",
             row.inUse && "bg-accent/10",
+            row.neverUsed !== null && "opacity-50",
           )}
         >
-          {/* As tall as a line of chips, so the icon sits on the first line. */}
-          <Tooltip content={row.glyphName}>
+          <div className="flex h-7 items-center gap-1.5">
             <button
               type="button"
-              aria-label={row.glyphName}
               {...sortable.activator}
-              className={cn(
-                "flex h-5 shrink-0 items-center rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent",
-                greyed && "opacity-50",
-              )}
+              className="flex min-w-0 flex-1 items-center gap-1.5 rounded-sm text-left text-ui text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
             >
-              <svg aria-hidden className="h-4 w-4 shrink-0 text-primary" viewBox="0 0 16 16">
-                {row.iconPath ? <path d={row.iconPath} fill="currentColor" /> : null}
-              </svg>
+              <span className="truncate" title={row.glyphName}>
+                {row.glyphName}
+              </span>
             </button>
-          </Tooltip>
-          <div className={cn("min-w-0 flex-1", greyed && "opacity-50")}>
+            {row.inUse && (
+              <Tooltip content="Drawn here">
+                <span
+                  role="img"
+                  aria-label="Drawn here"
+                  className="mr-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
+                />
+              </Tooltip>
+            )}
+          </div>
+          <div className="relative flex flex-col gap-1 pl-6">
+            {/* The rail under the name, as the section and Objects tree rails draw. */}
+            <span
+              aria-hidden
+              className="absolute -top-1 bottom-0 left-2 border-l border-control-muted/45"
+            />
             <ConditionChips
               label={`${row.glyphName} condition`}
               chips={row.chips}
@@ -181,21 +192,10 @@ const AlternateRowView = ({
               onCommit={(index, range) => alternates.setRange(row.id, index, range)}
               onRemove={(index) => alternates.removeRange(row.id, index)}
             />
+            {row.neverUsed && <p className="text-ui text-muted">{row.neverUsed}</p>}
           </div>
-          {row.inUse && (
-            <Tooltip content="Drawn here">
-              <span className="flex h-5 shrink-0 items-center">
-                <span
-                  role="img"
-                  aria-label="Drawn here"
-                  className="h-1.5 w-1.5 rounded-full bg-accent"
-                />
-              </span>
-            </Tooltip>
-          )}
         </div>
       </AlternateMenu>
-      {row.neverUsed && <p className="pl-1 text-ui text-muted">{row.neverUsed}</p>}
     </div>
   );
 };

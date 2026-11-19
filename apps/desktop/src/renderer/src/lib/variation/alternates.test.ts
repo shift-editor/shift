@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { effect } from "@shift/editor/signals";
 import { FONTS, useTestEditor } from "@/testing/fontFixture";
 import { GlyphAlternates } from "./GlyphAlternates";
 
@@ -67,25 +66,6 @@ describe("the Alternates section", () => {
       ["dollar.bled", true],
       ["dollar.heavy", false],
     ]);
-  });
-
-  it("draws each alternate's icon where the font is drawn now, following the location", () => {
-    const section = alternates().sectionCell;
-    const icons: (string | undefined)[] = [];
-    const subscription = effect(() => {
-      // oxlint-disable-next-line shift/no-lookup-in-tests -- the section names rows by glyph; no selector reads them
-      icons.push(section.value?.rows.find((row) => row.glyphName === "dollar.bled")?.iconPath);
-    });
-
-    editor.setLocation({ BLED: 100 });
-    const atBled = icons.at(-1);
-    editor.setLocation({ BLED: 0 });
-    subscription.dispose();
-
-    // dollar.bled is wider at Bled (30–470) than at Regular (50–450).
-    expect(atBled).toBeDefined();
-    expect(icons.at(-1)).toBeDefined();
-    expect(atBled).not.toBe(icons.at(-1));
   });
 
   it("reorders, so the narrower alternate is tried first and used", async () => {
