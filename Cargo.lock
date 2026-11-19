@@ -1552,6 +1552,8 @@ dependencies = [
  "napi-sys",
  "nohash-hasher",
  "rustc-hash 2.1.2",
+ "serde",
+ "serde_json",
  "tokio",
  "tokio-stream",
 ]
@@ -2527,6 +2529,7 @@ dependencies = [
  "napi-derive",
  "pack",
  "rmp-serde",
+ "serde_json",
  "shift-backends",
  "shift-config",
  "shift-engine",

@@ -1528,6 +1528,7 @@ describe("WorkspaceHost serves the workspace over transferred ports", () => {
         name: "A",
         unicodes: [65],
         axes: [],
+        alternates: [],
         layers: [{ id: layerId, sourceId, baseSourceId: null, coordinates: null }],
         componentBaseGlyphIds: [],
         mark: false,

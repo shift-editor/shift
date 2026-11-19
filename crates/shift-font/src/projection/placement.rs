@@ -54,15 +54,8 @@ impl FontProjection<'_> {
     /// parent's, before `component_coords` applies the component's axis
     /// values.
     pub(super) fn draws(&self, parent: GlyphId, component: &Component) -> bool {
-        let condition = component.condition();
-        if condition.is_always() {
-            return true;
-        }
-        let axes = match self.font.glyph(parent) {
-            Some(parent) => self.font.glyph_space_axes(parent),
-            None => self.font.axes().to_vec(),
-        };
-        condition.holds_at(&self.location, &axes)
+        self.font
+            .component_condition_holds(parent, component.condition(), &self.location)
     }
 
     /// Runs `read` on a projection at `location` that shares this one's

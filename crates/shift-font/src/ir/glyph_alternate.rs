@@ -55,6 +55,7 @@ impl GlyphAlternate {
 
 /// An alternate no location in the font's axes draws.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct NeverUsedAlternate {
     pub alternate_id: AlternateId,
     pub reason: NeverUsedReason,
@@ -62,6 +63,7 @@ pub struct NeverUsedAlternate {
 
 /// Why an alternate is never used.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum NeverUsedReason {
     /// Its condition holds nowhere within the axes' ranges.
     OutsideAxes,

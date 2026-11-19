@@ -260,6 +260,7 @@ function record(id: GlyphId, componentBaseGlyphIds: GlyphId[] = []): GlyphRecord
     unicodes: [],
     componentBaseGlyphIds,
     axes: [],
+    alternates: [],
     layers: [],
     mark: false,
     nonspacingMark: false,

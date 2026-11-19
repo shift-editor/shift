@@ -50,6 +50,19 @@ pub enum ConditionTextError {
     #[error("the range {min} to {max} runs downwards")]
     Reversed { min: f64, max: f64 },
 
+    /// A chip's value past an end of its axis, which the condition could
+    /// never reach.
+    #[error("{axis} only goes {}", reach(*.end, *.above))]
+    OutsideAxis {
+        /// The axis's name.
+        axis: String,
+        /// The end of the axis the value passes.
+        end: f64,
+        /// Whether the value is above the axis's maximum, rather than below
+        /// its minimum.
+        above: bool,
+    },
+
     #[error(transparent)]
     Font(#[from] CoreError),
 }
@@ -133,6 +146,13 @@ impl ValueRange {
         }
         None
     }
+}
+
+/// How far an axis goes, past its maximum (`above`) or its minimum:
+/// `to 900` or `down to 100`.
+fn reach(end: f64, above: bool) -> String {
+    let direction = if above { "to" } else { "down to" };
+    format!("{direction} {}", number(end))
 }
 
 /// A number, with `-` or `−` for a minus sign.
@@ -221,10 +241,56 @@ impl<'a> ConditionSpace<'a> {
         let named = self
             .axis_named(axis)
             .ok_or_else(|| ConditionTextError::UnknownAxis(axis.to_string()))?;
+        self.range_on(&named, ValueRange::parse(value)?)
+    }
+
+    /// Reads a chip's value on the axis `axis_id`, a font axis or one of the
+    /// glyph's own: `700`, `>=700`, `≥700` or `700+` (from), `<=80` or `≤80`
+    /// (up to), `400-600` or `400–600` (both), in the units
+    /// [`Self::parse_range`] reads, into design units. Unlike a range typed
+    /// with its axis, each end must lie on the axis.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConditionTextError::UnknownAxis`] for an axis the space
+    /// lacks, [`ConditionTextError::OutsideAxis`] for an end past the
+    /// axis's minimum or maximum, and the errors of [`ValueRange::parse`].
+    pub fn parse_value(
+        &self,
+        axis_id: AxisId,
+        text: &str,
+    ) -> Result<ConditionRange, ConditionTextError> {
+        let named = self
+            .axis_by_id(axis_id)
+            .ok_or_else(|| ConditionTextError::UnknownAxis(axis_id.to_string()))?;
+        let value = ValueRange::parse(text)?;
+        let axis = named.axis;
+        for end in [value.from, value.up_to].into_iter().flatten() {
+            let outside = |end, above| ConditionTextError::OutsideAxis {
+                axis: axis.name().to_string(),
+                end,
+                above,
+            };
+            if end > axis.maximum() {
+                return Err(outside(axis.maximum(), true));
+            }
+            if end < axis.minimum() {
+                return Err(outside(axis.minimum(), false));
+            }
+        }
+        self.range_on(&named, value)
+    }
+
+    /// `value` placed on `named`, in design units.
+    fn range_on(
+        &self,
+        named: &NamedAxis<'_>,
+        value: ValueRange,
+    ) -> Result<ConditionRange, ConditionTextError> {
         let ValueRange {
             from: min,
             up_to: max,
-        } = ValueRange::parse(value)?;
+        } = value;
         let axis = named.axis;
         if !named.user_units {
             return Ok(ConditionRange::new(axis.id(), min, max));
@@ -266,13 +332,28 @@ impl<'a> ConditionSpace<'a> {
     /// axis's minimum. An axis the font no longer has is written by its id.
     pub fn format_range(&self, range: &ConditionRange, label: AxisNaming) -> String {
         let Some(named) = self.axis_by_id(range.axis_id) else {
-            return format_ends(&range.axis_id.to_string(), range.min, range.max);
+            return join_name(
+                &range.axis_id.to_string(),
+                &format_ends(range.min, range.max),
+            );
         };
         let axis = named.axis;
         let name = match label {
             AxisNaming::Name => axis.name(),
             AxisNaming::Tag => axis.tag(),
         };
+        join_name(name, &self.format_value(range))
+    }
+
+    /// Writes one range's value as a chip shows it after its axis's name,
+    /// and as [`Self::parse_value`] reads it back: `≥ 700`, `≤ 80` or
+    /// `400–600`, in the units [`Self::format_range`] writes. A range open on
+    /// both sides is written `≥` its axis's minimum.
+    pub fn format_value(&self, range: &ConditionRange) -> String {
+        let Some(named) = self.axis_by_id(range.axis_id) else {
+            return format_ends(range.min, range.max);
+        };
+        let axis = named.axis;
         let (mut min, mut max) = (range.min, range.max);
         if named.user_units {
             let to_user = |value| self.to_user(axis, value);
@@ -284,7 +365,7 @@ impl<'a> ConditionSpace<'a> {
         if min.is_none() && max.is_none() {
             min = Some(axis.minimum());
         }
-        format_ends(name, min, max)
+        format_ends(min, max)
     }
 
     /// Writes every range of `condition`, one text each; see
@@ -387,12 +468,23 @@ impl<'t> RangeText<'t> {
     }
 }
 
-fn format_ends(name: &str, min: Option<f64>, max: Option<f64>) -> String {
+/// A range's ends as a chip writes its value: `400–600`, `≥ 700` or `≤ 80`;
+/// nothing for a range open on both sides.
+fn format_ends(min: Option<f64>, max: Option<f64>) -> String {
     match (min, max) {
-        (Some(min), Some(max)) => format!("{name} {}–{}", number(min), number(max)),
-        (Some(min), None) => format!("{name} ≥ {}", number(min)),
-        (None, Some(max)) => format!("{name} ≤ {}", number(max)),
-        (None, None) => name.to_string(),
+        (Some(min), Some(max)) => format!("{}–{}", number(min), number(max)),
+        (Some(min), None) => format!("≥ {}", number(min)),
+        (None, Some(max)) => format!("≤ {}", number(max)),
+        (None, None) => String::new(),
+    }
+}
+
+/// An axis's name and a range's value, as one range's text.
+fn join_name(name: &str, value: &str) -> String {
+    if value.is_empty() {
+        name.to_string()
+    } else {
+        format!("{name} {value}")
     }
 }
 
@@ -541,6 +633,50 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_chip_value_reads_on_its_axis_and_formats_back() {
+        let font = conditions_font();
+        let space = font.condition_space(None).unwrap();
+        let weight = font.axis_id_by_tag("wght").unwrap();
+
+        for (text, min, max) in [
+            ("700", Some(700.0), None),
+            (">=700", Some(700.0), None),
+            ("≥700", Some(700.0), None),
+            ("700+", Some(700.0), None),
+            ("<=800", None, Some(800.0)),
+            ("≤800", None, Some(800.0)),
+            ("400-600", Some(400.0), Some(600.0)),
+            ("400–600", Some(400.0), Some(600.0)),
+        ] {
+            let range = space.parse_value(weight, text).unwrap();
+            assert_eq!(range, ConditionRange::new(weight, min, max), "{text}");
+            let formatted = space.format_value(&range);
+            assert_eq!(space.parse_value(weight, &formatted).unwrap(), range);
+        }
+        assert_eq!(
+            space.format_value(&ConditionRange::new(weight, Some(700.0), None)),
+            "≥ 700"
+        );
+    }
+
+    #[test]
+    fn a_chip_value_past_an_end_of_its_axis_is_refused() {
+        let font = conditions_font();
+        let space = font.condition_space(None).unwrap();
+        let weight = font.axis_id_by_tag("wght").unwrap();
+
+        let above = space.parse_value(weight, "950").unwrap_err();
+        let below = space.parse_value(weight, "50-600").unwrap_err();
+
+        assert_eq!(above.to_string(), "Weight only goes to 900");
+        assert_eq!(below.to_string(), "Weight only goes down to 100");
+        assert!(matches!(
+            space.parse_value(weight, "heavy"),
+            Err(ConditionTextError::InvalidValue(_))
+        ));
+    }
+
     /// `conditions_font` with Weight's user 100–900 mapped onto design
     /// 20–220 (user 400 at design 80).
     fn mapped_weight_font() -> Font {
@@ -574,5 +710,8 @@ mod tests {
             space.format_range(&range, AxisNaming::Name),
             "Weight 400–900"
         );
+        // A chip's value on the axis reads and writes the same way.
+        assert_eq!(space.parse_value(weight, "400-900").unwrap(), range);
+        assert_eq!(space.format_value(&range), "400–900");
     }
 }

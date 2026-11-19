@@ -29,9 +29,10 @@ use shift_engine::scene::{RevisedNode, SceneNode, TextRun};
 use shift_font::glyph_identity::GlyphIdentityChange;
 use shift_font::linked_metrics::SideLink;
 use shift_font::{
-    AnchorId, Axis, ComponentId, ComponentInheritance, Counterparts, CounterpartsError,
-    FontChangeFlag, GlyphId, GlyphPreview, GlyphRecords, LayerId, MetricValue,
-    MissingKerningOrigin, NodeId, PointId, ResolvedKerning, Source, SourceId,
+    AnchorId, Axis, AxisId, ComponentId, ComponentInheritance, Condition, ConditionRange,
+    Counterparts, CounterpartsError, FontChangeFlag, GlyphId, GlyphPreview, GlyphRecords, LayerId,
+    MetricValue, MissingKerningOrigin, NeverUsedAlternate, NodeId, PointId, ResolvedKerning,
+    Source, SourceId,
 };
 use shift_text::layout::{LayoutError, TextLayout};
 
@@ -344,6 +345,37 @@ pub trait EngineReads {
     /// (`Font::drawn_glyph_at`). What the canvas draws, and edits, for the
     /// glyph open at that location; a glyph the font lacks is itself.
     fn drawn_glyph(&self, glyph_id: GlyphId, location: Vec<f64>) -> GlyphId;
+    /// `glyph_id`'s alternates that never draw anywhere on the font's axes,
+    /// and why (`Font::never_used_alternates`); none for a glyph the font
+    /// lacks or whose axis mappings cannot compile.
+    fn never_used_alternates(&self, glyph_id: GlyphId) -> Vec<NeverUsedAlternate>;
+    /// A condition chip's value `text` read on `axis_id`, a font axis or one
+    /// of `glyph_id`'s own: `700`, `>=700`, `≥700` or `700+`, `<=80` or `≤80`,
+    /// `400-600` or `400–600`, in user units on a font axis users see, each
+    /// end on the axis (`ConditionSpace::parse_value`). The range in design
+    /// units, or why the text can't be read.
+    fn condition_value(
+        &self,
+        glyph_id: Option<GlyphId>,
+        axis_id: AxisId,
+        text: String,
+    ) -> ConditionValue;
+    /// A condition range's value as its chip shows it after the axis's
+    /// name, `≥ 700`, `≤ 80` or `400–600`, in the units
+    /// [`Self::condition_value`] reads (`ConditionSpace::format_value`).
+    /// Empty when the font's axis mappings cannot compile.
+    fn condition_value_text(&self, glyph_id: Option<GlyphId>, range: ConditionRange) -> String;
+    /// Whether a component with `condition`, placed in the glyph `parent`,
+    /// draws where `parent` is drawn: at the external location `location`
+    /// (the font's axis order, NaN for a default) and its own axes at `own`
+    /// (`Font::component_condition_holds`, skrifa's rule).
+    fn component_draws(
+        &self,
+        parent: GlyphId,
+        condition: Condition,
+        location: Vec<f64>,
+        own: Location,
+    ) -> bool;
     /// Each of `glyphs` drawn at `location`, in the font's axis order with
     /// NaN for an axis default, as the glyph drawn for it there
     /// (`Self::drawn_glyph`): its outline, components placed, as one SVG
@@ -363,6 +395,15 @@ pub trait EngineReads {
         glyphs: Vec<GlyphId>,
         location: Vec<f64>,
     ) -> Result<Vec<GlyphPreview>, FontRecordsError>;
+}
+
+/// A condition chip's value as [`EngineReads::condition_value`] reads it.
+#[derive(Clone, Debug, PartialEq, Pack)]
+pub enum ConditionValue {
+    /// The range the value reads as, in design units.
+    Range { range: ConditionRange },
+    /// Why the value can't be read, such as "Weight only goes to 900".
+    Problem { message: String },
 }
 
 /// The records [`EngineReads::font_header`] reads: what a font's store
@@ -546,10 +587,11 @@ mod exports {
     use wasm_bindgen::prelude::*;
 
     use super::{
-        AnchorId, Axis, CompiledVariationError, ComponentId, ComponentInheritance, Counterparts,
-        CounterpartsReadError, EditablePair, EngineReads, FeatureListError, FeatureSubstitution,
-        FontChangeFlag, FontFeature, FontHeader, FontRecordsError, GlyphIdentityChange,
-        GlyphSnapshot, InterpolatedMetrics, KerningSnapshot, LayerId, LayoutError, NodeId,
+        AnchorId, Axis, AxisId, CompiledVariationError, ComponentId, ComponentInheritance,
+        Condition, ConditionRange, ConditionValue, Counterparts, CounterpartsReadError,
+        EditablePair, EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag,
+        FontFeature, FontHeader, FontRecordsError, GlyphIdentityChange, GlyphSnapshot,
+        InterpolatedMetrics, KerningSnapshot, LayerId, LayoutError, NeverUsedAlternate, NodeId,
         PageLayout, PageLayoutError, PageLayoutRequest, PlacedText, PointId, RevisedNode,
         SceneNode, Source, SourceSetWeights, TextLayoutRequest, engine_reads_request,
     };
@@ -1317,6 +1359,58 @@ mod exports {
             font.drawn_glyph_at(glyph_id, &design_location(font, &location))
         }
 
+        fn never_used_alternates(&self, glyph_id: GlyphId) -> Vec<NeverUsedAlternate> {
+            self.session
+                .font()
+                .never_used_alternates(glyph_id)
+                .unwrap_or_default()
+        }
+
+        fn condition_value(
+            &self,
+            glyph_id: Option<GlyphId>,
+            axis_id: AxisId,
+            text: String,
+        ) -> ConditionValue {
+            let font = self.session.font();
+            let read = font
+                .condition_space(glyph_id)
+                .map_err(shift_font::ConditionTextError::from)
+                .and_then(|space| space.parse_value(axis_id, &text));
+            match read {
+                Ok(range) => ConditionValue::Range { range },
+                Err(error) => ConditionValue::Problem {
+                    message: error.to_string(),
+                },
+            }
+        }
+
+        fn condition_value_text(&self, glyph_id: Option<GlyphId>, range: ConditionRange) -> String {
+            self.session
+                .font()
+                .condition_space(glyph_id)
+                .map(|space| space.format_value(&range))
+                .unwrap_or_default()
+        }
+
+        fn component_draws(
+            &self,
+            parent: GlyphId,
+            condition: Condition,
+            location: Vec<f64>,
+            own: super::Location,
+        ) -> bool {
+            let font = self.session.font();
+            let design = design_values(font.axes(), &self.variation().mappings, &location);
+            let mut at = design_location(font, &design);
+            // In axis order, so the location is the same whatever the map's order.
+            let own: std::collections::BTreeMap<_, _> = own.values.into_iter().collect();
+            for (axis_id, value) in own {
+                at.set(axis_id, value);
+            }
+            font.component_condition_holds(parent, &condition, &at)
+        }
+
         fn glyph_previews(
             &self,
             glyphs: Vec<GlyphId>,
@@ -1773,6 +1867,77 @@ mod exports {
                 session.read(|engine| engine.drawn_glyph(id("dollarcomp"), vec![800.0, 50.0])),
                 id("dollarcomp"),
                 "a glyph with a component of dollar is not swapped"
+            );
+        }
+
+        #[test]
+        fn a_chip_value_reads_on_its_axis_and_formats_back() {
+            let font = shift_font::test_support::conditions_font();
+            let weight = font.axis_id_by_tag("wght").unwrap();
+            let session = Session::over(&font);
+            let read = |text: &str| {
+                session.read(|engine| engine.condition_value(None, weight, text.into()))
+            };
+            let from_700 = ConditionRange::new(weight, Some(700.0), None);
+
+            assert_eq!(read("700+"), ConditionValue::Range { range: from_700 });
+            assert_eq!(
+                read("950"),
+                ConditionValue::Problem {
+                    message: "Weight only goes to 900".into()
+                }
+            );
+            assert_eq!(
+                session.read(|engine| engine.condition_value_text(None, from_700)),
+                "≥ 700"
+            );
+        }
+
+        #[test]
+        fn a_component_draws_where_its_condition_holds_at_the_glyph_it_sits_in() {
+            let font = shift_font::test_support::conditions_font();
+            let h = font.glyph_id_by_name("H").unwrap();
+            let crossbar = AxisId::from_raw("crossbar");
+            let session = Session::over(&font);
+            let heavy = Condition::all([ConditionRange::new(
+                font.axis_id_by_tag("wght").unwrap(),
+                Some(700.0),
+                None,
+            )]);
+            let on_crossbar = Condition::all([ConditionRange::new(crossbar, Some(70.0), None)]);
+            let draws = |condition: &Condition, weight: f64, own: &[(AxisId, f64)]| {
+                let own = wire::Location {
+                    values: own.iter().copied().collect(),
+                };
+                session.read(|engine| {
+                    engine.component_draws(h, condition.clone(), vec![weight, f64::NAN], own)
+                })
+            };
+
+            assert!(!draws(&heavy, 400.0, &[]));
+            assert!(draws(&heavy, 750.0, &[]));
+            assert!(!draws(&on_crossbar, 400.0, &[(crossbar, 60.0)]));
+            assert!(draws(&on_crossbar, 400.0, &[(crossbar, 80.0)]));
+            assert!(draws(&Condition::always(), 400.0, &[]));
+        }
+
+        #[test]
+        fn an_alternate_an_earlier_one_covers_is_never_used() {
+            let mut font = shift_font::test_support::conditions_font();
+            let dollar = font.glyph_id_by_name("dollar").unwrap();
+            let alternates = font.glyph(dollar).unwrap().alternates().to_vec();
+            let reversed = alternates.iter().rev().cloned().collect();
+            font.set_glyph_alternates(dollar, reversed).unwrap();
+            let session = Session::over(&font);
+
+            let never_used = session.read(|engine| engine.never_used_alternates(dollar));
+
+            assert_eq!(
+                never_used
+                    .iter()
+                    .map(|never_used| never_used.alternate_id)
+                    .collect::<Vec<_>>(),
+                [alternates[0].id()]
             );
         }
 
