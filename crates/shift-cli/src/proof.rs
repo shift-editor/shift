@@ -20,7 +20,7 @@ use shift_proof::{
 };
 
 pub(crate) use args::ProofArgs;
-pub(crate) use summary::ProofSummary;
+pub(crate) use summary::{ProofSummary, ProofWarning};
 
 /// Compiles the font at `args.path`, renders the proof, and writes it to
 /// `args.output`, replacing any existing file.
@@ -34,7 +34,11 @@ pub(crate) use summary::ProofSummary;
 /// the proof is invalid (see [`ProofError`]), or the image cannot be
 /// written.
 pub(crate) fn proof(args: &ProofArgs) -> Result<ProofSummary> {
-    let (binary, source) = compile_font(&args.path)?;
+    let ProofBinary {
+        binary,
+        source,
+        warnings,
+    } = compile_font(&args.path)?;
     let mut locations: Vec<ProofLocation> = args
         .at
         .iter()
@@ -87,7 +91,18 @@ pub(crate) fn proof(args: &ProofArgs) -> Result<ProofSummary> {
     Ok(ProofSummary {
         output: args.output.display().to_string(),
         report: proof.report,
+        warnings,
     })
+}
+
+/// A font ready to shape for a proof.
+struct ProofBinary {
+    /// TrueType or OpenType bytes.
+    binary: Vec<u8>,
+    /// The source font, when the proof was asked of one.
+    source: Option<Font>,
+    /// What the binary draws differently from the editor.
+    warnings: Vec<ProofWarning>,
 }
 
 /// Reads `path` and returns TrueType or OpenType bytes ready for shaping,
@@ -95,8 +110,10 @@ pub(crate) fn proof(args: &ProofArgs) -> Result<ProofSummary> {
 ///
 /// `.ttf` and `.otf` files are used as they are; every other source,
 /// including `.shift`, is loaded into the Shift model and compiled in memory
-/// through the same exporter as `compile`.
-fn compile_font(path: &Path) -> Result<(Vec<u8>, Option<Font>)> {
+/// through the same exporter as `compile`. A source whose components carry
+/// conditions, which `compile` refuses, still proofs: those components are
+/// drawn everywhere, and a warning lists them.
+fn compile_font(path: &Path) -> Result<ProofBinary> {
     let extension = path
         .extension()
         .and_then(|extension| extension.to_str())
@@ -106,7 +123,11 @@ fn compile_font(path: &Path) -> Result<(Vec<u8>, Option<Font>)> {
         let binary = std::fs::read(path)
             .into_diagnostic()
             .wrap_err_with(|| format!("failed to read font {}", path.display()))?;
-        return Ok((binary, None));
+        return Ok(ProofBinary {
+            binary,
+            source: None,
+            warnings: Vec::new(),
+        });
     }
 
     let path_text = path
@@ -116,11 +137,18 @@ fn compile_font(path: &Path) -> Result<(Vec<u8>, Option<Font>)> {
         .read_font(path_text)
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to load font {}", path.display()))?;
-    let binary = FontExporter::new()
-        .compile_ttf(&font)
+    let preview = FontExporter::new()
+        .compile_preview_ttf(&font)
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to compile {} for proofing", path.display()))?;
-    Ok((binary, Some(font)))
+    let warnings = ProofWarning::components_drawn_everywhere(&preview.drawn_everywhere)
+        .into_iter()
+        .collect();
+    Ok(ProofBinary {
+        binary: preview.bytes,
+        source: Some(font),
+        warnings,
+    })
 }
 
 /// Locates every master by its design location, normalized by each axis's

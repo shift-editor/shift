@@ -111,3 +111,46 @@ fn a_font_whose_conditions_are_cleared_compiles() {
         .map_err(|error| error.to_string());
     assert_eq!(compiled, Ok(()));
 }
+
+#[test]
+fn a_preview_compiles_them_drawn_everywhere_and_lists_them() {
+    let preview = FontExporter::new()
+        .compile_preview_ttf(&conditions_font())
+        .map(|preview| (preview.bytes.is_empty(), preview.drawn_everywhere))
+        .map_err(|error| error.to_string());
+
+    assert_eq!(
+        preview,
+        Ok((
+            false,
+            vec![
+                conditional("H", 1, "bar"),
+                conditional("H", 2, "dot"),
+                conditional("H", 3, "bar"),
+                conditional("mid", 1, "bar"),
+            ]
+        ))
+    );
+}
+
+#[test]
+fn static_export_refuses_them() {
+    let mut font = conditions_font();
+    let location = font
+        .axes()
+        .iter()
+        .map(|axis| (axis.id(), axis.default()))
+        .collect();
+    let instance = shift_font::NamedInstance::new("Regular".to_owned(), location, None);
+    font.set_named_instances(vec![instance])
+        .expect("the instance is valid");
+    let directory = tempfile::tempdir().expect("a temporary directory");
+
+    let result = FontExporter::new().export_static_instances_with(
+        &font,
+        directory.path(),
+        &shift_backends::BinaryEncodings::ttf(),
+    );
+
+    assert!(matches!(result, Err(ExportError::ComponentConditions(_))));
+}

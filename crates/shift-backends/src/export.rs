@@ -30,7 +30,7 @@ use shift_font::{Axis, AxisRole, Font};
 
 /// A component that carries a condition, named by its glyph and its
 /// position in the glyph's drawings.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
 pub struct ConditionalComponentRef {
     pub glyph: String,
     /// Its position in the drawing, counting from 1.
@@ -99,6 +99,16 @@ impl std::fmt::Display for ComponentConditions {
             components.join(", ")
         )
     }
+}
+
+/// A binary compiled for a preview by [`FontExporter::compile_preview_ttf`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PreviewBinary {
+    /// The TrueType binary.
+    pub bytes: Vec<u8>,
+    /// The components whose conditions the binary leaves out, so it draws
+    /// them everywhere, in glyph order; empty when the font has none.
+    pub drawn_everywhere: Vec<ConditionalComponentRef>,
 }
 
 /// Identifies a format [`FontExporter`] can write.
@@ -497,6 +507,32 @@ impl FontExporter {
     /// represented in the supported compiler model or compilation fails.
     pub fn compile_ttf(&self, font: &impl FontView) -> Result<Vec<u8>, ExportError> {
         ComponentConditions::refuse(font)?;
+        self.compile_ttf_drawing_conditions_everywhere(font)
+    }
+
+    /// Compiles a TrueType binary for a preview, such as a proof, that may
+    /// show a font export refuses: every component that carries a condition
+    /// is drawn everywhere, as if it had none, and the result lists them so
+    /// the preview can say so. A font without component conditions compiles
+    /// exactly as [`Self::compile_ttf`] compiles it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExportError`] when the source cannot be represented in the
+    /// supported compiler model or compilation fails.
+    pub fn compile_preview_ttf(&self, font: &impl FontView) -> Result<PreviewBinary, ExportError> {
+        Ok(PreviewBinary {
+            bytes: self.compile_ttf_drawing_conditions_everywhere(font)?,
+            drawn_everywhere: ComponentConditions::of(font).0,
+        })
+    }
+
+    /// Compiles `font`, drawing each conditional component everywhere:
+    /// fontc 2.0.1 has no place for the condition.
+    fn compile_ttf_drawing_conditions_everywhere(
+        &self,
+        font: &impl FontView,
+    ) -> Result<Vec<u8>, ExportError> {
         let source = ShiftIrSource::from_font_view(font)?;
         let mut options = fontc::Options::default();
         options.flags.set(

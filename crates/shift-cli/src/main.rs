@@ -67,6 +67,9 @@ fn main() -> miette::Result<()> {
         Command::Import(args) => write_report(&import::import(&args)?, args.json),
         Command::Proof(args) => {
             let summary = proof::proof(&args)?;
+            for warning in &summary.warnings {
+                write_stderr(&format!("warning: {}", warning.message()))?;
+            }
             write_report(&summary, args.json)
         }
         Command::Font { command } => match command {
@@ -407,9 +410,17 @@ fn load_document(path: &Path) -> miette::Result<shift_font::Font> {
         .into_diagnostic()
 }
 
+fn write_stderr(output: &str) -> miette::Result<()> {
+    write_line(io::stderr().lock(), output)
+}
+
 fn write_stdout(output: &str) -> miette::Result<()> {
-    let mut stdout = io::stdout().lock();
-    match writeln!(stdout, "{output}") {
+    write_line(io::stdout().lock(), output)
+}
+
+/// Writes `output` and a newline to `stream`; a closed pipe is not an error.
+fn write_line(mut stream: impl Write, output: &str) -> miette::Result<()> {
+    match writeln!(stream, "{output}") {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == io::ErrorKind::BrokenPipe => Ok(()),
         Err(error) => Err(error).into_diagnostic(),

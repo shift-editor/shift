@@ -113,7 +113,13 @@ impl Font {
         Ok(layers)
     }
 
-    fn layer_at(&self, glyph: &Glyph, location: &DesignLocation) -> CoreResult<Option<GlyphLayer>> {
+    /// `glyph`'s own layer at `location`: interpolated where it has a model,
+    /// else its fallback layer.
+    pub(crate) fn layer_at(
+        &self,
+        glyph: &Glyph,
+        location: &DesignLocation,
+    ) -> CoreResult<Option<GlyphLayer>> {
         if let Some(interpolation) = self.glyph_interpolation(glyph.id())? {
             return interpolation.resolve(location, self.axes()).map(Some);
         }

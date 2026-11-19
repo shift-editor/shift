@@ -11,7 +11,7 @@ use napi_derive::napi;
 use shift_backends::{
   AxisIndex as SourceAxisIndex, BinaryEncoding, BinaryEncodings, DirectoryGlyph, DirectoryInstance,
   DirectorySource, ExportFormat, FontDirectory, FontExportRequest, FontExportResult, FontExporter,
-  FontSource, FontView, GlyphIndex, GlyphPointKind as SourceGlyphPointKind,
+  FontSource, GlyphIndex, GlyphPointKind as SourceGlyphPointKind,
   GlyphProjection as SourceGlyphProjection, GlyphShape as SourceGlyphShape, OpenedFont,
   SourceAtlasDescriptor, SourceIds, VariationAxisKind, font_loader::FontLoader,
 };
@@ -25,7 +25,7 @@ use shift_font::wire::{
 use shift_font::{
   AnchorId, Axis as FontAxis, AxisId, AxisMapping as FontAxisMapping, AxisMappingId,
   AxisMappingPoint as FontAxisMappingPoint, CompiledHeader, ComponentId, ContourId, CoreResult,
-  Font, Glyph, GlyphId, GlyphLayer, LayerId, Location as FontLocation, MetricId, MetricKind,
+  Font, GlyphId, GlyphLayer, LayerId, Location as FontLocation, MetricId, MetricKind,
   NamedInstanceId, PointId, SourceId,
 };
 use shift_slug::{AuthoredAtlasProfile, VariableAtlas};
@@ -34,7 +34,6 @@ use std::{
   collections::{BTreeMap, HashMap, HashSet, VecDeque},
   iter,
   path::Path,
-  sync::Arc,
   time::Duration,
 };
 
@@ -620,118 +619,6 @@ impl DocumentVersion {
   }
 }
 
-#[derive(Clone)]
-pub(crate) struct FontSaveSnapshot {
-  font: Font,
-  active_glyph_override: Option<Arc<Glyph>>,
-}
-
-impl FontSaveSnapshot {
-  fn new(font: Font, active_glyph_override: Option<Glyph>) -> Self {
-    Self {
-      font,
-      active_glyph_override: active_glyph_override.map(Arc::new),
-    }
-  }
-}
-
-impl FontView for FontSaveSnapshot {
-  fn metadata(&self) -> &shift_font::FontMetadata {
-    self.font.metadata()
-  }
-
-  fn metrics(&self) -> &shift_font::FontMetrics {
-    self.font.metrics()
-  }
-
-  fn metric_definitions(&self) -> &[shift_font::MetricDefinition] {
-    self.font.metric_definitions()
-  }
-
-  fn axes(&self) -> &[shift_font::Axis] {
-    self.font.axes()
-  }
-
-  fn axis_mappings(&self) -> &[shift_font::AxisMapping] {
-    self.font.axis_mappings()
-  }
-
-  fn named_instances(&self) -> &[shift_font::NamedInstance] {
-    self.font.named_instances()
-  }
-
-  fn sources(&self) -> &[shift_font::Source] {
-    self.font.sources()
-  }
-
-  fn default_source_id(&self) -> Option<SourceId> {
-    self.font.default_source_id()
-  }
-
-  fn glyphs(&self) -> impl Iterator<Item = &Glyph> {
-    let active_glyph = self.active_glyph_override.as_deref();
-    let override_name = active_glyph.map(Glyph::name);
-
-    active_glyph.into_iter().chain(
-      self
-        .font
-        .glyphs()
-        .filter(move |glyph| override_name != Some(glyph.name())),
-    )
-  }
-
-  fn glyph(&self, name: &str) -> Option<&Glyph> {
-    if let Some(active_glyph) = self.active_glyph_override.as_ref()
-      && active_glyph.name() == name
-    {
-      return Some(active_glyph.as_ref());
-    }
-
-    self.font.glyph_by_name(name)
-  }
-
-  fn kerning(&self) -> &shift_font::Kerning {
-    self.font.kerning()
-  }
-
-  fn features(&self) -> &shift_font::FeatureData {
-    self.font.features()
-  }
-
-  fn guidelines(&self) -> &[shift_font::Guideline] {
-    self.font.guidelines()
-  }
-
-  fn lib(&self) -> &shift_font::LibData {
-    self.font.lib()
-  }
-
-  fn fontinfo_remainder(&self) -> &shift_font::LibData {
-    self.font.fontinfo_remainder()
-  }
-
-  fn data_files(&self) -> &shift_font::BinaryData {
-    self.font.data_files()
-  }
-
-  fn images(&self) -> &shift_font::BinaryData {
-    self.font.images()
-  }
-
-  fn glyphs_with_derived_placements(&self) -> CoreResult<Vec<Glyph>> {
-    let Some(active_glyph) = self.active_glyph_override.as_deref() else {
-      return self.font.glyphs_with_derived_placements();
-    };
-    // Place against the font as saved, with the unsaved glyph in it.
-    let mut font = self.font.clone();
-    if font.glyph(active_glyph.id()).is_some() {
-      font.pop_glyph(active_glyph.id())?;
-    }
-    font.insert_glyph(active_glyph.clone())?;
-    font.glyphs_with_derived_placements()
-  }
-}
-
 /// Exports, or plans an export of, an owned copy of the workspace font with
 /// every layer loaded, off the JavaScript thread.
 pub struct ExportFontTask {
@@ -1199,8 +1086,8 @@ impl Bridge {
   #[napi(ts_return_type = "Promise<NapiSpecimen | null>")]
   pub fn document_specimen(&mut self) -> Result<AsyncTask<crate::specimen::SpecimenTask>> {
     Ok(AsyncTask::new(crate::specimen::SpecimenTask {
-      input: crate::specimen::SpecimenInput::Snapshot(
-        self.specimen_snapshot().map_err(generic_failure)?,
+      input: crate::specimen::SpecimenInput::Document(
+        self.specimen_font().map_err(generic_failure)?,
       ),
     }))
   }
@@ -1405,10 +1292,10 @@ impl Bridge {
     Ok(shift_font::wire::Location::from(mapped.as_untyped()).into())
   }
 
-  /// Snapshots the font with only the glyphs its thumbnail specimen compiles loaded.
-  fn specimen_snapshot(&mut self) -> BridgeResult<FontSaveSnapshot> {
+  /// Copies the font with only the glyphs its thumbnail specimen compiles loaded.
+  fn specimen_font(&mut self) -> BridgeResult<Font> {
     crate::specimen::acquire_specimen_glyphs(self.workspace_mut()?)?;
-    Ok(FontSaveSnapshot::new(self.font()?.clone(), None))
+    Ok(self.font()?.clone())
   }
 
   /// An owned copy of the font with every layer loaded.
@@ -2185,7 +2072,9 @@ mod tests {
     assert_eq!(created.updated[0].id, GlyphId::from_raw("glyph_a"));
     let font: Font = rmp_serde::from_slice(&directory.0).unwrap();
     assert_eq!(
-      font.glyph(GlyphId::from_raw("glyph_a")).map(Glyph::name),
+      font
+        .glyph(GlyphId::from_raw("glyph_a"))
+        .map(shift_font::Glyph::name),
       Some("A")
     );
   }

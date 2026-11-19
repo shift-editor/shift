@@ -27,7 +27,7 @@ pub use binary_encoding::{BinaryEncoding, BinaryEncodings};
 pub use errors::{BackendError, BackendResult, FormatBackendError, FormatBackendResult};
 pub use export::{
     ComponentConditions, ConditionalComponentRef, ExportError, ExportFormat, FontExportRequest,
-    FontExportResult, FontExporter, VariableComponents,
+    FontExportResult, FontExporter, PreviewBinary, VariableComponents,
 };
 pub use export_static::StaticInstanceFile;
 pub use font_source::{
