@@ -189,6 +189,11 @@ export function asAnchorId(id: string): AnchorId {
   return id as AnchorId;
 }
 
+/** Brands a swap id read from the engine or a sortable list. */
+export function asSwapId(id: string): SwapId {
+  return id as SwapId;
+}
+
 /**
  * Convert a string ID from Rust to a typed AxisId.
  * Use this when receiving IDs from Rust snapshots.
@@ -401,6 +406,7 @@ type MintedIdByPrefix = {
   run: RunId;
   textItem: TextItemId;
   source: SourceId;
+  swap: SwapId;
 };
 
 // Web Crypto's global, present in both the renderer and node >= 19. The
@@ -475,6 +481,11 @@ export function mintGlyphId(): GlyphId {
 /** Mints a new kerning group id. See {@link mintPointId}. */
 export function mintKerningGroupId(): KerningGroupId {
   return mintPrefixedId("kerningGroup");
+}
+
+/** Mints a new glyph swap id, unique in the font. See {@link mintAxisId}. */
+export function mintSwapId(): SwapId {
+  return mintPrefixedId("swap");
 }
 
 /** Mints a new layer id. See {@link mintPointId}. */

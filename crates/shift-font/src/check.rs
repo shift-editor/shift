@@ -118,6 +118,10 @@ pub enum Check {
     /// A component carries a condition, which compiled fonts can't hold
     /// yet, so the font can't be exported.
     ComponentConditionNotExported,
+    /// The font has swaps and its feature code writes its own `variation
+    /// rvrn` block: compiled fonts apply only one `rvrn` record at a
+    /// location, so where both hold, one of them is silently lost.
+    SwapsBesideFeatureRvrn,
     /// A kerning group has no members, so its pairs do nothing.
     EmptyKerningGroup,
     /// A pair names a glyph or group that isn't in the font, or a group on the wrong side, so it never applies.
@@ -134,7 +138,7 @@ pub enum Check {
 
 impl Check {
     /// Every check, in code order.
-    pub const ALL: [Self; 28] = [
+    pub const ALL: [Self; 29] = [
         Self::NoDefaultMaster,
         Self::DuplicateMasterLocation,
         Self::MasterOutsideAxis,
@@ -157,6 +161,7 @@ impl Check {
         Self::UnresolvedGlyph,
         Self::NeverUsedSwap,
         Self::ComponentConditionNotExported,
+        Self::SwapsBesideFeatureRvrn,
         Self::EmptyKerningGroup,
         Self::UnresolvedKerning,
         Self::CharsetMissingGlyph,
@@ -208,6 +213,9 @@ impl Check {
                 "component-condition-not-exported",
                 Severity::Warning,
             ),
+            Self::SwapsBesideFeatureRvrn => {
+                ("A003", "swaps-beside-feature-rvrn", Severity::Warning)
+            }
             Self::EmptyKerningGroup => ("K001", "empty-kerning-group", Severity::Warning),
             Self::UnresolvedKerning => ("K002", "unresolved-kerning", Severity::Warning),
             Self::CharsetMissingGlyph => ("C001", "charset-missing-glyph", Severity::Error),
@@ -288,6 +296,7 @@ impl Font {
             findings.extend(self.never_used_swap_findings(glyph)?);
             findings.extend(glyph.component_condition_findings());
         }
+        findings.extend(self.feature_rvrn_findings());
         findings.extend(kerning::check(self));
         if let Some(charset) = &options.charset {
             findings.extend(coverage::charset(self, charset));

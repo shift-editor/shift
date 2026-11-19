@@ -42,7 +42,7 @@ export function useGlyphMetrics(editor: Editor): GlyphMetricsState {
         const node = editor.scene.onlyCell("glyph").value;
         if (!node) return EMPTY_METRICS;
 
-        const glyph = editor.glyphForId(node.glyphId);
+        const glyph = editor.glyphForId(editor.drawnGlyphId(node));
         if (!glyph) return EMPTY_METRICS;
 
         const editLocation = editor.editLocationCell.value;

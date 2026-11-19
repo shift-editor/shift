@@ -30,6 +30,7 @@
   --color-on-accent: var(--shift-color-on-accent, #ffffff);
   --color-error: var(--shift-color-error, #dc2626);
   --color-error-ring: var(--shift-color-error-ring, #ef4444);
+  --color-warning: var(--shift-color-warning, #d79921);
   --color-destructive: var(--shift-color-destructive, #dc2626);
   --color-destructive-hover: var(--shift-color-destructive-hover, #fef2f2);
   --color-icon-subtle: var(--shift-color-icon-subtle, #9f9f9f);

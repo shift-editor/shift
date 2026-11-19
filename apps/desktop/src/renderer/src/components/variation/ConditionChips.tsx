@@ -1,0 +1,649 @@
+import { Children, useState, type KeyboardEvent, type ReactNode } from "react";
+import type { Axis } from "@shift/editor/model";
+import type { AxisId, ConditionRange } from "@shift/types";
+import {
+  Check,
+  cn,
+  Input,
+  Menu,
+  MenuCheckboxItem,
+  MenuCheckboxItemIndicator,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuPopup,
+  MenuPortal,
+  MenuPositioner,
+  MenuTrigger,
+  Popover,
+  PopoverPopup,
+  PopoverPortal,
+  PopoverPositioner,
+  PopoverTrigger,
+  Tooltip,
+  X,
+} from "@shift/ui";
+import { SidebarActionButton } from "@/components/sidebar";
+import { useSidebarPanelAnchor } from "@/hooks/useSidebarPanelAnchor";
+import {
+  boundsDisplayText,
+  boundsInMode,
+  boundsOfText,
+  boundsOnAxis,
+  isPlainNumber,
+  modeOf,
+  roundedValue,
+  type ConditionChipSpace,
+} from "@/lib/variation/ConditionChipSpace";
+import type { ChipAxisGroup, ChipBounds, ConditionChip, ConditionMode } from "@/types/conditions";
+import PlusIcon from "@/assets/general/plus.svg";
+
+/** A chip whose equation popover is open: an existing one (`index`) or a new one (`index` null). */
+interface ChipEdit {
+  readonly index: number | null;
+  readonly axis: Axis;
+  readonly bounds: ChipBounds;
+  readonly mode: ConditionMode;
+  readonly problem: string | null;
+}
+
+export interface ConditionChipsProps {
+  /** Names the row for assistive technology, such as "dollar.bled condition". */
+  label: string;
+  chips: readonly ConditionChip[];
+  /** The axes the + and the equation's axis menu offer, and how bounds are prefilled and read. */
+  space: ConditionChipSpace;
+  /** Commits a chip's range: in place of the chip at `index`, or a new one when null. */
+  onCommit: (index: number | null, range: ConditionRange) => Promise<void>;
+  onRemove: (index: number) => Promise<void>;
+  /** Starts a new chip at once, as adding a swap does. */
+  startNew?: boolean;
+  /** A new chip was cancelled with Escape: the caller drops what it began. */
+  onNewCancelled?: () => void;
+  /** Shown after the chips, such as "Mixed" for components that differ. */
+  note?: string;
+  disabled?: boolean;
+}
+
+/**
+ * A condition as a row of chips, `wght ≥ 694`, each with × on hover, and a
+ * + after them: one shared editor for swaps and component conditions.
+ *
+ * @remarks
+ * Clicking a chip opens its equation beside the sidebar, in the mode its
+ * condition has: `wght ≥ [694]`, `wght ≤ [80]` or `[400] ≤ wght ≤ [600]`;
+ * an operator's menu switches the mode, keeping the numbers. A range in
+ * the chips' grammar, pasted into a field or there when it commits, fills
+ * the fields and sets the mode. Typing or pasting `400-600`,
+ * `>=700`, `700+` or `<=80` into either field fills both, as the engine reads
+ * it. Enter, or clicking away, commits as one undo step; Escape reverts. A
+ * minimum above the maximum stays, with the reason, and nothing is
+ * committed. The axis button moves the condition to another axis, keeping
+ * the bounds inside its range. + picks an axis and opens a new chip's
+ * equation from where the canvas draws.
+ */
+export const ConditionChips = ({
+  label,
+  chips,
+  space,
+  onCommit,
+  onRemove,
+  startNew = false,
+  onNewCancelled,
+  note,
+  disabled = false,
+}: ConditionChipsProps) => {
+  const [edit, setEdit] = useState<ChipEdit | null>(() => {
+    const [axis] = startNew ? (space.axisGroups[0]?.axes ?? []) : [];
+    if (!axis) return null;
+    return { index: null, axis, bounds: space.prefillBounds(axis), mode: "atLeast", problem: null };
+  });
+
+  const startChip = (axis: Axis) =>
+    setEdit({
+      index: null,
+      axis,
+      bounds: space.prefillBounds(axis),
+      mode: "atLeast",
+      problem: null,
+    });
+  const openChip = (index: number, chip: ConditionChip) =>
+    openEdit(index, chip.axis, boundsOfText(chip.valueText));
+
+  const openEdit = (index: number, axis: Axis, bounds: ChipBounds) =>
+    setEdit({ index, axis, bounds, mode: modeOf(bounds), problem: null });
+
+  /** `edit` with `text` read into `side`: a range in the grammar fills both fields and sets the mode. */
+  const withFieldRead = (current: ChipEdit, side: keyof ChipBounds, text: string): ChipEdit => {
+    const reading = space.boundsFromField(current.axis, current.bounds, side, text);
+    if (reading.kind === "problem") {
+      return { ...current, bounds: { ...current.bounds, [side]: text }, problem: reading.message };
+    }
+    return {
+      ...current,
+      bounds: reading.bounds,
+      mode: reading.mode ?? current.mode,
+      problem: null,
+    };
+  };
+
+  /** `edit` with any range typed into a field it shows read, as committing reads it. */
+  const withGrammarRead = (current: ChipEdit): ChipEdit => {
+    const typed = shownSides(current.mode).find((side) => !isPlainNumber(current.bounds[side]));
+    return typed ? withFieldRead(current, typed, current.bounds[typed]) : current;
+  };
+
+  const cancel = () => {
+    const wasNew = edit !== null && edit.index === null;
+    setEdit(null);
+    if (wasNew && onNewCancelled) onNewCancelled();
+  };
+
+  const commit = async () => {
+    if (!edit) return;
+
+    const read = withGrammarRead(edit);
+    if (read.problem !== null) {
+      setEdit(read);
+      return;
+    }
+
+    const reading = space.rangeOf(read.axis, read.bounds, read.mode);
+    if (reading.kind === "problem") {
+      setEdit({ ...read, problem: reading.message });
+      return;
+    }
+
+    try {
+      await onCommit(edit.index, reading.range);
+      setEdit(null);
+    } catch (error) {
+      setEdit({ ...edit, problem: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
+  // Closing by Escape reverts; any other close (a click away) commits.
+  const onOpenChange = (open: boolean, reason: string) => {
+    if (open) return;
+    if (reason === "escape-key") cancel();
+    else void commit();
+  };
+
+  const equation = edit && (
+    <ConditionEquation
+      edit={edit}
+      groups={space.axisGroups}
+      used={chips.flatMap((chip, index) => (index === edit.index ? [] : [chip.axis.id]))}
+      // Typing keeps the text as it is: a range in the grammar is read when
+      // it is pasted, or when the equation is committed.
+      onBounds={(side, text) =>
+        setEdit({ ...edit, bounds: { ...edit.bounds, [side]: text }, problem: null })
+      }
+      onPaste={(side, text) => setEdit(withFieldRead(edit, side, text))}
+      onMode={(mode) =>
+        setEdit({
+          ...edit,
+          mode,
+          bounds: boundsInMode(edit.bounds, edit.mode, mode, edit.axis),
+          problem: null,
+        })
+      }
+      onAxis={(axis) =>
+        setEdit({ ...edit, axis, bounds: boundsOnAxis(edit.bounds, axis), problem: null })
+      }
+      onCommit={() => void commit()}
+    />
+  );
+
+  const views = chips.map((chip, index) => (
+    <ChipView
+      key={`${chip.axis.id}-${index}`}
+      tag={chip.axis.tag}
+      name={chip.axis.name}
+      valueText={chip.displayText}
+      disabled={disabled}
+      open={edit?.index === index}
+      onOpen={() => openChip(index, chip)}
+      onOpenChange={onOpenChange}
+      onRemove={() => void onRemove(index)}
+      equation={edit?.index === index ? equation : null}
+    />
+  ));
+  if (edit && edit.index === null) {
+    views.push(
+      <ChipView
+        key="new"
+        tag={edit.axis.tag}
+        name={edit.axis.name}
+        valueText={boundsDisplayText(edit.bounds)}
+        disabled={disabled}
+        open
+        onOpen={() => undefined}
+        onOpenChange={onOpenChange}
+        equation={equation}
+      />,
+    );
+  }
+  const leading = views.slice(0, -1);
+  const last = views.at(-1);
+
+  return (
+    <div role="group" aria-label={label} className="flex flex-wrap items-center gap-1">
+      {leading}
+      {/* The last chip and what follows it stay on one line: the + never wraps alone. */}
+      <span className="inline-flex shrink-0 items-center gap-1">
+        {last}
+        {note && <span className="px-0.5 text-ui text-muted">{note}</span>}
+        {!disabled && edit === null && <AddChipButton space={space} onAxis={startChip} />}
+      </span>
+    </div>
+  );
+};
+
+/**
+ * One chip, `wght ≥ 694` (its axis by tag, the name in its tooltip and
+ * label), with × on hover, and the equation popover it opens beside the
+ * sidebar. While the popover is open the chip shows a focus ring.
+ */
+const ChipView = ({
+  tag,
+  name,
+  valueText,
+  disabled,
+  open,
+  onOpen,
+  onOpenChange,
+  onRemove,
+  equation,
+}: {
+  tag: string;
+  name: string;
+  valueText: string;
+  disabled: boolean;
+  open: boolean;
+  onOpen: () => void;
+  onOpenChange: (open: boolean, reason: string) => void;
+  onRemove?: () => void;
+  equation: ReactNode;
+}) => {
+  const panelAnchor = useSidebarPanelAnchor();
+  const description = `${name} ${valueText}`;
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next, details) => {
+        if (next) onOpen();
+        else onOpenChange(false, details.reason);
+      }}
+      modal={false}
+    >
+      <span
+        className={cn(
+          "group/chip inline-flex h-5 items-center gap-1 rounded bg-input pl-1.5 pr-0.5 text-ui text-primary",
+          open && "ring-1 ring-accent",
+        )}
+      >
+        <Tooltip content={description}>
+          <PopoverTrigger
+            ref={panelAnchor.triggerRef}
+            disabled={disabled}
+            aria-label={`Edit ${description}`}
+            render={
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+              />
+            }
+          >
+            {/* As the axis menus set a tag. */}
+            <span className="font-mono text-secondary">{tag}</span>
+            <span>{valueText}</span>
+          </PopoverTrigger>
+        </Tooltip>
+        {!disabled && onRemove && (
+          <Tooltip content="Remove">
+            <button
+              type="button"
+              aria-label={`Remove ${description}`}
+              onClick={onRemove}
+              className="inline-flex h-4 w-4 items-center justify-center rounded-sm text-muted opacity-0 hover:bg-hover hover:text-primary focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent group-hover/chip:opacity-100"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </Tooltip>
+        )}
+      </span>
+      <PopoverPortal>
+        <PopoverPositioner {...panelAnchor.positioner}>
+          <PopoverPopup>
+            <div className="p-2">{equation}</div>
+          </PopoverPopup>
+        </PopoverPositioner>
+      </PopoverPortal>
+    </Popover>
+  );
+};
+
+/**
+ * The equation a chip's popover edits, in its mode: `BLED ≥ [70]`,
+ * `BLED ≤ [80]` or `[40] ≤ BLED ≤ [80]`, each operator a button that
+ * switches the mode; and why it can't be committed, if it can't.
+ */
+const ConditionEquation = ({
+  edit,
+  groups,
+  used,
+  onBounds,
+  onPaste,
+  onMode,
+  onAxis,
+  onCommit,
+}: {
+  edit: ChipEdit;
+  groups: readonly ChipAxisGroup[];
+  /** Axes another chip of the condition is on: the axis menu disables them. */
+  used: readonly AxisId[];
+  onBounds: (side: keyof ChipBounds, text: string) => void;
+  onPaste: (side: keyof ChipBounds, text: string) => void;
+  onMode: (mode: ConditionMode) => void;
+  onAxis: (axis: Axis) => void;
+  onCommit: () => void;
+}) => {
+  const { axis, bounds, mode, problem } = edit;
+  const field = (side: keyof ChipBounds, ariaLabel: string) => (
+    <BoundField
+      key={side}
+      ariaLabel={ariaLabel}
+      text={bounds[side]}
+      invalid={problem !== null}
+      onText={(text) => onBounds(side, text)}
+      onPaste={(text) => onPaste(side, text)}
+      onCommit={onCommit}
+    />
+  );
+  const tag = <AxisButton axis={axis} groups={groups} used={used} onAxis={onAxis} />;
+  const operator = (sign: string) => <OperatorButton sign={sign} mode={mode} onMode={onMode} />;
+
+  let row: ReactNode;
+  switch (mode) {
+    case "atLeast":
+      row = [tag, operator("≥"), field("min", `${axis.name} at least`)];
+      break;
+    case "atMost":
+      row = [tag, operator("≤"), field("max", `${axis.name} at most`)];
+      break;
+    case "between":
+      row = [
+        field("min", `${axis.name} from`),
+        operator("≤"),
+        tag,
+        operator("≤"),
+        field("max", `${axis.name} up to`),
+      ];
+      break;
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-1.5 text-ui text-muted">{Children.toArray(row)}</div>
+      {problem && (
+        <p role="alert" className="max-w-48 text-ui text-error">
+          {problem}
+        </p>
+      )}
+    </div>
+  );
+};
+
+/** The fields a mode shows. */
+function shownSides(mode: ConditionMode): readonly (keyof ChipBounds)[] {
+  switch (mode) {
+    case "atLeast":
+      return ["min"];
+    case "atMost":
+      return ["max"];
+    case "between":
+      return ["min", "max"];
+  }
+}
+
+/** The equation's modes, as the operator's menu lists them. */
+const MODES: readonly {
+  readonly mode: ConditionMode;
+  readonly sign: string;
+  readonly label: string;
+}[] = [
+  { mode: "atLeast", sign: "≥", label: "At least" },
+  { mode: "atMost", sign: "≤", label: "At most" },
+  // An en dash, as a chip writes a range: `BLED 70–100`.
+  { mode: "between", sign: "–", label: "Between" },
+];
+
+/** An operator, `≥` or `≤`: a button whose menu switches the equation's mode. */
+const OperatorButton = ({
+  sign,
+  mode,
+  onMode,
+}: {
+  sign: string;
+  mode: ConditionMode;
+  onMode: (mode: ConditionMode) => void;
+}) => (
+  <Menu modal={false}>
+    <MenuTrigger
+      aria-label={`Operator ${sign}: choose at least, at most or between`}
+      render={
+        // Tab goes from field to field.
+        <button
+          type="button"
+          tabIndex={-1}
+          className="inline-flex h-6 items-center rounded px-1 text-body text-muted hover:bg-hover hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+        />
+      }
+    >
+      {sign}
+    </MenuTrigger>
+    <MenuPortal>
+      <MenuPositioner side="bottom" sideOffset={4} align="start">
+        <MenuPopup>
+          {MODES.map((item) => (
+            <MenuCheckboxItem
+              key={item.mode}
+              checked={item.mode === mode}
+              onCheckedChange={() => onMode(item.mode)}
+            >
+              <span className="flex items-center gap-2">
+                <MenuCheckboxItemIndicator keepMounted className="w-3 data-[unchecked]:invisible">
+                  <Check className="h-3 w-3" strokeWidth={1.75} />
+                </MenuCheckboxItemIndicator>
+                {/* One fixed column, so the labels line up. */}
+                <span aria-hidden className="w-3 text-center">
+                  {item.sign}
+                </span>
+                {item.label}
+              </span>
+            </MenuCheckboxItem>
+          ))}
+        </MenuPopup>
+      </MenuPositioner>
+    </MenuPortal>
+  </Menu>
+);
+
+/**
+ * One end of the equation: rounded while it isn't being typed in, exact
+ * while it is. Enter commits.
+ */
+const BoundField = ({
+  ariaLabel,
+  text,
+  invalid,
+  onText,
+  onPaste,
+  onCommit,
+}: {
+  ariaLabel: string;
+  text: string;
+  invalid: boolean;
+  onText: (text: string) => void;
+  /** Pasted text, read at once: a range in the grammar fills both fields. */
+  onPaste: (text: string) => void;
+  onCommit: () => void;
+}) => {
+  const [focused, setFocused] = useState(false);
+  const number = Number(text);
+  const shown =
+    !focused && text.trim() !== "" && Number.isFinite(number) ? roundedValue(number) : text;
+
+  return (
+    <Input
+      aria-label={ariaLabel}
+      aria-invalid={invalid ? true : undefined}
+      className="w-14 text-right"
+      value={shown}
+      onFocus={(event) => {
+        setFocused(true);
+        event.currentTarget.select();
+      }}
+      onBlur={() => setFocused(false)}
+      onChange={(event) => onText(event.target.value)}
+      onPaste={(event) => {
+        event.preventDefault();
+        onPaste(event.clipboardData.getData("text"));
+      }}
+      onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        onCommit();
+      }}
+    />
+  );
+};
+
+/** The equation's axis, `wght`, a button: a menu of the axes the condition may move to. */
+const AxisButton = ({
+  axis,
+  groups,
+  used,
+  onAxis,
+}: {
+  axis: Axis;
+  groups: readonly ChipAxisGroup[];
+  used: readonly AxisId[];
+  onAxis: (axis: Axis) => void;
+}) => (
+  <Menu modal={false}>
+    <Tooltip content={`${axis.name}: choose another axis`}>
+      <MenuTrigger
+        aria-label={`Axis, ${axis.name}`}
+        render={
+          // Tab goes from the minimum straight to the maximum.
+          <button
+            type="button"
+            tabIndex={-1}
+            className="inline-flex h-6 items-center gap-0.5 rounded px-1 text-primary hover:bg-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+          />
+        }
+      >
+        <span className="font-mono">{axis.tag}</span>
+      </MenuTrigger>
+    </Tooltip>
+    <MenuPortal>
+      <MenuPositioner side="bottom" sideOffset={4} align="start">
+        <MenuPopup>
+          <AxisMenuItems groups={groups} used={used} onAxis={onAxis} />
+        </MenuPopup>
+      </MenuPositioner>
+    </MenuPortal>
+  </Menu>
+);
+
+/** The + after the chips: one axis starts a chip on it, several open a menu of them beside the sidebar. */
+const AddChipButton = ({
+  space,
+  onAxis,
+}: {
+  space: ConditionChipSpace;
+  onAxis: (axis: Axis) => void;
+}) => {
+  const groups = space.axisGroups;
+  const axes = groups.flatMap((group) => group.axes);
+  const [only] = axes;
+  if (!only) return null;
+
+  if (axes.length === 1) {
+    return (
+      <Tooltip content="Add a condition">
+        <SidebarActionButton label="Add a condition" onClick={() => onAxis(only)}>
+          <PlusIcon className="h-3 w-3" />
+        </SidebarActionButton>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <Menu modal={false}>
+      <Tooltip content="Add a condition">
+        <MenuTrigger
+          render={
+            <SidebarActionButton label="Add a condition">
+              <PlusIcon className="h-3 w-3" />
+            </SidebarActionButton>
+          }
+        />
+      </Tooltip>
+      <MenuPortal>
+        <MenuPositioner side="right" sideOffset={4} align="start">
+          <MenuPopup>
+            <AxisMenuItems groups={groups} used={[]} onAxis={onAxis} />
+          </MenuPopup>
+        </MenuPositioner>
+      </MenuPortal>
+    </Menu>
+  );
+};
+
+/** The axes, under "Font axes" / "Glyph axes" headings once there are both. */
+const AxisMenuItems = ({
+  groups,
+  used,
+  onAxis,
+}: {
+  groups: readonly ChipAxisGroup[];
+  used: readonly AxisId[];
+  onAxis: (axis: Axis) => void;
+}) => {
+  if (groups.length === 1) {
+    return <AxisItems axes={groups[0]!.axes} used={used} onAxis={onAxis} />;
+  }
+
+  return groups.map((group) => (
+    <MenuGroup key={group.label}>
+      <MenuGroupLabel>{group.label}</MenuGroupLabel>
+      <AxisItems axes={group.axes} used={used} onAxis={onAxis} />
+    </MenuGroup>
+  ));
+};
+
+/** One menu item per axis, as Font axes' + menu lists them: the name, then the tag in mono. */
+const AxisItems = ({
+  axes,
+  used,
+  onAxis,
+}: {
+  axes: readonly Axis[];
+  used: readonly AxisId[];
+  onAxis: (axis: Axis) => void;
+}) =>
+  axes.map((axis) => (
+    <MenuItem
+      key={axis.id}
+      disabled={used.includes(axis.id)}
+      className="grid grid-cols-[minmax(0,1fr)_auto] gap-6"
+      onClick={() => onAxis(axis)}
+    >
+      <span className="truncate">{axis.name}</span>
+      <span className="font-mono text-secondary">{axis.tag}</span>
+    </MenuItem>
+  ));

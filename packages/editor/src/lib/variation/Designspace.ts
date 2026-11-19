@@ -3,6 +3,8 @@ import type {
   AxisMappingBasis,
   Axis as AxisRecord,
   ComponentInheritance,
+  Condition,
+  GlyphId,
   InterpolationBasis,
   LayerId,
   Source,
@@ -156,6 +158,32 @@ export class Designspace {
   ): ExternalAxisLocation {
     if (this.axes.length === 0 && set.size === 0) return emptyExternalAxisLocation();
     return this.#mapping().componentBaseLocation(parent, set, inheritance);
+  }
+
+  /**
+   * The glyph drawn for `glyphId` where the font is drawn at `location`, as
+   * the engine decides it (`Font::drawn_glyph_at`): its first swap
+   * that holds there, else itself.
+   *
+   * @throws When the font has axes and its engine is not open.
+   */
+  drawnGlyph(glyphId: GlyphId, location: ExternalAxisLocation): GlyphId {
+    if (this.axes.length === 0) return glyphId;
+    return this.#mapping().drawnGlyph(glyphId, location);
+  }
+
+  /**
+   * Whether a component with `condition`, placed in the glyph `parent`,
+   * draws where `parent` is drawn at `location`, as the engine decides it
+   * (`Font::component_condition_holds`, skrifa's rule): the font's axes in
+   * user units and `parent`'s own axes; the component's own location does
+   * not apply. An empty condition always holds.
+   *
+   * @throws When the condition reads an axis and the engine is not open.
+   */
+  componentDraws(parent: GlyphId, condition: Condition, location: ExternalAxisLocation): boolean {
+    if (condition.all.length === 0) return true;
+    return this.#mapping().componentDraws(parent, condition, location);
   }
 
   /**

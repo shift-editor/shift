@@ -516,6 +516,13 @@ pub struct NapiComponentData {
   /// glyph it sits in (`parent`) or the font's default location (`font`).
   #[napi(ts_type = "\"parent\" | \"font\"")]
   pub inheritance: String,
+  /// Where the component draws, read where the glyph it sits in is drawn;
+  /// no ranges where it always draws. Carried as its serde form,
+  /// `{ all: [{ axisId, min, max }] }`: the shape the pack protocol gives
+  /// TypeScript, so a snapshot from the native workspace and a layer from the
+  /// window's engine read alike, with no napi type mirroring the condition's.
+  #[napi(ts_type = "{ all: Array<{ axisId: AxisId; min?: number | null; max?: number | null }> }")]
+  pub condition: serde_json::Value,
 }
 
 impl From<ComponentData> for NapiComponentData {
@@ -527,6 +534,7 @@ impl From<ComponentData> for NapiComponentData {
       alignment,
       location_axes,
       inheritance,
+      condition,
     } = component;
     Self {
       id,
@@ -535,6 +543,7 @@ impl From<ComponentData> for NapiComponentData {
       alignment: alignment_name(alignment).to_string(),
       location_axes: location_axes.iter().map(ToString::to_string).collect(),
       inheritance: inheritance_name(inheritance).to_string(),
+      condition: serde_json::to_value(&condition).unwrap_or_default(),
     }
   }
 }
@@ -582,6 +591,8 @@ impl From<NapiComponentData> for ComponentData {
         .map(AxisId::from_raw)
         .collect(),
       inheritance: values::parse_inheritance(&component.inheritance),
+      // A condition TypeScript can't have written reads as always holding.
+      condition: serde_json::from_value(component.condition).unwrap_or_default(),
     }
   }
 }

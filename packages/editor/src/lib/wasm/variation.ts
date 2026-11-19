@@ -3,6 +3,8 @@ import type {
   AxisId,
   AxisMappingBasis,
   ComponentInheritance,
+  Condition,
+  GlyphId,
   InterpolationBasis,
   LayerId,
   SlugWeightSet,
@@ -130,6 +132,30 @@ export class FontVariation {
       inheritance,
     );
     return externalAxisLocationFromLocation(base);
+  }
+
+  /**
+   * The glyph drawn for `glyphId` where the font is drawn at `location`:
+   * its first swap that holds there, else itself. Only the font's
+   * axes are read.
+   */
+  drawnGlyph(glyphId: GlyphId, location: ExternalAxisLocation): GlyphId {
+    const axes = this.#axesCell.peek();
+    const design = this.#variation.designLocation(locationValues(axes, location));
+    return this.#variation.drawnGlyph(glyphId, design);
+  }
+
+  /**
+   * Whether a component with `condition`, placed in `parent`, draws where
+   * `parent` is drawn at `location`: the font's axes in user units, and
+   * `parent`'s own axes in theirs.
+   */
+  componentDraws(parent: GlyphId, condition: Condition, location: ExternalAxisLocation): boolean {
+    const axes = this.#axesCell.peek();
+    const own = location.entries().filter(([axisId]) => !axes.some((axis) => axis.id === axisId));
+    return this.#variation.componentDraws(parent, condition, locationValues(axes, location), {
+      values: Object.fromEntries(own),
+    });
   }
 
   /**

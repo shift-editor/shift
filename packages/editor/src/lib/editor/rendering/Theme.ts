@@ -60,6 +60,8 @@ export interface EditorRenderTheme {
     fill: string;
     widthPx: number;
     hoverOutline: { stroke: string; widthPx: number };
+    /** A component whose condition fails where the glyph is drawn: a faint outline, unfilled. */
+    hidden: { stroke: string; widthPx: number };
   };
   controlLine: { color: string; widthPx: number };
   /** Neutral circular halo behind idle and hovered on-curve points resting exactly on a metric line. */
@@ -144,6 +146,7 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     fill: "rgba(231, 231, 231, 0.75)",
     widthPx: 1,
     hoverOutline: { stroke: "#1886D7", widthPx: 1.5 },
+    hidden: { stroke: "rgba(0, 0, 0, 0.22)", widthPx: 1 },
   },
   controlLine: { color: "rgba(136, 136, 136, 0.65)", widthPx: 0.75 },
   metricMarker: {

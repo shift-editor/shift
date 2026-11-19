@@ -70,6 +70,7 @@ describe("glyph structure equality preserves every ordered metadata field", () =
           alignment: "unset",
           locationAxes: [],
           inheritance: "parent",
+          condition: { all: [] },
         },
       ],
     };

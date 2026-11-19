@@ -100,6 +100,7 @@ fn restore_components(layer: &mut GlyphLayer, components: &[ComponentData]) -> C
         );
         component.set_alignment(component_data.alignment);
         component.set_inheritance(component_data.inheritance);
+        component.set_condition(component_data.condition.clone());
         // Placeholders: the layer's values set them.
         component.set_location(
             component_data

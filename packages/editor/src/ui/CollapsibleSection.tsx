@@ -16,6 +16,8 @@ export interface CollapsibleSectionProps {
   onOpenChange?: (open: boolean) => void;
   isActive?: boolean;
   className?: string;
+  /** Classes for the panel under the header, such as `pt-0` to drop the space above its first row. */
+  panelClassName?: string;
   actions?: ReactNode;
   children: ReactNode;
 }
@@ -27,6 +29,7 @@ export const CollapsibleSection = ({
   onOpenChange,
   isActive,
   className,
+  panelClassName,
   actions,
   children,
 }: CollapsibleSectionProps) => (
@@ -50,6 +53,8 @@ export const CollapsibleSection = ({
       </CollapsibleTrigger>
       {actions && <SidebarActionSlot isVisible={isActive}>{actions}</SidebarActionSlot>}
     </div>
-    {children && <CollapsiblePanel className="pt-2">{children}</CollapsiblePanel>}
+    {children && (
+      <CollapsiblePanel className={cn("pt-2", panelClassName)}>{children}</CollapsiblePanel>
+    )}
   </Collapsible>
 );

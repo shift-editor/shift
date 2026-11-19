@@ -6,7 +6,7 @@ import { TextBuffer } from "../text/TextBuffer";
 import type { LocalBounds, LocalPoint } from "../../types/coordinates";
 import { localBounds } from "../editor/spaces";
 import type { GlyphNode, ShiftNode, TextRunNode } from "../../types/node";
-import type { TextItem } from "../text/layout/types";
+import { glyphIdForItem, type ParagraphItem, type TextItem } from "../text/layout/types";
 import type { NodeReference } from "../../types/records";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
@@ -65,7 +65,8 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     track(layoutCell);
     const layout = layoutCell.peek();
     const placed =
-      layout?.placedGlyph(child.itemId, child.glyphId) ?? layout?.placedGlyphForItem(child.itemId);
+      layout?.placedGlyph(child.itemId, this.editor.drawnGlyphId(child)) ??
+      layout?.placedGlyphForItem(child.itemId);
     if (!placed) return null;
 
     return {
@@ -115,6 +116,20 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     return true;
   }
 
+  /**
+   * The glyph editing `item` opens while it shows `shown`: the item's own
+   * glyph when `shown` is one of its swaps, so the canvas follows it
+   * into and out of its swaps' regions; else `shown`, such as a
+   * ligature or a glyph a feature substitutes.
+   */
+  #openedGlyph(item: ParagraphItem, shown: GlyphId): GlyphId {
+    const own = glyphIdForItem(item, this.editor.font);
+    if (!own || own === shown) return shown;
+
+    const swaps = this.editor.font.swapsOf(own);
+    return swaps.some((swap) => swap.glyph === shown) ? own : shown;
+  }
+
   /** Deletes the child glyph when its item is no longer in the run. */
   override onContentChange(node: TextRunNode): void {
     const child = this.childGlyph(node);
@@ -146,7 +161,8 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       ?.items.find((candidate) => candidate.id === itemId);
     if (!item || item.kind === "linebreak") return null;
 
-    const editedGlyphId = glyphId ?? this.editor.text.glyphIdForItem(itemId);
+    const shown = glyphId ?? this.editor.text.glyphIdForItem(itemId);
+    const editedGlyphId = shown && this.#openedGlyph(item, shown);
     const current = this.childGlyph(node);
     if (current?.itemId === itemId && current.glyphId === editedGlyphId) return current;
     if (!editedGlyphId || !this.editor.glyphForId(editedGlyphId)) return null;
@@ -592,7 +608,8 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   #editedChildGlyph(node: TextRunNode, layout: TextLayout): PlacedGlyph | null {
     const child = this.childGlyph(node);
     if (!child?.itemId || !this.editor.editing.has(child.id)) return null;
-    return layout.placedGlyph(child.itemId, child.glyphId);
+    // The layout places the glyph drawn here: the child's swap inside its region.
+    return layout.placedGlyph(child.itemId, this.editor.drawnGlyphId(child));
   }
 
   #model(glyphId: GlyphId): GlyphRenderModel | null {

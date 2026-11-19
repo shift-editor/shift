@@ -55,6 +55,7 @@ impl GlyphSwap {
 
 /// A swap no location in the font's axes draws.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct NeverUsedSwap {
     pub swap_id: SwapId,
     pub reason: NeverUsedReason,
@@ -62,6 +63,7 @@ pub struct NeverUsedSwap {
 
 /// Why a swap is never used.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub enum NeverUsedReason {
     /// Its condition holds nowhere within the axes' ranges.
     OutsideAxes,

@@ -137,7 +137,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
    */
   override selectableInRect(node: GlyphNode, rect: LocalBounds): SelectableId[] {
     if (node.itemId !== undefined && !this.#isEditing(node)) return [];
-    const glyph = this.editor.glyphForId(node.glyphId);
+    const glyph = this.editor.glyphForId(this.editor.drawnGlyphId(node));
     if (!glyph) return [];
 
     const geometry = glyph.geometryAt(this.editor.editLocation);
@@ -174,7 +174,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
           return {
             ...hit,
             nodeId: node.id,
-            glyphId: node.glyphId,
+            glyphId: this.editor.drawnGlyphId(node),
             point,
             segmentId: hit.id,
             pointIds: segment.pointIds,
@@ -185,7 +185,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
           return {
             ...hit,
             nodeId: node.id,
-            glyphId: node.glyphId,
+            glyphId: this.editor.drawnGlyphId(node),
             point,
             pointId: hit.id,
           };
@@ -194,7 +194,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
           return {
             ...hit,
             nodeId: node.id,
-            glyphId: node.glyphId,
+            glyphId: this.editor.drawnGlyphId(node),
             point,
             anchorId: hit.id,
           };
@@ -217,7 +217,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
         componentId,
         componentPath: component.componentPath,
         nodeId: node.id,
-        glyphId: node.glyphId,
+        glyphId: this.editor.drawnGlyphId(node),
         point,
       };
     }
@@ -239,7 +239,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
           componentId,
           componentPath: fillHit.componentPath,
           nodeId: node.id,
-          glyphId: node.glyphId,
+          glyphId: this.editor.drawnGlyphId(node),
           point,
         };
       }
@@ -300,7 +300,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   #view(node: GlyphNode): GlyphRenderModel | null {
     return (
       this.editor
-        .glyphForId(node.glyphId)
+        .glyphForId(this.editor.drawnGlyphId(node))
         ?.renderModelAt(this.editor.editLocationCell, this.editor.activeSourceIdCell) ?? null
     );
   }
@@ -333,7 +333,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
   /** Advance the metric lines are drawn across, subscribed for redraw; null for an unknown glyph. */
   #displayAdvance(node: GlyphNode, view: GlyphRenderModel): number | null {
-    const glyph = this.editor.glyphForId(node.glyphId);
+    const glyph = this.editor.glyphForId(this.editor.drawnGlyphId(node));
     if (!glyph) return null;
 
     track(view.xAdvanceCell);
@@ -398,7 +398,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     const targets = this.visibleOutlines(node.id);
     if (targets.length === 0) return;
 
-    const glyph = this.editor.glyphForId(node.glyphId);
+    const glyph = this.editor.glyphForId(this.editor.drawnGlyphId(node));
     if (!glyph) return;
 
     for (const target of targets) {
@@ -442,6 +442,9 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
     track(view.componentsCell);
     for (const component of view.components) {
+      track(component.drawsCell);
+      if (!component.draws) continue;
+
       track(component.closedContoursPathCell);
       ctx.canvas.fillPath(component.closedContoursPath, ctx.canvas.theme.component.fill);
     }
@@ -465,12 +468,12 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     );
 
     for (const component of view.components) {
+      // A component whose condition fails here stays selectable, drawn as a ghost.
+      const { stroke, widthPx } = component.draws
+        ? { stroke: ctx.canvas.theme.glyph.stroke, widthPx: ctx.canvas.theme.component.widthPx }
+        : ctx.canvas.theme.component.hidden;
       for (const contour of component.contours) {
-        ctx.canvas.strokePath(
-          contour.fillPath,
-          ctx.canvas.theme.glyph.stroke,
-          ctx.canvas.theme.component.widthPx,
-        );
+        ctx.canvas.strokePath(contour.fillPath, stroke, widthPx);
       }
     }
 

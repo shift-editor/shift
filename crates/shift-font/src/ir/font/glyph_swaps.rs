@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use crate::Require;
 use crate::axis::{AxisList, DesignLocation};
 use crate::component::Component;
+use crate::condition::Condition;
 use crate::contour::Contour;
 use crate::entity::LayerId;
 use crate::entity::{GlyphId, SwapId};
@@ -150,6 +151,29 @@ impl Font {
             }),
             None => Ok(()),
         }
+    }
+
+    /// Whether a component with `condition`, placed in the glyph `parent`,
+    /// draws where `parent` is drawn at `location`: the font axes after
+    /// `parent`'s own inheritance, in design units, and `parent`'s own axes;
+    /// an axis `location` doesn't name is at its default. The component's
+    /// own location doesn't apply yet (skrifa's rule; see
+    /// `FontProjection::draws`). An empty condition always holds; a parent
+    /// the font lacks reads font axes only.
+    pub fn component_condition_holds(
+        &self,
+        parent: GlyphId,
+        condition: &Condition,
+        location: &DesignLocation,
+    ) -> bool {
+        if condition.is_always() {
+            return true;
+        }
+        let axes = match self.glyph(parent) {
+            Some(parent) => self.glyph_space_axes(parent),
+            None => self.axes().to_vec(),
+        };
+        condition.holds_at(location, &axes)
     }
 
     /// Checks the condition of every component in `layer`, a layer of

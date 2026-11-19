@@ -4,6 +4,7 @@ import {
   type ComponentData,
   type ComponentId,
   type ComponentTransformKind,
+  type Condition,
   type GlyphId,
   type GlyphName,
   type GlyphStructure,
@@ -99,6 +100,15 @@ export class Component {
    */
   get inheritance(): ComponentData["inheritance"] {
     return this.#data.inheritance;
+  }
+
+  /**
+   * Where the component draws, read where the glyph it sits in is drawn
+   * (font axes and that glyph's own, in design units), the same in every
+   * drawing; no ranges where it always draws.
+   */
+  get condition(): Condition {
+    return this.#data.condition;
   }
 
   get transform(): DecomposedTransform {

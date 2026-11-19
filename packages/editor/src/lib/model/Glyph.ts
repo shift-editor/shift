@@ -1675,6 +1675,13 @@ export class GlyphRenderModel {
     parent: ExternalAxisLocation,
     component: Component,
   ) => ExternalAxisLocation;
+  readonly #componentDraws: (
+    parentGlyphId: GlyphId,
+    component: Component,
+    parent: ExternalAxisLocation,
+  ) => boolean;
+  /** The contours drawn: the root's and those of each component occurrence that draws. */
+  readonly #drawnContoursCell: Signal<readonly GlyphContour[]>;
 
   /**
    * Creates a Glyph render model tied to a live external location and optional exact source.
@@ -1694,6 +1701,8 @@ export class GlyphRenderModel {
    * @param baseLocation - Where a component draws its base glyph when the
    * glyph it sits in is drawn at `parent`; `parent` itself when the
    * component sets no axis and follows its glyph.
+   * @param componentDraws - Whether a component of `parentGlyphId` draws
+   * where that glyph is drawn at `parent`: its condition holds there.
    */
   constructor(
     glyphId: GlyphId,
@@ -1716,9 +1725,15 @@ export class GlyphRenderModel {
     anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory,
     decompositionWeightsAt: (location: ExternalAxisLocation) => readonly WeightedSource[] | null,
     baseLocation: (parent: ExternalAxisLocation, component: Component) => ExternalAxisLocation,
+    componentDraws: (
+      parentGlyphId: GlyphId,
+      component: Component,
+      parent: ExternalAxisLocation,
+    ) => boolean,
   ) {
     this.#glyphId = glyphId;
     this.#baseLocation = baseLocation;
+    this.#componentDraws = componentDraws;
     this.#anchorCategory = anchorCategory;
     this.#propagatedCache = keyedCache<GlyphId, GlyphId, ComputedSignal<PropagatedAnchors>>({
       name: "glyph.renderModel.propagatedAnchors",
@@ -1789,15 +1804,21 @@ export class GlyphRenderModel {
       ...this.#rootContoursCell.value,
       ...this.#componentsCell.value.flatMap((component) => component.contoursCell.value),
     ]);
+    this.#drawnContoursCell = computed(() => [
+      ...this.#rootContoursCell.value,
+      ...this.#componentsCell.value.flatMap((component) =>
+        component.drawsCell.value ? component.contoursCell.value : [],
+      ),
+    ]);
     this.#boundsCell = computed(() => {
-      const contours = this.#contoursCell.value;
+      const contours = this.#drawnContoursCell.value;
       for (const contour of contours) contour.trackShape();
 
       return Bounds.unionAll(contours.map((contour) => contour.bounds));
     });
     this.#drawPathCell = computed(() => {
       const path = new Path2D();
-      for (const contour of this.#contoursCell.value) {
+      for (const contour of this.#drawnContoursCell.value) {
         contour.trackShape();
         path.addPath(contour.path);
       }
@@ -1805,7 +1826,7 @@ export class GlyphRenderModel {
     });
     this.#outlinePathCell = computed(() => {
       const path = new Path2D();
-      for (const contour of this.#contoursCell.value) {
+      for (const contour of this.#drawnContoursCell.value) {
         contour.trackShape();
         path.addPath(contour.fillPath);
       }
@@ -1813,7 +1834,7 @@ export class GlyphRenderModel {
     });
     this.#openCornerContoursPathCell = computed(() => {
       const path = new Path2D();
-      for (const contour of this.#contoursCell.value) {
+      for (const contour of this.#drawnContoursCell.value) {
         contour.trackShape();
         if (contour.hasOpenCorners) path.addPath(contour.path);
       }
@@ -1829,7 +1850,7 @@ export class GlyphRenderModel {
     });
     this.#closedContoursPathCell = computed(() => {
       const path = new Path2D();
-      for (const contour of this.#contoursCell.value) {
+      for (const contour of this.#drawnContoursCell.value) {
         contour.trackShape();
         if (contour.contour.closed) path.addPath(contour.fillPath);
       }
@@ -1837,14 +1858,14 @@ export class GlyphRenderModel {
     });
     this.#openContoursPathCell = computed(() => {
       const path = new Path2D();
-      for (const contour of this.#contoursCell.value) {
+      for (const contour of this.#drawnContoursCell.value) {
         contour.trackShape();
         if (!contour.contour.closed) path.addPath(contour.path);
       }
       return path;
     });
     this.#hasOpenContoursCell = computed(() => {
-      for (const contour of this.#contoursCell.value) {
+      for (const contour of this.#drawnContoursCell.value) {
         // Closedness lives in the contour's shape data, as for `#openContoursPathCell`.
         // Contours after the first open one cannot change the answer, so they go untracked.
         contour.trackShape();
@@ -1853,7 +1874,7 @@ export class GlyphRenderModel {
       return false;
     });
     this.#svgPathCell = computed(() => {
-      const contours = this.#contoursCell.value;
+      const contours = this.#drawnContoursCell.value;
       for (const contour of contours) contour.trackShape();
 
       return contours.map((contour) => contour.svgPath).join(" ");
@@ -2078,6 +2099,18 @@ export class GlyphRenderModel {
     return this.#baseLocation(parent, component);
   }
 
+  /**
+   * @internal Whether `component`, placed in `parentGlyphId`, draws where
+   * that glyph is drawn at `parent`: its condition holds there.
+   */
+  componentDraws(
+    parentGlyphId: GlyphId,
+    component: Component,
+    parent: ExternalAxisLocation,
+  ): boolean {
+    return this.#componentDraws(parentGlyphId, component, parent);
+  }
+
   /** @internal Resolves a root or component glyph's geometry as one master draws it. */
   geometryForSource(glyphId: GlyphId, sourceId: SourceId): GlyphGeometry {
     return this.#geometryAt(glyphId, this.#externalLocation.peek(), sourceId);
@@ -2240,6 +2273,11 @@ export class GlyphRenderModel {
 
   get rootContoursCell(): Signal<readonly GlyphContour[]> {
     return this.#rootContoursCell;
+  }
+
+  /** The root glyph this model draws. */
+  get glyphId(): GlyphId {
+    return this.#glyphId;
   }
 
   get components(): readonly ComponentGlyph[] {
@@ -3011,6 +3049,8 @@ export class Glyph {
       this.#anchorCategory,
       (location) => this.#decompositionWeightsAt(location),
       (parent, component) => this.#baseLocation(parent, component),
+      (parentGlyphId, component, parent) =>
+        this.#designspace.componentDraws(parentGlyphId, component.condition, parent),
     );
     renderModels.set(activeSourceIdCell, renderModel);
     return renderModel;

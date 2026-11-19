@@ -183,12 +183,14 @@ export class Designspace {
     axis(axisId: AxisId): Axis | null;
     axisTagged(tag: string): Axis | null;
     componentBaseLocation(parent: ExternalAxisLocation, set: ReadonlyMap<AxisId, number>, inheritance: ComponentInheritance): ExternalAxisLocation;
+    componentDraws(parent: GlyphId, condition: Condition, location: ExternalAxisLocation): boolean;
     coordinates(location: ExternalAxisLocation | DesignAxisLocation): {
         axisId: AxisId;
         value: number;
     }[];
     defaultLocation(): ExternalAxisLocation;
     drawingLocation(layerId: LayerId): DesignAxisLocation | null;
+    drawnGlyph(glyphId: GlyphId, location: ExternalAxisLocation): GlyphId;
     glyphWeights(basis: InterpolationBasis, location: DesignAxisLocation): Float64Array | null;
     interpolationWeights(basis: InterpolationBasis, location: DesignAxisLocation): Float64Array | null;
     location(coordinates: readonly {
@@ -267,9 +269,11 @@ export class Editor {
     detachRenderSurfaces(): void;
     doubleClickNode(target: PointerTarget): boolean;
     get draggingCell(): Signal<boolean>;
+    drawnGlyphId(node: GlyphNode): GlyphId;
     // (undocumented)
     duplicateSelection(): PointId[];
     editableLayer(node: GlyphNode): GlyphLayer | null;
+    get editedGlyphCell(): Signal<EditedGlyph | null>;
     // (undocumented)
     readonly editing: Editing;
     // (undocumented)
@@ -405,6 +409,7 @@ export class Editor {
     setRightSidebearing(value: number): void;
     setSelectedComponentsAnchored(anchored: boolean): Promise<boolean>;
     setSelectedComponentsAxis(axisId: AxisId, value: number | null): Promise<boolean>;
+    setSelectedComponentsCondition(condition: (current: Condition) => Condition): Promise<boolean>;
     setSelectedComponentsInheritance(inheritance: ComponentInheritance): Promise<boolean>;
     setSourceToDefault(): void;
     // (undocumented)
@@ -578,6 +583,7 @@ export function externalAxisLocationFromRecord(values: Readonly<Record<string, n
 // @beta
 export class Font {
     constructor(input: FontOptions);
+    addGlyphSwap(glyphId: GlyphId, swapGlyphId: GlyphId, condition: Condition, position?: number | null): Promise<SwapId>;
     assignKerningGroup(position: KerningPairPosition, glyphIds: readonly GlyphId[], groupId: KerningGroupId | null): Promise<void>;
     get axesCell(): Signal<readonly Axis[]>;
     axis(axisId: AxisId): Axis | null;
@@ -587,6 +593,8 @@ export class Font {
     cloneGlyphLayer(glyphId: GlyphId, sourceId: SourceId, fromLayerId: LayerId): LayerId;
     get committedRevisionCell(): Signal<number>;
     componentBaseNamesForName(name: GlyphName): readonly GlyphName[];
+    conditionValue(glyphId: GlyphId | null, axisId: AxisId, text: string): ConditionValue;
+    conditionValueText(glyphId: GlyphId | null, range: ConditionRange$1): string;
     contourIdForPoint(pointId: PointId): ContourId | null;
     contourIdForSegment(segmentId: SegmentId): ContourId | null;
     counterparts(reference: LayerId, target: LayerId, ids: Counterparts): Counterparts | null;
@@ -620,9 +628,11 @@ export class Font {
     get designspace(): Designspace;
     // (undocumented)
     dispose(): void;
+    drawnGlyphAt(glyphId: GlyphId, location: ExternalAxisLocation): GlyphId;
     duplicateGlyphs(glyphIds: readonly GlyphId[]): GlyphId[];
     get editCoordinator(): WorkspaceEditCoordinator;
     editGlyphAxis(axisId: AxisId, edit: GlyphAxisEdit): Promise<void>;
+    editGlyphSwap(swapId: SwapId, edit: GlyphSwapEdit): Promise<void>;
     entryForId(glyphId: GlyphId): GlyphEntry | null;
     entryForName(name: GlyphName): GlyphEntry | null;
     entryForUnicode(unicode: Unicode): GlyphEntry | null;
@@ -695,6 +705,7 @@ export class Font {
     nameForUnicode(unicode: Unicode): GlyphName;
     // (undocumented)
     nearestSource(location: ExternalAxisLocation): Source | null;
+    neverUsedSwaps(glyphId: GlyphId): readonly NeverUsedSwap[];
     newAnchorName(layerIds: readonly LayerId[]): string;
     nextAvailableGlyphName(name: GlyphName): GlyphName;
     pointIdsForSegment(segmentId: SegmentId): readonly PointId[] | null;
@@ -709,6 +720,8 @@ export class Font {
     renameKerningGroup(groupId: KerningGroupId, name: string): Promise<void>;
     resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]>;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
+    setComponentConditions(conditions: readonly SetComponentCondition[]): Promise<void>;
+    setGlyphSwaps(glyphId: GlyphId, swaps: readonly GlyphSwap[], label: string): Promise<void>;
     setGrid(grid: Grid$1 | null): void;
     setIndependentAxisMapping(axis: Axis$1, mapping: AxisMapping): Promise<void>;
     setKerningException(sourceId: SourceId, first: GlyphId, second: GlyphId, position: KerningPairPosition, exception: boolean): boolean;
@@ -726,6 +739,7 @@ export class Font {
     sourceNamed(name: string): Source | null;
     get sources(): readonly Source[];
     get sourcesCell(): Signal<readonly Source[]>;
+    swapsOf(glyphId: GlyphId): readonly GlyphSwap[];
     // (undocumented)
     get unicodes(): readonly Unicode[];
     get unicodesCell(): Signal<Unicode[]>;
@@ -934,6 +948,7 @@ export interface GlyphRecord {
     // (undocumented)
     readonly name: GlyphName;
     readonly nonspacingMark: boolean;
+    readonly swaps: readonly GlyphSwap[];
     // (undocumented)
     readonly unicodes: readonly number[];
 }

@@ -22,7 +22,10 @@ use crate::error::{CoreError, CoreResult};
 /// side leaves the range open there.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
+#[serde(rename_all = "camelCase")]
 pub struct ConditionRange {
+    // Read under its earlier snake_case name too, as it was first written.
+    #[serde(alias = "axis_id")]
     pub axis_id: AxisId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min: Option<f64>,
@@ -69,7 +72,10 @@ impl ConditionRange {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Condition {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    // Written even when empty, so every reader of the serialized form, the
+    // editor's included, finds the list; a container that leaves out a
+    // condition that always holds skips the whole field.
+    #[serde(default)]
     all: Vec<ConditionRange>,
 }
 

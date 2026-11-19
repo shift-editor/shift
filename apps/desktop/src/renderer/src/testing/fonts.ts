@@ -42,7 +42,9 @@ export const FONT_FILES = {
   /**
    * A Bleed axis (0–100, source Bled at 100); `dot` with its own Spread and Strike
    * axes, drawn at Regular, Bled, Spread 100 and Strike 100; `H` of two `dot`s, the
-   * first at Spread 60, with a drawing at Bleed 50. Built by `generate_solenoid.sh`.
+   * first at Spread 60, with a drawing at Bleed 50; `dollar`, drawn as `dollar.bled` from
+   * Bleed 70 (then `dollar.heavy` from 80, never used); `colon` of three `dot`s, the second
+   * and third drawn up to Bleed 50. Built by `generate_solenoid.sh`.
    */
   solenoid: "Solenoid.shift",
 } as const;

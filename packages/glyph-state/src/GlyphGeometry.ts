@@ -19,6 +19,7 @@ import { IdIndex } from "./IdIndex";
 import type { Segment, SegmentHit } from "./Segment";
 import { Point } from "./Point";
 import type { PointHit } from "./Point";
+import { sameCondition } from "./condition";
 
 export interface GlyphSidebearings {
   readonly lsb: number | null;
@@ -157,7 +158,8 @@ export class GlyphGeometry {
         component.baseGlyphName !== other.baseGlyphName ||
         (component.alignment ?? "unset") !== (other.alignment ?? "unset") ||
         component.inheritance !== other.inheritance ||
-        !sameAxes(component.locationAxes, other.locationAxes)
+        !sameAxes(component.locationAxes, other.locationAxes) ||
+        !sameCondition(component.condition, other.condition)
       )
         return false;
     }
