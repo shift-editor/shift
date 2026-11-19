@@ -120,7 +120,9 @@ export const ConditionChips = ({
   const problem = draft === null ? null : draft.problem;
   const draftField = draft && (
     <ChipFrame key="draft">
-      <span className="text-muted">{draft.axis.name}</span>
+      <span className="font-mono text-muted" title={draft.axis.name}>
+        {draft.axis.tag}
+      </span>
       <Input
         aria-label={`${draft.axis.name} condition`}
         aria-invalid={draft.problem ? true : undefined}
@@ -191,16 +193,19 @@ const ChipView = ({
   onRemove: () => void;
 }) => (
   <ChipFrame>
-    <button
-      type="button"
-      disabled={disabled}
-      aria-label={`Edit ${chip.axis.name} ${chip.displayText}`}
-      onClick={onEdit}
-      className="inline-flex items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-    >
-      <span className="text-muted">{chip.axis.name}</span>
-      <span>{chip.displayText}</span>
-    </button>
+    {/* The axis by its tag, `wght ≥ 694`; its name in the tooltip and label. */}
+    <Tooltip content={`${chip.axis.name} ${chip.displayText}`}>
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label={`Edit ${chip.axis.name} ${chip.displayText}`}
+        onClick={onEdit}
+        className="inline-flex items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+      >
+        <span className="font-mono text-muted">{chip.axis.tag}</span>
+        <span>{chip.displayText}</span>
+      </button>
+    </Tooltip>
     {!disabled && (
       <Tooltip content="Remove">
         <button
@@ -270,10 +275,13 @@ const AddChipButton = ({
   );
 };
 
-/** One menu item per axis. */
+/** One menu item per axis: its name, its tag beside it. */
 const AxisItems = ({ axes, onAxis }: { axes: readonly Axis[]; onAxis: (axis: Axis) => void }) =>
   axes.map((axis) => (
     <MenuItem key={axis.id} onClick={() => onAxis(axis)}>
-      {axis.name}
+      <span className="flex w-full justify-between gap-6">
+        <span>{axis.name}</span>
+        <span className="font-mono text-muted">{axis.tag}</span>
+      </span>
     </MenuItem>
   ));

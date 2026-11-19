@@ -32,7 +32,7 @@ import { NewAlternatePanel } from "./NewAlternatePanel";
  * a glyph is edited: the glyphs drawn in its place where their conditions
  * hold, tried in order, the first match winning. Each is a small tree
  * node: the alternate glyph's name, with its condition's chips on
- * a rail under it; a dot on the section's rail marks the one the canvas draws
+ * a rail under it; a dot under the header's + marks the one the canvas draws
  * here, and one an earlier alternate always beats is greyed with a note.
  * Nodes reorder by dragging the name; right-clicking one opens or deletes it.
  * **+** picks a glyph (or creates `<glyph>.alt`) and starts its first chip;
@@ -130,7 +130,7 @@ export const AlternatesSection = ({
 
 /**
  * One alternate as a small tree node, like an Objects panel row with a
- * child: the alternate glyph's name, the in-use dot on the rail before it; under
+ * child: the alternate glyph's name, the in-use dot at the right under the header's +; under
  * it, on a rail, its
  * condition's chips. The name drags the node; right-clicking it opens the
  * glyph or deletes the alternate. A never-used one is greyed, with its
@@ -160,17 +160,7 @@ const AlternateRowView = ({
         <div
           className={cn("flex flex-col rounded px-1 pb-1", row.neverUsed !== null && "opacity-50")}
         >
-          <div className="relative flex h-7 items-center gap-1.5">
-            {row.inUse && (
-              <Tooltip content="Drawn here">
-                <span
-                  role="img"
-                  aria-label="Drawn here"
-                  // Centred on the section's rail, 14px into its 24px gutter, left of the name.
-                  className="absolute -left-4.25 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-accent ring-2 ring-surface"
-                />
-              </Tooltip>
-            )}
+          <div className="flex h-7 items-center gap-1.5">
             <button
               type="button"
               {...sortable.activator}
@@ -180,6 +170,18 @@ const AlternateRowView = ({
                 {row.glyphName}
               </span>
             </button>
+            {row.inUse && (
+              // In the column of the section header's +: past the node's padding, as wide as it.
+              <span className="-mr-1 flex h-6 w-6 shrink-0 items-center justify-center">
+                <Tooltip content="Drawn here">
+                  <span
+                    role="img"
+                    aria-label="Drawn here"
+                    className="h-1.5 w-1.5 rounded-full bg-accent"
+                  />
+                </Tooltip>
+              </span>
+            )}
           </div>
           <div className="relative flex flex-col gap-1 pl-6">
             {/* The rail under the name, as the section and Objects tree rails draw. */}
