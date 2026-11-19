@@ -406,3 +406,37 @@ fn warns_that_a_component_condition_cant_be_exported() {
         3
     );
 }
+
+#[test]
+fn warns_when_feature_code_writes_its_own_rvrn_beside_swaps() {
+    let mut font = crate::test_support::conditions_font();
+    let rvrn_findings = |font: &Font| {
+        font.check()
+            .unwrap()
+            .into_iter()
+            .filter(|finding| finding.check == Check::SwapsBesideFeatureRvrn)
+            .count()
+    };
+    let set_fea = |font: &mut Font, source: &str| {
+        font.features_mut().set_fea_source(Some(source.to_string()));
+    };
+
+    set_fea(
+        &mut font,
+        "conditionset narrow { wdth 50 70; } narrow;\nvariation rvrn narrow {\n  sub cent by cent.alt;\n} rvrn;\n",
+    );
+    assert_eq!(rvrn_findings(&font), 1);
+
+    // Commented out, or another feature, it doesn't compete with the swaps.
+    set_fea(&mut font, "# variation rvrn narrow { sub a by b; } rvrn;\n");
+    assert_eq!(rvrn_findings(&font), 0);
+    set_fea(&mut font, "variation rclt narrow { sub a by b; } rclt;\n");
+    assert_eq!(rvrn_findings(&font), 0);
+
+    // Without swaps there is nothing to compete with.
+    let dollar = font.glyph_by_name("dollar").unwrap().id();
+    font.set_glyph_swaps(dollar, Vec::new()).unwrap();
+    set_fea(&mut font, "variation rvrn narrow { sub a by b; } rvrn;\n");
+    assert_eq!(rvrn_findings(&font), 0);
+    assert_eq!(Check::SwapsBesideFeatureRvrn.code(), "A003");
+}
