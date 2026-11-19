@@ -33,8 +33,8 @@ export interface SwapRow {
   readonly chips: readonly ConditionChip[];
   /** Whether the canvas draws this swap at the current location. */
   readonly inUse: boolean;
-  /** Why it never draws, as the row's note says it; null when it draws somewhere. */
-  readonly neverUsed: string | null;
+  /** Why it never draws, and what the warning offers; null when it draws somewhere. */
+  readonly neverUsed: NeverUsedNote | null;
 }
 
 /** What the Designspace tab's Swaps section shows for the glyph being edited. */
@@ -76,3 +76,15 @@ export interface ChipBounds {
 export type BoundsReading =
   | { readonly kind: "bounds"; readonly bounds: ChipBounds }
   | { readonly kind: "problem"; readonly message: string };
+
+/** Why a swap never draws, as its warning popover says it. */
+export interface NeverUsedNote {
+  /** One short sentence: "Never used: dollar.bled always wins first." */
+  readonly message: string;
+  /**
+   * The earliest swap that always wins where this one holds, which the
+   * popover offers to move it above; null when its condition holds
+   * nowhere on the axes, where no move helps.
+   */
+  readonly shadowedBy: { readonly id: SwapId; readonly glyphName: string } | null;
+}

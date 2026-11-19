@@ -34,15 +34,19 @@ test.describe("swaps in the Designspace tab", () => {
     await expect(chips.getByRole("button", { name: "Edit Bleed ≤ 90" })).toBeVisible();
   });
 
-  test("warns about a swap an earlier one always beats", async ({ page, editor }) => {
+  test("explains a swap an earlier one always beats, and moves it above", async ({
+    page,
+    editor,
+  }) => {
     await editor.openGlyphByName("dollar");
     const controls = await openVariationControls(page);
 
-    // The reason is the warning icon's name and the swap name's description.
+    await controls.getByRole("button", { name: "Why is this swap never used?" }).click();
+    await expect(page.getByText("Never used: dollar.bled always wins first.")).toBeVisible();
+    await page.getByRole("button", { name: "Move above dollar.bled" }).click();
+
     await expect(
-      controls.getByRole("img", {
-        name: "dollar.heavy (swap 2) is never used, because dollar.bled (swap 1) already applies wherever its condition holds.",
-      }),
-    ).toBeVisible();
+      controls.getByRole("button", { name: "Why is this swap never used?" }),
+    ).toHaveCount(0);
   });
 });

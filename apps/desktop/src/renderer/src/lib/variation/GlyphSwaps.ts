@@ -9,7 +9,7 @@ import type {
   GlyphId,
   GlyphName,
 } from "@shift/types";
-import type { SwapRow, SwapsSection } from "@/types/conditions";
+import type { NeverUsedNote, SwapRow, SwapsSection } from "@/types/conditions";
 import { ConditionChipSpace, withRange, withoutRange } from "./ConditionChipSpace";
 
 /**
@@ -129,6 +129,26 @@ export class GlyphSwaps {
     await this.#editor.font.editGlyphSwap(swapId, { kind: "move", move: position });
   }
 
+  /**
+   * Moves a swap directly above `aboveId`, the swap that shadows it, so it
+   * is tried first: one undo step, the whole list set at once.
+   */
+  async moveAbove(swapId: SwapId, aboveId: SwapId): Promise<void> {
+    const edited = this.#editor.editedGlyphCell.peek();
+    if (!edited) return;
+
+    const swaps = this.#editor.font.swapsOf(edited.glyphId);
+    const moved = swaps.find((swap) => swap.id === swapId);
+    if (!moved) return;
+
+    const rest = swaps.filter((swap) => swap.id !== swapId);
+    const at = rest.findIndex((swap) => swap.id === aboveId);
+    if (at < 0) return;
+
+    const order = [...rest.slice(0, at), moved, ...rest.slice(at)];
+    await this.#editor.font.setGlyphSwaps(edited.glyphId, order, "Move Swap");
+  }
+
   /** Removes a swap; its glyph stays in the font. */
   async remove(swapId: SwapId): Promise<void> {
     await this.#editor.font.editGlyphSwap(swapId, { kind: "remove" });
@@ -151,25 +171,28 @@ export class GlyphSwaps {
     swap: GlyphSwap,
     swaps: readonly GlyphSwap[],
     neverUsed: readonly NeverUsedSwap[],
-  ): string | null {
+  ): NeverUsedNote | null {
     track(this.#editor.font.glyphEntriesCell);
     const found = neverUsed.find((entry) => entry.swapId === swap.id);
     if (!found) return null;
 
-    // In check A001's words, each swap named with its place in the list.
-    const font = this.#editor.font;
-    const describe = (id: SwapId) => {
-      const index = swaps.findIndex((other) => other.id === id);
-      const other = swaps[index];
-      return other ? `${font.glyphName(other.glyph) ?? other.glyph} (swap ${index + 1})` : "a swap";
-    };
     switch (found.reason.kind) {
       case "outsideAxes":
-        return `${describe(swap.id)} is never used, because its condition holds nowhere in the axes' ranges.`;
+        return {
+          message: "Never used: its condition holds nowhere on the axes.",
+          shadowedBy: null,
+        };
       case "covered": {
-        const earlier = found.reason.by.map(describe);
-        const verb = earlier.length === 1 ? "applies" : "apply";
-        return `${describe(swap.id)} is never used, because ${earlier.join(" and ")} already ${verb} wherever its condition holds.`;
+        const [first] = found.reason.by;
+        const shadow = swaps.find((other) => other.id === first);
+        if (!shadow)
+          return { message: "Never used: an earlier swap always wins first.", shadowedBy: null };
+
+        const glyphName = this.#editor.font.glyphName(shadow.glyph) ?? shadow.glyph;
+        return {
+          message: `Never used: ${glyphName} always wins first.`,
+          shadowedBy: { id: shadow.id, glyphName },
+        };
       }
     }
   }

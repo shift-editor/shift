@@ -959,6 +959,19 @@ export class Font {
   }
 
   /**
+   * Replaces a glyph's swaps with `swaps`, tried in order, as one undoable
+   * edit: a reorder of several at once, say.
+   *
+   * @throws {Error} when the engine refuses the list.
+   */
+  async setGlyphSwaps(glyphId: GlyphId, swaps: readonly GlyphSwap[], label: string): Promise<void> {
+    await this.editCoordinator.apply(
+      [{ kind: "setGlyphSwaps", setGlyphSwaps: { glyphId, swaps } }],
+      label,
+    );
+  }
+
+  /**
    * Changes one swap's condition or glyph, moves it, or removes it, as
    * one undoable edit.
    *

@@ -2,6 +2,7 @@ import { useId, useMemo, useState, type ComponentType, type ReactNode } from "re
 import { useSignalState } from "@shift/editor/signals";
 import { asSwapId, type SwapId, type ConditionRange } from "@shift/types";
 import {
+  Button,
   cn,
   ContextMenu,
   ContextMenuItem,
@@ -9,6 +10,11 @@ import {
   ContextMenuPortal,
   ContextMenuPositioner,
   ContextMenuTrigger,
+  Popover,
+  PopoverPopup,
+  PopoverPortal,
+  PopoverPositioner,
+  PopoverTrigger,
   Separator,
   SortableList,
   Tooltip,
@@ -21,8 +27,9 @@ import {
   type CollapsibleSectionProps,
 } from "@/components/sidebar";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
+import { useSidebarPanelAnchor } from "@/hooks/useSidebarPanelAnchor";
 import { GlyphSwaps } from "@/lib/variation/GlyphSwaps";
-import type { SwapGlyphChoice, SwapRow } from "@/types/conditions";
+import type { NeverUsedNote, SwapGlyphChoice, SwapRow } from "@/types/conditions";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 import PlusIcon from "@/assets/general/plus.svg";
 import WarningIcon from "@/assets/general/warning.svg";
@@ -35,7 +42,7 @@ import { NewSwapPanel } from "./NewSwapPanel";
  * hold, tried in order, the first match winning. Each is a small tree
  * node: the swap glyph's name, with its condition's chips on
  * a rail under it; a dot under the header's + marks the one the canvas draws
- * here, and one that never draws is named in the warning colour with a warning icon.
+ * here; one that never draws is named in the warning colour, with a ⚠ that explains it.
  * Nodes reorder by dragging the name; right-clicking one opens or deletes it.
  * **+** picks a glyph (or creates `<glyph>.alt`) and starts its first chip;
  * the swap is added when that chip is committed.
@@ -131,7 +138,7 @@ export const SwapsSection = ({
  * it, on a rail, its
  * condition's chips. The name drags the node; right-clicking it opens the
  * glyph or deletes the swap. A never-used one has its name in the warning
- * colour and a warning icon where the dot goes, the reason in their tooltips.
+ * colour and a ⚠ where the dot goes, which explains it and offers a move.
  */
 const SwapRowView = ({
   row,
@@ -158,12 +165,12 @@ const SwapRowView = ({
           <div className="flex h-7 items-center gap-1.5">
             <SwapName row={row} activator={sortable.activator} />
             {row.neverUsed !== null && (
-              // In the in-use dot's column, under the section header's +.
-              <span className="-mr-1 flex h-6 w-6 shrink-0 items-center justify-center text-warning">
-                <Tooltip content={row.neverUsed} side="right">
-                  <WarningIcon role="img" aria-label={row.neverUsed} className="h-3 w-3" />
-                </Tooltip>
-              </span>
+              <NeverUsedWarning
+                note={row.neverUsed}
+                row={row}
+                swaps={swaps}
+                canAuthor={canAuthor}
+              />
             )}
             {row.inUse && (
               // In the column of the section header's +: past the node's padding, as wide as it.
@@ -201,34 +208,92 @@ const SwapRowView = ({
 
 /**
  * A swap's name, which drags its node. A swap that never draws has its name
- * in the warning colour, the reason in its tooltip and description.
+ * in the warning colour, the reason as its description.
  */
 const SwapName = ({ row, activator }: { row: SwapRow; activator: SortableActivatorProps }) => {
   const reasonId = useId();
-  const name = (
+  const note = row.neverUsed;
+
+  return (
     <button
       type="button"
       {...activator}
-      aria-describedby={row.neverUsed === null ? undefined : reasonId}
+      aria-describedby={note === null ? undefined : reasonId}
       className={cn(
         "flex min-w-0 flex-1 items-center gap-1.5 rounded-sm text-left text-ui focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent",
-        row.neverUsed === null ? "text-primary" : "text-warning",
+        note === null ? "text-primary" : "text-warning",
       )}
     >
       <span className="truncate">{row.glyphName}</span>
-      {row.neverUsed !== null && (
+      {note !== null && (
         <span id={reasonId} className="sr-only">
-          {row.neverUsed}
+          {note.message}
         </span>
       )}
     </button>
   );
-  if (row.neverUsed === null) return name;
+};
+
+/**
+ * A never-used swap's ⚠, in the in-use dot's column: a button whose popover,
+ * beside the sidebar, says why and offers to move the swap above the one
+ * that shadows it, as one undo step.
+ */
+const NeverUsedWarning = ({
+  note,
+  row,
+  swaps,
+  canAuthor,
+}: {
+  note: NeverUsedNote;
+  row: SwapRow;
+  swaps: GlyphSwaps;
+  canAuthor: boolean;
+}) => {
+  const [open, setOpen] = useState(false);
+  const panelAnchor = useSidebarPanelAnchor();
+  const shadow = note.shadowedBy;
+  const moveAbove = async () => {
+    if (!shadow) return;
+
+    try {
+      await swaps.moveAbove(row.id, shadow.id);
+      setOpen(false);
+    } catch (error) {
+      console.error("could not move the swap", error);
+    }
+  };
 
   return (
-    <Tooltip content={row.neverUsed} side="right">
-      {name}
-    </Tooltip>
+    <Popover open={open} onOpenChange={setOpen} modal={false}>
+      <PopoverTrigger
+        ref={panelAnchor.triggerRef}
+        aria-label="Why is this swap never used?"
+        render={
+          // In the in-use dot's column, under the section header's +.
+          <button
+            type="button"
+            className="-mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-warning hover:bg-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+          />
+        }
+      >
+        <WarningIcon aria-hidden className="h-3 w-3" />
+      </PopoverTrigger>
+      <PopoverPortal>
+        <PopoverPositioner {...panelAnchor.positioner}>
+          <PopoverPopup>
+            <div className="flex w-56 flex-col items-start gap-2 p-2">
+              <p className="text-ui text-primary">{note.message}</p>
+              {shadow && canAuthor && (
+                <Button size="sm" onClick={() => void moveAbove()}>
+                  Move above {shadow.glyphName}
+                </Button>
+              )}
+            </div>
+          </PopoverPopup>
+        </PopoverPositioner>
+      </PopoverPortal>
+    </Popover>
   );
 };
 

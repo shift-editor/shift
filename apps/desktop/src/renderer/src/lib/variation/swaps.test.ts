@@ -23,7 +23,7 @@ function rows() {
     glyph: glyphName,
     chips: chips.map(({ axis, valueText }) => `${axis.name} ${valueText}`),
     inUse,
-    neverUsed,
+    neverUsed: neverUsed?.message ?? null,
   }));
 }
 
@@ -50,8 +50,7 @@ describe("the Swaps section", () => {
         glyph: "dollar.heavy",
         chips: ["Bleed ≥ 80"],
         inUse: false,
-        neverUsed:
-          "dollar.heavy (swap 2) is never used, because dollar.bled (swap 1) already applies wherever its condition holds.",
+        neverUsed: "Never used: dollar.bled always wins first.",
       },
     ]);
   });
@@ -79,6 +78,20 @@ describe("the Swaps section", () => {
       { glyph: "dollar.heavy", inUse: true, neverUsed: null },
       { glyph: "dollar.bled", inUse: false, neverUsed: null },
     ]);
+  });
+
+  it("moves a never-used swap above the one that shadows it, in one undo step", async () => {
+    const shadow = row("dollar.heavy").neverUsed?.shadowedBy;
+    expect(shadow).toMatchObject({ glyphName: "dollar.bled" });
+
+    await swaps().moveAbove(row("dollar.heavy").id, shadow!.id);
+    expect(rows()?.map(({ glyph, neverUsed }) => [glyph, neverUsed])).toEqual([
+      ["dollar.heavy", null],
+      ["dollar.bled", null],
+    ]);
+
+    await editor.undo();
+    expect(rows()?.map(({ glyph }) => glyph)).toEqual(["dollar.bled", "dollar.heavy"]);
   });
 
   it("adds a swap on a glyph the font has, and deletes it", async () => {
