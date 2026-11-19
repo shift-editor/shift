@@ -721,6 +721,7 @@ export class Font {
     resolveLayers(layerIds: readonly LayerId[]): Promise<readonly LayerRead[]>;
     setAxisMappings(mappings: readonly AxisMapping[]): Promise<void>;
     setComponentConditions(conditions: readonly SetComponentCondition[]): Promise<void>;
+    setGlyphSwaps(glyphId: GlyphId, swaps: readonly GlyphSwap[], label: string): Promise<void>;
     setGrid(grid: Grid$1 | null): void;
     setIndependentAxisMapping(axis: Axis$1, mapping: AxisMapping): Promise<void>;
     setKerningException(sourceId: SourceId, first: GlyphId, second: GlyphId, position: KerningPairPosition, exception: boolean): boolean;
