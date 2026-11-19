@@ -91,6 +91,9 @@ impl Work<Context, WorkId, Error> for StaticMetadataWork {
             false,
         )?;
         static_metadata.glyph_axes = self.snapshot.hidden_axes.by_glyph_name();
+        static_metadata
+            .variations
+            .clone_from(&self.snapshot.feature_variations);
         static_metadata.misc.version_major = version_major;
         static_metadata.misc.version_minor = version_minor;
 

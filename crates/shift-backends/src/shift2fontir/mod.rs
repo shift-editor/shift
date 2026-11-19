@@ -10,12 +10,14 @@
 //! Authored named instances remain external product presets; source names do
 //! not create products implicitly.
 
+mod alternates;
 mod axes;
 mod glyph;
 mod glyph_axes;
 mod kerning;
 mod metadata;
 mod propagation;
+mod regions;
 mod source;
 mod stat;
 
