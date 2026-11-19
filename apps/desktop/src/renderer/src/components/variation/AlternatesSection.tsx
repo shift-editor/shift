@@ -79,7 +79,13 @@ export const AlternatesSection = ({
   return (
     <>
       <Separator className="-mx-1 w-auto" />
-      <Section title="Alternates" open={open} onOpenChange={setOpen} actions={actions}>
+      <Section
+        title="Alternates"
+        open={open}
+        onOpenChange={setOpen}
+        actions={actions}
+        panelClassName="pt-0"
+      >
         {empty ? (
           <p className="pl-2 text-ui text-muted">None</p>
         ) : (
