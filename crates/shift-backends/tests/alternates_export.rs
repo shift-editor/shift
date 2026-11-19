@@ -4,10 +4,11 @@
 use std::str::FromStr;
 
 use harfrust::{ShapeOptions, ShaperData, ShaperInstance, Tag, UnicodeBuffer, Variation};
-use shift_backends::FontExporter;
+use shift_backends::{ExportFormat, FontExportRequest, FontExporter};
 use shift_font::{
-    AlternateId, Axis, AxisId, Condition, ConditionRange, Contour, DesignLocation, Font, Glyph,
-    GlyphAlternate, GlyphId, GlyphLayer, LayerId, PointType, Source, SourceId,
+    AlternateId, Axis, AxisId, AxisMapping, AxisMappingPoint, Condition, ConditionRange, Contour,
+    DesignLocation, Font, Glyph, GlyphAlternate, GlyphId, GlyphLayer, LayerId, Location, PointType,
+    Source, SourceId,
 };
 use skrifa::raw::TableProvider;
 use skrifa::{FontRef, GlyphId as CompiledGlyphId, MetadataProvider};
@@ -278,4 +279,183 @@ fn glyphs_with_the_same_condition_share_feature_variation_records() {
         .and_then(|binary| feature_variation_records(&binary))
         .map_err(|error| error.to_string());
     assert_eq!(records, Ok(2));
+}
+
+/// The fixture with `alternates` exported as a designspace, then compiled
+/// from that designspace by fontc's own designspace reader.
+fn compile_through_designspace(axes: &Axes) -> Fixture<Vec<u8>> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("Alternates.designspace");
+    FontExporter::new().export(
+        &axes.font,
+        FontExportRequest {
+            path: path.clone(),
+            format: ExportFormat::Designspace,
+        },
+    )?;
+    let source = fontc::Input::new(&path)?.create_source(&fontc::SourceOptions::default())?;
+    Ok(fontc::generate_font(source, fontc::Options::default())?)
+}
+
+/// What `$` shapes to at each user Bleed, at full Width, in the fixture
+/// with `dollar`'s `alternates` exported as a designspace and compiled
+/// from it, and in the fixture compiled directly.
+fn dollar_through_designspace(
+    axes: &mut Axes,
+    alternates: AlternateList,
+    bleeds: &[f32],
+) -> Result<[Vec<String>; 2], String> {
+    let mut read = || -> Fixture<[Vec<String>; 2]> {
+        axes.alternates("dollar", alternates)?;
+        let shape = |binary: &[u8]| -> Fixture<Vec<String>> {
+            bleeds
+                .iter()
+                .map(|bleed| Ok(shape_at(binary, "$", *bleed, 100.0)?.join(" ")))
+                .collect()
+        };
+        Ok([
+            shape(&compile_through_designspace(axes)?)?,
+            shape(&axes.compile()?)?,
+        ])
+    };
+    read().map_err(|error| error.to_string())
+}
+
+#[test]
+fn designspace_rules_compile_in_fontc_as_shift_compiles_the_alternates() {
+    let cases: [(AlternateList, &[f32], &[&str]); 2] = [
+        (
+            &[("dollar.bled", 70.0, None)],
+            &[0.0, 69.0, 70.0, 100.0],
+            &["dollar", "dollar", "dollar.bled", "dollar.bled"],
+        ),
+        // fontc applies overlapping rules in glyph-name order, which would
+        // pick dollar.bled over dollar.heavy, so these are written as
+        // disjoint regions.
+        (
+            &[("dollar.heavy", 80.0, None), ("dollar.bled", 70.0, None)],
+            &[69.0, 75.0, 85.0, 100.0],
+            &["dollar", "dollar.bled", "dollar.heavy", "dollar.heavy"],
+        ),
+    ];
+    for (alternates, bleeds, drawn) in cases {
+        let drawn = expected_glyphs(drawn);
+        assert_eq!(
+            Axes::new()
+                .map_err(|error| error.to_string())
+                .and_then(|mut axes| dollar_through_designspace(&mut axes, alternates, bleeds)),
+            Ok([drawn.clone(), drawn]),
+            "{alternates:?}"
+        );
+    }
+}
+
+#[test]
+fn designspace_rule_conditions_are_design_values_through_the_axis_mapping() {
+    // User Bleed 50 is design 80, so dollar.bled from design 80 draws from user 50.
+    let mut axes = mapped_bleed().expect("the fixture builds");
+
+    let drawn = expected_glyphs(&["dollar", "dollar", "dollar.bled", "dollar.bled"]);
+    assert_eq!(
+        dollar_through_designspace(
+            &mut axes,
+            &[("dollar.bled", 80.0, None)],
+            &[0.0, 49.0, 51.0, 100.0]
+        ),
+        Ok([drawn.clone(), drawn]),
+    );
+}
+
+/// The fixture with Bleed mapped from user 0, 50, 100 to design 0, 80, 100.
+fn mapped_bleed() -> Fixture<Axes> {
+    let mut axes = Axes::new()?;
+    let bleed = axes.bleed;
+    let point = |user: f64, design: f64| AxisMappingPoint {
+        description: None,
+        input: Location::from([(bleed, user)]),
+        output: Location::from([(bleed, design)]),
+    };
+    axes.font.set_axis_mappings(vec![AxisMapping::new(
+        "Bleed".into(),
+        vec![bleed],
+        vec![bleed],
+        vec![point(0.0, 0.0), point(50.0, 80.0), point(100.0, 100.0)],
+    )])?;
+    Ok(axes)
+}
+
+/// A rule's conditions, as (axis, minimum, maximum), and substitutions.
+type ReadRule = (
+    Vec<(String, Option<f32>, Option<f32>)>,
+    Vec<(String, String)>,
+);
+
+/// The fixture with `alternates` exported as a designspace, and the rules
+/// that designspace holds, with their processing.
+fn exported_rules(
+    alternates: &[(&str, AlternateList)],
+) -> Fixture<(norad::designspace::RuleProcessing, Vec<ReadRule>)> {
+    let mut axes = Axes::new()?;
+    for (glyph, list) in alternates {
+        axes.alternates(glyph, list)?;
+    }
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("Alternates.designspace");
+    FontExporter::new().export(
+        &axes.font,
+        FontExportRequest {
+            path: path.clone(),
+            format: ExportFormat::Designspace,
+        },
+    )?;
+    let rules = norad::designspace::DesignSpaceDocument::load(&path)?.rules;
+    let read = rules
+        .rules
+        .iter()
+        .map(|rule| {
+            let conditions = rule
+                .condition_sets
+                .iter()
+                .flat_map(|set| &set.conditions)
+                .map(|condition| (condition.name.clone(), condition.minimum, condition.maximum))
+                .collect();
+            let substitutions = rule
+                .substitutions
+                .iter()
+                .map(|sub| (sub.name.to_string(), sub.with.to_string()))
+                .collect();
+            (conditions, substitutions)
+        })
+        .collect();
+    Ok((rules.processing, read))
+}
+
+#[test]
+fn designspace_rules_carry_alternates_that_never_overlap_as_authored() {
+    let rules = exported_rules(&[
+        ("dollar", &[("dollar.narrow", 70.0, Some(80.0))]),
+        ("cent", &[("cent.bled", 70.0, None)]),
+    ])
+    .map_err(|error| error.to_string());
+
+    let named = |name: &str| name.to_string();
+    assert_eq!(
+        rules,
+        Ok((
+            norad::designspace::RuleProcessing::First,
+            vec![
+                (
+                    vec![
+                        (named("Bleed"), Some(70.0), None),
+                        (named("Width"), None, Some(80.0))
+                    ],
+                    vec![(named("dollar"), named("dollar.narrow"))]
+                ),
+                (
+                    vec![(named("Bleed"), Some(70.0), None)],
+                    vec![(named("cent"), named("cent.bled"))]
+                ),
+            ]
+        ))
+    );
 }

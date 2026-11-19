@@ -24,7 +24,7 @@ ordered-float = "5"
 plist = "1"
 quick-xml = { version = "0.42.0", features = ["serialize"] }
 rayon = "1.10"
-serde = "1"
+serde = { version = "1", features = ["derive"] }
 tempfile = "3"
 thiserror = "2.0.18"
 write-fonts = "0.55"

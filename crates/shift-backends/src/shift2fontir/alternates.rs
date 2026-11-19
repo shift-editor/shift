@@ -21,7 +21,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use fontdrasil::types::{GlyphName, Tag};
 use fontir::ir::{Rule, Substitution, VariableFeature};
-use shift_font::{Glyph, GlyphId};
+use shift_font::{Condition, Glyph, GlyphId};
 
 use super::regions::{Lattice, MAX_REGIONS, Region};
 
@@ -30,7 +30,7 @@ const RVRN: Tag = Tag::new(b"rvrn");
 
 /// Why a glyph's alternates cannot compile.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum AlternatesError {
+pub enum AlternatesError {
     #[error(
         "glyph '{glyph}' has the alternate '{alternate}', which is not exported, so it can't be substituted"
     )]
@@ -42,36 +42,56 @@ pub(crate) enum AlternatesError {
     TooManyRegions,
 }
 
-/// One glyph's alternates where they can hold, in order.
-struct Alternates {
+/// One alternate where it can hold.
+struct Alternate<'a> {
+    region: Region,
     glyph: GlyphName,
-    alternates: Vec<(Region, GlyphName)>,
+    condition: &'a Condition,
 }
 
-impl Alternates {
+/// One glyph's alternates where they can hold, in order.
+struct Alternates<'a> {
+    glyph: GlyphName,
+    alternates: Vec<Alternate<'a>>,
+}
+
+impl Alternates<'_> {
     /// The glyph drawn in `region`, which every alternate's region contains
     /// or misses whole: the first alternate that holds there.
     fn drawn_in(&self, region: &Region) -> Option<&GlyphName> {
         self.alternates
             .iter()
-            .find(|(holds, _)| holds.contains(region))
-            .map(|(_, alternate)| alternate)
+            .find(|alternate| alternate.region.contains(region))
+            .map(|alternate| &alternate.glyph)
+    }
+
+    /// Whether no two of the alternates hold anywhere at once, so the
+    /// order they are tried in never decides between them.
+    fn are_disjoint(&self) -> bool {
+        self.alternates
+            .iter()
+            .enumerate()
+            .all(|(index, alternate)| {
+                self.alternates
+                    .iter()
+                    .skip(index + 1)
+                    .all(|later| alternate.region.intersection(&later.region).is_none())
+            })
     }
 }
 
-/// The `rvrn` feature variations that swap in `glyphs`' alternates, or
-/// `None` when no alternate holds anywhere. A glyph `skipped` from export
-/// is never substituted.
+/// Each glyph's alternates that hold somewhere, leaving out glyphs
+/// `skipped` from export and alternates whose glyph the font lacks.
 ///
 /// # Errors
 ///
-/// Returns [`AlternatesError`] when an exported glyph's alternate is not
-/// exported, or the alternates cut the axes into too many regions.
-pub(super) fn feature_variations(
-    glyphs: &[Glyph],
+/// Returns [`AlternatesError::AlternateNotExported`] when an exported
+/// glyph's alternate is not exported.
+fn collect_alternates<'a>(
+    glyphs: &'a [Glyph],
     lattice: &Lattice,
     skipped: &HashSet<String>,
-) -> Result<Option<VariableFeature>, AlternatesError> {
+) -> Result<Vec<Alternates<'a>>, AlternatesError> {
     let names: HashMap<GlyphId, &str> = glyphs
         .iter()
         .map(|glyph| (glyph.id(), glyph.name()))
@@ -95,7 +115,11 @@ pub(super) fn feature_variations(
                     alternate: name.to_string(),
                 });
             }
-            alternates.push((region, GlyphName::from(*name)));
+            alternates.push(Alternate {
+                region,
+                glyph: GlyphName::from(*name),
+                condition: alternate.condition(),
+            });
         }
         if !alternates.is_empty() {
             every_glyph.push(Alternates {
@@ -104,13 +128,87 @@ pub(super) fn feature_variations(
             });
         }
     }
+    Ok(every_glyph)
+}
+
+/// The `rvrn` feature variations that swap in `glyphs`' alternates, or
+/// `None` when no alternate holds anywhere. A glyph `skipped` from export
+/// is never substituted.
+///
+/// # Errors
+///
+/// Returns [`AlternatesError`] when an exported glyph's alternate is not
+/// exported, or the alternates cut the axes into too many regions.
+pub(super) fn feature_variations(
+    glyphs: &[Glyph],
+    lattice: &Lattice,
+    skipped: &HashSet<String>,
+) -> Result<Option<VariableFeature>, AlternatesError> {
+    let every_glyph = collect_alternates(glyphs, lattice, skipped)?;
     if every_glyph.is_empty() {
         return Ok(None);
     }
+    Ok(Some(VariableFeature {
+        features: vec![RVRN],
+        rules: region_rules(&every_glyph, lattice)?,
+    }))
+}
 
+/// The rules a designspace carries for `glyphs`' alternates, read as
+/// `processing="first"` (`rvrn`) rules, so a compiler that reads them
+/// substitutes as the font compiled from `glyphs` does.
+///
+/// A glyph whose alternates never hold at once gets one rule per
+/// alternate, in order, with the alternate's own ranges in design units.
+/// A glyph with alternates that overlap gets the disjoint region rules
+/// [`feature_variations`] compiles, in design units that normalize to the
+/// regions' lattice values, because fontc 2.0.1 applies overlapping rules
+/// in glyph-name order rather than rule order (see the module docs). A
+/// glyph `skipped` from export is never substituted.
+///
+/// # Errors
+///
+/// As [`feature_variations`].
+pub(crate) fn designspace_rules(
+    glyphs: &[Glyph],
+    lattice: &Lattice,
+    skipped: &HashSet<String>,
+) -> Result<Vec<Rule>, AlternatesError> {
+    let (disjoint, overlapping): (Vec<_>, Vec<_>) = collect_alternates(glyphs, lattice, skipped)?
+        .into_iter()
+        .partition(Alternates::are_disjoint);
+    let mut rules: Vec<Rule> = disjoint
+        .iter()
+        .flat_map(|glyph| {
+            glyph.alternates.iter().map(|alternate| Rule {
+                conditions: vec![lattice.authored_condition_set(alternate.condition)],
+                substitutions: vec![Substitution {
+                    replace: glyph.glyph.clone(),
+                    with: alternate.glyph.clone(),
+                }],
+            })
+        })
+        .collect();
+    if !overlapping.is_empty() {
+        rules.extend(region_rules(&overlapping, lattice)?);
+    }
+    Ok(rules)
+}
+
+/// One rule per set of substitutions, over the disjoint regions where
+/// `every_glyph`'s alternates draw that set.
+///
+/// # Errors
+///
+/// Returns [`AlternatesError::TooManyRegions`] when the alternates cut the
+/// axes into too many regions.
+fn region_rules(
+    every_glyph: &[Alternates],
+    lattice: &Lattice,
+) -> Result<Vec<Rule>, AlternatesError> {
     let mut boxes: Vec<&Region> = every_glyph
         .iter()
-        .flat_map(|glyph| glyph.alternates.iter().map(|(region, _)| region))
+        .flat_map(|glyph| glyph.alternates.iter().map(|alternate| &alternate.region))
         .collect();
     boxes.sort();
     boxes.dedup();
@@ -133,7 +231,7 @@ pub(super) fn feature_variations(
                 .push(region);
         }
     }
-    let rules = by_substitutions
+    Ok(by_substitutions
         .into_iter()
         .map(|(substitutions, regions)| Rule {
             conditions: regions
@@ -148,9 +246,5 @@ pub(super) fn feature_variations(
                 })
                 .collect(),
         })
-        .collect();
-    Ok(Some(VariableFeature {
-        features: vec![RVRN],
-        rules,
-    }))
+        .collect())
 }

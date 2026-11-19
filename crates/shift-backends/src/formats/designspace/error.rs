@@ -71,6 +71,19 @@ pub enum DesignspaceError {
     #[error("failed to parse designspace XML: {details}")]
     ParseDesignspaceXml { details: String },
 
+    #[error("glyph name '{name}' cannot be written in a designspace rule: {source}")]
+    RuleGlyphName {
+        name: String,
+        #[source]
+        source: norad::error::NamingError,
+    },
+
+    #[error("cannot write the alternates as designspace rules: {0}")]
+    Alternates(#[from] crate::shift2fontir::AlternatesError),
+
+    #[error("cannot write the alternates as designspace rules: {0}")]
+    RuleAxes(#[from] crate::shift2fontir::AxisConversionError),
+
     #[error(transparent)]
     Font(#[from] shift_font::CoreError),
 }

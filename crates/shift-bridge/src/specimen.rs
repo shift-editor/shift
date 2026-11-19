@@ -4,10 +4,8 @@ use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
 use shift_backends::{FontExporter, FontView, GlyphSubsetView, font_loader::FontLoader};
-use shift_font::{Glyph, GlyphId};
+use shift_font::{DesignLocation, Font, Glyph, GlyphId};
 use shift_workspace::{AcquireScope, FontWorkspace, WorkspaceError};
-
-use crate::bridge::FontSaveSnapshot;
 
 /// Specimen outline drawn on a recent file's thumbnail, in font units with y
 /// pointing down.
@@ -101,8 +99,8 @@ impl From<shift_specimen::Specimen> for NapiSpecimen {
 
 /// Font whose specimen is built on a worker thread.
 pub(crate) enum SpecimenInput {
-  /// Live authored document, compiled from a snapshot of its current state.
-  Snapshot(FontSaveSnapshot),
+  /// Live authored document, compiled from a copy of its current state.
+  Document(Font),
   /// Font file on disk: binaries are shaped as they are, sources are
   /// imported and compiled first.
   Path(PathBuf),
@@ -113,18 +111,32 @@ pub struct SpecimenTask {
   pub(crate) input: SpecimenInput,
 }
 
+/// Why a specimen could not be built.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum SpecimenError {
+  #[error("failed to read the font: {0}")]
+  Read(#[from] std::io::Error),
+
+  #[error(transparent)]
+  Load(#[from] shift_backends::BackendError),
+
+  #[error("cannot draw the font at its default location: {0}")]
+  Draw(#[from] shift_font::CoreError),
+
+  #[error(transparent)]
+  Compile(#[from] shift_backends::ExportError),
+}
+
 impl SpecimenTask {
-  fn build(&self) -> std::result::Result<Option<shift_specimen::Specimen>, String> {
+  fn build(&self) -> std::result::Result<Option<shift_specimen::Specimen>, SpecimenError> {
     match &self.input {
-      SpecimenInput::Snapshot(snapshot) => source_specimen(snapshot),
+      SpecimenInput::Document(font) => source_specimen(font),
       SpecimenInput::Path(path) if is_font_binary(path) => {
-        let binary = std::fs::read(path).map_err(|error| error.to_string())?;
+        let binary = std::fs::read(path)?;
         Ok(shift_specimen::specimen(&binary))
       }
       SpecimenInput::Path(path) => {
-        let font = FontLoader::new()
-          .read_font(&path.to_string_lossy())
-          .map_err(|error| error.to_string())?;
+        let font = FontLoader::new().read_font(&path.to_string_lossy())?;
         source_specimen(&font)
       }
     }
@@ -211,9 +223,16 @@ fn shows_planned_character(glyph: &Glyph, planned: &[char]) -> bool {
 /// candidate glyphs, the family name's glyphs, `.notdef`, and the first drawn
 /// glyphs are compiled. A
 /// font whose specimen needs contextual forms is compiled whole instead.
+///
+/// The specimen is drawn at the font's default location, so components
+/// that carry conditions, which compiled fonts can't hold, are drawn as the
+/// editor draws them there: each glyph that reads one is compiled as its
+/// outline at the default ([`Font::with_component_conditions_drawn_at`]).
 fn source_specimen(
-  font: &impl FontView,
-) -> std::result::Result<Option<shift_specimen::Specimen>, String> {
+  font: &Font,
+) -> std::result::Result<Option<shift_specimen::Specimen>, SpecimenError> {
+  let font = font.with_component_conditions_drawn_at(&DesignLocation::new())?;
+  let font = &font;
   let characters = font_characters(font);
   let plan = shift_specimen::subset_plan(&characters, family_name(font));
 
@@ -230,8 +249,7 @@ fn source_specimen(
       .take(LEADING_DRAWN_GLYPHS);
     let names = planned.chain(leading).map(Glyph::name).chain([".notdef"]);
     exporter.compile_ttf(&GlyphSubsetView::new(font, names))
-  }
-  .map_err(|error| error.to_string())?;
+  }?;
 
   Ok(shift_specimen::specimen_with_characters(
     &binary,
@@ -246,7 +264,7 @@ impl Task for SpecimenTask {
   fn compute(&mut self) -> Result<Self::Output> {
     self
       .build()
-      .map_err(|message| Error::new(Status::GenericFailure, message))
+      .map_err(|error| Error::new(Status::GenericFailure, error.to_string()))
   }
 
   fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
@@ -267,6 +285,14 @@ fn is_font_binary(path: &std::path::Path) -> bool {
 mod tests {
   use super::*;
 
+  /// The specimen the bridge builds for an open document holding `font`.
+  fn specimen_of(font: Font) -> Result<Option<shift_specimen::Specimen>> {
+    SpecimenTask {
+      input: SpecimenInput::Document(font),
+    }
+    .compute()
+  }
+
   #[test]
   fn a_source_font_draws_its_family_name_from_the_compiled_subset() {
     let path =
@@ -275,13 +301,77 @@ mod tests {
       .read_font(&path.to_string_lossy())
       .expect("Homenaje should load");
 
-    let specimen = source_specimen(&font)
+    let specimen = specimen_of(font)
       .expect("Homenaje should compile")
       .expect("Homenaje draws a specimen");
 
     assert_eq!(
       specimen.family_name.map(|name| name.text),
       Some("Homenaje".to_string())
+    );
+  }
+
+  /// A font whose `A` is a box with a second box beside it, the second
+  /// drawn only where Weight is at least 700, or nowhere when `conditional`
+  /// is false; `g` is a box, so the specimen shapes `Ag`.
+  fn conditional_box_font(conditional: bool) -> Font {
+    use shift_font::{
+      Axis, Component, Condition, ConditionRange, Contour, GlyphLayer, LayerId, PointType,
+    };
+
+    let mut font = Font::new();
+    font.metadata_mut().family_name = Some("Boxes".to_string());
+    let weight = Axis::weight();
+    let weight_id = weight.id();
+    font.add_axis(weight).unwrap();
+    let source = font.default_source_id().unwrap();
+    let mut box_glyph = |name: &str, x: f64, unicode: Option<char>| {
+      let mut glyph = Glyph::new(name);
+      glyph.set_unicodes(unicode.map(u32::from).into_iter().collect());
+      let mut layer = GlyphLayer::with_width(LayerId::new(), source, 0.0);
+      let mut contour = Contour::new();
+      for (dx, y) in [(0.0, 0.0), (100.0, 0.0), (100.0, 700.0), (0.0, 700.0)] {
+        contour.add_point(x + dx, y, PointType::OnCurve, false);
+      }
+      contour.close();
+      layer.add_contour(contour);
+      glyph.set_layer(layer);
+      font.insert_glyph(glyph).unwrap()
+    };
+    let stem = box_glyph("stem", 0.0, None);
+    let side = box_glyph("side", 200.0, None);
+    box_glyph("g", 0.0, Some('g'));
+
+    let mut a = Glyph::with_unicode("A", u32::from('A'));
+    let mut layer = GlyphLayer::with_width(LayerId::new(), source, 400.0);
+    layer.add_component(Component::new(stem, "stem"));
+    if conditional {
+      let mut heavy = Component::new(side, "side");
+      heavy.set_condition(Condition::all([ConditionRange::new(
+        weight_id,
+        Some(700.0),
+        None,
+      )]));
+      layer.add_component(heavy);
+    }
+    a.set_layer(layer);
+    font.insert_glyph(a).unwrap();
+    font
+  }
+
+  #[test]
+  fn a_component_condition_draws_in_the_specimen_as_the_editor_draws_it_at_the_default() {
+    let outline = |font: Font| {
+      let specimen = specimen_of(font)
+        .expect("the font should compile")
+        .expect("the font draws a specimen");
+      (specimen.text, specimen.outline)
+    };
+
+    // At the default Weight, 400, the second box is not drawn.
+    assert_eq!(
+      outline(conditional_box_font(true)),
+      outline(conditional_box_font(false))
     );
   }
 }

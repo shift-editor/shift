@@ -10,6 +10,8 @@ use std::collections::BTreeSet;
 use crate::Require;
 use crate::axis::{AxisList, DesignLocation};
 use crate::component::Component;
+use crate::contour::Contour;
+use crate::entity::LayerId;
 use crate::entity::{AlternateId, GlyphId};
 use crate::error::{CoreError, CoreResult};
 use crate::glyph::{Glyph, GlyphLayer};
@@ -202,5 +204,82 @@ impl Font {
             });
         }
         Ok(())
+    }
+    /// This font with every glyph whose drawing reads a component condition,
+    /// in its own components or theirs, replaced by its outline at design
+    /// `location` as the editor draws it there ([`crate::FontProjection::glyph`]):
+    /// one layer on the default source holding the flattened contours, with
+    /// the advance and anchors the glyph has at `location`. Other glyphs are
+    /// unchanged, so the result has no component conditions and compiles,
+    /// and draws exactly as this font does at `location`, and only there.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::MissingDefaultSource`] when the font has no
+    /// default source, and a projection's resolution errors.
+    pub fn with_component_conditions_drawn_at(
+        &self,
+        location: &DesignLocation,
+    ) -> CoreResult<Self> {
+        let mut reading: BTreeSet<GlyphId> = self
+            .glyphs()
+            .filter(|glyph| !glyph.conditional_components().is_empty())
+            .map(Glyph::id)
+            .collect();
+        if reading.is_empty() {
+            return Ok(self.clone());
+        }
+        let mut added: Vec<GlyphId> = reading.iter().copied().collect();
+        while let Some(base) = added.pop() {
+            let composites: Vec<GlyphId> =
+                self.index().composite_glyphs_of(&base).copied().collect();
+            for composite in composites {
+                if reading.insert(composite) {
+                    added.push(composite);
+                }
+            }
+        }
+
+        let default_id = self
+            .default_source_id()
+            .ok_or(CoreError::MissingDefaultSource)?;
+        let mut projection = self.projection(location);
+        let mut flattened = Vec::new();
+        for glyph_id in reading {
+            let glyph = self.require_glyph(glyph_id)?;
+            let (Some(drawn), Some(own)) =
+                (projection.glyph(glyph_id)?, self.layer_at(glyph, location)?)
+            else {
+                continue;
+            };
+            let layer_id = self
+                .default_master_layer(glyph)
+                .map_or_else(LayerId::new, |layer| layer.id());
+            let mut layer = GlyphLayer::with_width(layer_id, default_id, drawn.x_advance());
+            for contour in drawn.contours() {
+                let mut flat = Contour::new();
+                for point in &contour.points {
+                    flat.push_point(point.with_fresh_id());
+                }
+                if contour.closed {
+                    flat.close();
+                }
+                layer.add_contour(flat);
+            }
+            for anchor in own.anchors_iter() {
+                layer.add_anchor(anchor.clone());
+            }
+            let old_layers: Vec<LayerId> = glyph.layer_ids().collect();
+            flattened.push((glyph_id, old_layers, layer));
+        }
+
+        let mut font = self.clone();
+        for (glyph_id, old_layers, layer) in flattened {
+            for layer_id in old_layers {
+                font.remove_glyph_layer(layer_id)?;
+            }
+            font.insert_glyph_layer(glyph_id, layer)?;
+        }
+        Ok(font)
     }
 }

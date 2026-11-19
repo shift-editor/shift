@@ -5,8 +5,8 @@ use support::{load_font, shift, shift_with_stdin};
 
 /// A `Solenoid.shift` with Bleed (0–100, default 0) and Resolution (0–100,
 /// default 100) axes, a Bled master at Bleed 100, and on both masters: `dot`,
-/// `dollar.bled`, `dollar.heavy` and `dollar`, which is two `dot` components,
-/// the second moved 50 right.
+/// `dollar.bled`, `dollar.heavy` and `dollar` (`$`), which is two `dot`
+/// components, the second moved 50 right.
 struct DollarFont {
     path: String,
     _dir: tempfile::TempDir,
@@ -45,7 +45,12 @@ impl DollarFont {
             for name in ["dot", "dollar.bled", "dollar.heavy"] {
                 glyphs.push(json!({"name": name, "source": source, "layer": shape}));
             }
-            glyphs.push(json!({"name": "dollar", "source": source, "layer": dollar}));
+            glyphs.push(json!({
+                "name": "dollar",
+                "unicodes": ["U+0024"],
+                "source": source,
+                "layer": dollar,
+            }));
         }
         glyphs
     }
@@ -350,4 +355,54 @@ fn alternates_and_component_conditions_round_trip_through_glyph_set_and_export()
         again.contains("No files written") && !again.contains("alternates"),
         "{again}"
     );
+}
+
+#[test]
+fn a_proof_draws_conditional_components_everywhere_and_warns() {
+    let font = DollarFont::new().unwrap();
+    font.ok(
+        "component condition set",
+        &["dollar", "2", "--when", "RSLN >= 50"],
+    );
+    let image = font._dir.path().join("dollar.png");
+
+    let output = shift(&[
+        "proof",
+        &font.path,
+        "--output",
+        image.to_str().unwrap(),
+        "--text",
+        "$",
+        "--json",
+    ]);
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        report["warnings"],
+        json!([{
+            "code": "component-conditions-drawn-everywhere",
+            "message": "compiled fonts can't hold component conditions yet, so this proof draws 1 conditional component everywhere: dollar: component 2 (dot)",
+            "components": [{"glyph": "dollar", "position": 2, "base": "dot"}],
+        }])
+    );
+    assert_eq!(
+        stderr.trim(),
+        "warning: compiled fonts can't hold component conditions yet, so this proof draws 1 conditional component everywhere: dollar: component 2 (dot)"
+    );
+}
+
+#[test]
+fn compile_still_refuses_conditional_components() {
+    let font = DollarFont::new().unwrap();
+    font.ok(
+        "component condition set",
+        &["dollar", "2", "--when", "RSLN >= 50"],
+    );
+    let output = font._dir.path().join("Solenoid.ttf");
+
+    let error = font.refused("compile", &["--output", output.to_str().unwrap()]);
+
+    assert!(error.contains("dollar: component 2 (dot)"), "{error}");
 }

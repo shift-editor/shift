@@ -431,9 +431,13 @@ shift component condition set Solenoid.shift H 2 --when "RSLN >= 50"     # every
   glyphs in the same order, since a component exists in all of them.
 - A report, `glyph inspect` and `inspect --view glyphs` list the alternates in order and warn about
   one that is never used; `check` reports it as `A001`. Compiled fonts carry alternates as `rvrn`
-  substitutions (`compile`, `export`, the compiled path of `proof`). They don't carry component
-  conditions: `compile` and `export` refuse a font with any, listing each, and `check` warns
-  about them as `A002`. `glyph inspect --location` says which
+  substitutions (`compile`, `export`, the compiled path of `proof`), a designspace as
+  `<rules processing="first">`, and a static instance (`compile --static`) draws the alternate
+  that holds there in the glyph's place. They don't carry component conditions: `compile` and
+  `export` refuse a font with any, listing each, and `check` warns about them as `A002`.
+  `proof` still draws such a font, with each conditional component drawn everywhere, and says
+  so: a `warning:` line on stderr and a `component-conditions-drawn-everywhere` entry in the
+  `--json` report's `warnings`. `glyph inspect --location` says which
   glyph is `drawn as` there, and its structure view marks each component condition `draws here`
   or `hidden here`; the resolved outline leaves hidden components out.
 - In `glyph set`, an entry's `alternates` replaces the glyph's list (`[]` removes them; omitted
@@ -451,7 +455,7 @@ shift component condition set Solenoid.shift H 2 --when "RSLN >= 50"     # every
 }
 ```
 
-Compiled fonts do not carry alternates or component conditions yet.
+Compiled fonts carry alternates; they do not carry component conditions yet.
 
 ### Font metadata and source metrics
 

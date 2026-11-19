@@ -175,7 +175,7 @@
   },
   "stringly-error": {
     "shift-backends": { "src": 49, "tests": 0 },
-    "shift-bridge": { "src": 8, "tests": 0 },
+    "shift-bridge": { "src": 4, "tests": 0 },
     "shift-font": { "src": 14, "tests": 0 },
     "shift-scan": { "src": 6, "tests": 0 },
     "shift-store": { "src": 38, "tests": 0 },
@@ -228,7 +228,7 @@
   "tuple-return": {
     "pack-derive": { "src": 1, "tests": 0 },
     "shift-backends": { "src": 13, "tests": 0 },
-    "shift-cli": { "src": 3, "tests": 0 },
+    "shift-cli": { "src": 2, "tests": 0 },
     "shift-font": { "src": 15, "tests": 0 },
     "shift-proof": { "src": 2, "tests": 0 },
     "shift-scan": { "src": 1, "tests": 0 },

@@ -311,3 +311,44 @@ fn component_conditions_off_the_parent_glyphs_space_are_refused() {
     let mut font = font;
     font.insert_glyph(probe_with(on(probe_axis))).unwrap();
 }
+
+#[test]
+fn a_font_with_its_component_conditions_drawn_somewhere_draws_as_the_font_does_there() {
+    let font = conditions_font();
+    let names = ["H", "HX", "mid", "T", "U", "dollarcomp", "dollar"];
+
+    for weight in [400.0, 900.0] {
+        let location = weight_width(&font, weight, 100.0);
+        let drawn = font.with_component_conditions_drawn_at(&location).unwrap();
+
+        assert!(
+            drawn
+                .glyphs()
+                .all(|glyph| glyph.conditional_components().is_empty())
+        );
+        for name in names {
+            assert_eq!(
+                drawn_starts_at(&drawn, name, &location),
+                drawn_starts_at(&font, name, &location),
+                "{name} at Weight {weight}"
+            );
+        }
+    }
+}
+
+#[test]
+fn drawing_component_conditions_somewhere_keeps_glyphs_that_read_none() {
+    let font = conditions_font();
+    let location = weight_width(&font, 400.0, 100.0);
+
+    let drawn = font.with_component_conditions_drawn_at(&location).unwrap();
+
+    let components = |font: &Font| {
+        let glyph = font.glyph_by_name("dollarcomp").unwrap();
+        font.default_master_layer(glyph)
+            .unwrap()
+            .components_iter()
+            .count()
+    };
+    assert_eq!(components(&drawn), components(&font));
+}
