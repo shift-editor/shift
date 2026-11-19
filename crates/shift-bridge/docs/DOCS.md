@@ -22,7 +22,7 @@ The native addon the utility process calls: three `#[pack::interface]` traits on
 
 **Architecture Invariant:** What the traits do not carry stays a napi method, exposed as `ShiftBridge.napi`: the Slug atlas streams (`ReadableStream<Buffer>`), the async export and specimen tasks, and the reads phase f moves into the window's engine (`getGlyphSnapshots`, `resolveLayers`, `getGlyphProjections`, `getGlyphPreviews`, `mapLocation`). Their DTOs are the remaining napi twins, in `wire_napi.rs`. `shift-bridge` is the only crate that may link the NAPI runtime — enforced by `scripts/check-invariants.py` (`napi-boundary`).
 
-**Architecture Invariant:** Export explicitly acquires all persisted layers before taking a clone/COW `FontSaveSnapshot`. **WHY:** Async export gets a complete stable view while ordinary workspace open remains directory-first and lazy.
+**Architecture Invariant:** Export explicitly acquires all persisted layers before taking a clone/COW copy of the font for its `ExportFontTask`. **WHY:** Async export gets a complete stable view while ordinary workspace open remains directory-first and lazy.
 
 **Architecture Invariant:** Glyph snapshots, projections, imported `sourceGlyph`, and Slug preparation are explicit acquisition boundaries. Authored reads may load requested BLOBs in the serialized utility process; imported renderer Glyphs and synchronous getters never initiate I/O. `readFontSourceGlyph()` requests a stable session `GlyphId`, resolves the backend-private `GlyphIndex`, and returns canonical `GlyphSnapshot[]` for the root and complete component closure. Imported results contain projections but no authored layers. Only a compiled font's preview (TrueType, OpenType) reads glyphs through it; a UFO, designspace or Glyphs preview reads them from its engine (`EngineReads.glyphSnapshots`), which loads them through `SourceReader`. Product Grid startup requests the complete directory as bounded fixed root pages and presents only after the entire page set is resident.
 
@@ -59,7 +59,7 @@ crates/shift-bridge/
 
 - `Bridge` -- the exported `#[napi]` class holding the current `FontWorkspace` and document versions.
 - `LayerId` -- mutation-side identity for the glyph layer being edited.
-- `FontSaveSnapshot` -- clone/COW export view of the current workspace font.
+- `ExportFontTask` -- exports, or plans an export of, a clone/COW copy of the workspace font with every layer loaded, off the JavaScript thread.
 - `DocumentIdentity` -- canonical `DocumentId` and canonical path used by utility/main document lifecycle decisions.
 - `ExportFontTask` -- NAPI `Task` implementation for async font export.
 - `BridgeError` -- typed bridge error enum converted once at the NAPI boundary.
@@ -88,7 +88,7 @@ crates/shift-bridge/
 6. `saveWorkspace()` applies a document's sparse recovery overlay to its canonical SQLite file. `saveWorkspaceAsDocument(path, recoveryPath)` publishes a new native document identity and adopts its fresh overlay; `discardWorkspaceChanges()` clears recovery and reloads canonical directory state.
 7. `inspectDocument(path)` exposes canonical identity without opening a live workspace. `openDocument(path, recoveryPath)` opens merged lazy views selected by the utility process.
 8. `closeWorkspace()` drops the live Rust workspace handle before the utility process removes clean or discarded recovery files and bindings.
-9. `exportWorkspace(request)` creates a `FontSaveSnapshot` and exports asynchronously through `shift-backends`.
+9. `exportWorkspace(request)` creates an `ExportFontTask` over a copy of the font and exports asynchronously through `shift-backends`.
 10. The renderer calls `prepareSlugAtlasPage(glyphIds, alignment)` for every deterministic fixed directory page and installs the complete set before first presentation. Every native miss independently acquires its indexed component closure. Closure traversal passes each complete deduplicated frontier to one bounded store query primitive; it never crosses SQLite once per root. Each bounded build uses one compilation-scoped `GlyphProjectionSet`; no projection or resolved-source map survives its build. The utility may bypass native preparation with a validated external `CachedAtlas` page keyed by canonical `DocumentId` for bound documents and app-local `workspaceId` for unbound documents. Cached and native pages share the same bounded renderer stream contract. Authored invalidation rebuilds every affected page while the previous complete set remains presented; scrolling performs no bridge work. The complete preparation endpoint remains available to the external profiler; set `SHIFT_PROFILE_SLUG_ATLAS=1` for native phase timings.
 
 Imported (read-only) font sources go through `SourceIdentity`: opening a source mints stable glyph, axis, source, mapping, instance, and metric IDs once and retains the canonical `FontAxis` values plus the compiled `AxisMappingBasis` values for that directory. Imported per-source metrics (italic angle, line gap, underline, cap height, x-height) come from the backend directory rather than synthesized defaults. Catalog atlas coordinates arrive as external axis values and are mapped through the retained bases into design space before atlas weight evaluation, so external controls never leak into design-space interpolation. Authored mutations stay gated off while a read-only source is open.
