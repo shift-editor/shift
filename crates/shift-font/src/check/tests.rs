@@ -342,3 +342,35 @@ fn a_round_contour_starting_elsewhere_is_not_reported_when_it_keeps_its_shape() 
 
     assert!(!glyph_a_checks(&font).contains(&Check::WrongStartPoint));
 }
+
+#[test]
+fn reports_an_alternate_an_earlier_one_covers() {
+    use crate::{AlternateId, EditGlyphAlternate, GlyphAlternateEdit};
+
+    let mut font = crate::test_support::conditions_font();
+    // `heavy` (Weight ≥ 700) first covers `compact-heavy` (also Weight ≥ 700).
+    let reorder = EditGlyphAlternate {
+        alternate_id: AlternateId::from_raw("heavy"),
+        edit: GlyphAlternateEdit::Move(0),
+    };
+    let dollar = font.glyph_by_name("dollar").unwrap().id();
+    let unused = |font: &Font| -> Vec<_> {
+        font.check_glyph(dollar)
+            .unwrap()
+            .into_iter()
+            .filter(|finding| finding.check == Check::NeverUsedAlternate)
+            .collect()
+    };
+    assert!(unused(&font).is_empty());
+    font.apply_intents(&reorder.into()).unwrap();
+
+    let findings = unused(&font);
+
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].check, Check::NeverUsedAlternate);
+    assert_eq!(
+        findings[0].message,
+        "dollar: dollar.compact-heavy (alternate 2) is never used, because \
+         dollar.heavy (alternate 1) already applies wherever its condition holds"
+    );
+}

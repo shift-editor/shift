@@ -190,6 +190,17 @@ pub enum CoreError {
     #[error("alternate id {0} already exists")]
     DuplicateAlternateId(crate::AlternateId),
 
+    #[error("alternate {0} not found")]
+    AlternateNotFound(crate::AlternateId),
+
+    /// An alternate placed or moved past the end of its glyph's list.
+    #[error("glyph {glyph_id} has {count} alternates, so position {position} is out of range")]
+    AlternatePositionOutOfRange {
+        glyph_id: GlyphId,
+        position: usize,
+        count: usize,
+    },
+
     /// A glyph's alternate draws the glyph itself.
     #[error("alternate {alternate_id} of glyph {glyph_id} is the glyph itself")]
     AlternateIsItself {
@@ -434,6 +445,7 @@ entity_ref! {
     LayerId => LayerNotFound,
     SourceId => SourceNotFound,
     AxisId => AxisNotFound,
+    crate::AlternateId => AlternateNotFound,
     NamedInstanceId => NamedInstanceNotFound,
     KerningGroupId => KerningGroupNotFound,
 }

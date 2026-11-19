@@ -161,16 +161,16 @@ fn an_alternate_must_be_another_glyph_the_font_has() {
 
 #[test]
 fn an_alternate_condition_reads_font_axes_only() {
-    let font = conditions_font();
-    let spread = axis_tagged(&font, "SPRD");
-    let on_glyph_axis = Condition::all([ConditionRange::new(spread, Some(1.0), None)]);
+    // `H`'s Crossbar, whose id is the same in every copy of the fixture.
+    let crossbar = AxisId::from_raw("crossbar");
+    let on_glyph_axis = Condition::all([ConditionRange::new(crossbar, Some(1.0), None)]);
 
     let refused = refusal_of_alternate("r", on_glyph_axis, "dollar");
 
     assert!(matches!(
         refused,
         CoreError::AlternateConditionOffFontAxes { alternate_id, axis_id }
-            if alternate_id == AlternateId::from_raw("r") && axis_id == spread
+            if alternate_id == AlternateId::from_raw("r") && axis_id == crossbar
     ));
 }
 

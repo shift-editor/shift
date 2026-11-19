@@ -46,6 +46,11 @@ impl Font {
         (self.glyph_axis_owner(axis_id) == Some(glyph_id?)).then_some(axis_id)
     }
 
+    /// The glyph axis tagged `tag`, in whichever glyph has it.
+    pub fn glyph_axis_id_by_tag(&self, tag: &str) -> Option<AxisId> {
+        self.index().glyph_axis_by_tag(tag).copied()
+    }
+
     /// Whether a font axis or a glyph axis already uses `tag`.
     pub fn is_axis_tag_taken(&self, tag: &str) -> bool {
         self.axes().iter().any(|axis| axis.tag() == tag)
