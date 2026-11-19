@@ -1,15 +1,14 @@
-import { useMemo, useState, type ComponentType } from "react";
+import { useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { useSignalState } from "@shift/editor/signals";
 import { asAlternateId, type AlternateId, type ConditionRange } from "@shift/types";
 import {
-  Button,
   cn,
-  Menu,
-  MenuItem,
-  MenuPopup,
-  MenuPortal,
-  MenuPositioner,
-  MenuTrigger,
+  ContextMenu,
+  ContextMenuItem,
+  ContextMenuPopup,
+  ContextMenuPortal,
+  ContextMenuPositioner,
+  ContextMenuTrigger,
   Separator,
   SortableList,
   Tooltip,
@@ -18,7 +17,6 @@ import {
 import {
   CollapsibleSection,
   SidebarActionButton,
-  SidebarActionRow,
   type CollapsibleSectionProps,
 } from "@/components/sidebar";
 import { useGlyphCatalog } from "@/context/GlyphCatalogContext";
@@ -26,17 +24,16 @@ import { GlyphAlternates } from "@/lib/variation/GlyphAlternates";
 import type { AlternateGlyphChoice, AlternateRow } from "@/types/conditions";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 import PlusIcon from "@/assets/general/plus.svg";
-import VerticalElipsis from "@/assets/general/vertical-ellipsis.svg";
 import { ConditionChips } from "./ConditionChips";
 import { NewAlternatePanel } from "./NewAlternatePanel";
 
 /**
  * The Designspace tab's Alternates section, after Glyph sources, shown while
  * a glyph is edited: the glyphs drawn in its place where their conditions
- * hold, tried in order, the first match winning. Each row names the
- * alternate glyph, with its condition's chips under it; a dot marks the one
- * the canvas draws here, and one an earlier alternate always beats is
- * greyed with a note. Rows reorder by dragging; ⋮ opens or deletes one.
+ * hold, tried in order, the first match winning. Each row is one line: a
+ * the alternate glyph's icon, as the Layers panel draws it (its name the tooltip), its
+ * condition's chips, and a dot on the one the canvas draws here, which is
+ * tinted; one an earlier alternate always beats is greyed with a note. Rows reorder by dragging the icon; right-clicking a row opens or deletes it.
  * **+** picks a glyph (or creates `<glyph>.alt`) and starts its first chip;
  * the alternate is added when that chip is committed.
  */
@@ -81,12 +78,7 @@ export const AlternatesSection = ({
   return (
     <>
       <Separator className="-mx-1 w-auto" />
-      <Section
-        title="Alternates"
-        open={open}
-        onOpenChange={setOpen}
-        actions={actions}
-      >
+      <Section title="Alternates" open={open} onOpenChange={setOpen} actions={actions}>
         {empty ? (
           <p className="pl-2 text-ui text-muted">None</p>
         ) : (
@@ -129,7 +121,13 @@ export const AlternatesSection = ({
   );
 };
 
-/** One alternate: its glyph's name, the in-use dot, its chips, and a never-used note. */
+/**
+ * One alternate on one line: its glyph's icon where the font is drawn now,
+ * as the Layers panel draws a glyph (its name the tooltip), its condition's
+ * chips, and the in-use dot. The icon drags the row; right-clicking the row
+ * opens the glyph or deletes the alternate. A never-used alternate greys its
+ * icon and chips, with the note below.
+ */
 const AlternateRowView = ({
   row,
   alternates,
@@ -149,56 +147,70 @@ const AlternateRowView = ({
       role="listitem"
       aria-label={row.glyphName}
       data-testid={`alternate-${row.id}`}
-      className={cn(
-        "relative flex w-full flex-col gap-1 pb-1",
-        sortable.dragging && "z-10 opacity-50",
-      )}
+      className={cn("relative flex w-full flex-col gap-1", sortable.dragging && "z-10 opacity-50")}
     >
-      <SidebarActionRow
-        activator={sortable.activator}
-        onClick={() => undefined}
-        actions={<AlternateActions row={row} alternates={alternates} disabled={!canAuthor} />}
-      >
-        <span
-          className={cn("min-w-0 flex-1 truncate text-left", greyed && "opacity-50")}
-          title={row.glyphName}
+      <AlternateMenu row={row} alternates={alternates} canAuthor={canAuthor}>
+        <div
+          className={cn(
+            "flex w-full items-start gap-2 rounded px-1 py-1",
+            row.inUse && "bg-accent/10",
+          )}
         >
-          {row.glyphName}
-        </span>
-        {row.inUse && (
-          <Tooltip content="Drawn here">
-            <span
-              role="img"
-              aria-label="Drawn here"
-              className="mr-1 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
-            />
+          {/* As tall as a line of chips, so the icon sits on the first line. */}
+          <Tooltip content={row.glyphName}>
+            <button
+              type="button"
+              aria-label={row.glyphName}
+              {...sortable.activator}
+              className={cn(
+                "flex h-5 shrink-0 items-center rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent",
+                greyed && "opacity-50",
+              )}
+            >
+              <svg aria-hidden className="h-4 w-4 shrink-0 text-primary" viewBox="0 0 16 16">
+                {row.iconPath ? <path d={row.iconPath} fill="currentColor" /> : null}
+              </svg>
+            </button>
           </Tooltip>
-        )}
-      </SidebarActionRow>
-      <div className={cn("pl-2", greyed && "opacity-50")}>
-        <ConditionChips
-          label={`${row.glyphName} condition`}
-          chips={row.chips}
-          space={alternates.chips}
-          disabled={!canAuthor}
-          onCommit={(index, range) => alternates.setRange(row.id, index, range)}
-          onRemove={(index) => alternates.removeRange(row.id, index)}
-        />
-      </div>
-      {row.neverUsed && <p className="pl-2 text-ui text-muted">{row.neverUsed}</p>}
+          <div className={cn("min-w-0 flex-1", greyed && "opacity-50")}>
+            <ConditionChips
+              label={`${row.glyphName} condition`}
+              chips={row.chips}
+              space={alternates.chips}
+              disabled={!canAuthor}
+              onCommit={(index, range) => alternates.setRange(row.id, index, range)}
+              onRemove={(index) => alternates.removeRange(row.id, index)}
+            />
+          </div>
+          {row.inUse && (
+            <Tooltip content="Drawn here">
+              <span className="flex h-5 shrink-0 items-center">
+                <span
+                  role="img"
+                  aria-label="Drawn here"
+                  className="h-1.5 w-1.5 rounded-full bg-accent"
+                />
+              </span>
+            </Tooltip>
+          )}
+        </div>
+      </AlternateMenu>
+      {row.neverUsed && <p className="pl-1 text-ui text-muted">{row.neverUsed}</p>}
     </div>
   );
 };
 
-/** A row's ⋮: open the alternate glyph, or delete the alternate (the glyph stays). */
-const AlternateActions = ({
+/** A row's context menu: open the alternate glyph, or delete the alternate (the glyph stays). */
+const AlternateMenu = ({
   row,
   alternates,
-  disabled,
+  canAuthor,
+  children,
 }: {
   row: AlternateRow;
   alternates: GlyphAlternates;
-  disabled: boolean;
+  canAuthor: boolean;
+  children: ReactNode;
 }) => {
   const catalog = useGlyphCatalog();
   const openGlyph = async () => {
@@ -220,26 +232,18 @@ const AlternateActions = ({
   };
 
   return (
-    <Menu modal={false}>
-      <Tooltip content="Alternate actions">
-        <MenuTrigger
-          render={
-            <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${row.glyphName}`} />
-          }
-        >
-          <VerticalElipsis className="h-5 w-5 text-icon-subtle" />
-        </MenuTrigger>
-      </Tooltip>
-      <MenuPortal>
-        <MenuPositioner sideOffset={4} align="start">
-          <MenuPopup>
-            <MenuItem onClick={() => void openGlyph()}>Open {row.glyphName}</MenuItem>
-            <MenuItem disabled={disabled} onClick={() => void remove(row.id)}>
+    <ContextMenu>
+      <ContextMenuTrigger className="block w-full">{children}</ContextMenuTrigger>
+      <ContextMenuPortal>
+        <ContextMenuPositioner>
+          <ContextMenuPopup>
+            <ContextMenuItem onClick={() => void openGlyph()}>Open {row.glyphName}</ContextMenuItem>
+            <ContextMenuItem disabled={!canAuthor} onClick={() => void remove(row.id)}>
               Delete
-            </MenuItem>
-          </MenuPopup>
-        </MenuPositioner>
-      </MenuPortal>
-    </Menu>
+            </ContextMenuItem>
+          </ContextMenuPopup>
+        </ContextMenuPositioner>
+      </ContextMenuPortal>
+    </ContextMenu>
   );
 };

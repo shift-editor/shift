@@ -135,25 +135,33 @@ export const ConditionChips = ({
     </ChipFrame>
   );
 
+  const views = chips.map((chip, index) =>
+    editingIndex === index ? (
+      draftField
+    ) : (
+      <ChipView
+        key={`${chip.axis.id}-${index}`}
+        chip={chip}
+        disabled={disabled}
+        onEdit={() => editChip(index, chip)}
+        onRemove={() => void onRemove(index)}
+      />
+    ),
+  );
+  if (editingIndex === null && draftField) views.push(draftField);
+  const leading = views.slice(0, -1);
+  const last = views.at(-1);
+
   return (
     <div className="flex flex-col gap-1">
       <div role="group" aria-label={label} className="flex flex-wrap items-center gap-1">
-        {chips.map((chip, index) =>
-          editingIndex === index ? (
-            draftField
-          ) : (
-            <ChipView
-              key={`${chip.axis.id}-${index}`}
-              chip={chip}
-              disabled={disabled}
-              onEdit={() => editChip(index, chip)}
-              onRemove={() => void onRemove(index)}
-            />
-          ),
-        )}
-        {editingIndex === null && draftField}
-        {note && <span className="px-0.5 text-ui text-muted">{note}</span>}
-        {!disabled && draft === null && <AddChipButton space={space} onAxis={startChip} />}
+        {leading}
+        {/* The last chip and what follows it stay on one line: the + never wraps alone. */}
+        <span className="inline-flex shrink-0 items-center gap-1">
+          {last}
+          {note && <span className="px-0.5 text-ui text-muted">{note}</span>}
+          {!disabled && draft === null && <AddChipButton space={space} onAxis={startChip} />}
+        </span>
       </div>
       {problem && (
         <p role="alert" className="text-ui text-error">

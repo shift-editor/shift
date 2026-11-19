@@ -25,6 +25,12 @@ export interface AlternateRow {
   readonly id: AlternateId;
   readonly glyphId: GlyphId;
   readonly glyphName: GlyphName;
+  /**
+   * The alternate glyph's icon where the font is drawn now, as the Layers
+   * panel draws a glyph (`GLYPH_ICON`); undefined until it is loaded or
+   * while it has no outline.
+   */
+  readonly iconPath: string | undefined;
   readonly chips: readonly ConditionChip[];
   /** Whether the canvas draws this alternate at the current location. */
   readonly inUse: boolean;

@@ -10,6 +10,7 @@ import type {
   GlyphName,
 } from "@shift/types";
 import type { AlternateRow, AlternatesSection } from "@/types/conditions";
+import { GLYPH_ICON } from "@/components/editor/object-tree/IconBox";
 import { ConditionChipSpace, withRange, withoutRange } from "./ConditionChipSpace";
 
 /**
@@ -45,6 +46,7 @@ export class GlyphAlternates {
           id: alternate.id,
           glyphId: alternate.glyph,
           glyphName: font.glyphName(alternate.glyph) ?? alternate.glyph,
+          iconPath: this.#iconPath(alternate.glyph),
           chips: this.#chips.chips(alternate.condition),
           inUse: alternate === inUse,
           neverUsed: this.#neverUsedNote(alternate, alternates, neverUsed),
@@ -148,6 +150,33 @@ export class GlyphAlternates {
 
     const alternates = this.#editor.font.alternatesOf(edited.glyphId);
     return alternates.find((alternate) => alternate.id === alternateId)?.condition ?? null;
+  }
+
+  /**
+   * `glyphId`'s icon where the font is drawn now, as the Layers panel draws
+   * the glyph being edited; undefined until it is loaded.
+   */
+  #iconPath(glyphId: GlyphId): string | undefined {
+    const glyph = this.#editor.glyphForId(glyphId);
+    if (!glyph) return undefined;
+
+    const view = glyph.renderModelAt(
+      this.#editor.externalLocationCell,
+      this.#editor.activeSourceIdCell,
+    );
+    // Called from the section's computed: subscribe, then read.
+    track(view.contoursCell);
+    const placed = view.contoursCell.peek();
+    for (const contour of placed) contour.trackShape();
+    const metricsCell = this.#editor.font.defaultSourceMetricsCell;
+    track(metricsCell);
+    track(view.xAdvanceCell);
+    const metrics = metricsCell.peek();
+    return GLYPH_ICON.glyphPath(placed, {
+      ascender: metrics.ascender,
+      descender: metrics.descender,
+      advance: view.xAdvanceCell.peek(),
+    });
   }
 
   /** Why `alternate` never draws, as its row says it; null when it draws somewhere. */
