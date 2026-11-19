@@ -194,18 +194,18 @@ const ChipView = ({
     <button
       type="button"
       disabled={disabled}
-      aria-label={`Edit ${chip.axis.name} ${chip.valueText}`}
+      aria-label={`Edit ${chip.axis.name} ${chip.displayText}`}
       onClick={onEdit}
       className="inline-flex items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
     >
       <span className="text-muted">{chip.axis.name}</span>
-      <span>{chip.valueText}</span>
+      <span>{chip.displayText}</span>
     </button>
     {!disabled && (
       <Tooltip content="Remove">
         <button
           type="button"
-          aria-label={`Remove ${chip.axis.name} ${chip.valueText}`}
+          aria-label={`Remove ${chip.axis.name} ${chip.displayText}`}
           onClick={onRemove}
           className="inline-flex h-4 w-4 items-center justify-center rounded-sm text-muted hover:bg-hover hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
         >

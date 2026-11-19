@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FONTS, useTestEditor } from "@/testing/fontFixture";
 import { GlyphAlternates } from "./GlyphAlternates";
+import { chipDisplayText } from "./ConditionChipSpace";
 
 // Solenoid: a Bleed axis (0–100, source Bled at 100). `dollar` draws
 // `dollar.bled` from Bleed 70, then `dollar.heavy` from 80, which the first
@@ -143,6 +144,30 @@ describe("condition chips", () => {
 
     await alternates().removeRange(row("dollar.heavy").id, 1);
     expect(row("dollar.heavy").chips.map(({ valueText }) => valueText)).toEqual(["≥ 80"]);
+  });
+});
+
+describe("a chip's shown value", () => {
+  it("is rounded, and open on a side that reaches the axis's end", () => {
+    const axis = bleed(); // 0 to 100
+
+    expect(chipDisplayText("≥ 69.444", axis)).toBe("≥ 69.4");
+    expect(chipDisplayText("16.84–50", axis)).toBe("16.8–50");
+    expect(chipDisplayText("69.444–100", axis)).toBe("≥ 69.4");
+    expect(chipDisplayText("0–80", axis)).toBe("≤ 80");
+    expect(chipDisplayText("0–100", axis)).toBe("0–100");
+  });
+
+  it("is whole from 100 up, while editing starts from the exact value", async () => {
+    const reading = alternates().chips.read(bleed(), "≥ 69.444");
+    if (reading.kind !== "range") throw new Error(reading.message);
+    await alternates().setRange(row("dollar.bled").id, 0, reading.range);
+
+    expect(row("dollar.bled").chips[0]).toMatchObject({
+      valueText: "≥ 69.444",
+      displayText: "≥ 69.4",
+    });
+    expect(chipDisplayText("≥ 694.444", bleed())).toBe("≥ 694");
   });
 });
 

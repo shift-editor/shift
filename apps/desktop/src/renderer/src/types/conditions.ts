@@ -4,8 +4,13 @@ import type { AlternateId, ConditionRange, GlyphId, GlyphName } from "@shift/typ
 /** One range of a condition as its chip shows it: `Weight ≥ 700`. */
 export interface ConditionChip {
   readonly axis: Axis;
-  /** The value after the axis's name, in user units on a font axis: `≥ 700`, `≤ 80`, `400–600`. */
+  /** The value after the axis's name, exactly, in user units on a font axis: `≥ 700`, `≤ 80`, `400–600`; what editing the chip starts from. */
   readonly valueText: string;
+  /**
+   * The value as the chip shows it: rounded (`694`, `16.8`), and a range
+   * that reaches an end of the axis written open on that side (`≥ 694`).
+   */
+  readonly displayText: string;
   readonly range: ConditionRange;
 }
 

@@ -44,7 +44,7 @@ export class ConditionChipSpace {
       if (!axis) return [];
 
       const valueText = this.#editor.font.conditionValueText(this.#glyphId, range);
-      return [{ axis, range, valueText }];
+      return [{ axis, range, valueText, displayText: chipDisplayText(valueText, axis) }];
     });
   }
 
@@ -118,6 +118,32 @@ export function sharedRanges(conditions: readonly Condition[]): readonly Conditi
 /** Whether `condition` has `range` among its ranges. */
 function hasRange(condition: Condition, range: ConditionRange): boolean {
   return condition.all.some((other) => sameConditionRange(range, other));
+}
+
+/**
+ * A chip's exact value text, as the engine writes it (`≥ 694.444`,
+ * `≤ 80`, `400–900`), as the chip shows it: each number rounded for
+ * reading, and a range whose end is the axis's own written open there,
+ * `694.444–900` on an axis up to 900 as `≥ 694`. Only the shown text: the
+ * range and the text editing starts from stay exact.
+ */
+export function chipDisplayText(valueText: string, axis: Axis): string {
+  const both = /^(-?[\d.]+)–(-?[\d.]+)$/.exec(valueText);
+  if (both) {
+    const [from, upTo] = [Number(both[1]), Number(both[2])];
+    if (upTo === axis.maximum && from !== axis.minimum) return `≥ ${roundedValue(from)}`;
+    if (from === axis.minimum && upTo !== axis.maximum) return `≤ ${roundedValue(upTo)}`;
+    return `${roundedValue(from)}–${roundedValue(upTo)}`;
+  }
+
+  return valueText.replace(/-?\d+(?:\.\d+)?/g, (number) => roundedValue(Number(number)));
+}
+
+/** A value as a chip shows it: whole from 100 up, else to one decimal place, `694`, `16.8`. */
+function roundedValue(value: number): string {
+  const places = Math.abs(value) >= 100 ? 0 : 1;
+  const factor = 10 ** places;
+  return String(Math.round(value * factor) / factor);
 }
 
 /** An engine message as the chip shows it: capitalised, with a full stop. */
