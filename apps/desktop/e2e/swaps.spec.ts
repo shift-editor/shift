@@ -43,8 +43,9 @@ test.describe("swaps in the Designspace tab", () => {
     const controls = await openVariationControls(page);
 
     await controls.getByRole("button", { name: "Why is this swap never used?" }).click();
-    await expect(page.getByText("Never used: dollar.bled always wins first.")).toBeVisible();
-    await page.getByRole("button", { name: "Move above dollar.bled" }).click();
+    const why = page.getByRole("dialog");
+    await expect(why.getByText("Never used: dollar.bled always wins first.")).toBeVisible();
+    await why.getByRole("button", { name: "Move above dollar.bled" }).click();
 
     await expect(
       controls.getByRole("button", { name: "Why is this swap never used?" }),
