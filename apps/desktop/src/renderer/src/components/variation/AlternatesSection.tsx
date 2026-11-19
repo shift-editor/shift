@@ -83,7 +83,6 @@ export const AlternatesSection = ({
       <Separator className="-mx-1 w-auto" />
       <Section
         title="Alternates"
-        hint="First match wins"
         open={open}
         onOpenChange={setOpen}
         actions={actions}
