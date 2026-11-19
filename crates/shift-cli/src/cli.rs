@@ -4,6 +4,9 @@ use anstyle::{AnsiColor, Effects};
 use clap::builder::styling::Styles;
 use clap::{Args, ColorChoice, Parser, Subcommand, ValueHint};
 
+use shift_font::MarkColor;
+
+use crate::authoring::parse_mark_color;
 use crate::glyph_inspect::GlyphInspectView;
 use crate::inspect::InspectView;
 use crate::proof::ProofArgs;
@@ -187,6 +190,13 @@ pub(crate) enum GlyphCommand {
     /// Write glyphs from any font source as the JSON `glyph set` reads.
     Export(ExportGlyphsArgs),
 
+    /// Tag glyphs with a mark colour, the colour the glyph grid shows and
+    /// filters by, or clear it.
+    ///
+    /// A glyph has one mark colour, whatever the source. Every named glyph
+    /// changes in one edit, or none does.
+    Color(MarkColorArgs),
+
     /// Author axes only one glyph varies along.
     Axis {
         #[command(subcommand)]
@@ -311,6 +321,38 @@ pub(crate) struct ExportGlyphsArgs {
     /// Write the JSON here instead of to stdout.
     #[arg(long, value_hint = ValueHint::FilePath)]
     pub output: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct MarkColorArgs {
+    /// Path to the canonical SQLite .shift document.
+    #[arg(value_hint = ValueHint::FilePath)]
+    pub path: PathBuf,
+
+    /// Glyph names or full stable glyph ids; repeat or comma-separate.
+    #[arg(long, value_delimiter = ',', required = true)]
+    pub glyphs: Vec<String>,
+
+    #[command(flatten)]
+    pub color: MarkColorChoice,
+
+    #[command(flatten)]
+    pub mutation: MutationArgs,
+}
+
+/// The colour to tag glyphs with, or none to clear it.
+#[derive(Debug, Args)]
+#[group(required = true, multiple = false)]
+pub(crate) struct MarkColorChoice {
+    /// A named colour (red, orange, brown, yellow, lightGreen, darkGreen,
+    /// lightBlue, darkBlue, purple, magenta, lightGray, charcoal), or any
+    /// other colour as r,g,b,a with each channel from 0 to 1.
+    #[arg(long, value_parser = parse_mark_color)]
+    pub color: Option<MarkColor>,
+
+    /// Remove the glyphs' mark colour.
+    #[arg(long)]
+    pub clear: bool,
 }
 
 #[derive(Debug, Args)]

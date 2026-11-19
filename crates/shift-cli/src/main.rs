@@ -19,7 +19,7 @@ use authoring::{
     add_source, assign_kerning_group, copy_layer, create_font, create_kerning_group,
     delete_kerning_group, edit_glyph_axis, export_glyphs, font_info, move_layer, remove_glyph_axis,
     remove_instance, remove_kerning, remove_layer, rename_kerning_group, set_axis, set_font,
-    set_glyphs, set_instance, set_kerning, set_layer, unassign_kerning_group,
+    set_glyphs, set_instance, set_kerning, set_layer, set_mark_color, unassign_kerning_group,
 };
 use authoring::{
     add_alternate, move_alternate, remove_alternate, set_alternate, set_component_condition,
@@ -128,6 +128,10 @@ fn main() -> miette::Result<()> {
             }
             GlyphCommand::Inspect(args) => inspect_glyph(&args),
             GlyphCommand::Export(args) => export_glyph_batch(args),
+            GlyphCommand::Color(args) => {
+                let json = args.mutation.json;
+                write_authoring_result(set_mark_color(&args), json)
+            }
             GlyphCommand::Axis { command } => match command {
                 GlyphAxisCommand::Add(args) => {
                     let json = args.mutation.json;

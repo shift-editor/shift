@@ -23,6 +23,10 @@ impl GlyphInspection {
             format!("{}  {}", self.glyph.name, self.glyph.id),
             format!("format      {}", self.format),
             format!("unicode     {}", display_list(&self.glyph.unicodes)),
+            format!(
+                "mark color  {}",
+                self.glyph.mark_color.as_deref().unwrap_or("-")
+            ),
             format!("external    {}", Coordinates::of(&self.location.external)),
             format!("design      {}", Coordinates::of(&self.location.design)),
             format!("selection   {}", self.variation.selection),

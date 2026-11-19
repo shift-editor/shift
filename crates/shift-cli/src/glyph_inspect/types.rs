@@ -28,6 +28,9 @@ pub(crate) struct GlyphIdentity {
     pub id: String,
     pub name: String,
     pub unicodes: Vec<String>,
+    /// A named colour such as `red`, or `r,g,b,a` for any other; `None`
+    /// when the glyph has no mark colour.
+    pub mark_color: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
