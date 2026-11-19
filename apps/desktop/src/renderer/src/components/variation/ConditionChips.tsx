@@ -409,10 +409,15 @@ function shownSides(mode: ConditionMode): readonly (keyof ChipBounds)[] {
 }
 
 /** The equation's modes, as the operator's menu lists them. */
-const MODES: readonly { readonly mode: ConditionMode; readonly label: string }[] = [
-  { mode: "atLeast", label: "≥ At least" },
-  { mode: "atMost", label: "≤ At most" },
-  { mode: "between", label: "↔ Between" },
+const MODES: readonly {
+  readonly mode: ConditionMode;
+  readonly sign: string;
+  readonly label: string;
+}[] = [
+  { mode: "atLeast", sign: "≥", label: "At least" },
+  { mode: "atMost", sign: "≤", label: "At most" },
+  // An en dash, as a chip writes a range: `BLED 70–100`.
+  { mode: "between", sign: "–", label: "Between" },
 ];
 
 /** An operator, `≥` or `≤`: a button whose menu switches the equation's mode. */
@@ -452,6 +457,10 @@ const OperatorButton = ({
                 <MenuCheckboxItemIndicator keepMounted className="w-3 data-[unchecked]:invisible">
                   <Check className="h-3 w-3" strokeWidth={1.75} />
                 </MenuCheckboxItemIndicator>
+                {/* One fixed column, so the labels line up. */}
+                <span aria-hidden className="w-3 text-center">
+                  {item.sign}
+                </span>
                 {item.label}
               </span>
             </MenuCheckboxItem>
