@@ -1,5 +1,75 @@
 # Changelog
 
+## [0.3.0](https://github.com/shift-editor/shift/compare/v0.2.0...v0.3.0) (2026-11-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename glyph alternates to swaps ([#980](https://github.com/shift-editor/shift/issues/980))
+* **sdk:** run memory sessions and compiled previews on the engine ([#902](https://github.com/shift-editor/shift/issues/902))
+
+### Features
+
+* author glyph axes and drawings anywhere from engine and CLI ([#969](https://github.com/shift-editor/shift/issues/969)) ([6d852cd](https://github.com/shift-editor/shift/commit/6d852cdf7cc7d321367c68b3a9d7ba98c46147e6))
+* **canvas:** find and place glyphs from a Glyphs tab ([#944](https://github.com/shift-editor/shift/issues/944)) ([deb4be9](https://github.com/shift-editor/shift/commit/deb4be9e67132e20715c24bcc06943acb0bee9db))
+* **cli:** author metrics keys in glyph and layer payloads ([#949](https://github.com/shift-editor/shift/issues/949)) ([1ce5612](https://github.com/shift-editor/shift/commit/1ce5612806004f8e8835ce092531e18eabd378d6))
+* **cli:** export documents as designspace or UFO sources ([#933](https://github.com/shift-editor/shift/issues/933)) ([c639f3f](https://github.com/shift-editor/shift/commit/c639f3fb949b97d42da03af9a684cc1c527bf12a))
+* **cli:** hide or show axes from shift-cli ([#963](https://github.com/shift-editor/shift/issues/963)) ([9bc24c4](https://github.com/shift-editor/shift/commit/9bc24c419d565af30dfdc98034ca1c5b72884c23))
+* **cli:** import a font source into a new .shift document ([#945](https://github.com/shift-editor/shift/issues/945)) ([d418f83](https://github.com/shift-editor/shift/commit/d418f83f1f47226dc1808ed98b4c7755a4afe161))
+* **cli:** read and write glyph mark colours ([#976](https://github.com/shift-editor/shift/issues/976)) ([611f92b](https://github.com/shift-editor/shift/commit/611f92befd62a50647fb501e4bd4247dccefbaa5))
+* edit glyph alternates and component conditions from the CLI ([#975](https://github.com/shift-editor/shift/issues/975)) ([78edc02](https://github.com/shift-editor/shift/commit/78edc02f2f8edd2a9b198c44f7d31bb8bc95a348))
+* edit glyph sources and glyph axes in the editor ([#972](https://github.com/shift-editor/shift/issues/972)) ([daa7fe1](https://github.com/shift-editor/shift/commit/daa7fe13fdee3b33a21e9e06017e95b6fb3d133a))
+* edit glyph swaps and component conditions in the editor ([#979](https://github.com/shift-editor/shift/issues/979)) ([873ecad](https://github.com/shift-editor/shift/commit/873ecad98cdb03acbe7e0301cd02cac2458fd6bc))
+* **editor:** add a configurable grid with snap-to-grid ([#930](https://github.com/shift-editor/shift/issues/930)) ([03f0ec5](https://github.com/shift-editor/shift/commit/03f0ec50bb4a8cae4b7a86033fb7e8f84bd3ca27))
+* **editor:** save the grid's spacing and subdivisions with the font ([#948](https://github.com/shift-editor/shift/issues/948)) ([da797bf](https://github.com/shift-editor/shift/commit/da797bf01fafe8000436d69342c3b59b7d65b48d))
+* erase open corners on the canvas, in the grid and in export ([#957](https://github.com/shift-editor/shift/issues/957)) ([f219ba7](https://github.com/shift-editor/shift/commit/f219ba7a2017f7e8dfc7b63edb4d96974d3f51d1))
+* **export:** compile alternates and refuse component conditions ([#977](https://github.com/shift-editor/shift/issues/977)) ([de37e97](https://github.com/shift-editor/shift/commit/de37e97d3305f95c19eca0110ceab35f97a86b38))
+* **export:** compile brace drawings at their own locations ([#970](https://github.com/shift-editor/shift/issues/970)) ([7f114f9](https://github.com/shift-editor/shift/commit/7f114f92c153313a29d77e595101fdd3309c42d9))
+* **export:** compile component locations, and keep them in VARC on request ([#960](https://github.com/shift-editor/shift/issues/960)) ([e1529f1](https://github.com/shift-editor/shift/commit/e1529f116610975ab7f7b485ca2c135f2d270e34))
+* **export:** compile each named instance as a static font ([#934](https://github.com/shift-editor/shift/issues/934)) ([db5edde](https://github.com/shift-editor/shift/commit/db5edde445101ee0dbabf5aac4b0b2329d79599e))
+* **export:** compile glyph axes and component locations on them ([#971](https://github.com/shift-editor/shift/issues/971)) ([6102222](https://github.com/shift-editor/shift/commit/61022226f2a0b5f2e7d37c9cf69ed5b8089273d7))
+* **export:** export fonts and sources from a sidebar section ([#935](https://github.com/shift-editor/shift/issues/935)) ([40cfebc](https://github.com/shift-editor/shift/commit/40cfebcb8279d6edb490e609a956daed76ea903f))
+* **export:** export fonts as designspace and UFO sources ([#932](https://github.com/shift-editor/shift/issues/932)) ([8a5a4a5](https://github.com/shift-editor/shift/commit/8a5a4a57d38808e097ec789e725ddd1a54301050))
+* **font:** add glyph alternates and component conditions ([#974](https://github.com/shift-editor/shift/issues/974)) ([742dc41](https://github.com/shift-editor/shift/commit/742dc41d82ec5a2040469f15acf0f5e8ec738e0c))
+* **font:** give glyphs their own axes, saved in documents ([#967](https://github.com/shift-editor/shift/issues/967)) ([e452863](https://github.com/shift-editor/shift/commit/e452863870455125b78ca3c58483cf2915e488cd))
+* **font:** let a component draw its base glyph at its own location ([#953](https://github.com/shift-editor/shift/issues/953)) ([75482d2](https://github.com/shift-editor/shift/commit/75482d240c046f97f009c3c93bf8a14d7ea35c12))
+* **font:** place anchored marks on their anchors where each is drawn ([#964](https://github.com/shift-editor/shift/issues/964)) ([534e36c](https://github.com/shift-editor/shift/commit/534e36ca3355c91e58afdc66210085e17e37aeca))
+* **font:** store a mark colour on glyphs ([#939](https://github.com/shift-editor/shift/issues/939)) ([3c13913](https://github.com/shift-editor/shift/commit/3c13913ddacb98943ae00b3a90bd47b9816c8152))
+* **glyph-catalog:** group languages for type design ([#924](https://github.com/shift-editor/shift/issues/924)) ([a56e4f0](https://github.com/shift-editor/shift/commit/a56e4f07335a7f30fcced0d75f70835fe7c5448d))
+* **glyph-grid:** shade the name band and tighten tile corners ([#959](https://github.com/shift-editor/shift/issues/959)) ([c70a487](https://github.com/shift-editor/shift/commit/c70a4878c8a30842a30d0e18ec960374fb376506))
+* **glyph:** highlight every colour a mixed selection has ([#961](https://github.com/shift-editor/shift/issues/961)) ([25da080](https://github.com/shift-editor/shift/commit/25da080bb90358118a262ebe656dfda612970cdc))
+* **glyph:** tag glyphs from the sidebar, the Glyph menu and ⌃0–⌃7 ([#943](https://github.com/shift-editor/shift/issues/943)) ([3582988](https://github.com/shift-editor/shift/commit/35829882c3af5068c3f81a26263466daf581c96f))
+* **grid:** act on several glyphs from the right-click menu ([#942](https://github.com/shift-editor/shift/issues/942)) ([685aa48](https://github.com/shift-editor/shift/commit/685aa4837c686ddfed3304c33eb29f9397eca6f0))
+* **grid:** colour glyph cells by tag and add a grid footer ([#941](https://github.com/shift-editor/shift/issues/941)) ([4292b72](https://github.com/shift-editor/shift/commit/4292b72fbd16de9534a39866d339c6559ad59116))
+* **grid:** select several glyphs in the glyph grid ([#940](https://github.com/shift-editor/shift/issues/940)) ([645f7fe](https://github.com/shift-editor/shift/commit/645f7fefc598096db240a653df916076c890d030))
+* link sidebearings and widths with metrics keys ([#919](https://github.com/shift-editor/shift/issues/919)) ([d74187c](https://github.com/shift-editor/shift/commit/d74187c52d3919e6237698465144a38a0a896822))
+* list language glyphs by name with positional forms and ligatures ([#917](https://github.com/shift-editor/shift/issues/917)) ([f33b343](https://github.com/shift-editor/shift/commit/f33b343d52d2bb922ea00eb706ed9fb7220b031e))
+* **scan:** report duplicated function bodies across crates ([#903](https://github.com/shift-editor/shift/issues/903)) ([4ead21b](https://github.com/shift-editor/shift/commit/4ead21bb26f3b2c6edbbb72cbbc1092b09acbcc0))
+* **sdk:** run memory sessions and compiled previews on the engine ([#902](https://github.com/shift-editor/shift/issues/902)) ([9a826b9](https://github.com/shift-editor/shift/commit/9a826b9d0b7e3ad52384585205e10404a337b7f6))
+* **text:** shape TrueType and OpenType previews with the binary itself ([#925](https://github.com/shift-editor/shift/issues/925)) ([e7b4879](https://github.com/shift-editor/shift/commit/e7b4879d8673af493328e968719e4526e34fc01a))
+* **variation:** set where a component draws its base glyph ([#965](https://github.com/shift-editor/shift/issues/965)) ([c16c5b2](https://github.com/shift-editor/shift/commit/c16c5b288fbdcd67c0abde6956ee5afb6149af53))
+
+
+### Bug Fixes
+
+* **desktop:** show the update strip above the glyph canvas ([#928](https://github.com/shift-editor/shift/issues/928)) ([d355d90](https://github.com/shift-editor/shift/commit/d355d9071fa11fefa2ed322838a0c66d85875e10))
+* **export:** carry alternates to designspace and static fonts ([#978](https://github.com/shift-editor/shift/issues/978)) ([7de4ce5](https://github.com/shift-editor/shift/commit/7de4ce507b68bbc5d8f6500e6b59098ec467623e))
+* **font:** interpolate masters whose components set different axes ([#958](https://github.com/shift-editor/shift/issues/958)) ([2baf503](https://github.com/shift-editor/shift/commit/2baf503f201fd7cd08efcc3a85b1f94c2b6791bd))
+* **font:** select a sparse source when components set different axes ([#966](https://github.com/shift-editor/shift/issues/966)) ([97933da](https://github.com/shift-editor/shift/commit/97933daa8bec50f5207d7e653d21f38a9ed015f9))
+* **glyph-grid:** list a language's glyphs in its alphabet order ([#968](https://github.com/shift-editor/shift/issues/968)) ([00e9d19](https://github.com/shift-editor/shift/commit/00e9d19c38e334d3c093c1a596acd45fb9e26fb2))
+* **preview:** draw glyph tiles in previews without a workspace ([#973](https://github.com/shift-editor/shift/issues/973)) ([01f5205](https://github.com/shift-editor/shift/commit/01f520548b100d2de535082c9c62f21d0cefa1d4))
+* **wasm:** load the engine module asynchronously ([#926](https://github.com/shift-editor/shift/issues/926)) ([9478d84](https://github.com/shift-editor/shift/commit/9478d84371d3ec099167c42180f49dde0b6a1d2f))
+
+
+### Performance
+
+* **text:** read glyph advances without resolving outlines ([#962](https://github.com/shift-editor/shift/issues/962)) ([38cf8ec](https://github.com/shift-editor/shift/commit/38cf8ecb55513eb4b791f831dc1c4758a939d373))
+
+
+### Internal Changes
+
+* rename glyph alternates to swaps ([#980](https://github.com/shift-editor/shift/issues/980)) ([14583fb](https://github.com/shift-editor/shift/commit/14583fbe91f2d1328941ff7542fd35d2e8fac26f))
+
 ## [0.2.0](https://github.com/shift-editor/shift/compare/v0.1.1...v0.2.0) (2026-11-10)
 
 
