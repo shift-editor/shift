@@ -120,7 +120,7 @@ export const ConditionChips = ({
   const problem = draft === null ? null : draft.problem;
   const draftField = draft && (
     <ChipFrame key="draft">
-      <span className="font-mono text-muted" title={draft.axis.name}>
+      <span className="font-mono text-secondary" title={draft.axis.name}>
         {draft.axis.tag}
       </span>
       <Input
@@ -202,7 +202,7 @@ const ChipView = ({
         onClick={onEdit}
         className="inline-flex items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
       >
-        <span className="font-mono text-muted">{chip.axis.tag}</span>
+        <span className="font-mono text-secondary">{chip.axis.tag}</span>
         <span>{chip.displayText}</span>
       </button>
     </Tooltip>
@@ -278,10 +278,13 @@ const AddChipButton = ({
 /** One menu item per axis: its name, its tag beside it. */
 const AxisItems = ({ axes, onAxis }: { axes: readonly Axis[]; onAxis: (axis: Axis) => void }) =>
   axes.map((axis) => (
-    <MenuItem key={axis.id} onClick={() => onAxis(axis)}>
-      <span className="flex w-full justify-between gap-6">
-        <span>{axis.name}</span>
-        <span className="font-mono text-muted">{axis.tag}</span>
-      </span>
+    // As Font axes' + menu lists axes: the name, then the tag in mono.
+    <MenuItem
+      key={axis.id}
+      className="grid grid-cols-[minmax(0,1fr)_auto] gap-6"
+      onClick={() => onAxis(axis)}
+    >
+      <span className="truncate">{axis.name}</span>
+      <span className="font-mono text-secondary">{axis.tag}</span>
     </MenuItem>
   ));
