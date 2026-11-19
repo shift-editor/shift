@@ -1,4 +1,4 @@
-import { Button, ScrollArea, Separator, Tooltip } from "@shift/ui";
+import { ArrowLeftRight, Button, ScrollArea, Separator, Tooltip } from "@shift/ui";
 import type { MetricsKeySide } from "@shift/types";
 import type { SideLink } from "@shift/wasm/protocol";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
@@ -268,7 +268,10 @@ function GlyphTitle({
   const name = font.glyphName(opened.glyphId) ?? opened.glyphId;
   return (
     <span title={`${name} is drawn as its alternate ${drawn} here`}>
-      <span className="text-muted">{name} → </span>
+      <span className="text-muted">{name}</span>
+      <span className="mx-1 inline-flex align-text-bottom text-muted">
+        <ArrowLeftRight aria-hidden className="size-3.25" />
+      </span>
       {drawn}
     </span>
   );

@@ -1,7 +1,9 @@
-import { useState, type KeyboardEvent } from "react";
+import { useState, type KeyboardEvent, type ReactNode } from "react";
 import type { Axis } from "@shift/editor/model";
-import type { ConditionRange } from "@shift/types";
+import type { AxisId, ConditionRange } from "@shift/types";
 import {
+  ChevronDown,
+  cn,
   Input,
   Menu,
   MenuGroup,
@@ -11,19 +13,31 @@ import {
   MenuPortal,
   MenuPositioner,
   MenuTrigger,
+  Popover,
+  PopoverPopup,
+  PopoverPortal,
+  PopoverPositioner,
+  PopoverTrigger,
   Tooltip,
   X,
 } from "@shift/ui";
 import { SidebarActionButton } from "@/components/sidebar";
-import type { ConditionChipSpace } from "@/lib/variation/ConditionChipSpace";
-import type { ConditionChip } from "@/types/conditions";
+import { useSidebarPanelAnchor } from "@/hooks/useSidebarPanelAnchor";
+import {
+  boundsDisplayText,
+  boundsOfText,
+  boundsOnAxis,
+  roundedValue,
+  type ConditionChipSpace,
+} from "@/lib/variation/ConditionChipSpace";
+import type { ChipAxisGroup, ChipBounds, ConditionChip } from "@/types/conditions";
 import PlusIcon from "@/assets/general/plus.svg";
 
-/** A chip being typed: an existing one (`index`) or a new one (`index` null). */
-interface ChipDraft {
+/** A chip whose equation popover is open: an existing one (`index`) or a new one (`index` null). */
+interface ChipEdit {
   readonly index: number | null;
   readonly axis: Axis;
-  readonly text: string;
+  readonly bounds: ChipBounds;
   readonly problem: string | null;
 }
 
@@ -31,7 +45,7 @@ export interface ConditionChipsProps {
   /** Names the row for assistive technology, such as "dollar.bled condition". */
   label: string;
   chips: readonly ConditionChip[];
-  /** The axes the + offers, and how a chip's text is prefilled and read. */
+  /** The axes the + and the equation's axis menu offer, and how bounds are prefilled and read. */
   space: ConditionChipSpace;
   /** Commits a chip's range: in place of the chip at `index`, or a new one when null. */
   onCommit: (index: number | null, range: ConditionRange) => Promise<void>;
@@ -46,16 +60,18 @@ export interface ConditionChipsProps {
 }
 
 /**
- * A condition as a row of chips, `Weight ≥ 700`, each with ×, and a + after
- * them: one shared editor for alternates and component conditions.
+ * A condition as a row of chips, `wght ≥ 694`, each with × on hover, and a
+ * + after them: one shared editor for alternates and component conditions.
  *
  * @remarks
- * + picks an axis (from a menu when there are several) and starts a chip
- * prefilled from where the canvas draws, `≥ 700`, its value selected. A
- * chip's text reads `700`, `>=700`, `≥700`, `700+`, `<=80`, `≤80`,
- * `400-600` or `400–600`, as the engine parses it. Enter commits; Escape
- * cancels, and removes a new chip; text that can't be read stays, with the
- * reason under the row. Clicking a chip edits its value in place.
+ * Clicking a chip opens its equation beside the sidebar, `[min] ≤ wght ⌄ ≤
+ * [max]`: an empty field leaves that side open. Typing or pasting `400-600`,
+ * `>=700`, `700+` or `<=80` into either field fills both, as the engine reads
+ * it. Enter, or clicking away, commits as one undo step; Escape reverts. A
+ * minimum above the maximum stays, with the reason, and nothing is
+ * committed. The axis button moves the condition to another axis, keeping
+ * the bounds inside its range. + picks an axis and opens a new chip's
+ * equation from where the canvas draws.
  */
 export const ConditionChips = ({
   label,
@@ -68,105 +84,241 @@ export const ConditionChips = ({
   note,
   disabled = false,
 }: ConditionChipsProps) => {
-  const [draft, setDraft] = useState<ChipDraft | null>(() => {
+  const [edit, setEdit] = useState<ChipEdit | null>(() => {
     const [axis] = startNew ? (space.axisGroups[0]?.axes ?? []) : [];
     if (!axis) return null;
-    return { index: null, axis, text: space.prefill(axis), problem: null };
+    return { index: null, axis, bounds: space.prefillBounds(axis), problem: null };
   });
 
   const startChip = (axis: Axis) =>
-    setDraft({ index: null, axis, text: space.prefill(axis), problem: null });
-  const editChip = (index: number, chip: ConditionChip) =>
-    setDraft({ index, axis: chip.axis, text: chip.valueText, problem: null });
+    setEdit({ index: null, axis, bounds: space.prefillBounds(axis), problem: null });
+  const openChip = (index: number, chip: ConditionChip) =>
+    setEdit({ index, axis: chip.axis, bounds: boundsOfText(chip.valueText), problem: null });
 
   const cancel = () => {
-    const wasNew = draft !== null && draft.index === null;
-    setDraft(null);
+    const wasNew = edit !== null && edit.index === null;
+    setEdit(null);
     if (wasNew && onNewCancelled) onNewCancelled();
   };
 
   const commit = async () => {
-    if (!draft) return;
+    if (!edit) return;
 
-    const reading = space.read(draft.axis, draft.text);
+    const reading = space.rangeOf(edit.axis, edit.bounds);
     if (reading.kind === "problem") {
-      setDraft({ ...draft, problem: reading.message });
+      setEdit({ ...edit, problem: reading.message });
       return;
     }
 
     try {
-      await onCommit(draft.index, reading.range);
-      setDraft(null);
+      await onCommit(edit.index, reading.range);
+      setEdit(null);
     } catch (error) {
-      setDraft({ ...draft, problem: error instanceof Error ? error.message : String(error) });
+      setEdit({ ...edit, problem: error instanceof Error ? error.message : String(error) });
     }
   };
 
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    switch (event.key) {
-      case "Enter":
-        event.preventDefault();
-        void commit();
-        return;
-      case "Escape":
-        event.preventDefault();
-        event.stopPropagation();
-        cancel();
-        return;
-    }
+  // Closing by Escape reverts; any other close (a click away) commits.
+  const onOpenChange = (open: boolean, reason: string) => {
+    if (open) return;
+    if (reason === "escape-key") cancel();
+    else void commit();
   };
 
-  const editingIndex = draft === null ? undefined : draft.index;
-  const problem = draft === null ? null : draft.problem;
-  const draftField = draft && (
-    <ChipFrame key="draft">
-      <span className="font-mono text-secondary" title={draft.axis.name}>
-        {draft.axis.tag}
-      </span>
-      <Input
-        aria-label={`${draft.axis.name} condition`}
-        aria-invalid={draft.problem ? true : undefined}
-        autoFocus
-        onFocus={(event) => event.currentTarget.select()}
-        value={draft.text}
-        onChange={(event) => setDraft({ ...draft, text: event.target.value, problem: null })}
-        onKeyDown={onKeyDown}
-        className="h-4"
-        style={{ width: `${Math.max(draft.text.length, 3) + 1}ch` }}
-      />
-    </ChipFrame>
+  const equation = edit && (
+    <ConditionEquation
+      edit={edit}
+      groups={space.axisGroups}
+      used={chips.flatMap((chip, index) => (index === edit.index ? [] : [chip.axis.id]))}
+      onBounds={(side, text) => {
+        const reading = space.boundsFromField(edit.axis, edit.bounds, side, text);
+        if (reading.kind === "problem") {
+          setEdit({ ...edit, bounds: { ...edit.bounds, [side]: text }, problem: reading.message });
+          return;
+        }
+        setEdit({ ...edit, bounds: reading.bounds, problem: null });
+      }}
+      onAxis={(axis) =>
+        setEdit({ ...edit, axis, bounds: boundsOnAxis(edit.bounds, axis), problem: null })
+      }
+      onCommit={() => void commit()}
+    />
   );
 
-  const views = chips.map((chip, index) =>
-    editingIndex === index ? (
-      draftField
-    ) : (
+  const views = chips.map((chip, index) => (
+    <ChipView
+      key={`${chip.axis.id}-${index}`}
+      tag={chip.axis.tag}
+      name={chip.axis.name}
+      valueText={chip.displayText}
+      disabled={disabled}
+      open={edit?.index === index}
+      onOpen={() => openChip(index, chip)}
+      onOpenChange={onOpenChange}
+      onRemove={() => void onRemove(index)}
+      equation={edit?.index === index ? equation : null}
+    />
+  ));
+  if (edit && edit.index === null) {
+    views.push(
       <ChipView
-        key={`${chip.axis.id}-${index}`}
-        chip={chip}
+        key="new"
+        tag={edit.axis.tag}
+        name={edit.axis.name}
+        valueText={boundsDisplayText(edit.bounds)}
         disabled={disabled}
-        onEdit={() => editChip(index, chip)}
-        onRemove={() => void onRemove(index)}
-      />
-    ),
-  );
-  if (editingIndex === null && draftField) views.push(draftField);
+        open
+        onOpen={() => undefined}
+        onOpenChange={onOpenChange}
+        equation={equation}
+      />,
+    );
+  }
   const leading = views.slice(0, -1);
   const last = views.at(-1);
 
   return (
-    <div className="flex flex-col gap-1">
-      <div role="group" aria-label={label} className="flex flex-wrap items-center gap-1">
-        {leading}
-        {/* The last chip and what follows it stay on one line: the + never wraps alone. */}
-        <span className="inline-flex shrink-0 items-center gap-1">
-          {last}
-          {note && <span className="px-0.5 text-ui text-muted">{note}</span>}
-          {!disabled && draft === null && <AddChipButton space={space} onAxis={startChip} />}
-        </span>
+    <div role="group" aria-label={label} className="flex flex-wrap items-center gap-1">
+      {leading}
+      {/* The last chip and what follows it stay on one line: the + never wraps alone. */}
+      <span className="inline-flex shrink-0 items-center gap-1">
+        {last}
+        {note && <span className="px-0.5 text-ui text-muted">{note}</span>}
+        {!disabled && edit === null && <AddChipButton space={space} onAxis={startChip} />}
+      </span>
+    </div>
+  );
+};
+
+/**
+ * One chip, `wght ≥ 694` (its axis by tag, the name in its tooltip and
+ * label), with × on hover, and the equation popover it opens beside the
+ * sidebar. While the popover is open the chip shows a focus ring.
+ */
+const ChipView = ({
+  tag,
+  name,
+  valueText,
+  disabled,
+  open,
+  onOpen,
+  onOpenChange,
+  onRemove,
+  equation,
+}: {
+  tag: string;
+  name: string;
+  valueText: string;
+  disabled: boolean;
+  open: boolean;
+  onOpen: () => void;
+  onOpenChange: (open: boolean, reason: string) => void;
+  onRemove?: () => void;
+  equation: ReactNode;
+}) => {
+  const panelAnchor = useSidebarPanelAnchor();
+  const description = `${name} ${valueText}`;
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next, details) => {
+        if (next) onOpen();
+        else onOpenChange(false, details.reason);
+      }}
+      modal={false}
+    >
+      <span
+        className={cn(
+          "group/chip inline-flex h-5 items-center gap-1 rounded bg-input pl-1.5 pr-0.5 text-ui text-primary",
+          open && "ring-1 ring-accent",
+        )}
+      >
+        <Tooltip content={description}>
+          <PopoverTrigger
+            ref={panelAnchor.triggerRef}
+            disabled={disabled}
+            aria-label={`Edit ${description}`}
+            render={
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+              />
+            }
+          >
+            {/* As the axis menus set a tag. */}
+            <span className="font-mono text-secondary">{tag}</span>
+            <span>{valueText}</span>
+          </PopoverTrigger>
+        </Tooltip>
+        {!disabled && onRemove && (
+          <Tooltip content="Remove">
+            <button
+              type="button"
+              aria-label={`Remove ${description}`}
+              onClick={onRemove}
+              className="inline-flex h-4 w-4 items-center justify-center rounded-sm text-muted opacity-0 hover:bg-hover hover:text-primary focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent group-hover/chip:opacity-100"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </Tooltip>
+        )}
+      </span>
+      <PopoverPortal>
+        <PopoverPositioner {...panelAnchor.positioner}>
+          <PopoverPopup>
+            <div className="p-2">{equation}</div>
+          </PopoverPopup>
+        </PopoverPositioner>
+      </PopoverPortal>
+    </Popover>
+  );
+};
+
+/**
+ * The equation a chip's popover edits, `[min] ≤ wght ⌄ ≤ [max]`, and why it
+ * can't be committed, if it can't.
+ */
+const ConditionEquation = ({
+  edit,
+  groups,
+  used,
+  onBounds,
+  onAxis,
+  onCommit,
+}: {
+  edit: ChipEdit;
+  groups: readonly ChipAxisGroup[];
+  /** Axes another chip of the condition is on: the axis menu disables them. */
+  used: readonly AxisId[];
+  onBounds: (side: keyof ChipBounds, text: string) => void;
+  onAxis: (axis: Axis) => void;
+  onCommit: () => void;
+}) => {
+  const { axis, bounds, problem } = edit;
+  const field = (side: keyof ChipBounds, end: number, ariaLabel: string) => (
+    <BoundField
+      key={side}
+      ariaLabel={ariaLabel}
+      text={bounds[side]}
+      placeholder={String(end)}
+      invalid={problem !== null}
+      onText={(text) => onBounds(side, text)}
+      onCommit={onCommit}
+    />
+  );
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-1.5 text-ui text-muted">
+        {field("min", axis.minimum, `${axis.name} from`)}
+        <span aria-hidden>≤</span>
+        <AxisButton axis={axis} groups={groups} used={used} onAxis={onAxis} />
+        <span aria-hidden>≤</span>
+        {field("max", axis.maximum, `${axis.name} up to`)}
       </div>
       {problem && (
-        <p role="alert" className="text-ui text-error">
+        <p role="alert" className="max-w-48 text-ui text-error">
           {problem}
         </p>
       )}
@@ -174,51 +326,91 @@ export const ConditionChips = ({
   );
 };
 
-const ChipFrame = ({ children }: { children: React.ReactNode }) => (
-  <span className="inline-flex h-5 items-center gap-1 rounded bg-input pl-1.5 pr-0.5 text-ui text-primary">
-    {children}
-  </span>
-);
-
-/** A committed chip: its axis muted, its value plain, and ×. */
-const ChipView = ({
-  chip,
-  disabled,
-  onEdit,
-  onRemove,
+/**
+ * One end of the equation: rounded while it isn't being typed in, exact
+ * while it is; empty shows the axis's end, greyed. Enter commits.
+ */
+const BoundField = ({
+  ariaLabel,
+  text,
+  placeholder,
+  invalid,
+  onText,
+  onCommit,
 }: {
-  chip: ConditionChip;
-  disabled: boolean;
-  onEdit: () => void;
-  onRemove: () => void;
+  ariaLabel: string;
+  text: string;
+  placeholder: string;
+  invalid: boolean;
+  onText: (text: string) => void;
+  onCommit: () => void;
+}) => {
+  const [focused, setFocused] = useState(false);
+  const number = Number(text);
+  const shown =
+    !focused && text.trim() !== "" && Number.isFinite(number) ? roundedValue(number) : text;
+
+  return (
+    <Input
+      aria-label={ariaLabel}
+      aria-invalid={invalid ? true : undefined}
+      className="w-14 text-right"
+      value={shown}
+      placeholder={placeholder}
+      onFocus={(event) => {
+        setFocused(true);
+        event.currentTarget.select();
+      }}
+      onBlur={() => setFocused(false)}
+      onChange={(event) => onText(event.target.value)}
+      onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        onCommit();
+      }}
+    />
+  );
+};
+
+/** The equation's axis, `wght ⌄`: a menu of the axes the condition may move to. */
+const AxisButton = ({
+  axis,
+  groups,
+  used,
+  onAxis,
+}: {
+  axis: Axis;
+  groups: readonly ChipAxisGroup[];
+  used: readonly AxisId[];
+  onAxis: (axis: Axis) => void;
 }) => (
-  <ChipFrame>
-    {/* The axis by its tag, `wght ≥ 694`; its name in the tooltip and label. */}
-    <Tooltip content={`${chip.axis.name} ${chip.displayText}`}>
-      <button
-        type="button"
-        disabled={disabled}
-        aria-label={`Edit ${chip.axis.name} ${chip.displayText}`}
-        onClick={onEdit}
-        className="inline-flex items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+  <Menu modal={false}>
+    <Tooltip content={`${axis.name}: choose another axis`}>
+      <MenuTrigger
+        aria-label={`Axis, ${axis.name}`}
+        render={
+          // Tab goes from the minimum straight to the maximum.
+          <button
+            type="button"
+            tabIndex={-1}
+            className="inline-flex h-6 items-center gap-0.5 rounded px-1 text-primary hover:bg-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+          />
+        }
       >
-        <span className="font-mono text-secondary">{chip.axis.tag}</span>
-        <span>{chip.displayText}</span>
-      </button>
+        <span className="font-mono">{axis.tag}</span>
+        <span className="text-muted">
+          <ChevronDown aria-hidden className="h-3 w-3" />
+        </span>
+      </MenuTrigger>
     </Tooltip>
-    {!disabled && (
-      <Tooltip content="Remove">
-        <button
-          type="button"
-          aria-label={`Remove ${chip.axis.name} ${chip.displayText}`}
-          onClick={onRemove}
-          className="inline-flex h-4 w-4 items-center justify-center rounded-sm text-muted hover:bg-hover hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-        >
-          <X className="h-3 w-3" />
-        </button>
-      </Tooltip>
-    )}
-  </ChipFrame>
+    <MenuPortal>
+      <MenuPositioner side="bottom" sideOffset={4} align="start">
+        <MenuPopup>
+          <AxisMenuItems groups={groups} used={used} onAxis={onAxis} />
+        </MenuPopup>
+      </MenuPositioner>
+    </MenuPortal>
+  </Menu>
 );
 
 /** The + after the chips: one axis starts a chip on it, several open a menu of them beside the sidebar. */
@@ -258,16 +450,7 @@ const AddChipButton = ({
       <MenuPortal>
         <MenuPositioner side="right" sideOffset={4} align="start">
           <MenuPopup>
-            {groups.length === 1 ? (
-              <AxisItems axes={axes} onAxis={onAxis} />
-            ) : (
-              groups.map((group) => (
-                <MenuGroup key={group.label}>
-                  <MenuGroupLabel>{group.label}</MenuGroupLabel>
-                  <AxisItems axes={group.axes} onAxis={onAxis} />
-                </MenuGroup>
-              ))
-            )}
+            <AxisMenuItems groups={groups} used={[]} onAxis={onAxis} />
           </MenuPopup>
         </MenuPositioner>
       </MenuPortal>
@@ -275,12 +458,42 @@ const AddChipButton = ({
   );
 };
 
-/** One menu item per axis: its name, its tag beside it. */
-const AxisItems = ({ axes, onAxis }: { axes: readonly Axis[]; onAxis: (axis: Axis) => void }) =>
+/** The axes, under "Font axes" / "Glyph axes" headings once there are both. */
+const AxisMenuItems = ({
+  groups,
+  used,
+  onAxis,
+}: {
+  groups: readonly ChipAxisGroup[];
+  used: readonly AxisId[];
+  onAxis: (axis: Axis) => void;
+}) => {
+  if (groups.length === 1) {
+    return <AxisItems axes={groups[0]!.axes} used={used} onAxis={onAxis} />;
+  }
+
+  return groups.map((group) => (
+    <MenuGroup key={group.label}>
+      <MenuGroupLabel>{group.label}</MenuGroupLabel>
+      <AxisItems axes={group.axes} used={used} onAxis={onAxis} />
+    </MenuGroup>
+  ));
+};
+
+/** One menu item per axis, as Font axes' + menu lists them: the name, then the tag in mono. */
+const AxisItems = ({
+  axes,
+  used,
+  onAxis,
+}: {
+  axes: readonly Axis[];
+  used: readonly AxisId[];
+  onAxis: (axis: Axis) => void;
+}) =>
   axes.map((axis) => (
-    // As Font axes' + menu lists axes: the name, then the tag in mono.
     <MenuItem
       key={axis.id}
+      disabled={used.includes(axis.id)}
       className="grid grid-cols-[minmax(0,1fr)_auto] gap-6"
       onClick={() => onAxis(axis)}
     >

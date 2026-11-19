@@ -61,3 +61,18 @@ export interface SelectedComponentCondition {
 export type AlternateGlyphChoice =
   | { readonly kind: "glyph"; readonly glyphId: GlyphId; readonly name: GlyphName }
   | { readonly kind: "create"; readonly name: GlyphName };
+
+/**
+ * A condition's ends as the equation popover edits them, `[min] ≤ wght ≤
+ * [max]`: each as typed, in user units on a font axis; empty leaves that
+ * side open.
+ */
+export interface ChipBounds {
+  readonly min: string;
+  readonly max: string;
+}
+
+/** Bounds a field's text filled in, or why the text can't be read. */
+export type BoundsReading =
+  | { readonly kind: "bounds"; readonly bounds: ChipBounds }
+  | { readonly kind: "problem"; readonly message: string };

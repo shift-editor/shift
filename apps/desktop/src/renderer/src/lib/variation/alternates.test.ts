@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { FONTS, useTestEditor } from "@/testing/fontFixture";
 import { GlyphAlternates } from "./GlyphAlternates";
-import { chipDisplayText } from "./ConditionChipSpace";
+import { boundsOnAxis, chipDisplayText } from "./ConditionChipSpace";
+import { GlyphDesignspace } from "./GlyphDesignspace";
 
 // Solenoid: a Bleed axis (0–100, source Bled at 100). `dollar` draws
 // `dollar.bled` from Bleed 70, then `dollar.heavy` from 80, which the first
@@ -144,6 +145,59 @@ describe("condition chips", () => {
 
     await alternates().removeRange(row("dollar.heavy").id, 1);
     expect(row("dollar.heavy").chips.map(({ valueText }) => valueText)).toEqual(["≥ 80"]);
+  });
+});
+
+describe("a chip's equation", () => {
+  const ends = (bounds: { min: string; max: string }) => {
+    const reading = alternates().chips.rangeOf(bleed(), bounds);
+    return reading.kind === "range"
+      ? [reading.range.min ?? null, reading.range.max ?? null]
+      : reading;
+  };
+
+  it("makes a range from its bounds, an empty field leaving that side open", () => {
+    expect(ends({ min: "70", max: "" })).toEqual([70, null]);
+    expect(ends({ min: "", max: "80" })).toEqual([null, 80]);
+    expect(ends({ min: "40", max: "60" })).toEqual([40, 60]);
+    expect(ends({ min: "", max: "" })).toMatchObject({ kind: "problem" });
+  });
+
+  it("refuses a minimum above the maximum", () => {
+    expect(ends({ min: "60", max: "40" })).toEqual({
+      kind: "problem",
+      message: "The range 60 to 40 runs downwards.",
+    });
+  });
+
+  it("fills both fields from a range pasted into either", () => {
+    const chips = alternates().chips;
+    const empty = { min: "", max: "" };
+
+    expect(chips.boundsFromField(bleed(), empty, "min", "40-60")).toEqual({
+      kind: "bounds",
+      bounds: { min: "40", max: "60" },
+    });
+    expect(chips.boundsFromField(bleed(), empty, "max", ">=70")).toEqual({
+      kind: "bounds",
+      bounds: { min: "70", max: "" },
+    });
+    expect(chips.boundsFromField(bleed(), empty, "min", "<=80")).toMatchObject({
+      bounds: { min: "", max: "80" },
+    });
+    expect(chips.boundsFromField(bleed(), { min: "", max: "90" }, "min", "12")).toMatchObject({
+      bounds: { min: "12", max: "90" },
+    });
+  });
+
+  it("keeps its bounds on another axis, inside that axis's range", async () => {
+    await editor.openGlyph("H");
+    const designspace = new GlyphDesignspace(editor.asEditor());
+    await designspace.addAxis({ name: "Gap", minimum: 0, default: 0, maximum: 50 });
+    const gap = designspace.axisTagged(designspace.glyph!.axes[0]!.tag)!;
+
+    expect(boundsOnAxis({ min: "30", max: "80" }, gap)).toEqual({ min: "30", max: "50" });
+    expect(boundsOnAxis({ min: "", max: "20" }, gap)).toEqual({ min: "", max: "20" });
   });
 });
 

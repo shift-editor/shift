@@ -4,7 +4,13 @@ import { track } from "@shift/editor/signals";
 import { axisValue } from "@shift/editor/variation";
 import { sameConditionRange } from "@shift/glyph-state";
 import type { Condition, ConditionRange, GlyphId } from "@shift/types";
-import type { ChipAxisGroup, ChipReading, ConditionChip } from "@/types/conditions";
+import type {
+  BoundsReading,
+  ChipAxisGroup,
+  ChipBounds,
+  ChipReading,
+  ConditionChip,
+} from "@/types/conditions";
 
 /**
  * The axes a condition's chips are written on, and how a chip's text reads
@@ -57,6 +63,52 @@ export class ConditionChipSpace {
     return `≥ ${Math.round(axisValue(location, axis) * 100) / 100}`;
   }
 
+  /**
+   * A new chip's bounds on `axis`: from where the canvas draws now, up to
+   * the axis's end, `[694] ≤ wght ≤ [ ]`.
+   */
+  prefillBounds(axis: Axis): ChipBounds {
+    return boundsOfText(this.prefill(axis));
+  }
+
+  /**
+   * The range `bounds` make on `axis`: both ends `400–600`, only a minimum
+   * `≥ 694`, only a maximum `≤ 80`. Read by the engine, which refuses a
+   * minimum above the maximum or an end past the axis.
+   */
+  rangeOf(axis: Axis, bounds: ChipBounds): ChipReading {
+    const min = bounds.min.trim();
+    const max = bounds.max.trim();
+    if (min === "" && max === "") {
+      return { kind: "problem", message: "Give a lower or an upper bound." };
+    }
+
+    if (min === "") return this.read(axis, `<=${max}`);
+    if (max === "") return this.read(axis, `>=${min}`);
+    return this.read(axis, `${min}-${max}`);
+  }
+
+  /**
+   * The bounds `text` typed or pasted into either field fills in: a plain
+   * number fills only that field (`side`); a range in the chips' grammar,
+   * `400-600`, `>=700`, `700+` or `<=80`, fills both, as the engine reads it.
+   */
+  boundsFromField(
+    axis: Axis,
+    bounds: ChipBounds,
+    side: keyof ChipBounds,
+    text: string,
+  ): BoundsReading {
+    if (PLAIN_NUMBER.test(text.trim()))
+      return { kind: "bounds", bounds: { ...bounds, [side]: text } };
+
+    const reading = this.read(axis, text);
+    if (reading.kind === "problem") return reading;
+
+    const valueText = this.#editor.font.conditionValueText(this.#glyphId, reading.range);
+    return { kind: "bounds", bounds: boundsOfText(valueText) };
+  }
+
   /** What `text`, typed in a chip on `axis`, reads as; a problem reads as a sentence. */
   read(axis: Axis, text: string): ChipReading {
     const value = this.#editor.font.conditionValue(this.#glyphId, axis.id, text);
@@ -89,6 +141,51 @@ export class ConditionChipSpace {
     track(glyph.axesCell);
     return glyph.axesCell.peek();
   }
+}
+
+/** A plain number as a field holds it while typed: `694`, `-20`, `16.8`, or nothing yet. */
+const PLAIN_NUMBER = /^-?\d*\.?\d*$/;
+
+/**
+ * A chip's exact value text, as the engine writes it (`≥ 694.444`, `≤ 80`,
+ * `400–600`), as the popover's two fields.
+ */
+export function boundsOfText(valueText: string): ChipBounds {
+  const from = /^≥\s*(\S+)$/.exec(valueText);
+  if (from) return { min: from[1]!, max: "" };
+
+  const upTo = /^≤\s*(\S+)$/.exec(valueText);
+  if (upTo) return { min: "", max: upTo[1]! };
+
+  const both = /^(-?[\d.]+)–(-?[\d.]+)$/.exec(valueText);
+  if (both) return { min: both[1]!, max: both[2]! };
+
+  return { min: "", max: "" };
+}
+
+/** Bounds as a chip shows them while its equation is open: `400–600`, `≥ 694`, `≤ 80`. */
+export function boundsDisplayText(bounds: ChipBounds): string {
+  const shown = (text: string) => {
+    const value = Number(text);
+    return text.trim() !== "" && Number.isFinite(value) ? roundedValue(value) : text.trim();
+  };
+  const [min, max] = [shown(bounds.min), shown(bounds.max)];
+  if (min !== "" && max !== "") return `${min}–${max}`;
+  if (min !== "") return `≥ ${min}`;
+  return max === "" ? "" : `≤ ${max}`;
+}
+
+/** `bounds` moved onto `axis`: each end kept, pulled inside the axis's range. */
+export function boundsOnAxis(bounds: ChipBounds, axis: Axis): ChipBounds {
+  const clamp = (text: string) => {
+    if (text.trim() === "") return text;
+
+    const value = Number(text);
+    if (!Number.isFinite(value)) return text;
+
+    return String(Math.min(axis.maximum, Math.max(axis.minimum, value)));
+  };
+  return { min: clamp(bounds.min), max: clamp(bounds.max) };
 }
 
 /** `condition` with its range at `index` replaced by `range`, or `range` added after the rest when `index` is null. */
@@ -140,7 +237,7 @@ export function chipDisplayText(valueText: string, axis: Axis): string {
 }
 
 /** A value as a chip shows it: whole from 100 up, else to one decimal place, `694`, `16.8`. */
-function roundedValue(value: number): string {
+export function roundedValue(value: number): string {
   const places = Math.abs(value) >= 100 ? 0 : 1;
   const factor = 10 ** places;
   return String(Math.round(value * factor) / factor);
