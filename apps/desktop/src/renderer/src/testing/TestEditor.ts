@@ -561,7 +561,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     if (!node) return null;
 
     return (
-      this.glyphForId(node.glyphId)?.renderModelAt(
+      this.glyphForId(this.drawnGlyphId(node))?.renderModelAt(
         this.editLocationCell,
         this.activeSourceIdCell,
       ) ?? null
@@ -1655,6 +1655,14 @@ export class TestEditor extends Editor implements EditorTestSurface {
     ) as Record<PointId, LocalPoint>;
   }
 
+  editedGlyph(): { readonly glyph: string; readonly drawnAs: string } | null {
+    const edited = this.editedGlyphCell.peek();
+    if (!edited) return null;
+
+    const name = (glyphId: GlyphId) => this.font.glyphName(glyphId) ?? glyphId;
+    return { glyph: name(edited.glyphId), drawnAs: name(edited.drawnGlyphId) };
+  }
+
   async drawnGlyph(glyph?: string): Promise<DrawnGlyph> {
     const model =
       glyph === undefined
@@ -1667,6 +1675,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
     const { lsb, rsb } = model.sidebearings;
     return {
+      glyph: this.font.glyphName(model.glyphId) ?? model.glyphId,
       advanceWidth: model.xAdvance,
       bounds: plainBounds(model.bounds),
       sidebearings: { lsb, rsb },
@@ -1675,6 +1684,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
         dx: component.transform.e,
         dy: component.transform.f,
         bounds: plainBounds(component.bounds),
+        draws: component.draws,
       })),
       anchors: model.anchorsWithComponents.map(({ name, x, y }) => ({ name, x, y })),
     };

@@ -110,6 +110,8 @@ export interface Modifiers {
  * Test-only: agents read authored layers, not the canvas.
  */
 export interface DrawnGlyph {
+  /** The glyph drawn: the open glyph's alternate where one holds, else the glyph itself. */
+  readonly glyph: string;
   readonly advanceWidth: number;
   readonly bounds: Bounds | null;
   readonly sidebearings: { readonly lsb: number | null; readonly rsb: number | null };
@@ -119,6 +121,8 @@ export interface DrawnGlyph {
     readonly dx: number;
     readonly dy: number;
     readonly bounds: Bounds | null;
+    /** False where its condition fails here: drawn as a faint outline, still selectable. */
+    readonly draws: boolean;
   }[];
   /**
    * The glyph's anchors with those it takes from its components, in the order
@@ -630,6 +634,12 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
    * flight, or null when none is shown. Test-only: not agent data.
    */
   editGhost(ids: readonly PointId[]): Record<PointId, LocalPoint> | null;
+  /**
+   * The open glyph and the glyph the canvas draws and edits for it here, by
+   * name: `dollar` drawn as `dollar.bled` inside one of its alternates'
+   * regions. Null without one open glyph. Test-only.
+   */
+  editedGlyph(): { readonly glyph: string; readonly drawnAs: string } | null;
   /** A glyph as the canvas draws it at the current location; the open glyph when `glyph` is omitted. Test-only. */
   drawnGlyph(glyph?: string): Promise<DrawnGlyph>;
   /**

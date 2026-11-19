@@ -22,6 +22,10 @@ import {
   selectedComponentLocationCell,
   setSelectedComponentAxis,
 } from "@/lib/variation/componentLocation";
+import { ComponentConditions } from "@/lib/variation/ComponentConditions";
+import { ConditionChipSpace } from "@/lib/variation/ConditionChipSpace";
+import type { SelectedComponentCondition } from "@/types/conditions";
+import { ConditionChips } from "./ConditionChips";
 import type { ComponentAxisKind, FollowedComponentAxis } from "@/types/componentLocation";
 import PlusIcon from "@/assets/general/plus.svg";
 
@@ -42,6 +46,8 @@ export const ComponentLocationSection = () => {
   const editor = useEditor();
   const stateCell = useMemo(() => selectedComponentLocationCell(editor), [editor]);
   const state = useSignalState(stateCell);
+  const conditions = useMemo(() => new ComponentConditions(editor), [editor]);
+  const condition = useSignalState(conditions.selectedCell);
   const [open, setOpen] = useState(true);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const drag = useRef<{ finish(): void } | null>(null);
@@ -122,11 +128,46 @@ export const ComponentLocationSection = () => {
               </div>
             </div>
           ))}
+          {condition && <ComponentConditionChips condition={condition} conditions={conditions} />}
         </div>
       </CollapsibleSection>
     </>
   );
 };
+
+/**
+ * The selected components' condition as chips: the ranges they share, and
+ * "Mixed" when they differ beyond them. Every edit applies to each selected
+ * component, the same in every drawing of the glyph.
+ */
+function ComponentConditionChips({
+  condition,
+  conditions,
+}: {
+  condition: SelectedComponentCondition;
+  conditions: ComponentConditions;
+}) {
+  const editor = useEditor();
+  const space = useMemo(
+    () => new ConditionChipSpace(editor, condition.parentGlyphId),
+    [editor, condition.parentGlyphId],
+  );
+
+  return (
+    <div className="pl-2 pt-1">
+      <ConditionChips
+        label="Component condition"
+        chips={condition.chips}
+        space={space}
+        note={condition.mixed ? "Mixed" : undefined}
+        onCommit={(index, range) =>
+          conditions.setRange(index === null ? null : condition.chips[index]!.range, range)
+        }
+        onRemove={(index) => conditions.removeRange(condition.chips[index]!.range)}
+      />
+    </div>
+  );
+}
 
 function AddAxisMenu({
   followed,

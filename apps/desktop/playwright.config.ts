@@ -29,6 +29,7 @@ export const PLATFORM_SPECS = [
 
 /** Software-rendered editor, interaction, and golden coverage at a fixed 1200×600 viewport. */
 export const VISUAL_SPECS = [
+  "alternates.spec.ts",
   "component-rendering.spec.ts",
   "deletion.spec.ts",
   "editor.spec.ts",

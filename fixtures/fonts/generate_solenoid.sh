@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds Solenoid.shift, a small font with glyph axes, through shift-cli.
+# Builds Solenoid.shift, a small font with glyph axes, alternates and component
+# conditions, through shift-cli.
 # Usage: generate_solenoid.sh [shift-cli] [output]
 set -euo pipefail
 
@@ -25,7 +26,22 @@ cat > "$work/glyphs.json" <<'JSON'
   {"name": "dot", "source": "Regular", "location": {"STRK": 100}, "layer": {"advance": 200, "svgPath": "M0 0 L100 0 L100 300 L0 300 Z"}},
   {"name": "H", "source": "Regular", "layer": {"advance": 720, "components": [{"base": "dot", "location": {"SPRD": 60}}, {"base": "dot", "transform": [1, 0, 0, 1, 500, 0]}]}},
   {"name": "H", "source": "Bled", "layer": {"advance": 720, "components": [{"base": "dot", "location": {"SPRD": 60}}, {"base": "dot", "transform": [1, 0, 0, 1, 500, 0]}]}},
-  {"name": "H", "location": {"BLED": 50}, "layer": {"advance": 720, "components": [{"base": "dot", "location": {"SPRD": 80}}, {"base": "dot", "transform": [1, 0, 0, 1, 500, 0]}]}}
+  {"name": "H", "location": {"BLED": 50}, "layer": {"advance": 720, "components": [{"base": "dot", "location": {"SPRD": 80}}, {"base": "dot", "transform": [1, 0, 0, 1, 500, 0]}]}},
+  {"name": "dollar.bled", "source": "Regular", "layer": {"advance": 500, "svgPath": "M50 0 L450 0 L450 600 L50 600 Z"}},
+  {"name": "dollar.bled", "source": "Bled", "layer": {"advance": 500, "svgPath": "M30 -20 L470 -20 L470 620 L30 620 Z"}},
+  {"name": "dollar.heavy", "source": "Regular", "layer": {"advance": 500, "svgPath": "M0 0 L500 0 L250 700 Z"}},
+  {"name": "dollar.heavy", "source": "Bled", "layer": {"advance": 500, "svgPath": "M-20 -20 L520 -20 L250 720 Z"}},
+  {"name": "dollar", "unicodes": ["U+0024"], "source": "Regular", "layer": {"advance": 500, "svgPath": "M200 0 L300 0 L300 700 L200 700 Z"}},
+  {"name": "dollar", "unicodes": ["U+0024"], "source": "Bled", "layer": {"advance": 500, "svgPath": "M180 -20 L320 -20 L320 720 L180 720 Z"}},
+  {"name": "colon", "source": "Regular", "layer": {"advance": 1000, "components": [{"base": "dot"}, {"base": "dot", "transform": [1, 0, 0, 1, 300, 0]}, {"base": "dot", "transform": [1, 0, 0, 1, 600, 0]}]}},
+  {"name": "colon", "source": "Bled", "layer": {"advance": 1000, "components": [{"base": "dot"}, {"base": "dot", "transform": [1, 0, 0, 1, 300, 0]}, {"base": "dot", "transform": [1, 0, 0, 1, 600, 0]}]}}
 ]}
 JSON
 "$cli" glyph set "$out" --input "$work/glyphs.json"
+
+# dollar draws dollar.bled from Bleed 70; dollar.heavy, from 80, is never used.
+"$cli" glyph alternate add "$out" dollar dollar.bled --when "Bleed >= 70"
+"$cli" glyph alternate add "$out" dollar dollar.heavy --when "Bleed >= 80"
+# colon's second and third dots draw up to Bleed 50, its first everywhere.
+"$cli" component condition set "$out" colon 2 --when "Bleed <= 50"
+"$cli" component condition set "$out" colon 3 --when "Bleed <= 50"
