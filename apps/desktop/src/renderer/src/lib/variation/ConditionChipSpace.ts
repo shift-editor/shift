@@ -10,6 +10,7 @@ import type {
   ChipBounds,
   ChipReading,
   ConditionChip,
+  ConditionMode,
 } from "@/types/conditions";
 
 /**
@@ -72,26 +73,29 @@ export class ConditionChipSpace {
   }
 
   /**
-   * The range `bounds` make on `axis`: both ends `400–600`, only a minimum
-   * `≥ 694`, only a maximum `≤ 80`. Read by the engine, which refuses a
-   * minimum above the maximum or an end past the axis.
+   * The range `bounds` make on `axis` in `mode`: `≥ min`, `≤ max`, or both
+   * ends. Every end the mode shows must hold a value. Read by the engine,
+   * which refuses a minimum above the maximum or an end past the axis.
    */
-  rangeOf(axis: Axis, bounds: ChipBounds): ChipReading {
+  rangeOf(axis: Axis, bounds: ChipBounds, mode: ConditionMode): ChipReading {
     const min = bounds.min.trim();
     const max = bounds.max.trim();
-    if (min === "" && max === "") {
-      return { kind: "problem", message: "Give a lower or an upper bound." };
+    switch (mode) {
+      case "atLeast":
+        return min === "" ? GIVE_A_VALUE : this.read(axis, `>=${min}`);
+      case "atMost":
+        return max === "" ? GIVE_A_VALUE : this.read(axis, `<=${max}`);
+      case "between":
+        if (min === "" || max === "") return { kind: "problem", message: "Give both ends." };
+        return this.read(axis, `${min}-${max}`);
     }
-
-    if (min === "") return this.read(axis, `<=${max}`);
-    if (max === "") return this.read(axis, `>=${min}`);
-    return this.read(axis, `${min}-${max}`);
   }
 
   /**
-   * The bounds `text` typed or pasted into either field fills in: a plain
-   * number fills only that field (`side`); a range in the chips' grammar,
-   * `400-600`, `>=700`, `700+` or `<=80`, fills both, as the engine reads it.
+   * The bounds `text` typed or pasted into any field fills in: a plain
+   * number fills only that field (`side`), the mode unchanged (`mode`
+   * null); a range in the chips' grammar, `400-600`, `>=700`, `700+` or
+   * `<=80`, fills both, as the engine reads it, and sets the mode it makes.
    */
   boundsFromField(
     axis: Axis,
@@ -99,14 +103,16 @@ export class ConditionChipSpace {
     side: keyof ChipBounds,
     text: string,
   ): BoundsReading {
-    if (PLAIN_NUMBER.test(text.trim()))
-      return { kind: "bounds", bounds: { ...bounds, [side]: text } };
+    if (PLAIN_NUMBER.test(text.trim())) {
+      return { kind: "bounds", bounds: { ...bounds, [side]: text }, mode: null };
+    }
 
     const reading = this.read(axis, text);
     if (reading.kind === "problem") return reading;
 
     const valueText = this.#editor.font.conditionValueText(this.#glyphId, reading.range);
-    return { kind: "bounds", bounds: boundsOfText(valueText) };
+    const filled = boundsOfText(valueText);
+    return { kind: "bounds", bounds: filled, mode: modeOf(filled) };
   }
 
   /** What `text`, typed in a chip on `axis`, reads as; a problem reads as a sentence. */
@@ -161,6 +167,42 @@ export function boundsOfText(valueText: string): ChipBounds {
   if (both) return { min: both[1]!, max: both[2]! };
 
   return { min: "", max: "" };
+}
+
+const GIVE_A_VALUE: ChipReading = { kind: "problem", message: "Give a value." };
+
+/** The mode bounds make: a minimum only is at least, a maximum only at most, both between. */
+export function modeOf(bounds: ChipBounds): ConditionMode {
+  const hasMin = bounds.min.trim() !== "";
+  const hasMax = bounds.max.trim() !== "";
+  if (hasMin && hasMax) return "between";
+  return hasMax ? "atMost" : "atLeast";
+}
+
+/**
+ * `bounds` moved from mode `from` to `to`, the numbers kept: at least or at
+ * most to between runs to the axis's end; between to at least keeps the
+ * minimum, to at most the maximum; at least and at most trade the number.
+ */
+export function boundsInMode(
+  bounds: ChipBounds,
+  from: ConditionMode,
+  to: ConditionMode,
+  axis: Axis,
+): ChipBounds {
+  if (from === to) return bounds;
+
+  const one = from === "atMost" ? bounds.max : bounds.min;
+  switch (to) {
+    case "atLeast":
+      return { min: one, max: "" };
+    case "atMost":
+      return { min: "", max: from === "between" ? bounds.max : one };
+    case "between":
+      return from === "atLeast"
+        ? { min: bounds.min, max: String(axis.maximum) }
+        : { min: String(axis.minimum), max: bounds.max };
+  }
 }
 
 /** Bounds as a chip shows them while its equation is open: `400–600`, `≥ 694`, `≤ 80`. */

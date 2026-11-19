@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FONTS, useTestEditor } from "@/testing/fontFixture";
 import { GlyphSwaps } from "./GlyphSwaps";
-import { boundsOnAxis, chipDisplayText } from "./ConditionChipSpace";
+import { boundsInMode, boundsOnAxis, chipDisplayText, modeOf } from "./ConditionChipSpace";
 import { GlyphDesignspace } from "./GlyphDesignspace";
 
 // Solenoid: a Bleed axis (0–100, source Bled at 100). `dollar` draws
@@ -163,44 +163,82 @@ describe("condition chips", () => {
 });
 
 describe("a chip's equation", () => {
-  const ends = (bounds: { min: string; max: string }) => {
-    const reading = swaps().chips.rangeOf(bleed(), bounds);
+  type Mode = "atLeast" | "atMost" | "between";
+  const ends = (bounds: { min: string; max: string }, mode: Mode) => {
+    const reading = swaps().chips.rangeOf(bleed(), bounds, mode);
     return reading.kind === "range"
       ? [reading.range.min ?? null, reading.range.max ?? null]
       : reading;
   };
 
-  it("makes a range from its bounds, an empty field leaving that side open", () => {
-    expect(ends({ min: "70", max: "" })).toEqual([70, null]);
-    expect(ends({ min: "", max: "80" })).toEqual([null, 80]);
-    expect(ends({ min: "40", max: "60" })).toEqual([40, 60]);
-    expect(ends({ min: "", max: "" })).toMatchObject({ kind: "problem" });
+  it("opens in the mode its condition has", () => {
+    expect(modeOf({ min: "70", max: "" })).toBe("atLeast");
+    expect(modeOf({ min: "", max: "80" })).toBe("atMost");
+    expect(modeOf({ min: "40", max: "60" })).toBe("between");
+    expect(modeOf(swaps().chips.prefillBounds(bleed()))).toBe("atLeast");
+  });
+
+  it("makes a range from the fields its mode shows, each holding a value", () => {
+    expect(ends({ min: "70", max: "90" }, "atLeast")).toEqual([70, null]);
+    expect(ends({ min: "10", max: "80" }, "atMost")).toEqual([null, 80]);
+    expect(ends({ min: "40", max: "60" }, "between")).toEqual([40, 60]);
+    expect(ends({ min: "", max: "" }, "atLeast")).toEqual({
+      kind: "problem",
+      message: "Give a value.",
+    });
+    expect(ends({ min: "40", max: "" }, "between")).toEqual({
+      kind: "problem",
+      message: "Give both ends.",
+    });
+  });
+
+  it("keeps its numbers when the mode switches", () => {
+    const axis = bleed(); // 0 to 100
+    const atLeast = { min: "70", max: "" };
+    const atMost = { min: "", max: "30" };
+    const between = { min: "40", max: "60" };
+
+    expect(boundsInMode(atLeast, "atLeast", "between", axis)).toEqual({ min: "70", max: "100" });
+    expect(boundsInMode(atMost, "atMost", "between", axis)).toEqual({ min: "0", max: "30" });
+    expect(boundsInMode(between, "between", "atLeast", axis)).toEqual({ min: "40", max: "" });
+    expect(boundsInMode(between, "between", "atMost", axis)).toEqual({ min: "", max: "60" });
+    expect(boundsInMode(atLeast, "atLeast", "atMost", axis)).toEqual({ min: "", max: "70" });
+    expect(boundsInMode(atMost, "atMost", "atLeast", axis)).toEqual({ min: "30", max: "" });
   });
 
   it("refuses a minimum above the maximum", () => {
-    expect(ends({ min: "60", max: "40" })).toEqual({
+    expect(ends({ min: "60", max: "40" }, "between")).toEqual({
       kind: "problem",
       message: "The range 60 to 40 runs downwards.",
     });
   });
 
-  it("fills both fields from a range pasted into either", () => {
+  it("fills its fields, and switches mode, from a range typed into any field", () => {
     const chips = swaps().chips;
     const empty = { min: "", max: "" };
 
     expect(chips.boundsFromField(bleed(), empty, "min", "40-60")).toEqual({
       kind: "bounds",
       bounds: { min: "40", max: "60" },
+      mode: "between",
     });
     expect(chips.boundsFromField(bleed(), empty, "max", ">=70")).toEqual({
       kind: "bounds",
       bounds: { min: "70", max: "" },
+      mode: "atLeast",
+    });
+    expect(chips.boundsFromField(bleed(), empty, "min", "70+")).toMatchObject({
+      mode: "atLeast",
     });
     expect(chips.boundsFromField(bleed(), empty, "min", "<=80")).toMatchObject({
       bounds: { min: "", max: "80" },
+      mode: "atMost",
     });
-    expect(chips.boundsFromField(bleed(), { min: "", max: "90" }, "min", "12")).toMatchObject({
+    // A plain number fills its own field and leaves the mode as it was.
+    expect(chips.boundsFromField(bleed(), { min: "", max: "90" }, "min", "12")).toEqual({
+      kind: "bounds",
       bounds: { min: "12", max: "90" },
+      mode: null,
     });
   });
 

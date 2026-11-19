@@ -12,25 +12,27 @@ function chipsOf(controls: Locator, glyph: string): Locator {
 }
 
 test.describe("swaps in the Designspace tab", () => {
-  test("edits a chip in place, keeping text it can't read", async ({ page, editor }) => {
+  test("edits a chip in its equation, keeping text it can't read", async ({ page, editor }) => {
     await editor.openGlyphByName("dollar");
     const controls = await openVariationControls(page);
     const chips = chipsOf(controls, "dollar.heavy");
 
     await chips.getByRole("button", { name: "Edit Bleed ≥ 80" }).click();
-    const field = chips.getByLabel("Bleed condition");
-    await field.fill("150");
-    await field.press("Enter");
-    await expect(controls.getByRole("alert")).toHaveText("Bleed only goes to 100.");
-    await expect(field).toHaveValue("150");
+    const atLeast = page.getByLabel("Bleed at least");
+    await atLeast.fill("150");
+    await atLeast.press("Enter");
+    await expect(page.getByRole("alert")).toHaveText("Bleed only goes to 100.");
+    await expect(atLeast).toHaveValue("150");
 
-    await field.fill("<=90");
-    await field.press("Enter");
+    // A range in the grammar switches the equation to at most.
+    await atLeast.fill("<=90");
+    const atMost = page.getByLabel("Bleed at most");
+    await atMost.press("Enter");
     await expect(chips.getByRole("button", { name: "Edit Bleed ≤ 90" })).toBeVisible();
 
     await chips.getByRole("button", { name: "Edit Bleed ≤ 90" }).click();
-    await chips.getByLabel("Bleed condition").fill("10");
-    await chips.getByLabel("Bleed condition").press("Escape");
+    await page.getByLabel("Bleed at most").fill("10");
+    await page.getByLabel("Bleed at most").press("Escape");
     await expect(chips.getByRole("button", { name: "Edit Bleed ≤ 90" })).toBeVisible();
   });
 

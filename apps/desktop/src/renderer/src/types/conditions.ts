@@ -63,18 +63,24 @@ export type SwapGlyphChoice =
   | { readonly kind: "create"; readonly name: GlyphName };
 
 /**
- * A condition's ends as the equation popover edits them, `[min] ≤ wght ≤
- * [max]`: each as typed, in user units on a font axis; empty leaves that
- * side open.
+ * A condition's ends as the equation popover edits them: each as typed, in
+ * user units on a font axis. Which ends count is the {@link ConditionMode}.
  */
 export interface ChipBounds {
   readonly min: string;
   readonly max: string;
 }
 
-/** Bounds a field's text filled in, or why the text can't be read. */
+/**
+ * Which ends a condition sets, as the equation's operator says it: at least
+ * a value (`BLED ≥ 70`), at most one (`BLED ≤ 80`), or between two. Ends are
+ * inclusive.
+ */
+export type ConditionMode = "atLeast" | "atMost" | "between";
+
+/** Bounds a field's text filled in, and the mode they make, or why the text can't be read. */
 export type BoundsReading =
-  | { readonly kind: "bounds"; readonly bounds: ChipBounds }
+  | { readonly kind: "bounds"; readonly bounds: ChipBounds; readonly mode: ConditionMode | null }
   | { readonly kind: "problem"; readonly message: string };
 
 /** Why a swap never draws, as its warning popover says it. */

@@ -1,10 +1,13 @@
-import { useState, type KeyboardEvent, type ReactNode } from "react";
+import { Children, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { Axis } from "@shift/editor/model";
 import type { AxisId, ConditionRange } from "@shift/types";
 import {
+  Check,
   cn,
   Input,
   Menu,
+  MenuCheckboxItem,
+  MenuCheckboxItemIndicator,
   MenuGroup,
   MenuGroupLabel,
   MenuItem,
@@ -24,12 +27,14 @@ import { SidebarActionButton } from "@/components/sidebar";
 import { useSidebarPanelAnchor } from "@/hooks/useSidebarPanelAnchor";
 import {
   boundsDisplayText,
+  boundsInMode,
   boundsOfText,
   boundsOnAxis,
+  modeOf,
   roundedValue,
   type ConditionChipSpace,
 } from "@/lib/variation/ConditionChipSpace";
-import type { ChipAxisGroup, ChipBounds, ConditionChip } from "@/types/conditions";
+import type { ChipAxisGroup, ChipBounds, ConditionChip, ConditionMode } from "@/types/conditions";
 import PlusIcon from "@/assets/general/plus.svg";
 
 /** A chip whose equation popover is open: an existing one (`index`) or a new one (`index` null). */
@@ -37,6 +42,7 @@ interface ChipEdit {
   readonly index: number | null;
   readonly axis: Axis;
   readonly bounds: ChipBounds;
+  readonly mode: ConditionMode;
   readonly problem: string | null;
 }
 
@@ -63,8 +69,9 @@ export interface ConditionChipsProps {
  * + after them: one shared editor for swaps and component conditions.
  *
  * @remarks
- * Clicking a chip opens its equation beside the sidebar, `[min] ≤ wght ≤
- * [max]`: an empty field leaves that side open. Typing or pasting `400-600`,
+ * Clicking a chip opens its equation beside the sidebar, in the mode its
+ * condition has: `wght ≥ [694]`, `wght ≤ [80]` or `[400] ≤ wght ≤ [600]`;
+ * an operator's menu switches the mode, keeping the numbers. Typing or pasting `400-600`,
  * `>=700`, `700+` or `<=80` into either field fills both, as the engine reads
  * it. Enter, or clicking away, commits as one undo step; Escape reverts. A
  * minimum above the maximum stays, with the reason, and nothing is
@@ -86,13 +93,22 @@ export const ConditionChips = ({
   const [edit, setEdit] = useState<ChipEdit | null>(() => {
     const [axis] = startNew ? (space.axisGroups[0]?.axes ?? []) : [];
     if (!axis) return null;
-    return { index: null, axis, bounds: space.prefillBounds(axis), problem: null };
+    return { index: null, axis, bounds: space.prefillBounds(axis), mode: "atLeast", problem: null };
   });
 
   const startChip = (axis: Axis) =>
-    setEdit({ index: null, axis, bounds: space.prefillBounds(axis), problem: null });
+    setEdit({
+      index: null,
+      axis,
+      bounds: space.prefillBounds(axis),
+      mode: "atLeast",
+      problem: null,
+    });
   const openChip = (index: number, chip: ConditionChip) =>
-    setEdit({ index, axis: chip.axis, bounds: boundsOfText(chip.valueText), problem: null });
+    openEdit(index, chip.axis, boundsOfText(chip.valueText));
+
+  const openEdit = (index: number, axis: Axis, bounds: ChipBounds) =>
+    setEdit({ index, axis, bounds, mode: modeOf(bounds), problem: null });
 
   const cancel = () => {
     const wasNew = edit !== null && edit.index === null;
@@ -103,7 +119,7 @@ export const ConditionChips = ({
   const commit = async () => {
     if (!edit) return;
 
-    const reading = space.rangeOf(edit.axis, edit.bounds);
+    const reading = space.rangeOf(edit.axis, edit.bounds, edit.mode);
     if (reading.kind === "problem") {
       setEdit({ ...edit, problem: reading.message });
       return;
@@ -135,8 +151,21 @@ export const ConditionChips = ({
           setEdit({ ...edit, bounds: { ...edit.bounds, [side]: text }, problem: reading.message });
           return;
         }
-        setEdit({ ...edit, bounds: reading.bounds, problem: null });
+        setEdit({
+          ...edit,
+          bounds: reading.bounds,
+          mode: reading.mode ?? edit.mode,
+          problem: null,
+        });
       }}
+      onMode={(mode) =>
+        setEdit({
+          ...edit,
+          mode,
+          bounds: boundsInMode(edit.bounds, edit.mode, mode, edit.axis),
+          problem: null,
+        })
+      }
       onAxis={(axis) =>
         setEdit({ ...edit, axis, bounds: boundsOnAxis(edit.bounds, axis), problem: null })
       }
@@ -275,14 +304,16 @@ const ChipView = ({
 };
 
 /**
- * The equation a chip's popover edits, `[min] ≤ wght ≤ [max]`, and why it
- * can't be committed, if it can't.
+ * The equation a chip's popover edits, in its mode: `BLED ≥ [70]`,
+ * `BLED ≤ [80]` or `[40] ≤ BLED ≤ [80]`, each operator a button that
+ * switches the mode; and why it can't be committed, if it can't.
  */
 const ConditionEquation = ({
   edit,
   groups,
   used,
   onBounds,
+  onMode,
   onAxis,
   onCommit,
 }: {
@@ -291,35 +322,46 @@ const ConditionEquation = ({
   /** Axes another chip of the condition is on: the axis menu disables them. */
   used: readonly AxisId[];
   onBounds: (side: keyof ChipBounds, text: string) => void;
+  onMode: (mode: ConditionMode) => void;
   onAxis: (axis: Axis) => void;
   onCommit: () => void;
 }) => {
-  const { axis, bounds, problem } = edit;
-  const field = (side: keyof ChipBounds, end: number, ariaLabel: string) => (
+  const { axis, bounds, mode, problem } = edit;
+  const field = (side: keyof ChipBounds, ariaLabel: string) => (
     <BoundField
       key={side}
       ariaLabel={ariaLabel}
       text={bounds[side]}
-      placeholder={String(end)}
       invalid={problem !== null}
       onText={(text) => onBounds(side, text)}
       onCommit={onCommit}
     />
   );
+  const tag = <AxisButton axis={axis} groups={groups} used={used} onAxis={onAxis} />;
+  const operator = (sign: string) => <OperatorButton sign={sign} mode={mode} onMode={onMode} />;
+
+  let row: ReactNode;
+  switch (mode) {
+    case "atLeast":
+      row = [tag, operator("≥"), field("min", `${axis.name} at least`)];
+      break;
+    case "atMost":
+      row = [tag, operator("≤"), field("max", `${axis.name} at most`)];
+      break;
+    case "between":
+      row = [
+        field("min", `${axis.name} from`),
+        operator("≤"),
+        tag,
+        operator("≤"),
+        field("max", `${axis.name} up to`),
+      ];
+      break;
+  }
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-1.5 text-ui text-muted">
-        {field("min", axis.minimum, `${axis.name} from`)}
-        <span aria-hidden className="text-body">
-          ≤
-        </span>
-        <AxisButton axis={axis} groups={groups} used={used} onAxis={onAxis} />
-        <span aria-hidden className="text-body">
-          ≤
-        </span>
-        {field("max", axis.maximum, `${axis.name} up to`)}
-      </div>
+      <div className="flex items-center gap-1.5 text-ui text-muted">{Children.toArray(row)}</div>
       {problem && (
         <p role="alert" className="max-w-48 text-ui text-error">
           {problem}
@@ -329,21 +371,73 @@ const ConditionEquation = ({
   );
 };
 
+/** The equation's modes, as the operator's menu lists them. */
+const MODES: readonly { readonly mode: ConditionMode; readonly label: string }[] = [
+  { mode: "atLeast", label: "≥ At least" },
+  { mode: "atMost", label: "≤ At most" },
+  { mode: "between", label: "↔ Between" },
+];
+
+/** An operator, `≥` or `≤`: a button whose menu switches the equation's mode. */
+const OperatorButton = ({
+  sign,
+  mode,
+  onMode,
+}: {
+  sign: string;
+  mode: ConditionMode;
+  onMode: (mode: ConditionMode) => void;
+}) => (
+  <Menu modal={false}>
+    <MenuTrigger
+      aria-label={`Operator ${sign}: choose at least, at most or between`}
+      render={
+        // Tab goes from field to field.
+        <button
+          type="button"
+          tabIndex={-1}
+          className="inline-flex h-6 items-center rounded px-1 text-body text-muted hover:bg-hover hover:text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+        />
+      }
+    >
+      {sign}
+    </MenuTrigger>
+    <MenuPortal>
+      <MenuPositioner side="bottom" sideOffset={4} align="start">
+        <MenuPopup>
+          {MODES.map((item) => (
+            <MenuCheckboxItem
+              key={item.mode}
+              checked={item.mode === mode}
+              onCheckedChange={() => onMode(item.mode)}
+            >
+              <span className="flex items-center gap-2">
+                <MenuCheckboxItemIndicator keepMounted className="w-3 data-[unchecked]:invisible">
+                  <Check className="h-3 w-3" strokeWidth={1.75} />
+                </MenuCheckboxItemIndicator>
+                {item.label}
+              </span>
+            </MenuCheckboxItem>
+          ))}
+        </MenuPopup>
+      </MenuPositioner>
+    </MenuPortal>
+  </Menu>
+);
+
 /**
  * One end of the equation: rounded while it isn't being typed in, exact
- * while it is; empty shows the axis's end, greyed. Enter commits.
+ * while it is. Enter commits.
  */
 const BoundField = ({
   ariaLabel,
   text,
-  placeholder,
   invalid,
   onText,
   onCommit,
 }: {
   ariaLabel: string;
   text: string;
-  placeholder: string;
   invalid: boolean;
   onText: (text: string) => void;
   onCommit: () => void;
@@ -359,7 +453,6 @@ const BoundField = ({
       aria-invalid={invalid ? true : undefined}
       className="w-14 text-right"
       value={shown}
-      placeholder={placeholder}
       onFocus={(event) => {
         setFocused(true);
         event.currentTarget.select();
