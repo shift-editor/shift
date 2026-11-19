@@ -156,14 +156,20 @@ export class GlyphSwaps {
     const found = neverUsed.find((entry) => entry.swapId === swap.id);
     if (!found) return null;
 
+    // In check A001's words, each swap named with its place in the list.
+    const font = this.#editor.font;
+    const describe = (id: SwapId) => {
+      const index = swaps.findIndex((other) => other.id === id);
+      const other = swaps[index];
+      return other ? `${font.glyphName(other.glyph) ?? other.glyph} (swap ${index + 1})` : "a swap";
+    };
     switch (found.reason.kind) {
       case "outsideAxes":
-        return "Never used: no location on the axes meets its condition.";
+        return `${describe(swap.id)} is never used, because its condition holds nowhere in the axes' ranges.`;
       case "covered": {
-        const [first] = found.reason.by;
-        const coverer = swaps.find((other) => other.id === first);
-        const name = coverer ? this.#editor.font.glyphName(coverer.glyph) : null;
-        return `Never used: ${name ?? "a swap"} above always wins first. Drag it below.`;
+        const earlier = found.reason.by.map(describe);
+        const verb = earlier.length === 1 ? "applies" : "apply";
+        return `${describe(swap.id)} is never used, because ${earlier.join(" and ")} already ${verb} wherever its condition holds.`;
       }
     }
   }

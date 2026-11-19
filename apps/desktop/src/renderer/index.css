@@ -41,6 +41,8 @@
   /* Status and action colors */
   --color-error: #dc2626;
   --color-error-ring: #ef4444;
+  /* A caution, such as a swap that never draws: amber, apart from errors. */
+  --color-warning: #d79921;
   --color-destructive: #dc2626;
   --color-destructive-hover: #fef2f2;
 

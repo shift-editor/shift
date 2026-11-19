@@ -50,7 +50,8 @@ describe("the Swaps section", () => {
         glyph: "dollar.heavy",
         chips: ["Bleed ≥ 80"],
         inUse: false,
-        neverUsed: "Never used: dollar.bled above always wins first. Drag it below.",
+        neverUsed:
+          "dollar.heavy (swap 2) is never used, because dollar.bled (swap 1) already applies wherever its condition holds.",
       },
     ]);
   });

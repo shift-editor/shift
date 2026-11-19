@@ -545,6 +545,8 @@ function colorThemeVariables(theme: ColorTheme): Record<string, string> {
     ]),
     "--color-error": palette.base08,
     "--color-error-ring": palette.base08,
+    // base16 gives base0A to warnings: yellow in most palettes.
+    "--color-warning": palette.base0A,
     "--color-destructive": palette.base08,
     "--color-destructive-hover": withAlpha(palette.base08, dark ? 0.18 : 0.1),
     ...TAG_COLORS,

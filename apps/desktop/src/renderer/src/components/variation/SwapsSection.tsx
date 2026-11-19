@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { useId, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { useSignalState } from "@shift/editor/signals";
 import { asSwapId, type SwapId, type ConditionRange } from "@shift/types";
 import {
@@ -13,6 +13,7 @@ import {
   SortableList,
   Tooltip,
   useSortableItem,
+  type SortableActivatorProps,
 } from "@shift/ui";
 import {
   CollapsibleSection,
@@ -24,6 +25,7 @@ import { GlyphSwaps } from "@/lib/variation/GlyphSwaps";
 import type { SwapGlyphChoice, SwapRow } from "@/types/conditions";
 import { useEditor, useFontSession } from "@/workspace/WorkspaceContext";
 import PlusIcon from "@/assets/general/plus.svg";
+import WarningIcon from "@/assets/general/warning.svg";
 import { ConditionChips } from "./ConditionChips";
 import { NewSwapPanel } from "./NewSwapPanel";
 
@@ -33,7 +35,7 @@ import { NewSwapPanel } from "./NewSwapPanel";
  * hold, tried in order, the first match winning. Each is a small tree
  * node: the swap glyph's name, with its condition's chips on
  * a rail under it; a dot under the header's + marks the one the canvas draws
- * here, and one an earlier swap always beats is greyed with a note.
+ * here, and one that never draws is named in the warning colour with a warning icon.
  * Nodes reorder by dragging the name; right-clicking one opens or deletes it.
  * **+** picks a glyph (or creates `<glyph>.alt`) and starts its first chip;
  * the swap is added when that chip is committed.
@@ -128,8 +130,8 @@ export const SwapsSection = ({
  * child: the swap glyph's name, the in-use dot at the right under the header's +; under
  * it, on a rail, its
  * condition's chips. The name drags the node; right-clicking it opens the
- * glyph or deletes the swap. A never-used one is greyed, with its
- * note under the chips.
+ * glyph or deletes the swap. A never-used one has its name in the warning
+ * colour and a warning icon where the dot goes, the reason in their tooltips.
  */
 const SwapRowView = ({
   row,
@@ -152,19 +154,17 @@ const SwapRowView = ({
       className={cn("relative w-full", sortable.dragging && "z-10 opacity-50")}
     >
       <SwapMenu row={row} swaps={swaps} canAuthor={canAuthor}>
-        <div
-          className={cn("flex flex-col rounded px-1 pb-1", row.neverUsed !== null && "opacity-50")}
-        >
+        <div className="flex flex-col rounded px-1 pb-1">
           <div className="flex h-7 items-center gap-1.5">
-            <button
-              type="button"
-              {...sortable.activator}
-              className="flex min-w-0 flex-1 items-center gap-1.5 rounded-sm text-left text-ui text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-            >
-              <span className="truncate" title={row.glyphName}>
-                {row.glyphName}
+            <SwapName row={row} activator={sortable.activator} />
+            {row.neverUsed !== null && (
+              // In the in-use dot's column, under the section header's +.
+              <span className="-mr-1 flex h-6 w-6 shrink-0 items-center justify-center text-warning">
+                <Tooltip content={row.neverUsed} side="right">
+                  <WarningIcon role="img" aria-label={row.neverUsed} className="h-3 w-3" />
+                </Tooltip>
               </span>
-            </button>
+            )}
             {row.inUse && (
               // In the column of the section header's +: past the node's padding, as wide as it.
               <span className="-mr-1 flex h-6 w-6 shrink-0 items-center justify-center">
@@ -192,11 +192,43 @@ const SwapRowView = ({
               onCommit={(index, range) => swaps.setRange(row.id, index, range)}
               onRemove={(index) => swaps.removeRange(row.id, index)}
             />
-            {row.neverUsed && <p className="text-ui text-muted">{row.neverUsed}</p>}
           </div>
         </div>
       </SwapMenu>
     </div>
+  );
+};
+
+/**
+ * A swap's name, which drags its node. A swap that never draws has its name
+ * in the warning colour, the reason in its tooltip and description.
+ */
+const SwapName = ({ row, activator }: { row: SwapRow; activator: SortableActivatorProps }) => {
+  const reasonId = useId();
+  const name = (
+    <button
+      type="button"
+      {...activator}
+      aria-describedby={row.neverUsed === null ? undefined : reasonId}
+      className={cn(
+        "flex min-w-0 flex-1 items-center gap-1.5 rounded-sm text-left text-ui focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent",
+        row.neverUsed === null ? "text-primary" : "text-warning",
+      )}
+    >
+      <span className="truncate">{row.glyphName}</span>
+      {row.neverUsed !== null && (
+        <span id={reasonId} className="sr-only">
+          {row.neverUsed}
+        </span>
+      )}
+    </button>
+  );
+  if (row.neverUsed === null) return name;
+
+  return (
+    <Tooltip content={row.neverUsed} side="right">
+      {name}
+    </Tooltip>
   );
 };
 
