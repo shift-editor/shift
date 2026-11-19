@@ -14,6 +14,7 @@ use shift_font::{
 };
 use svgtypes::{PathParser, PathSegment};
 
+use super::alternate::parse_when;
 use super::input::{LayerInput, TransformInput};
 use super::metrics_keys::WrittenKey;
 use super::require_finite;
@@ -133,9 +134,12 @@ impl LayerInput {
             };
             let location = component_location(&input.location, font, base_glyph_id)
                 .wrap_err_with(|| format!("component {:?} location", input.base))?;
+            let condition = parse_when(font, Some(glyph_id), &input.condition)
+                .wrap_err_with(|| format!("component {:?} condition", input.base))?;
             let mut component = Component::with_transform(base_glyph_id, input.base, transform);
             component.set_location(location);
             component.set_inheritance(input.inheritance);
+            component.set_condition(condition);
             components.push(component);
         }
 

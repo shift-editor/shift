@@ -21,12 +21,16 @@ use authoring::{
     remove_instance, remove_kerning, remove_layer, rename_kerning_group, set_axis, set_font,
     set_glyphs, set_instance, set_kerning, set_layer, unassign_kerning_group,
 };
+use authoring::{
+    add_alternate, move_alternate, remove_alternate, set_alternate, set_component_condition,
+};
 use clap::Parser;
 use cli::{
     AxisCommand, Cli, Command, CompileArgs, ExportArgs, FontCommand, GlyphAxisCommand,
     GlyphCommand, InstanceCommand, KerningCommand, KerningGroupCommand, LayerCommand, SkillCommand,
     SourceCommand,
 };
+use cli::{ComponentCommand, ComponentConditionCommand, GlyphAlternateCommand};
 use glyph_inspect::GlyphInspection;
 use inspect::{InspectReport, RenderMode};
 use kerning::{get_kerning, kerning_groups, list_kerning};
@@ -138,7 +142,34 @@ fn main() -> miette::Result<()> {
                     write_authoring_result(remove_glyph_axis(&args), json)
                 }
             },
+            GlyphCommand::Alternate { command } => match command {
+                GlyphAlternateCommand::Add(args) => {
+                    let json = args.mutation.json;
+                    write_authoring_result(add_alternate(&args), json)
+                }
+                GlyphAlternateCommand::Remove(args) => {
+                    let json = args.mutation.json;
+                    write_authoring_result(remove_alternate(&args), json)
+                }
+                GlyphAlternateCommand::Reorder(args) => {
+                    let json = args.mutation.json;
+                    write_authoring_result(move_alternate(&args), json)
+                }
+                GlyphAlternateCommand::Set(args) => {
+                    let json = args.mutation.json;
+                    write_authoring_result(set_alternate(&args), json)
+                }
+            },
         },
+        Command::Component {
+            command:
+                ComponentCommand::Condition {
+                    command: ComponentConditionCommand::Set(args),
+                },
+        } => {
+            let json = args.mutation.json;
+            write_authoring_result(set_component_condition(&args), json)
+        }
         Command::Layer { command } => match command {
             LayerCommand::Add(args) => {
                 let json = args.mutation.json;

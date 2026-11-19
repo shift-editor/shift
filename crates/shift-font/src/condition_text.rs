@@ -27,7 +27,7 @@ use crate::axis::{Axis, AxisRole, DesignLocation, ExternalLocation};
 use crate::condition::{Condition, ConditionRange};
 use crate::entity::{AxisId, GlyphId};
 use crate::error::{CoreError, CoreResult};
-use crate::ir::Font;
+use crate::ir::{Font, GlyphAxis};
 use crate::variation::{AxisMappingBasis, map_location_with_bases, unmap_location_with_bases};
 
 /// Why a condition's text can't be read.
@@ -58,8 +58,10 @@ pub enum ConditionTextError {
 /// a side leaves it open.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ValueRange {
-    pub min: Option<f64>,
-    pub max: Option<f64>,
+    /// The lowest value the range holds at.
+    pub from: Option<f64>,
+    /// The highest value the range holds at.
+    pub up_to: Option<f64>,
 }
 
 impl ValueRange {
@@ -77,12 +79,12 @@ impl ValueRange {
         let number = |value: &str| parse_number(value).ok_or_else(invalid);
 
         let from = |min| Self {
-            min: Some(min),
-            max: None,
+            from: Some(min),
+            up_to: None,
         };
         let up_to = |max| Self {
-            min: None,
-            max: Some(max),
+            from: None,
+            up_to: Some(max),
         };
         if let Some(rest) = compact
             .strip_prefix(">=")
@@ -102,15 +104,34 @@ impl ValueRange {
         if let Some(value) = parse_number(&compact) {
             return Ok(from(value));
         }
-        let (min, max) = split_range(&compact).ok_or_else(invalid)?;
-        let (min, max) = (number(min)?, number(max)?);
-        if min > max {
+        let range = Self::both_ends(&compact).ok_or_else(invalid)?;
+        if let Self {
+            from: Some(min),
+            up_to: Some(max),
+        } = range
+            && min > max
+        {
             return Err(ConditionTextError::Reversed { min, max });
         }
-        Ok(Self {
-            min: Some(min),
-            max: Some(max),
-        })
+        Ok(range)
+    }
+
+    /// The two ends of `400-600` or `400–600`: split at the first dash that
+    /// follows a digit or a point, so a negative first end keeps its sign.
+    fn both_ends(text: &str) -> Option<Self> {
+        let mut previous = None;
+        for (index, c) in text.char_indices() {
+            let after_number = previous.is_some_and(|p: char| p.is_ascii_digit() || p == '.');
+            if after_number && matches!(c, '-' | '–' | '—') {
+                let (min, rest) = text.split_at(index);
+                return Some(Self {
+                    from: Some(parse_number(min)?),
+                    up_to: Some(parse_number(rest.strip_prefix(c)?)?),
+                });
+            }
+            previous = Some(c);
+        }
+        None
     }
 }
 
@@ -124,20 +145,6 @@ fn parse_number(text: &str) -> Option<f64> {
         return None;
     }
     text.parse::<f64>().ok().filter(|value| value.is_finite())
-}
-
-/// The two ends of `400-600` or `400–600`: split at the first dash that
-/// follows a digit or a point, so a negative first end keeps its sign.
-fn split_range(text: &str) -> Option<(&str, &str)> {
-    let mut previous = None;
-    for (index, c) in text.char_indices() {
-        let after_number = previous.is_some_and(|p: char| p.is_ascii_digit() || p == '.');
-        if after_number && matches!(c, '-' | '–' | '—') {
-            return Some((&text[..index], &text[index + c.len_utf8()..]));
-        }
-        previous = Some(c);
-    }
-    None
 }
 
 /// How [`ConditionSpace::format_range`] names an axis.
@@ -187,7 +194,12 @@ struct NamedAxis<'a> {
     user_units: bool,
 }
 
-impl ConditionSpace<'_> {
+impl<'a> ConditionSpace<'a> {
+    /// The font whose axes the space reads.
+    pub fn font(&self) -> &'a Font {
+        self.font
+    }
+
     /// Reads one range, such as `wght>=700` or `Weight 400–600`, into design
     /// units.
     ///
@@ -202,11 +214,17 @@ impl ConditionSpace<'_> {
     /// [`ConditionTextError::UnknownAxis`] for an axis no glyph has, and the
     /// errors of [`ValueRange::parse`].
     pub fn parse_range(&self, text: &str) -> Result<ConditionRange, ConditionTextError> {
-        let (axis_text, value_text) = split_axis(text)?;
+        let RangeText {
+            axis_text: axis,
+            value_text: value,
+        } = RangeText::split(text)?;
         let named = self
-            .axis_named(axis_text)
-            .ok_or_else(|| ConditionTextError::UnknownAxis(axis_text.to_string()))?;
-        let ValueRange { min, max } = ValueRange::parse(value_text)?;
+            .axis_named(axis)
+            .ok_or_else(|| ConditionTextError::UnknownAxis(axis.to_string()))?;
+        let ValueRange {
+            from: min,
+            up_to: max,
+        } = ValueRange::parse(value)?;
         let axis = named.axis;
         if !named.user_units {
             return Ok(ConditionRange::new(axis.id(), min, max));
@@ -291,7 +309,7 @@ impl ConditionSpace<'_> {
         let own = self
             .glyph_id
             .and_then(|glyph_id| font.glyph(glyph_id))
-            .and_then(|glyph| glyph.axes().iter().map(|axis| axis.as_axis()).find(matches));
+            .and_then(|glyph| glyph.axes().iter().map(GlyphAxis::as_axis).find(matches));
         let axis = own.or_else(|| {
             let axis_id = font.glyph_axis_id_by_tag(text)?;
             Some(font.glyph_axis(axis_id)?.as_axis())
@@ -338,28 +356,35 @@ impl ConditionSpace<'_> {
     }
 }
 
-/// The axis and the value of `wght>=700`, `Weight ≥ 700` or `Weight
-/// 400–600`: split before the first operator, else at the last space.
-fn split_axis(text: &str) -> Result<(&str, &str), ConditionTextError> {
-    let text = text.trim();
-    let operator = text.find(['>', '<', '≥', '≤']);
-    let (axis, value) = match operator {
-        Some(index) => (&text[..index], &text[index..]),
-        None => {
-            let Some(index) = text.rfind(char::is_whitespace) else {
-                return Err(ConditionTextError::MissingValue(text.to_string()));
-            };
-            (&text[..index], &text[index..])
+/// One range's text, split into its axis and its value.
+struct RangeText<'t> {
+    axis_text: &'t str,
+    value_text: &'t str,
+}
+
+impl<'t> RangeText<'t> {
+    /// Splits `wght>=700`, `Weight ≥ 700` or `Weight 400–600` before the
+    /// first operator, else at the last space.
+    fn split(text: &'t str) -> Result<Self, ConditionTextError> {
+        let text = text.trim();
+        let operator = text.find(['>', '<', '≥', '≤']);
+        let split = operator.or_else(|| text.rfind(char::is_whitespace));
+        let Some(index) = split else {
+            return Err(ConditionTextError::MissingValue(text.to_string()));
+        };
+        let (axis, value) = text.split_at(index);
+        let (axis, value) = (axis.trim(), value.trim());
+        if axis.is_empty() {
+            return Err(ConditionTextError::MissingAxis(text.to_string()));
         }
-    };
-    let (axis, value) = (axis.trim(), value.trim());
-    if axis.is_empty() {
-        return Err(ConditionTextError::MissingAxis(text.to_string()));
+        if value.is_empty() {
+            return Err(ConditionTextError::MissingValue(text.to_string()));
+        }
+        Ok(Self {
+            axis_text: axis,
+            value_text: value,
+        })
     }
-    if value.is_empty() {
-        return Err(ConditionTextError::MissingValue(text.to_string()));
-    }
-    Ok((axis, value))
 }
 
 fn format_ends(name: &str, min: Option<f64>, max: Option<f64>) -> String {
@@ -386,24 +411,27 @@ mod tests {
     use crate::test_support::conditions_font;
     use crate::{AxisMappingPoint, GlyphAxis};
 
-    fn value(text: &str) -> (Option<f64>, Option<f64>) {
-        let ValueRange { min, max } = ValueRange::parse(text).unwrap();
-        (min, max)
+    fn value(text: &str) -> ValueRange {
+        ValueRange::parse(text).unwrap()
+    }
+
+    fn ends(from: Option<f64>, up_to: Option<f64>) -> ValueRange {
+        ValueRange { from, up_to }
     }
 
     #[test]
     fn a_chip_value_reads_as_a_minimum_a_maximum_or_both() {
         for text in ["700", ">=700", "≥700", "700+", ">= 700", "≥ 700"] {
-            assert_eq!(value(text), (Some(700.0), None), "{text}");
+            assert_eq!(value(text), ends(Some(700.0), None), "{text}");
         }
         for text in ["<=80", "≤80", "≤ 80"] {
-            assert_eq!(value(text), (None, Some(80.0)), "{text}");
+            assert_eq!(value(text), ends(None, Some(80.0)), "{text}");
         }
         for text in ["400-600", "400–600", "400 – 600"] {
-            assert_eq!(value(text), (Some(400.0), Some(600.0)), "{text}");
+            assert_eq!(value(text), ends(Some(400.0), Some(600.0)), "{text}");
         }
-        assert_eq!(value("-20--10"), (Some(-20.0), Some(-10.0)));
-        assert_eq!(value("−5"), (Some(-5.0), None));
+        assert_eq!(value("-20--10"), ends(Some(-20.0), Some(-10.0)));
+        assert_eq!(value("−5"), ends(Some(-5.0), None));
     }
 
     #[test]
@@ -470,7 +498,10 @@ mod tests {
             ConditionRange::new(crossbar, Some(70.0), None)
         );
         assert_eq!(anywhere.parse_range("CRSB<=30").unwrap().axis_id, crossbar);
-        assert!(anywhere.parse_range("Crossbar 70").is_err());
+        assert!(matches!(
+            anywhere.parse_range("Crossbar 70"),
+            Err(ConditionTextError::UnknownAxis(_))
+        ));
     }
 
     #[test]

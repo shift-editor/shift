@@ -90,16 +90,17 @@ impl FontLevelIntent for EditGlyphAlternate {
         font.edit_glyph_alternates(glyph_id, |alternates| {
             let index = alternates
                 .iter()
-                .position(|alternate| alternate.id() == *alternate_id)
+                .map(GlyphAlternate::id)
+                .position(|id| id == *alternate_id)
                 .require(alternate_id)?;
-            let current = &alternates[index];
+            let current = alternates.get_mut(index).require(alternate_id)?;
             match edit {
                 GlyphAlternateEdit::Condition(condition) => {
-                    alternates[index] =
+                    *current =
                         GlyphAlternate::new(*alternate_id, condition.clone(), current.glyph());
                 }
                 GlyphAlternateEdit::Glyph(glyph) => {
-                    alternates[index] =
+                    *current =
                         GlyphAlternate::new(*alternate_id, current.condition().clone(), *glyph);
                 }
                 GlyphAlternateEdit::Move(position) => {
@@ -131,8 +132,8 @@ impl FontLevelIntent for EditGlyphAlternate {
 /// drawing whose components differ is left as it is: it doesn't interpolate
 /// with the others, and `check` reports it.
 ///
-/// The condition is evaluated where the glyph is drawn (see
-/// [`crate::FontProjection::draws`]), so it may read font axes and the glyph's
+/// The condition is evaluated where the glyph is drawn, before the
+/// component's own location applies (skrifa's rule), so it may read font axes and the glyph's
 /// own axes, never the axes of the glyph the component draws.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
@@ -164,14 +165,17 @@ impl FontLevelIntent for SetComponentCondition {
         font.check_component_condition(glyph, &component)?;
 
         let position = layer
-            .components_iter()
-            .position(|candidate| candidate.id() == *component_id)
+            .components()
+            .index_of(component_id)
             .require(component_id)?;
-        let bases = component_bases(layer);
         let counterparts: Vec<(LayerId, ComponentId)> = glyph
             .layers()
             .values()
-            .filter(|candidate| component_bases(candidate) == bases)
+            .filter(|candidate| {
+                candidate
+                    .component_glyph_ids()
+                    .eq(layer.component_glyph_ids())
+            })
             .filter_map(|candidate| {
                 let counterpart = candidate.components_iter().nth(position)?;
                 Some((candidate.id(), counterpart.id()))
@@ -189,15 +193,6 @@ impl FontLevelIntent for SetComponentCondition {
             .collect();
         Ok((layer_ids, Vec::new()))
     }
-}
-
-/// The glyphs `layer`'s components draw, in order: what makes two drawings'
-/// components counterparts.
-fn component_bases(layer: &GlyphLayer) -> Vec<GlyphId> {
-    layer
-        .components_iter()
-        .map(Component::base_glyph_id)
-        .collect()
 }
 
 impl Font {

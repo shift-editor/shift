@@ -13,10 +13,7 @@ use crate::component::Component;
 use crate::entity::{AlternateId, GlyphId};
 use crate::error::{CoreError, CoreResult};
 use crate::glyph::{Glyph, GlyphLayer};
-use crate::glyph_alternate::{
-    AxisBounds, GlyphAlternate, NeverUsedAlternate, never_used_alternates,
-};
-use crate::variation::AxisRange;
+use crate::glyph_alternate::{GlyphAlternate, NeverUsedAlternate, never_used_alternates};
 
 use super::Font;
 
@@ -42,29 +39,6 @@ impl Font {
             .map_or(glyph_id, GlyphAlternate::glyph)
     }
 
-    /// The design-unit box alternates are chosen in: each font axis from the
-    /// design value of its user minimum to that of its user maximum.
-    ///
-    /// # Errors
-    ///
-    /// Returns an axis-mapping error when an authored mapping cannot compile.
-    pub fn alternate_space(&self) -> CoreResult<Vec<AxisBounds>> {
-        Ok(self
-            .design_normalization()?
-            .iter()
-            .map(|normalization| {
-                let AxisRange {
-                    minimum, maximum, ..
-                } = normalization.range();
-                AxisBounds {
-                    axis_id: normalization.axis_id(),
-                    min: minimum.min(maximum),
-                    max: minimum.max(maximum),
-                }
-            })
-            .collect())
-    }
-
     /// `glyph_id`'s alternates that never win anywhere on the font's axes;
     /// see [`never_used_alternates`].
     ///
@@ -79,7 +53,7 @@ impl Font {
         }
         Ok(never_used_alternates(
             glyph.alternates(),
-            &self.alternate_space()?,
+            &self.design_normalization()?,
         ))
     }
 
@@ -102,11 +76,13 @@ impl Font {
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::GlyphNotFound`] for an unknown glyph, the errors
-    /// of [`Self::check_glyph_alternates`], and
+    /// Returns [`CoreError::GlyphNotFound`] for an unknown glyph or alternate
+    /// glyph, [`CoreError::AlternateIsItself`],
+    /// [`CoreError::AlternateConditionOffFontAxes`], [`CoreError::AxisNotFound`],
+    /// a condition's own error, and
     /// [`CoreError::DuplicateAlternateId`] for an alternate id the font
     /// already uses.
-    pub(crate) fn set_glyph_alternates(
+    pub fn set_glyph_alternates(
         &mut self,
         glyph_id: GlyphId,
         alternates: Vec<GlyphAlternate>,

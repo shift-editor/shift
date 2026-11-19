@@ -105,6 +105,7 @@ Findings carry a stable code, a fixed severity, the glyph, master, and contour c
 - `D` axes and masters: no master at the default (`D001`), masters at the same location (`D002`), a master outside its axis (`D003`), a mapping that turns back on itself (`D004`), an axis that runs past its last master (`D005`).
 - `I` interpolation against the default master: a glyph missing from the default master (`I001`), incompatible structure (`I002`), compatible layers that can't interpolate (`I003`), a contour whose different start point breaks the shape halfway (`I004`), a contour running the other way (`I005`), contours in each other's place (`I006`), a contour that turns inside out between masters (`I007`), masters using components differently (`I008`, a warning: compilers decompose these, Shift's preview leaves the master out).
 - `O` drawing, per master: open contours (`O001`), contours too small to draw (`O002`), coordinates that aren't numbers (`O003`), invalid advances (`O004`), a contour wholly inside another and winding the same way (`O005`), an encoded glyph that draws nothing in the default master (`O006`), a glyph that can't be drawn (`O007`). Glyphs marked not to export, and unencoded `_` part glyphs, are skipped.
+- `A` alternates: an alternate that never wins (`A001`, a warning), because its condition holds nowhere in the axes' ranges or earlier alternates already apply wherever it does.
 - `K` kerning: a pair through an empty group (`K001`), a pair naming a glyph or group not in the font (`K002`).
 - `C` and `M`, opt-in: `--charset ascii|latin1|FILE` requires characters (a file lists characters, `U+XXXX` scalars, and `U+XXXX..U+YYYY` ranges, one per line); `--mono [--width N]` requires one advance width, the most common one per master when no width is given.
 
@@ -375,6 +376,57 @@ shift layer remove Solenoid.shift --glyph H --location BLED=50
 ```
 
 `inspect` lists each glyph's axes, and `inspect --view layers` each drawing's coordinates.
+
+### Alternates and component conditions
+
+An **alternate** is another glyph text draws in a glyph's place where a condition on the font's
+axes holds, as a designspace rule swaps `dollar` for `dollar.bled`. A glyph's alternates are tried
+in order and the first whose condition holds wins; a component of the glyph is never swapped. A
+**component condition** says where a component draws at all: nowhere its condition fails.
+
+```sh
+shift glyph alternate add Solenoid.shift dollar dollar.bled --when "Bleed >= 70"
+shift glyph alternate add Solenoid.shift dollar dollar.heavy --when wght>=700 --when wdth<=80 --at 1
+shift glyph alternate move Solenoid.shift dollar dollar.heavy --to 2
+shift glyph alternate set Solenoid.shift dollar 1 --when "BLED 80-100"     # or --glyph, --always
+shift glyph alternate remove Solenoid.shift dollar dollar.heavy           # the glyph stays
+shift component condition set Solenoid.shift H 2 --when "RSLN >= 50"     # every drawing of H
+```
+
+- A condition is one `--when` per axis range, all of which must hold. Each names the axis by tag
+  or name, then the value: `700`, `>=700`, `≥700` or `700+` from 700; `<=80` or `≤80` up to 80;
+  `400-600` or `400–600` for both ends. Ends are inclusive. Values on font axes are in **user
+  units**, as the app shows them, and are mapped through the axis mappings into the design units
+  the document stores; a glyph's own axis is in its own units.
+- An alternate is named by its position from 1 or by the glyph it draws; a component by its
+  position from 1 (as `glyph export` lists them) or by the glyph it draws, in the default source's
+  drawing unless `--source` names another.
+- Alternates read font axes only. A component condition is evaluated where its glyph is drawn,
+  before the component's own location applies, so it reads font axes and the glyph's own axes,
+  never the axes of the glyph the component draws. Both refusals, an unknown axis, a reversed
+  range, an alternate that is the glyph itself and a missing glyph are reported without writing.
+- A component condition is set in every drawing of the glyph whose components draw the same
+  glyphs in the same order, since a component exists in all of them.
+- A report, `glyph inspect` and `inspect --view glyphs` list the alternates in order and warn about
+  one that is never used; `check` reports it as `A001`. `glyph inspect --location` says which
+  glyph is `drawn as` there, and its structure view marks each component condition `draws here`
+  or `hidden here`; the resolved outline leaves hidden components out.
+- In `glyph set`, an entry's `alternates` replaces the glyph's list (`[]` removes them; omitted
+  keeps them), and a component's `condition` lists its ranges. Give the same condition in every
+  drawing's entry. `glyph export` writes both, by tag, and adds the alternate glyphs to the batch.
+
+```json
+{
+  "name": "dollar",
+  "alternates": [{ "glyph": "dollar.bled", "when": ["BLED >= 70"] }],
+  "layer": {
+    "advance": 500,
+    "components": [{ "base": "dot" }, { "base": "dot", "condition": ["RSLN >= 50"] }]
+  }
+}
+```
+
+Compiled fonts do not carry alternates or component conditions yet.
 
 ### Font metadata and source metrics
 

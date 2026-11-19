@@ -1,6 +1,8 @@
 //! Batch planning over directory facts; geometry is acquired by the workspace only when needed.
 
-use shift_font::{CreateGlyph, Glyph, LayerLocation, UpdateGlyph};
+use shift_font::{
+    AlternateId, CreateGlyph, Glyph, GlyphAlternate, LayerLocation, SetGlyphAlternates, UpdateGlyph,
+};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
@@ -8,8 +10,9 @@ use shift_font::{FontIntentSet, GlyphId, GlyphName};
 
 use crate::cli::SetGlyphsArgs;
 
+use super::alternate::parse_when;
 use super::glyph::{load_font, parse_unicodes};
-use super::input::{GlyphBatchInput, GlyphEntryInput, MetricsKeysInput};
+use super::input::{AlternateInput, GlyphBatchInput, GlyphEntryInput, MetricsKeysInput};
 use super::layer_payload::read_json_input;
 use super::layer_place::{create_layer, layer_at, layer_location_from_values};
 use super::metrics_keys::check_written_keys;
@@ -54,6 +57,7 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
     let mut glyphs = HashMap::<String, (GlyphId, Vec<u32>)>::new();
     let mut unicodes = HashMap::<String, Vec<u32>>::new();
     let mut glyph_keys = BTreeMap::<String, MetricsKeysInput>::new();
+    let mut glyph_alternates = BTreeMap::<String, Vec<AlternateInput>>::new();
     let mut seen: Vec<(String, LayerLocation)> = Vec::new();
     let mut intents = Vec::new();
     let mut layers = Vec::new();
@@ -129,6 +133,15 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
             glyph_keys.insert(name.clone(), keys);
         }
 
+        if let Some(alternates) = entry.alternates {
+            if let Some(previous) = glyph_alternates.get(&name)
+                && *previous != alternates
+            {
+                bail!("{}: conflicting alternates for this glyph", context());
+            }
+            glyph_alternates.insert(name.clone(), alternates);
+        }
+
         if !glyphs.contains_key(&name) {
             let glyph = match font.glyph_by_name(&name) {
                 Some(glyph) => (glyph.id(), glyph.unicodes().to_vec()),
@@ -188,6 +201,23 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
         );
     }
 
+    // Alternates follow the glyphs, so an alternate glyph the batch creates
+    // exists.
+    for (name, inputs) in &glyph_alternates {
+        let Some(&(glyph_id, _)) = glyphs.get(name) else {
+            bail!("alternates name glyph `{name}`, which the batch did not create");
+        };
+        let alternates = planned_alternates(&font, glyph_id, inputs, &base_glyph)
+            .wrap_err_with(|| format!("glyph {name:?} alternates"))?;
+        intents.push(
+            SetGlyphAlternates {
+                glyph_id,
+                alternates,
+            }
+            .into(),
+        );
+    }
+
     // Glyph keys come last, so the glyphs and layers they read already exist.
     for (name, keys) in &glyph_keys {
         let Some(&(glyph_id, _)) = glyphs.get(name) else {
@@ -202,4 +232,38 @@ pub(crate) fn set_glyphs(args: &SetGlyphsArgs) -> Result<AuthoringReport> {
         &FontIntentSet { intents },
         |font| check_written_keys(font, &written),
     )
+}
+
+/// The alternates `inputs` give `glyph_id`, in order. Each keeps the id of
+/// an existing alternate with the same glyph and condition, so a batch that
+/// writes the list back unchanged changes nothing.
+///
+/// # Errors
+///
+/// Rejects an alternate glyph `base_glyph` can't find and condition text the
+/// font can't read.
+fn planned_alternates(
+    font: &shift_font::Font,
+    glyph_id: GlyphId,
+    inputs: &[AlternateInput],
+    base_glyph: &dyn Fn(&str) -> Result<GlyphId>,
+) -> Result<Vec<GlyphAlternate>> {
+    let existing = font
+        .glyph(glyph_id)
+        .map(Glyph::alternates)
+        .unwrap_or_default();
+    let mut alternates: Vec<GlyphAlternate> = Vec::with_capacity(inputs.len());
+    for input in inputs {
+        let context = || format!("alternate {:?}", input.glyph);
+        let alternate_glyph = base_glyph(&input.glyph).wrap_err_with(context)?;
+        let condition = parse_when(font, Some(glyph_id), &input.when).wrap_err_with(context)?;
+        let kept = existing.iter().find(|alternate| {
+            alternate.glyph() == alternate_glyph
+                && *alternate.condition() == condition
+                && !alternates.iter().any(|taken| taken.id() == alternate.id())
+        });
+        let id = kept.map_or_else(AlternateId::new, GlyphAlternate::id);
+        alternates.push(GlyphAlternate::new(id, condition, alternate_glyph));
+    }
+    Ok(alternates)
 }

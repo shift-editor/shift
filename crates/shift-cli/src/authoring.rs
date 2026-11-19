@@ -19,6 +19,7 @@ use shift_workspace::{FontWorkspace, WorkspaceError};
 
 use crate::cli::{AddAxisArgs, AddSourceArgs, CreateFontArgs, MutationArgs};
 
+mod alternate;
 mod axis;
 mod font_info;
 mod glyph;
@@ -33,6 +34,9 @@ mod layer_place;
 mod metrics_keys;
 mod report;
 
+pub(crate) use alternate::{
+    add_alternate, move_alternate, remove_alternate, set_alternate, set_component_condition,
+};
 pub(crate) use axis::set_axis;
 pub(crate) use font_info::{font_info, set_font};
 pub(crate) use glyph::{add_glyph, add_layer, copy_layer, set_layer};
@@ -46,7 +50,7 @@ pub(crate) use kerning::{
 };
 pub(crate) use layer_place::{move_layer, remove_layer};
 use report::report_changes;
-pub(crate) use report::{AuthoringChange, AuthoringReport};
+pub(crate) use report::{AlternateReport, AuthoringChange, AuthoringReport};
 
 /// Creates a canonical SQLite `.shift` document with the model's default source.
 ///

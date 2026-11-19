@@ -10,12 +10,13 @@
 //! open for editing), never to a component: a component of the glyph still
 //! draws the glyph.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
 use crate::condition::Condition;
 use crate::entity::{AlternateId, AxisId, GlyphId};
+use crate::variation::{AxisRange, DesignNormalization};
 
 /// One of a glyph's alternates: where its condition holds on the font's
 /// axes, text draws `glyph` in the glyph's place.
@@ -52,15 +53,6 @@ impl GlyphAlternate {
     }
 }
 
-/// One axis of the space alternates are chosen in: its design-unit bounds.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct AxisBounds {
-    pub axis_id: AxisId,
-    /// The lowest design value, not above `max`.
-    pub min: f64,
-    pub max: f64,
-}
-
 /// An alternate no location in the font's axes draws.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NeverUsedAlternate {
@@ -79,7 +71,8 @@ pub enum NeverUsedReason {
 }
 
 /// The alternates in `alternates`, tried in order, that never win anywhere
-/// in the box `space` bounds: those whose condition holds nowhere in it, and
+/// in the box `space` bounds, each axis between the design values of its
+/// user minimum and maximum ([`crate::Font::design_normalization`]): those whose condition holds nowhere in it, and
 /// those whose whole region the earlier alternates' regions cover. A
 /// condition on an axis `space` lacks holds nowhere.
 ///
@@ -90,13 +83,14 @@ pub enum NeverUsedReason {
 /// as checking every location. Discrete axes are treated as continuous.
 pub fn never_used_alternates(
     alternates: &[GlyphAlternate],
-    space: &[AxisBounds],
+    space: &[DesignNormalization],
 ) -> Vec<NeverUsedAlternate> {
-    (0..alternates.len())
-        .filter_map(|index| {
-            let reason = never_used_reason(&alternates[..=index], space)?;
+    (1..=alternates.len())
+        .filter_map(|count| {
+            let tried = alternates.get(..count)?;
+            let reason = never_used_reason(tried, space)?;
             Some(NeverUsedAlternate {
-                alternate_id: alternates[index].id(),
+                alternate_id: tried.last()?.id(),
                 reason,
             })
         })
@@ -107,30 +101,30 @@ pub fn never_used_alternates(
 /// wins somewhere.
 fn never_used_reason(
     alternates: &[GlyphAlternate],
-    space: &[AxisBounds],
+    space: &[DesignNormalization],
 ) -> Option<NeverUsedReason> {
     let (target, earlier) = alternates.split_last()?;
     let grid = RepresentativeGrid::new(alternates, space);
-    let mut covering = vec![false; earlier.len()];
+    let mut covering = BTreeSet::new();
     let mut holds_somewhere = false;
     for cell in grid.cells() {
-        if !grid.holds(target.condition(), &cell) {
+        if !target.condition().holds_on(&cell) {
             continue;
         }
         holds_somewhere = true;
         let winner = earlier
             .iter()
-            .position(|alternate| grid.holds(alternate.condition(), &cell))?;
-        covering[winner] = true;
+            .position(|alternate| alternate.condition().holds_on(&cell))?;
+        covering.insert(winner);
     }
     if !holds_somewhere {
         return Some(NeverUsedReason::OutsideAxes);
     }
     let by = earlier
         .iter()
-        .zip(covering)
-        .filter(|(_, covers)| *covers)
-        .map(|(alternate, _)| alternate.id())
+        .enumerate()
+        .filter(|(index, _)| covering.contains(index))
+        .map(|(_, alternate)| alternate.id())
         .collect();
     Some(NeverUsedReason::Covered { by })
 }
@@ -145,7 +139,7 @@ struct RepresentativeGrid {
 }
 
 impl RepresentativeGrid {
-    fn new(alternates: &[GlyphAlternate], space: &[AxisBounds]) -> Self {
+    fn new(alternates: &[GlyphAlternate], space: &[DesignNormalization]) -> Self {
         let ranges = || {
             alternates
                 .iter()
@@ -154,52 +148,49 @@ impl RepresentativeGrid {
         let read: BTreeSet<AxisId> = ranges().map(|range| range.axis_id).collect();
         let (axes, values) = space
             .iter()
-            .filter(|bounds| read.contains(&bounds.axis_id))
+            .filter(|bounds| read.contains(&bounds.axis_id()))
             .map(|bounds| {
-                let mut ends = vec![bounds.min, bounds.max];
+                let AxisRange {
+                    minimum, maximum, ..
+                } = bounds.range();
+                // A decreasing mapping puts the user minimum's design value on top.
+                let (low, high) = (minimum.min(maximum), minimum.max(maximum));
+                let mut ends = vec![low, high];
                 ends.extend(
                     ranges()
-                        .filter(|range| range.axis_id == bounds.axis_id)
+                        .filter(|range| range.axis_id == bounds.axis_id())
                         .flat_map(|range| [range.min, range.max])
                         .flatten()
-                        .filter(|end| (bounds.min..=bounds.max).contains(end)),
+                        .filter(|end| (low..=high).contains(end)),
                 );
                 ends.sort_by(f64::total_cmp);
                 ends.dedup();
                 let mut values = Vec::with_capacity(ends.len() * 2);
                 for pair in ends.windows(2) {
-                    values.extend([pair[0], f64::midpoint(pair[0], pair[1])]);
+                    if let [low, high] = *pair {
+                        values.extend([low, f64::midpoint(low, high)]);
+                    }
                 }
                 values.extend(ends.last());
-                (bounds.axis_id, values)
+                (bounds.axis_id(), values)
             })
             .unzip();
         Self { axes, values }
     }
 
-    /// Every location of the grid, as one value index per axis.
-    fn cells(&self) -> impl Iterator<Item = Vec<f64>> + '_ {
+    /// Every location of the grid, each a value per axis.
+    fn cells(&self) -> impl Iterator<Item = BTreeMap<AxisId, f64>> + '_ {
         let count: usize = self.values.iter().map(Vec::len).product();
-        (0..count).map(|mut cell| {
-            self.values
-                .iter()
-                .map(|values| {
-                    let value = values[cell % values.len()];
-                    cell /= values.len();
-                    value
-                })
-                .collect()
-        })
-    }
-
-    /// Whether `condition` holds at `cell`; a range on an axis the grid
-    /// lacks doesn't.
-    fn holds(&self, condition: &Condition, cell: &[f64]) -> bool {
-        condition.ranges().iter().all(|range| {
+        (0..count).filter_map(|mut cell| {
             self.axes
                 .iter()
-                .position(|axis_id| *axis_id == range.axis_id)
-                .is_some_and(|index| range.contains(cell[index]))
+                .zip(&self.values)
+                .map(|(axis_id, values)| {
+                    let value = values.get(cell % values.len())?;
+                    cell /= values.len();
+                    Some((*axis_id, *value))
+                })
+                .collect()
         })
     }
 }
@@ -212,27 +203,29 @@ mod tests {
     const WGHT: &str = "wght";
     const WDTH: &str = "wdth";
 
-    fn axis(tag: &str) -> AxisId {
+    fn id_tagged(tag: &str) -> AxisId {
         AxisId::from_raw(tag)
     }
 
-    fn space() -> [AxisBounds; 2] {
+    fn space() -> [DesignNormalization; 2] {
+        let bounds = |tag, minimum, default, maximum| {
+            DesignNormalization::new(
+                id_tagged(tag),
+                AxisRange {
+                    minimum,
+                    default,
+                    maximum,
+                },
+            )
+        };
         [
-            AxisBounds {
-                axis_id: axis(WGHT),
-                min: 100.0,
-                max: 900.0,
-            },
-            AxisBounds {
-                axis_id: axis(WDTH),
-                min: 50.0,
-                max: 100.0,
-            },
+            bounds(WGHT, 100.0, 400.0, 900.0),
+            bounds(WDTH, 50.0, 100.0, 100.0),
         ]
     }
 
-    fn range(tag: &str, min: Option<f64>, max: Option<f64>) -> ConditionRange {
-        ConditionRange::new(axis(tag), min, max)
+    fn range_on(tag: &str, min: Option<f64>, max: Option<f64>) -> ConditionRange {
+        ConditionRange::new(id_tagged(tag), min, max)
     }
 
     fn alternate(id: &str, ranges: impl IntoIterator<Item = ConditionRange>) -> GlyphAlternate {
@@ -266,12 +259,12 @@ mod tests {
     #[test]
     fn a_narrower_alternate_after_a_wider_one_is_never_used() {
         let alternates = [
-            alternate("heavy", [range(WGHT, Some(700.0), None)]),
+            alternate("heavy", [range_on(WGHT, Some(700.0), None)]),
             alternate(
                 "compact-heavy",
                 [
-                    range(WGHT, Some(700.0), None),
-                    range(WDTH, None, Some(80.0)),
+                    range_on(WGHT, Some(700.0), None),
+                    range_on(WDTH, None, Some(80.0)),
                 ],
             ),
         ];
@@ -288,11 +281,11 @@ mod tests {
             alternate(
                 "compact-heavy",
                 [
-                    range(WGHT, Some(700.0), None),
-                    range(WDTH, None, Some(80.0)),
+                    range_on(WGHT, Some(700.0), None),
+                    range_on(WDTH, None, Some(80.0)),
                 ],
             ),
-            alternate("heavy", [range(WGHT, Some(700.0), None)]),
+            alternate("heavy", [range_on(WGHT, Some(700.0), None)]),
         ];
 
         assert!(never_used(&alternates).is_empty());
@@ -305,18 +298,18 @@ mod tests {
             alternate(
                 "narrow",
                 [
-                    range(WGHT, Some(700.0), None),
-                    range(WDTH, None, Some(80.0)),
+                    range_on(WGHT, Some(700.0), None),
+                    range_on(WDTH, None, Some(80.0)),
                 ],
             ),
             alternate(
                 "wide",
                 [
-                    range(WGHT, Some(600.0), None),
-                    range(WDTH, Some(80.0), None),
+                    range_on(WGHT, Some(600.0), None),
+                    range_on(WDTH, Some(80.0), None),
                 ],
             ),
-            alternate("heavy", [range(WGHT, Some(700.0), None)]),
+            alternate("heavy", [range_on(WGHT, Some(700.0), None)]),
         ];
 
         assert_eq!(
@@ -326,22 +319,22 @@ mod tests {
     }
 
     #[test]
-    fn a_gap_of_one_point_or_one_open_span_leaves_a_later_alternate_used() {
-        // 700 itself is left to the later alternate.
+    fn an_alternate_left_one_point_or_one_open_span_is_used() {
+        // Weight 700 exactly is left to the last alternate.
         let point = [
-            alternate("below", [range(WGHT, None, Some(699.0))]),
-            alternate("above", [range(WGHT, Some(700.5), None)]),
-            alternate("any", []),
+            alternate("below", [range_on(WGHT, None, Some(699.0))]),
+            alternate("above", [range_on(WGHT, Some(701.0), None)]),
+            alternate("at-700", [range_on(WGHT, Some(700.0), Some(700.0))]),
         ];
         // Only the open span between 80 and 90 is left.
         let span = [
-            alternate("narrow", [range(WDTH, None, Some(80.0))]),
-            alternate("wide", [range(WDTH, Some(90.0), None)]),
+            alternate("narrow", [range_on(WDTH, None, Some(80.0))]),
+            alternate("wide", [range_on(WDTH, Some(90.0), None)]),
             alternate("any", []),
         ];
         let touching = [
-            alternate("narrow", [range(WDTH, None, Some(80.0))]),
-            alternate("wide", [range(WDTH, Some(80.0), None)]),
+            alternate("narrow", [range_on(WDTH, None, Some(80.0))]),
+            alternate("wide", [range_on(WDTH, Some(80.0), None)]),
             alternate("any", []),
         ];
 
@@ -356,9 +349,9 @@ mod tests {
     #[test]
     fn an_alternate_outside_the_axes_or_on_a_missing_axis_is_never_used() {
         let alternates = [
-            alternate("beyond", [range(WGHT, Some(1000.0), None)]),
-            alternate("missing", [range("opsz", Some(10.0), None)]),
-            alternate("at-maximum", [range(WGHT, Some(900.0), Some(900.0))]),
+            alternate("beyond", [range_on(WGHT, Some(1000.0), None)]),
+            alternate("missing", [range_on("opsz", Some(10.0), None)]),
+            alternate("at-maximum", [range_on(WGHT, Some(900.0), Some(900.0))]),
         ];
 
         assert_eq!(

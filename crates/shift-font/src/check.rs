@@ -276,7 +276,7 @@ impl Font {
         for glyph in self.glyphs() {
             findings.extend(health::check(self, glyph));
             findings.extend(outline::check(self, glyph.id(), &thresholds)?);
-            findings.extend(alternates::check(self, glyph)?);
+            findings.extend(self.never_used_alternate_findings(glyph)?);
         }
         findings.extend(kerning::check(self));
         if let Some(charset) = &options.charset {
@@ -304,7 +304,7 @@ impl Font {
             glyph_id,
             &OutlineThresholds::default(),
         )?);
-        findings.extend(alternates::check(self, glyph)?);
+        findings.extend(self.never_used_alternate_findings(glyph)?);
         Ok(findings)
     }
 }

@@ -6,9 +6,11 @@ use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use shift_backends::font_loader::FontLoader;
 use shift_font::composite::{GlyphComponents, ResolvedContour as FontResolvedContour};
 use shift_font::{
-    Axis, Component as FontComponent, DesignLocation, ExternalLocation, Font, GlyphLayer,
-    LayerDifference, Point, Source,
+    Axis, AxisNaming, Component as FontComponent, ConditionSpace, DesignLocation, ExternalLocation,
+    Font, GlyphId, GlyphLayer, LayerDifference, Point, Source,
 };
+
+use crate::authoring::AlternateReport;
 
 use super::types::{
     AffineTransform, AnchorInspection, Bounds, ComponentInspection, ContourInspection,
@@ -47,7 +49,15 @@ impl GlyphInspection {
             .into_diagnostic()
             .wrap_err("failed to resolve the glyph at the requested location")?;
         let relationships = selected_components(&projection, exact_source);
-        let components = inspect_components(&font, relationships, &design)?;
+        let space = font
+            .condition_space(Some(glyph_id))
+            .into_diagnostic()
+            .wrap_err("failed to read the font's axis mappings")?;
+        let components = inspect_components(&font, &space, glyph_id, relationships, &design)?;
+        let drawn = font.drawn_glyph_at(glyph_id, &design);
+        let drawn_glyph = font
+            .glyph(drawn)
+            .map_or_else(|| drawn.to_string(), |glyph| glyph.name().to_string());
         let structure = inspect_structure(&layer);
         let sources = inspect_sources(&font, glyph, projection.fallback());
         let variation = inspect_variation(&font, &projection, glyph, exact_source, &design)?;
@@ -91,6 +101,8 @@ impl GlyphInspection {
                 external: location_values(external.as_untyped(), font.axes()),
                 design: location_values(design.as_untyped(), font.axes()),
             },
+            drawn_glyph,
+            alternates: AlternateReport::of_glyph(&font, glyph),
             summary: GlyphSummary {
                 advance: resolved.advance,
                 bounds: resolved.bounds,
@@ -207,6 +219,8 @@ fn inspect_structure(layer: &GlyphLayer) -> GlyphStructure {
 
 fn inspect_components(
     font: &Font,
+    space: &ConditionSpace<'_>,
+    glyph_id: GlyphId,
     relationships: &GlyphComponents,
     location: &DesignLocation,
 ) -> Result<Vec<ComponentInspection>> {
@@ -263,6 +277,14 @@ fn inspect_components(
                     .collect(),
                 decomposed_transform: inspect_decomposed_transform(component),
                 transform: inspect_transform(component),
+                condition: space.format(component.condition(), AxisNaming::Name),
+                draws: (parent_id == glyph_id).then(|| {
+                    let axes = font.glyph(parent_id).map_or_else(
+                        || font.axes().to_vec(),
+                        |parent| font.glyph_space_axes(parent),
+                    );
+                    component.condition().holds_at(location, &axes)
+                }),
             })
         })
         .collect()

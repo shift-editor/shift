@@ -50,7 +50,7 @@ pub use features::FeatureData;
 pub use font::{Font, FontCopyId, FontMetadata, LANGUAGES_LIB_KEY};
 pub use glyph::{Glyph, GlyphLayer};
 pub use glyph_alternate::{
-    AxisBounds, GlyphAlternate, NeverUsedAlternate, NeverUsedReason, never_used_alternates,
+    GlyphAlternate, NeverUsedAlternate, NeverUsedReason, never_used_alternates,
 };
 pub use glyph_axis::{AxisValueUse, GlyphAxis, GlyphAxisEdit};
 pub use glyph_category::{

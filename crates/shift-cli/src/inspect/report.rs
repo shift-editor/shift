@@ -1,3 +1,5 @@
+use crate::authoring::AlternateReport;
+use shift_font::AxisNaming;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
@@ -174,6 +176,20 @@ pub(crate) struct GlyphSummary {
     pub axes: Vec<GlyphAxis>,
     pub layer_count: usize,
     pub layers: Vec<GlyphLayerSummary>,
+    /// The glyphs text draws in its place, in the order they are tried,
+    /// with never-used warnings.
+    pub alternates: Vec<AlternateReport>,
+    /// Where each component of its default drawing draws, by position from
+    /// 1; components that always draw are left out.
+    pub component_conditions: Vec<ComponentConditionSummary>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ComponentConditionSummary {
+    pub position: usize,
+    pub base: String,
+    pub condition: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -238,7 +254,12 @@ impl InspectReport {
         let source_names_by_id = source_names_by_id(font.sources());
         let glyphs = font
             .glyphs()
-            .map(|glyph| GlyphSummary::from_glyph(glyph, &source_names_by_id, &axes_by_id))
+            .map(|glyph| {
+                let mut summary = GlyphSummary::from_glyph(glyph, &source_names_by_id, &axes_by_id);
+                summary.alternates = AlternateReport::of_glyph(font, glyph);
+                summary.component_conditions = component_conditions(font, glyph);
+                summary
+            })
             .collect::<Vec<_>>();
 
         Self {
@@ -488,8 +509,35 @@ impl GlyphSummary {
             axes: glyph.axes().to_vec(),
             layer_count: layers.len(),
             layers,
+            alternates: Vec::new(),
+            component_conditions: Vec::new(),
         }
     }
+}
+
+/// The conditions on the components of `glyph`'s default drawing.
+fn component_conditions(font: &Font, glyph: &Glyph) -> Vec<ComponentConditionSummary> {
+    let Some(layer) = font
+        .default_source_id()
+        .and_then(|source_id| glyph.layer_for_source(source_id))
+    else {
+        return Vec::new();
+    };
+    // Fails only for an axis mapping that doesn't compile, which `check`
+    // reports; the summary then leaves conditions out.
+    let Ok(space) = font.condition_space(Some(glyph.id())) else {
+        return Vec::new();
+    };
+    layer
+        .components_iter()
+        .enumerate()
+        .filter(|(_, component)| !component.condition().is_always())
+        .map(|(index, component)| ComponentConditionSummary {
+            position: index + 1,
+            base: component.base_glyph_name().to_string(),
+            condition: space.format(component.condition(), AxisNaming::Name),
+        })
+        .collect()
 }
 
 impl GlyphLayerSummary {

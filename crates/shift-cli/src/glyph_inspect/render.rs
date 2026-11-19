@@ -26,6 +26,7 @@ impl GlyphInspection {
             format!("external    {}", Coordinates::of(&self.location.external)),
             format!("design      {}", Coordinates::of(&self.location.design)),
             format!("selection   {}", self.variation.selection),
+            format!("drawn as    {}", self.drawn_glyph),
             format!("advance     {}", Number(self.summary.advance)),
             format!("bounds      {}", format_bounds(self.summary.bounds)),
             format!(
@@ -43,6 +44,21 @@ impl GlyphInspection {
             ),
         ]
         .join("\n")
+            + &self.render_alternates()
+    }
+
+    /// The alternates, one per line, or nothing when the glyph has none.
+    fn render_alternates(&self) -> String {
+        if self.alternates.is_empty() {
+            return String::new();
+        }
+        let mut lines = vec![String::new(), "alternates".to_string()];
+        lines.extend(
+            self.alternates
+                .iter()
+                .map(|alternate| format!("  {}", alternate.render())),
+        );
+        lines.join("\n")
     }
 
     fn render_structure(&self) -> String {
@@ -85,7 +101,16 @@ impl GlyphInspection {
             lines.push("No components".to_string());
         } else {
             let mut table = table(&[
-                "order", "parent", "base", "path", "tx", "ty", "rotation", "scale x", "scale y",
+                "order",
+                "parent",
+                "base",
+                "path",
+                "tx",
+                "ty",
+                "rotation",
+                "scale x",
+                "scale y",
+                "condition",
             ]);
             for component in &self.components {
                 table.add_row(vec![
@@ -98,6 +123,7 @@ impl GlyphInspection {
                     right(Number(component.decomposed_transform.rotation)),
                     right(Number(component.decomposed_transform.scale_x)),
                     right(Number(component.decomposed_transform.scale_y)),
+                    Cell::new(component.condition_text()),
                 ]);
             }
             lines.push(table.to_string());

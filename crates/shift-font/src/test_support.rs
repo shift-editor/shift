@@ -746,3 +746,33 @@ pub fn conditions_font() -> Font {
         .unwrap();
     font
 }
+
+/// Applies `set`, then checks that undoing it restores the font and redoing
+/// it brings the edit back. Returns the edited font.
+///
+/// # Panics
+///
+/// Panics when `set` is refused, or undo or redo doesn't restore the font.
+pub fn apply_undo_redo(font: &mut Font, set: impl Into<crate::FontIntentSet>) -> Font {
+    let before = font.clone();
+    let applied = font.apply_intents(&set.into()).unwrap();
+    let after = font.clone();
+
+    font.apply_change_set(&applied.changes.inverted()).unwrap();
+    assert_eq!(*font, before, "undo restores the font");
+    font.apply_change_set(&applied.changes).unwrap();
+    assert_eq!(*font, after, "redo brings the edit back");
+    after
+}
+
+/// Applies `set` and returns its error, checking the font is unchanged.
+///
+/// # Panics
+///
+/// Panics when `set` applies, or a refused edit changed the font.
+pub fn refused_edit(font: &mut Font, set: impl Into<crate::FontIntentSet>) -> crate::CoreError {
+    let before = font.clone();
+    let error = font.apply_intents(&set.into()).unwrap_err();
+    assert_eq!(*font, before, "a refused edit leaves the font as it was");
+    error
+}
