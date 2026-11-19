@@ -84,8 +84,19 @@ pub(crate) fn load_font_from_conn(
         font.set_default_source_id(default_source_id);
     }
 
-    for glyph in load_glyphs(conn, read)? {
+    // A glyph's alternates must name glyphs the font has, and an alternate
+    // glyph may come later in glyph order (or name this one back), so they
+    // are attached once every glyph is in.
+    let mut alternates = Vec::new();
+    for mut glyph in load_glyphs(conn, read)? {
+        if !glyph.alternates().is_empty() {
+            alternates.push((glyph.id(), glyph.alternates().to_vec()));
+            glyph.set_alternates(Vec::new());
+        }
         font.insert_glyph(glyph)?;
+    }
+    for (glyph_id, glyph_alternates) in alternates {
+        font.set_glyph_alternates(glyph_id, glyph_alternates)?;
     }
 
     *font.kerning_mut() = load_kerning(conn)?;
