@@ -111,7 +111,7 @@ export const NewAlternatePanel = ({
                   placeholder="Search"
                 />
               </div>
-              <AutocompleteEmpty className="flex min-h-0 flex-1 items-center justify-center text-ui text-muted">
+              <AutocompleteEmpty className="flex min-h-0 flex-1 items-center justify-center">
                 No matching glyphs
               </AutocompleteEmpty>
               <AutocompleteList className="min-h-0 flex-1 overflow-y-auto">
@@ -119,7 +119,7 @@ export const NewAlternatePanel = ({
                   <AutocompleteItem
                     key={choice.kind === "create" ? "create" : choice.glyphId}
                     value={choice}
-                    className="h-7 text-ui"
+                    className="h-7"
                     onClick={() => pick(choice)}
                   >
                     {choice.kind === "create" ? (

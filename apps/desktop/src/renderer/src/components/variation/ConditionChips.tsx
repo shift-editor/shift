@@ -129,7 +129,7 @@ export const ConditionChips = ({
         value={draft.text}
         onChange={(event) => setDraft({ ...draft, text: event.target.value, problem: null })}
         onKeyDown={onKeyDown}
-        className="h-4 rounded-sm px-0.5 text-ui"
+        className="h-4"
         style={{ width: `${Math.max(draft.text.length, 3) + 1}ch` }}
       />
     </ChipFrame>
