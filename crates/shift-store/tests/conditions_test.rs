@@ -90,6 +90,36 @@ fn alternates_and_component_conditions_save_and_reopen_as_they_were() {
 }
 
 #[test]
+fn a_glyph_whose_alternate_comes_later_in_glyph_order_reopens() {
+    let mut font = conditions_font();
+    let dollar = font
+        .glyph_by_name("dollar")
+        .ok_or("no dollar")
+        .unwrap()
+        .id();
+    let later = font
+        .insert_glyph(shift_font::Glyph::new("dollar.later"))
+        .unwrap();
+    let alternate =
+        shift_font::GlyphAlternate::new(shift_font::AlternateId::new(), Condition::always(), later);
+    font.set_glyph_alternates(dollar, vec![alternate]).unwrap();
+    let paths = DocumentPaths::holding(&font).unwrap();
+
+    let store = ShiftStore::open_document(&paths.document).unwrap();
+
+    assert_eq!(store.load_font_state().unwrap(), font);
+    assert_eq!(
+        store
+            .load_font_directory()
+            .unwrap()
+            .glyph(dollar)
+            .unwrap()
+            .alternates(),
+        font.glyph(dollar).unwrap().alternates()
+    );
+}
+
+#[test]
 fn an_imported_font_keeps_its_alternates_and_component_conditions() {
     let font = conditions_font();
     let mut store = ShiftStore::open_memory_for_test().unwrap();

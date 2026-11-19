@@ -94,6 +94,11 @@ impl FontIndex {
         self.glyph_axis_tags.get(tag)
     }
 
+    /// The glyph that has the alternate `alternate_id`.
+    pub(super) fn alternate_owner(&self, alternate_id: AlternateId) -> Option<&GlyphId> {
+        self.alternates.get(&alternate_id)
+    }
+
     /// The glyphs `glyph_id` is an alternate of.
     pub(super) fn glyphs_with_alternate(
         &self,

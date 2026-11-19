@@ -39,6 +39,7 @@ pub mod changes;
 pub mod check;
 pub mod compiled_header;
 pub mod composite;
+pub mod condition_text;
 pub mod contour_edit;
 pub mod curve;
 pub mod curve_fit;
@@ -69,6 +70,7 @@ pub mod wire;
 pub use axis_map::piecewise_map;
 pub use changes::*;
 pub use compiled_header::CompiledHeader;
+pub use condition_text::{AxisNaming, ConditionSpace, ConditionTextError, ValueRange};
 pub use contour_edit::{
     ContourEditError, ContourEnd, ContourSide, DeleteMode, EditOption, JoinMode, UnknownEditOption,
 };

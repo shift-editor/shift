@@ -10,6 +10,8 @@
 //! An axis is a font axis or a glyph axis, by its [`AxisId`]: the two share
 //! one namespace, so no reference type is needed to tell them apart.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::axis::{Axis, AxisList, DesignLocation};
@@ -107,6 +109,16 @@ impl Condition {
         self.all.iter().all(|range| {
             axes.axis(range.axis_id)
                 .is_some_and(|axis| range.contains(location.value_on(axis)))
+        })
+    }
+
+    /// Whether the condition holds at `values`, a value per axis; a range on
+    /// an axis `values` lacks doesn't.
+    pub(crate) fn holds_on(&self, values: &BTreeMap<AxisId, f64>) -> bool {
+        self.all.iter().all(|range| {
+            values
+                .get(&range.axis_id)
+                .is_some_and(|value| range.contains(*value))
         })
     }
 

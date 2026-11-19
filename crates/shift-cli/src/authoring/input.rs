@@ -68,6 +68,22 @@ pub(super) struct ComponentInput {
     /// `parent` (the default) or `font`.
     #[serde(default)]
     pub inheritance: ComponentInheritance,
+    /// Where the component draws, one range per text as `--when` reads them,
+    /// such as `["RSLN >= 50"]`; empty draws it everywhere. Give the same
+    /// condition in every drawing of the glyph.
+    #[serde(default)]
+    pub condition: Vec<String>,
+}
+
+/// One of a glyph's alternates: the glyph drawn in its place where every
+/// range of `when` holds.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct AlternateInput {
+    pub glyph: String,
+    /// One range per text as `--when` reads them; empty always applies.
+    #[serde(default)]
+    pub when: Vec<String>,
 }
 
 /// A component transform: Shift's decomposed form, or an affine
@@ -130,6 +146,10 @@ pub(super) struct GlyphEntryInput {
     /// Metrics keys that apply in every source the glyph's layers do not override.
     #[serde(default)]
     pub metrics_keys: Option<MetricsKeysInput>,
+    /// The glyph's alternates, in the order they are tried, replacing any it
+    /// has; omitted keeps them, and an empty list removes them.
+    #[serde(default)]
+    pub alternates: Option<Vec<AlternateInput>>,
     #[serde(default)]
     pub layer: Option<LayerInput>,
 }

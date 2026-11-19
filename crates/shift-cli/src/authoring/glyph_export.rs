@@ -6,7 +6,10 @@ use std::path::Path;
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
 use serde_json::{Map, Value, json};
 use shift_backends::font_loader::FontLoader;
-use shift_font::{ComponentInheritance, Font, Glyph, GlyphLayer, MetricsKeys, PointType, SourceId};
+use shift_font::{
+    AxisNaming, ComponentInheritance, ConditionSpace, Font, Glyph, GlyphLayer, MetricsKeys,
+    PointType, SourceId,
+};
 
 use super::glyph_batch::GLYPH_BATCH_FORMAT;
 use super::metrics_keys::side_name;
@@ -46,6 +49,11 @@ pub(crate) fn export_glyphs(
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to load font {}", path.display()))?;
     let source_ids = selected_sources(&font, sources)?;
+    // Formatting reads every axis by id, so one space serves every glyph.
+    let space = font
+        .condition_space(None)
+        .into_diagnostic()
+        .wrap_err("failed to read the font's axis mappings")?;
     let named = matches!(sources, ExportSources::All);
 
     let mut entries = Vec::new();
@@ -66,17 +74,19 @@ pub(crate) fn export_glyphs(
             for (_, component) in layer.components().iter() {
                 queued.push(component.base_glyph_name().to_string());
             }
+            queued.extend(alternate_glyph_names(&font, glyph));
             let source_name = named
                 .then(|| {
                     font.source(*source_id)
                         .map(|source| source.name().to_string())
                 })
                 .flatten();
-            entries.push(glyph_entry(glyph, Some(layer), source_name, &font));
+            entries.push(glyph_entry(glyph, Some(layer), source_name, &space));
             wrote_layer = true;
         }
         if !wrote_layer {
-            entries.push(glyph_entry(glyph, None, None, &font));
+            queued.extend(alternate_glyph_names(&font, glyph));
+            entries.push(glyph_entry(glyph, None, None, &space));
         }
     }
     entries.reverse();
@@ -104,8 +114,9 @@ fn glyph_entry(
     glyph: &Glyph,
     layer: Option<&GlyphLayer>,
     source: Option<String>,
-    font: &Font,
+    space: &ConditionSpace<'_>,
 ) -> Value {
+    let font = space.font();
     let mut entry = Map::new();
     entry.insert("name".into(), json!(glyph.name()));
     if !glyph.unicodes().is_empty() {
@@ -122,13 +133,28 @@ fn glyph_entry(
     if let Some(keys) = metrics_keys_value(glyph.metrics_keys()) {
         entry.insert("metricsKeys".into(), keys);
     }
+    if !glyph.alternates().is_empty() {
+        let alternates: Vec<Value> = glyph
+            .alternates()
+            .iter()
+            .map(|alternate| {
+                let name = font
+                    .glyph(alternate.glyph())
+                    .map_or_else(|| alternate.glyph().to_string(), |g| g.name().to_string());
+                let when = space.format(alternate.condition(), AxisNaming::Tag);
+                json!({ "glyph": name, "when": when })
+            })
+            .collect();
+        entry.insert("alternates".into(), json!(alternates));
+    }
     if let Some(layer) = layer {
-        entry.insert("layer".into(), layer_value(layer, font));
+        entry.insert("layer".into(), layer_value(layer, space));
     }
     Value::Object(entry)
 }
 
-fn layer_value(layer: &GlyphLayer, font: &Font) -> Value {
+fn layer_value(layer: &GlyphLayer, space: &ConditionSpace<'_>) -> Value {
+    let font = space.font();
     let contours: Vec<Value> = layer
         .contours()
         .iter()
@@ -194,6 +220,10 @@ fn layer_value(layer: &GlyphLayer, font: &Font) -> Value {
             if component.inheritance() == ComponentInheritance::Font {
                 value.insert("inheritance".into(), json!("font"));
             }
+            if !component.condition().is_always() {
+                let condition = space.format(component.condition(), AxisNaming::Tag);
+                value.insert("condition".into(), json!(condition));
+            }
             Value::Object(value)
         })
         .collect();
@@ -204,6 +234,16 @@ fn layer_value(layer: &GlyphLayer, font: &Font) -> Value {
         value.insert("metricsKeys".into(), keys);
     }
     Value::Object(value)
+}
+
+/// The names of the glyphs `glyph`'s alternates draw.
+fn alternate_glyph_names(font: &Font, glyph: &Glyph) -> Vec<String> {
+    glyph
+        .alternates()
+        .iter()
+        .filter_map(|alternate| font.glyph(alternate.glyph()))
+        .map(|alternate| alternate.name().to_string())
+        .collect()
 }
 
 /// The keys as `glyph set` reads them, or `None` when there are none.

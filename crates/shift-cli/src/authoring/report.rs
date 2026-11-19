@@ -6,9 +6,9 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 use shift_font::{
-    AxisId, EntityChange, Font, FontChange, FontChangeImpact, FontChangeSet, FontEntityChange,
-    FontMetadata, Glyph, GlyphAxis, GlyphLayer, KerningGroup, KerningGroupId, KerningPair,
-    SourceId,
+    AlternateId, AxisId, AxisNaming, EntityChange, Font, FontChange, FontChangeImpact,
+    FontChangeSet, FontEntityChange, FontMetadata, Glyph, GlyphAxis, GlyphLayer, KerningGroup,
+    KerningGroupId, KerningPair, NeverUsedReason, SourceId,
 };
 
 use super::font_info::report::SourceMetrics;
@@ -100,6 +100,12 @@ pub(crate) enum AuthoringChange {
     GlyphAxisDeleted {
         #[serde(flatten)]
         axis: GlyphAxisReport,
+    },
+    GlyphAlternatesSet {
+        glyph_id: String,
+        glyph_name: String,
+        /// Every alternate after the change, in the order they are tried.
+        alternates: Vec<AlternateReport>,
     },
     NamedInstancesUpdated {
         count: usize,
@@ -195,6 +201,113 @@ fn glyph_axis_changes(before: Option<&Glyph>, after: Option<&Glyph>) -> Vec<Auth
         }
     }
     changes
+}
+
+/// One alternate as a report lists it.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AlternateReport {
+    pub alternate_id: String,
+    /// Counting from 1.
+    pub position: usize,
+    pub glyph: String,
+    /// One range per text, by axis name, in user units on font axes;
+    /// empty when it always applies.
+    pub when: Vec<String>,
+    /// Why no location draws it, when none does.
+    pub never_used: Option<String>,
+}
+
+impl AlternateReport {
+    /// Each of `glyph`'s alternates in `font`, with never-used warnings.
+    pub(crate) fn of_glyph(font: &Font, glyph: &Glyph) -> Vec<Self> {
+        // Both fail only when an axis mapping doesn't compile; the report then
+        // lists the alternates without condition text or warnings, and
+        // `check` reports the mapping.
+        let space = font.condition_space(Some(glyph.id())).ok();
+        let unused: BTreeMap<AlternateId, NeverUsedReason> = font
+            .never_used_alternates(glyph.id())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|unused| (unused.alternate_id, unused.reason))
+            .collect();
+        let described: BTreeMap<AlternateId, String> = glyph
+            .alternates()
+            .iter()
+            .enumerate()
+            .map(|(index, alternate)| {
+                let name = glyph_name(font, alternate.glyph());
+                (alternate.id(), format!("{name} (alternate {})", index + 1))
+            })
+            .collect();
+        let name_at =
+            |alternate_id: AlternateId| described.get(&alternate_id).cloned().unwrap_or_default();
+        glyph
+            .alternates()
+            .iter()
+            .enumerate()
+            .map(|(index, alternate)| {
+                let never_used = unused.get(&alternate.id()).map(|reason| match reason {
+                    NeverUsedReason::OutsideAxes => {
+                        "its condition holds nowhere in the axes' ranges".to_string()
+                    }
+                    NeverUsedReason::Covered { by } => {
+                        let earlier: Vec<String> = by.iter().map(|id| name_at(*id)).collect();
+                        format!("{} always applies first", earlier.join(" and "))
+                    }
+                });
+                Self {
+                    alternate_id: alternate.id().to_string(),
+                    position: index + 1,
+                    glyph: glyph_name(font, alternate.glyph()),
+                    when: space.as_ref().map_or_else(Vec::new, |space| {
+                        space.format(alternate.condition(), AxisNaming::Name)
+                    }),
+                    never_used,
+                }
+            })
+            .collect()
+    }
+
+    /// One line: `2. dollar.bled  when Bleed ≥ 70`, with a warning when it
+    /// is never used.
+    pub(crate) fn render(&self) -> String {
+        let when = if self.when.is_empty() {
+            "always".to_string()
+        } else {
+            format!("when {}", self.when.join(", "))
+        };
+        let line = format!("{}. {}  {when}", self.position, self.glyph);
+        match &self.never_used {
+            Some(why) => format!("{line}\n     warning: never used, because {why}"),
+            None => line,
+        }
+    }
+}
+
+fn glyph_name(font: &Font, glyph_id: shift_font::GlyphId) -> String {
+    font.glyph(glyph_id)
+        .map_or_else(|| glyph_id.to_string(), |glyph| glyph.name().to_string())
+}
+
+/// The alternates of `after` when they differ from those of `before`.
+fn alternate_changes(
+    font: &Font,
+    before: Option<&Glyph>,
+    after: &Glyph,
+) -> Option<AuthoringChange> {
+    let unchanged = match before {
+        Some(before) => before.alternates() == after.alternates(),
+        None => after.alternates().is_empty(),
+    };
+    if unchanged {
+        return None;
+    }
+    Some(AuthoringChange::GlyphAlternatesSet {
+        glyph_id: after.id().to_string(),
+        glyph_name: after.name().to_string(),
+        alternates: AlternateReport::of_glyph(font, after),
+    })
 }
 
 #[derive(Debug, Serialize)]
@@ -349,6 +462,21 @@ impl Report for AuthoringReport {
                 AuthoringChange::GlyphAxisCreated { axis } => lines.push(axis.render('+')),
                 AuthoringChange::GlyphAxisUpdated { axis } => lines.push(axis.render('~')),
                 AuthoringChange::GlyphAxisDeleted { axis } => lines.push(axis.render('-')),
+                AuthoringChange::GlyphAlternatesSet {
+                    glyph_name,
+                    alternates,
+                    ..
+                } => {
+                    lines.push(format!("~ alternates  {glyph_name}"));
+                    if alternates.is_empty() {
+                        lines.push("    none".to_string());
+                    }
+                    lines.extend(
+                        alternates
+                            .iter()
+                            .map(|alternate| format!("    {}", alternate.render())),
+                    );
+                }
                 AuthoringChange::NamedInstancesUpdated { count, instances } => {
                     lines.push(format!("~ instances  {count} product presets"));
                     lines.extend(instances.iter().map(InstanceReport::render));
@@ -429,6 +557,7 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
                         unicodes: format_unicodes(glyph.unicodes()),
                     }];
                     reported.extend(glyph_axis_changes(None, Some(glyph)));
+                    reported.extend(alternate_changes(font, None, glyph));
                     reported
                 }
                 FontEntityChange::Glyph(EntityChange::Updated { before, after }) => {
@@ -438,6 +567,7 @@ pub(super) fn report_changes(font: &Font, changes: &FontChangeSet) -> Vec<Author
                         unicodes: format_unicodes(after.unicodes()),
                     }];
                     reported.extend(glyph_axis_changes(Some(before), Some(after)));
+                    reported.extend(alternate_changes(font, Some(before), after));
                     reported
                 }
                 other => entity_report(font, &other).into_iter().collect(),

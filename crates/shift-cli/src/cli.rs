@@ -8,6 +8,12 @@ use crate::glyph_inspect::GlyphInspectView;
 use crate::inspect::InspectView;
 use crate::proof::ProofArgs;
 
+mod alternate;
+pub(crate) use alternate::{
+    AddAlternateArgs, AlternateSelectorArgs, ComponentCommand, ComponentConditionCommand,
+    ConditionArgs, GlyphAlternateCommand, MoveAlternateArgs, RemoveAlternateArgs, SetAlternateArgs,
+    SetComponentConditionArgs,
+};
 mod font;
 pub(crate) use font::{FontInfoArgs, PackFontArgs, SetFontArgs};
 mod glyph_axis;
@@ -111,6 +117,12 @@ pub(crate) enum Command {
         command: GlyphCommand,
     },
 
+    /// Author where a glyph's components draw.
+    Component {
+        #[command(subcommand)]
+        command: ComponentCommand,
+    },
+
     /// Author a glyph's drawings: on a source, or anywhere in its design space.
     Layer {
         #[command(subcommand)]
@@ -179,6 +191,13 @@ pub(crate) enum GlyphCommand {
     Axis {
         #[command(subcommand)]
         command: GlyphAxisCommand,
+    },
+
+    /// Author the glyphs text draws in a glyph's place at some locations,
+    /// such as dollar.bled where Bleed is at least 70.
+    Alternate {
+        #[command(subcommand)]
+        command: GlyphAlternateCommand,
     },
 }
 

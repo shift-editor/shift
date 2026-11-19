@@ -320,7 +320,30 @@ impl InspectReport {
         }
         align_right(&mut table, &[4]);
 
-        mode.section_with_table("Glyphs", &table)
+        let mut lines = vec![mode.section_with_table("Glyphs", &table)];
+        for glyph in &self.glyphs {
+            if !glyph.alternates.is_empty() {
+                lines.push(format!("\n{} alternates", glyph.name));
+                lines.extend(
+                    glyph
+                        .alternates
+                        .iter()
+                        .map(|alternate| format!("  {}", alternate.render())),
+                );
+            }
+            if !glyph.component_conditions.is_empty() {
+                lines.push(format!("\n{} component conditions", glyph.name));
+                lines.extend(glyph.component_conditions.iter().map(|component| {
+                    format!(
+                        "  {}. {}  when {}",
+                        component.position,
+                        component.base,
+                        component.condition.join(", ")
+                    )
+                }));
+            }
+        }
+        lines.join("\n")
     }
 
     fn render_layers(&self, mode: RenderMode) -> String {

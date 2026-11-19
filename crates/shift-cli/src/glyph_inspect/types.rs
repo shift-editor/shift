@@ -1,5 +1,7 @@
 use serde::Serialize;
 
+use crate::authoring::AlternateReport;
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct GlyphInspection {
@@ -7,6 +9,11 @@ pub(crate) struct GlyphInspection {
     pub format: String,
     pub glyph: GlyphIdentity,
     pub location: GlyphLocation,
+    /// The glyph text draws in this one's place at the location: the glyph
+    /// itself, or the first alternate whose condition holds.
+    pub drawn_glyph: String,
+    /// The glyph's alternates, in the order they are tried.
+    pub alternates: Vec<AlternateReport>,
     pub summary: GlyphSummary,
     pub structure: GlyphStructure,
     pub components: Vec<ComponentInspection>,
@@ -117,6 +124,27 @@ pub(crate) struct ComponentInspection {
     pub component_path: Vec<String>,
     pub decomposed_transform: DecomposedTransform,
     pub transform: AffineTransform,
+    /// Where it draws, one range per text; empty when it always draws.
+    pub condition: Vec<String>,
+    /// Whether its condition holds at the location, for a component placed
+    /// directly in the inspected glyph; `None` for nested components.
+    pub draws: Option<bool>,
+}
+
+impl ComponentInspection {
+    /// Its condition and whether it draws here, such as `Resolution ≥ 50
+    /// (hidden here)`, or `-` when it always draws.
+    pub(crate) fn condition_text(&self) -> String {
+        if self.condition.is_empty() {
+            return "-".to_string();
+        }
+        let state = match self.draws {
+            Some(true) => " (draws here)",
+            Some(false) => " (hidden here)",
+            None => "",
+        };
+        format!("{}{state}", self.condition.join(", "))
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]

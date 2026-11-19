@@ -3,7 +3,7 @@
 //! Regular, Bled, Spread 100 and Strike 100, and `H` of two `dot`
 //! components whose first sets Spread 60 (80 in its Bleed 50 brace layer).
 
-use crate::test_support::glyph_axis_font;
+use crate::test_support::{apply_undo_redo, glyph_axis_font, refused_edit};
 use crate::{
     AxisId, AxisRange, AxisValueUse, Component, CoreError, CreateGlyphAxis,
     CreateLocatedGlyphLayer, DeleteGlyphLayer, DesignLocation, EditGlyphAxis, Font, FontIntentSet,
@@ -55,28 +55,6 @@ fn h_component_spreads(font: &Font) -> Vec<f64> {
         .collect()
 }
 
-/// Applies `set`, then checks that undoing it restores the font and redoing
-/// it brings the edit back. Returns the edited font.
-fn apply_undo_redo(font: &mut Font, set: impl Into<FontIntentSet>) -> Font {
-    let before = font.clone();
-    let applied = font.apply_intents(&set.into()).unwrap();
-    let after = font.clone();
-
-    font.apply_change_set(&applied.changes.inverted()).unwrap();
-    assert_eq!(*font, before, "undo restores the font");
-    font.apply_change_set(&applied.changes).unwrap();
-    assert_eq!(*font, after, "redo brings the edit back");
-    after
-}
-
-/// Applies `set` and returns its error, checking the font is unchanged.
-fn refused(font: &mut Font, set: impl Into<FontIntentSet>) -> CoreError {
-    let before = font.clone();
-    let error = font.apply_intents(&set.into()).unwrap_err();
-    assert_eq!(*font, before, "a refused edit leaves the font as it was");
-    error
-}
-
 fn axis_edit(font: &Font, tag: &str, edit: GlyphAxisEdit) -> EditGlyphAxis {
     EditGlyphAxis {
         axis_id: dot_space_axis(font, tag),
@@ -117,7 +95,7 @@ fn a_glyph_axis_is_added_with_a_tag_from_its_name_and_undone() {
 fn a_glyph_axis_with_a_tag_already_in_use_is_refused() {
     let mut font = glyph_axis_font();
 
-    let error = refused(
+    let error = refused_edit(
         &mut font,
         CreateGlyphAxis {
             glyph_id: h(),
@@ -160,7 +138,7 @@ fn a_range_that_strands_values_is_refused_naming_each_one() {
         GlyphAxisEdit::Range(axis_range(0.0, 0.0, 70.0)),
     );
 
-    let error = refused(&mut font, narrower);
+    let error = refused_edit(&mut font, narrower);
 
     let CoreError::AxisValuesOutsideRange { uses, .. } = error else {
         panic!("expected stranded values, got {error:?}");
@@ -250,7 +228,7 @@ fn an_axis_in_use_is_not_removed() {
 
     let remove = axis_edit(&font, "SPRD", GlyphAxisEdit::Remove);
 
-    let error = refused(&mut font, remove);
+    let error = refused_edit(&mut font, remove);
 
     assert!(matches!(error, CoreError::GlyphAxisInUse { uses, .. } if uses.len() == 4));
 }
@@ -281,7 +259,7 @@ fn an_edit_to_an_unknown_axis_is_refused() {
     let mut font = glyph_axis_font();
     let axis_id = AxisId::new();
 
-    let error = refused(
+    let error = refused_edit(
         &mut font,
         EditGlyphAxis {
             axis_id,
@@ -411,7 +389,7 @@ fn a_drawing_is_refused_where_it_cannot_sit() {
             coordinates: DesignLocation::from([(spread, value)]),
         };
 
-        let error = refused(&mut font, intent);
+        let error = refused_edit(&mut font, intent);
 
         assert!(expected.matches(&error), "{expected:?}: {error:?}");
     }
@@ -446,7 +424,7 @@ fn a_drawing_moved_onto_another_is_refused() {
     let regular = source_called(&font, "Regular");
     let spread = dot_space_axis(&font, "SPRD");
 
-    let error = refused(
+    let error = refused_edit(
         &mut font,
         SetGlyphLayerLocation {
             layer_id,
@@ -523,7 +501,7 @@ fn a_component_location_on_another_glyphs_axis_is_refused() {
     font = other;
     let (layer_id, component) = h_spread_component(&font);
 
-    let error = refused(
+    let error = refused_edit(
         &mut font,
         set_location(layer_id, &component, DesignLocation::from([(foreign, 5.0)])),
     );
@@ -540,7 +518,7 @@ fn a_component_location_outside_a_glyph_axis_range_is_refused() {
     let (layer_id, component) = h_spread_component(&font);
     let spread = dot_space_axis(&font, "SPRD");
 
-    let error = refused(
+    let error = refused_edit(
         &mut font,
         set_location(
             layer_id,
@@ -558,7 +536,7 @@ fn replacing_layer_content_checks_component_locations() {
     let (layer_id, mut component) = h_spread_component(&font);
     component.set_location(DesignLocation::from([(AxisId::new(), 1.0)]));
 
-    let error = refused(
+    let error = refused_edit(
         &mut font,
         ReplaceGlyphLayerContent {
             layer_id,

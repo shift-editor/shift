@@ -10,10 +10,10 @@ use std::collections::BTreeSet;
 use crate::Require;
 use crate::axis::{AxisList, DesignLocation};
 use crate::component::Component;
-use crate::entity::GlyphId;
+use crate::entity::{AlternateId, GlyphId};
 use crate::error::{CoreError, CoreResult};
 use crate::glyph::{Glyph, GlyphLayer};
-use crate::glyph_alternate::GlyphAlternate;
+use crate::glyph_alternate::{GlyphAlternate, NeverUsedAlternate, never_used_alternates};
 
 use super::Font;
 
@@ -39,6 +39,24 @@ impl Font {
             .map_or(glyph_id, GlyphAlternate::glyph)
     }
 
+    /// `glyph_id`'s alternates that never win anywhere on the font's axes;
+    /// see [`never_used_alternates`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::GlyphNotFound`] for an unknown glyph and an
+    /// axis-mapping error when an authored mapping cannot compile.
+    pub fn never_used_alternates(&self, glyph_id: GlyphId) -> CoreResult<Vec<NeverUsedAlternate>> {
+        let glyph = self.require_glyph(glyph_id)?;
+        if glyph.alternates().is_empty() {
+            return Ok(Vec::new());
+        }
+        Ok(never_used_alternates(
+            glyph.alternates(),
+            &self.design_normalization()?,
+        ))
+    }
+
     /// Every alternate glyph of one of `glyph_ids`: what a reader that draws
     /// those glyphs must have loaded besides them.
     pub fn alternate_glyphs_of<'a>(
@@ -58,14 +76,13 @@ impl Font {
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::GlyphNotFound`] for an unknown glyph, the errors
-    /// of [`Self::check_glyph_alternates`], and
+    /// Returns [`CoreError::GlyphNotFound`] for an unknown glyph or alternate
+    /// glyph, [`CoreError::AlternateIsItself`],
+    /// [`CoreError::AlternateConditionOffFontAxes`], [`CoreError::AxisNotFound`],
+    /// a condition's own error, and
     /// [`CoreError::DuplicateAlternateId`] for an alternate id the font
     /// already uses.
-    // Only tests set alternates on a glyph in the font until the authoring
-    // intent that calls this exists.
-    #[cfg(test)]
-    pub(crate) fn set_glyph_alternates(
+    pub fn set_glyph_alternates(
         &mut self,
         glyph_id: GlyphId,
         alternates: Vec<GlyphAlternate>,
@@ -77,6 +94,11 @@ impl Font {
         self.edit_indexed_glyph(glyph_id, |glyph| glyph.set_alternates(alternates))
     }
 
+    /// The glyph that has the alternate `alternate_id`.
+    pub fn alternate_owner(&self, alternate_id: AlternateId) -> Option<GlyphId> {
+        self.index().alternate_owner(alternate_id).copied()
+    }
+
     /// Checks `glyph`'s alternates: each draws a glyph the font has, other
     /// than `glyph`, and its condition is well formed and reads font axes
     /// only.
@@ -85,7 +107,8 @@ impl Font {
     ///
     /// Returns [`CoreError::AlternateIsItself`], [`CoreError::GlyphNotFound`]
     /// for an alternate glyph the font lacks,
-    /// [`CoreError::AlternateConditionOffFontAxes`], or a condition's own
+    /// [`CoreError::AlternateConditionOffFontAxes`] for a glyph's own axis,
+    /// [`CoreError::AxisNotFound`] for an axis the font has nowhere, or a condition's own
     /// error ([`crate::Condition::check_well_formed`]) for the first
     /// alternate that fails.
     pub(super) fn check_glyph_alternates(&self, glyph: &Glyph) -> CoreResult<()> {
@@ -104,6 +127,7 @@ impl Font {
                 .axis_ids()
                 .find(|axis_id| !self.axes().contains_axis(*axis_id))
             {
+                self.glyph_axis_owner(axis_id).require(&axis_id)?;
                 return Err(CoreError::AlternateConditionOffFontAxes {
                     alternate_id,
                     axis_id,
