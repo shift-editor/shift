@@ -372,6 +372,7 @@ impl GlyphLayer {
         self.contours = new_contours;
         self.anchors = anchors;
         self.components = new_components;
+        self.prune_orphan_stroke_lib_entries();
         Ok(())
     }
 
@@ -427,7 +428,11 @@ impl GlyphLayer {
     }
 
     pub fn remove_contour(&mut self, id: &ContourId) -> Option<Contour> {
-        self.contours.shift_remove(id)
+        let removed = self.contours.shift_remove(id);
+        if removed.is_some() {
+            self.prune_orphan_stroke_lib_entries();
+        }
+        removed
     }
 
     pub fn clear_contours(&mut self) {

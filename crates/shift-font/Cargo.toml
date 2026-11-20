@@ -22,7 +22,7 @@ rusqlite = { version = "0.41", optional = true }
 fontdrasil = "2.0"
 fontir = "2.0"
 indexmap = { version = "2", features = ["serde"] }
-kurbo = "0.13.0"
+kurbo = "0.13.1"
 svgtypes = "0.16"
 # Trigonometry with identical bits natively and in WebAssembly.
 libm = "0.2.16"

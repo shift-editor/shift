@@ -57,6 +57,9 @@ pub enum CoreError {
     #[error("boolean operation failed: {0}")]
     BooleanOperationFailed(#[source] linesweeper::Error),
 
+    #[error("stroke operation failed: {message}")]
+    StrokeOperationFailed { message: String },
+
     #[error("missing glyph value at {index}")]
     MissingGlyphValue { index: usize },
 

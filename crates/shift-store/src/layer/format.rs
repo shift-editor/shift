@@ -167,6 +167,44 @@ mod tests {
     use super::*;
 
     #[test]
+    fn stroke_lib_survives_messagepack_round_trip() {
+        use std::collections::BTreeMap;
+
+        use font::stroke::{ContourStrokeEntry, ContourStrokeRole, LayerStrokeLib, STROKE_LIB_KEY};
+        use font::{Contour, LayerId, PointType, SourceId};
+
+        let source_id = SourceId::from_raw("stroke_source");
+        let mut layer =
+            font::GlyphLayer::with_width(LayerId::from_raw("stroke_layer"), source_id, 500.0);
+        let mut contour = Contour::new();
+        contour.add_point(30.0, 30.0, PointType::OnCurve, false);
+        contour.add_point(30.0, 90.0, PointType::OnCurve, false);
+        layer.add_contour(contour);
+        let contour_id = layer.contours_iter().next().unwrap().id().to_string();
+        let stroke_lib = LayerStrokeLib {
+            contours: BTreeMap::from([(
+                contour_id,
+                ContourStrokeEntry {
+                    role: ContourStrokeRole::Skeleton,
+                    style_id: Some("default".to_string()),
+                },
+            )]),
+        };
+        layer
+            .lib_mut()
+            .set(STROKE_LIB_KEY.to_string(), stroke_lib.to_lib());
+
+        let encoded = encode_layer(&layer).unwrap();
+        let decoded = decode_layer(&encoded).unwrap();
+
+        assert_eq!(
+            LayerStrokeLib::from_lib(decoded.lib().get(STROKE_LIB_KEY).unwrap()),
+            LayerStrokeLib::from_lib(layer.lib().get(STROKE_LIB_KEY).unwrap())
+        );
+        assert_eq!(encode_layer(&decoded).unwrap(), encoded);
+    }
+
+    #[test]
     fn complete_layer_roundtrips_through_deterministic_bytes() {
         let font = font::test_support::sample_font();
         let layer = font

@@ -1,0 +1,6 @@
+{
+  "name": "icon-l-stroke",
+  "description": "Open L-shaped icon centerline (two right angles)",
+  "path_d": "M 30 30 L 30 90 L 90 90",
+  "stroke_width": 24.0
+}

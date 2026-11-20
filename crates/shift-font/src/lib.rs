@@ -62,6 +62,7 @@ pub mod projection;
 pub mod proof_text;
 pub mod shaper_font_source;
 mod string_enum;
+pub mod stroke;
 pub mod svg_path;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;

@@ -1,6 +1,7 @@
 //! Intents that edit one existing layer.
 
 use super::*;
+use crate::stroke::{OutlineStrokeStyle, StrokeJoin};
 
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
@@ -969,6 +970,78 @@ impl LayerIntent for ApplyBooleanOp {
             layer.apply_boolean_op(contour_id_a, contour_id_b, *operation)?;
         }
 
+        font.reindex_layer(*layer_id, &before)?;
+        Ok(())
+    }
+}
+
+/// Bakes constant-width stroke outlines from skeleton contours (stream A1.1).
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct OutlineStroke {
+    pub layer_id: LayerId,
+    pub contour_ids: Vec<ContourId>,
+    pub style: OutlineStrokeStyle,
+    pub tolerance: f64,
+}
+
+impl LayerIntent for OutlineStroke {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            contour_ids,
+            style,
+            tolerance,
+        } = self;
+        [style.width, style.miter_limit, *tolerance].require_finite(Coordinates::StrokeOutline)?;
+
+        let before = font.layer_snapshot(*layer_id)?;
+        {
+            let layer = font.require_layer_mut(*layer_id)?;
+            layer.outline_stroke_contours(contour_ids, *style, *tolerance)?;
+        }
+        font.reindex_layer(*layer_id, &before)?;
+        Ok(())
+    }
+}
+
+/// Constant normal offset on one closed contour (stream A1.2).
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct OffsetContour {
+    pub layer_id: LayerId,
+    pub contour_id: ContourId,
+    pub distance: f64,
+    pub join: StrokeJoin,
+    pub miter_limit: f64,
+    pub tolerance: f64,
+}
+
+impl LayerIntent for OffsetContour {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            contour_id,
+            distance,
+            join,
+            miter_limit,
+            tolerance,
+        } = self;
+        [*distance, *miter_limit, *tolerance].require_finite(Coordinates::StrokeOffset)?;
+
+        let before = font.layer_snapshot(*layer_id)?;
+        {
+            let layer = font.require_layer_mut(*layer_id)?;
+            layer.offset_contour(contour_id, *distance, *join, *miter_limit, *tolerance)?;
+        }
         font.reindex_layer(*layer_id, &before)?;
         Ok(())
     }

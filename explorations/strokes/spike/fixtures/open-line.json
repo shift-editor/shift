@@ -1,0 +1,6 @@
+{
+  "name": "open-line",
+  "description": "Horizontal open segment for cap behaviour",
+  "path_d": "M 20 60 L 180 60",
+  "stroke_width": 20.0
+}

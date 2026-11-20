@@ -606,6 +606,34 @@ mod tests {
     }
 
     #[test]
+    fn complete_match_with_skeleton_only_open_contours() {
+        let mut reference =
+            GlyphLayer::new(LayerId::from_raw("skeleton"), SourceId::from_raw("source"));
+        let stem = Contour::from_points(
+            vec![Point::on_curve(0.0, 0.0), Point::on_curve(0.0, 200.0)],
+            false,
+        );
+        let hook = Contour::from_points(
+            vec![Point::on_curve(100.0, 0.0), Point::on_curve(200.0, 50.0)],
+            false,
+        );
+        reference.add_contour(stem);
+        reference.add_contour(hook);
+
+        let target = reference.clone_with_fresh_ids(
+            LayerId::from_raw("target"),
+            LayerLocation::at_source(SourceId::from_raw("other-source")),
+        );
+
+        let layer_match = reference.match_with(&target);
+        assert!(
+            layer_match.is_complete(),
+            "open skeleton contours with matching topology should interpolate"
+        );
+        assert_eq!(layer_match.differences(), &[] as &[LayerDifference]);
+    }
+
+    #[test]
     fn enclosing_count_differences_do_not_cascade() {
         let reference = layer();
         let mut source = reference.clone();

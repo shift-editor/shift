@@ -155,6 +155,8 @@ font_intents! {
         TransformLayer,
         SetXAdvance,
         ApplyBooleanOp,
+        OutlineStroke,
+        OffsetContour,
         DeletePoints,
         SplitSegment,
         UpgradeLineToCubic,
@@ -246,6 +248,8 @@ enum Coordinates {
     PointTransform,
     SidebearingDelta,
     LayerLocation,
+    StrokeOutline,
+    StrokeOffset,
 }
 
 impl Coordinates {
@@ -263,6 +267,8 @@ impl Coordinates {
             Self::PointTransform => "point transform",
             Self::SidebearingDelta => "sidebearing delta",
             Self::LayerLocation => "layer location",
+            Self::StrokeOutline => "stroke outline",
+            Self::StrokeOffset => "stroke offset",
         }
     }
 }
