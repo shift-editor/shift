@@ -58,7 +58,7 @@ import type {
   SourceMetrics,
   Unicode,
 } from "@shift/types";
-import type { SideLink, StrokeOutlinePreviewItem } from "@shift/wasm/protocol";
+import type { ContourPoints, SideLink, StrokeOutlinePreviews } from "@shift/wasm/protocol";
 import type { CommandId, EditorCommandId } from "@shared/commands";
 import type { WorkspaceDocumentState } from "@shared/workspace/lanes";
 import type { DrawOptions, GlyphFixture, PointNames } from "./fixtures";
@@ -159,13 +159,16 @@ export interface CanvasFrame {
 
 /**
  * The ids of the outlines the canvas draws for one glyph at the current
- * location: its closed contours, which it fills, and its open contours, which
- * it strokes. An outline keeps its id while it is unchanged and gets a new one
- * when it is rebuilt. Each is null until the glyph loads. Test-only.
+ * location: its closed contours, which it fills, its open contours, which it
+ * strokes, and the solved fills of its dynamic strokes. An outline keeps its id
+ * while it is unchanged and gets a new one when it is rebuilt. Each is null
+ * until the glyph loads; `strokeFills` is also null while the glyph has no
+ * solved stroke here. Test-only.
  */
 export interface DrawnOutlineIds {
   readonly closed: number | null;
   readonly open: number | null;
+  readonly strokeFills: number | null;
 }
 
 // The read types tests see beyond {@link EditorReads}'s. Each aliases the
@@ -611,8 +614,19 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   drawnOutline(): Outline;
   /** The contours of the open glyph at the active source that carry a dynamic stroke. Test-only. */
   dynamicStrokeContours(): readonly ContourId[];
+  /**
+   * The solved stroke fills the latest recorded canvas frame filled for the open glyph, as plain
+   * contour points; empty when that frame filled none. Needs {@link recordCanvas}. Test-only.
+   */
+  drawnStrokeFills(): readonly ContourPoints[];
+  /**
+   * Whether the latest recorded canvas frame also drew the edge of the solved stroke fills, the
+   * way a closed contour gets one; false when it drew no stroke fills. Needs {@link recordCanvas}.
+   * Test-only.
+   */
+  strokeFillsOutlined(): boolean;
   /** The fill outlines the engine solves for the open glyph's dynamic strokes at the active source. Test-only. */
-  strokeOutlinePreviews(): readonly StrokeOutlinePreviewItem[];
+  strokeOutlinePreviews(): StrokeOutlinePreviews;
   /** The point handles the canvas draws on the open glyph, with how each is styled. */
   drawnHandles(): readonly CanvasHandle[];
   /** The source and instance outlines the canvas draws around the open glyph, in drawing order. */
@@ -657,6 +671,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
    * first frame. Test-only.
    */
   latestCanvasFrame(): CanvasFrame;
+  /** How many frames have been drawn since {@link recordCanvas}. Test-only. */
+  canvasFrameCount(): number;
   /** The ids of the outlines the canvas draws for the glyph named `glyph` now. Test-only. */
   drawnOutlineIds(glyph: string): DrawnOutlineIds;
   /**
@@ -670,6 +686,11 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
    * a gesture would change the font) since the editor opened. Test-only.
    */
   readOnlyNotices(): number;
+  /**
+   * The messages the editor has shown for a dynamic stroke it could not draw, oldest first, since
+   * the editor opened. Test-only.
+   */
+  strokeProblems(): readonly string[];
   /** Whether the glyph named `name` has loaded, so the canvas can draw it. Test-only: not agent data. */
   glyphLoaded(name: string): boolean;
   /**

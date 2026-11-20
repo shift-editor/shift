@@ -34,6 +34,7 @@ import {
   type ShiftId,
   type MetricsKeySide,
   type MarkColor,
+  type OutlineStrokeStyle,
 } from "@shift/types";
 import { isSegmentId, type Component, type GlyphGeometry } from "@shift/glyph-state";
 import type { ExternalAxisLocation } from "../../types/variation";
@@ -105,6 +106,7 @@ import { cursorToCSS } from "../styles/cursor";
 import { Hover } from "./Hover";
 import { Snapping } from "./Snapping";
 import { Grid } from "./Grid";
+import { DEFAULT_STROKE_STYLE } from "./strokeStyle";
 import { Renderer } from "./rendering/Renderer";
 import { Scene } from "./Scene";
 import { SessionScene } from "./SessionScene";
@@ -216,6 +218,13 @@ export class Editor {
   /** Builds the snap targets tools use while moving or placing glyph points. */
   readonly snapping: Snapping;
   readonly font: Font;
+  /**
+   * The style a new dynamic stroke starts with: the one last set in this window, or the default.
+   * Session state, not font data.
+   */
+  readonly newStrokeStyleCell: WritableSignal<OutlineStrokeStyle> = signal(DEFAULT_STROKE_STYLE, {
+    name: "editor.newStrokeStyle",
+  });
   /** Immutable persistence and editing capability; glyph edits still require an authored layer. */
   readonly sessionMode: FontSessionMode;
   readonly scene: Scene;
@@ -279,6 +288,8 @@ export class Editor {
   #clipboard: Clipboard;
 
   #events: EventEmitter;
+  // non-reactive: draw-pass bookkeeping of what each node last told the person, never read reactively
+  readonly #reportedStrokeProblems = new Map<string, string>();
 
   readonly gesture: EditorGesture;
   readonly input: EditorInput;
@@ -2206,6 +2217,29 @@ export class Editor {
     if (this.sessionMode !== "preview") return;
 
     this.#events.emit("previewMutationAttempted");
+  }
+
+  /**
+   * Records what a drawing node says about dynamic strokes right now, and tells presentation code
+   * the first time the node says it.
+   *
+   * @remarks
+   * Draw passes call this every frame, so a message reaches the person once per node, not once
+   * per frame. A node that says `null` has nothing to say, so the same message is told again if
+   * it comes back.
+   *
+   * @param source - The id of the node whose draw pass is reporting.
+   * @param message - What the person should read, or `null` when the node's strokes are fine.
+   */
+  public reportStrokeProblem(source: string, message: string | null): void {
+    if (message === null) {
+      this.#reportedStrokeProblems.delete(source);
+      return;
+    }
+    if (this.#reportedStrokeProblems.get(source) === message) return;
+
+    this.#reportedStrokeProblems.set(source, message);
+    this.#events.emit("strokeProblem", message);
   }
 
   public get camera(): Camera {

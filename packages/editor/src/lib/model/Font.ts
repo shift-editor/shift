@@ -85,11 +85,13 @@ import type {
   NeverUsedSwap,
   SideLink,
   PlacedText,
-  StrokeOutlinePreviewItem,
+  LiveStroke,
+  StrokeOutlinePreviews,
   TextRun,
 } from "@shift/wasm/protocol";
 import { FontVariation, locationValues } from "../wasm/variation";
 import type { GlyphIdentityEdit, GlyphReader } from "../../types/glyph";
+import type { StrokeFills } from "../../types/graphics";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
@@ -113,6 +115,7 @@ import { uniqueInOrder } from "../utils/utils";
 import { fallbackGlyphNameForUnicode, parseCodepoint } from "../utils/unicode";
 import { createBatchRequest } from "../utils/batchRequest";
 import { EditGate } from "./EditGate";
+import { solveStrokeFills } from "./strokeFills";
 
 /**
  * Directory queries over the store's committed glyph index.
@@ -290,6 +293,7 @@ export class Font {
   readonly #metadataCell: Signal<FontMetadata>;
   readonly #sourcesCell: Signal<readonly Source[]>;
 
+  readonly #strokeFillsCells = new Map<LayerId, ComputedSignal<StrokeFills>>();
   readonly #axesCell: ComputedSignal<readonly Axis[]>;
   readonly #externalAxesCell: Signal<readonly Axis[]>;
   readonly #axisMappingsCell: Signal<readonly AxisMapping[]>;
@@ -1257,6 +1261,7 @@ export class Font {
       projectionCell: this.#store.projectionCell(entry.id),
       axesCell: this.#glyphAxesCell(glyphId),
       defaultSourceId: this.defaultSource.id,
+      strokeFillsCell: (layerId) => this.strokeFillsCell(layerId),
       anchorCategory: (glyphId) => {
         // Called from render-model computeds: a re-read glyph directory re-runs them.
         track(this.#directoryCell);
@@ -1490,17 +1495,53 @@ export class Font {
   }
 
   /** Live stroke fill outlines for `layerId`, when the window's engine is open. */
-  strokeOutlinePreviews(layerId: LayerId, tolerance?: number): readonly StrokeOutlinePreviewItem[] {
+  strokeOutlinePreviews(layerId: LayerId, tolerance?: number): StrokeOutlinePreviews {
     const engine = this.#store.engine;
     track(engine.revision("layers"));
     return engine.strokeOutlinePreviews(layerId, tolerance);
   }
 
-  /** Contours on `layerId` that carry a dynamic stroke, when the window's engine is open. */
-  liveStrokeContours(layerId: LayerId): readonly ContourId[] {
+  /**
+   * The solved fills of the dynamic strokes on `layerId`, and the path they draw as.
+   *
+   * @remarks
+   * One cell per layer, so every reader gets the same value until the engine's
+   * layers change: an edit, a gesture's preview frame, or ending one. Pan,
+   * zoom, hover and selection read it without a solve or a path build. Read it
+   * where the frame is drawn, never in an effect that runs between a drag's
+   * position write and its preview.
+   *
+   * A layer with no dynamic stroke reads as one shared empty value, so the
+   * cells kept for the layers a session has opened hold solved outlines only
+   * for layers that have strokes.
+   *
+   * @param layerId - The glyph layer to solve.
+   * @returns A cell that never throws: a layer that cannot be solved reads as a `failure`.
+   */
+  strokeFillsCell(layerId: LayerId): Signal<StrokeFills> {
+    const existing = this.#strokeFillsCells.get(layerId);
+    if (existing) return existing;
+
+    const cell = computed(() => solveStrokeFills(() => this.strokeOutlinePreviews(layerId)), {
+      name: `font.strokeFills.${layerId}`,
+    });
+    this.#strokeFillsCells.set(layerId, cell);
+    return cell;
+  }
+
+  /**
+   * Contours on `layerId` that carry a dynamic stroke, with the style stored for each, when the
+   * window's engine is open.
+   */
+  liveStrokes(layerId: LayerId): readonly LiveStroke[] {
     const engine = this.#store.engine;
     track(engine.revision("layers"));
-    return engine.liveStrokeContours(layerId);
+    return engine.liveStrokes(layerId);
+  }
+
+  /** Contours on `layerId` that carry a dynamic stroke, when the window's engine is open. */
+  liveStrokeContours(layerId: LayerId): readonly ContourId[] {
+    return this.liveStrokes(layerId).map((stroke) => stroke.contourId);
   }
 
   /**

@@ -21,6 +21,7 @@ use shift_engine::{
     ApplyError, EditHistory, EditLocation, EngineSession, LayerSource, RecordCache, RecordSource,
     Recording, Replayed, StoreReadError, StoreReaderClient,
 };
+use shift_font::stroke::StrokeOutlineCache;
 use shift_font::wire::replacement::FontReplacement;
 use shift_font::wire::{AnchorData, ComponentData, ContourData, values};
 use shift_font::{
@@ -380,6 +381,9 @@ pub(crate) struct Engine {
     /// The font as the gesture under way previews it, until an edit or
     /// [`engine_end_preview`]: what text lays out from while it is shown.
     pub(crate) previewed: Option<Font>,
+    /// The solved fill outlines of live strokes, kept by what the solver read,
+    /// so a frame of a drag solves only the contour it moved.
+    pub(crate) stroke_outlines: RefCell<StrokeOutlineCache>,
 }
 
 impl Engine {
@@ -638,6 +642,7 @@ fn open(session: EngineSession, store: EngineStore, shaping: TextShaping) -> Res
             records: RefCell::new(RecordCache::default()),
             edit_impact: FontChangeImpact::empty(),
             previewed: None,
+            stroke_outlines: RefCell::new(StrokeOutlineCache::default()),
         }));
         Ok(handle)
     })

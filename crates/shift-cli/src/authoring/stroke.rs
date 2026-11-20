@@ -52,12 +52,14 @@ fn style_from_args(
     cap: StrokeCap,
     join: StrokeJoin,
     miter_limit: f64,
+    position: f64,
 ) -> OutlineStrokeStyle {
     OutlineStrokeStyle {
         width,
         cap,
         join,
         miter_limit,
+        position,
     }
 }
 
@@ -70,7 +72,13 @@ pub(crate) fn outline_stroke(args: &OutlineStrokeArgs) -> Result<AuthoringReport
     if contour_ids.is_empty() {
         return Err(miette!("glyph layer has no contours to stroke"));
     }
-    let style = style_from_args(args.width, args.cap, args.join, args.miter_limit);
+    let style = style_from_args(
+        args.width,
+        args.cap,
+        args.join,
+        args.miter_limit,
+        args.position,
+    );
     let set = FontIntentSet::from(OutlineStroke {
         layer_id,
         contour_ids,
@@ -86,9 +94,10 @@ pub(crate) fn outline_stroke(args: &OutlineStrokeArgs) -> Result<AuthoringReport
 pub(crate) fn offset_contour(args: &OffsetContourArgs) -> Result<AuthoringReport> {
     let (font, layer_id) = resolve_layer(&args.target)?;
     let contour_ids = contour_ids_on_layer(&font, layer_id)?;
-    let contour_id = contour_ids.first().cloned().ok_or_else(|| {
-        miette!("glyph layer has no closed contour to offset; add a closed path first")
-    })?;
+    let contour_id = contour_ids
+        .first()
+        .cloned()
+        .ok_or_else(|| miette!("glyph layer has no contour to offset; add a path first"))?;
     let set = FontIntentSet::from(OffsetContour {
         layer_id,
         contour_id,
@@ -109,7 +118,13 @@ pub(crate) fn set_live_stroke(args: &SetLiveStrokeArgs) -> Result<AuthoringRepor
     if contour_ids.is_empty() {
         return Err(miette!("glyph layer has no contours for live stroke"));
     }
-    let style = style_from_args(args.width, args.cap, args.join, args.miter_limit);
+    let style = style_from_args(
+        args.width,
+        args.cap,
+        args.join,
+        args.miter_limit,
+        args.position,
+    );
     let set = FontIntentSet::from(SetLiveStroke {
         layer_id,
         contour_ids,

@@ -7,7 +7,6 @@ import type {
   Condition,
   ConditionRange,
   FontIntent,
-  ContourId,
   FontReplacement,
   GlyphId,
   GlyphName,
@@ -76,11 +75,18 @@ import type {
   SceneIntent,
   SourceSetWeights,
   PlacedText,
-  StrokeOutlinePreviewItem,
+  StrokeOutlinePreviews,
+  LiveStroke,
 } from "@shift/wasm/protocol";
 
 export { initEngine, svgPaths, typedText } from "@shift/wasm/engine";
-export type { ContourPoints, StrokeOutlinePreviewItem } from "@shift/wasm/protocol";
+export type {
+  ContourPoints,
+  LiveStroke,
+  StrokeOutlineFailure,
+  StrokeOutlinePreviewItem,
+  StrokeOutlinePreviews,
+} from "@shift/wasm/protocol";
 import type { EngineStore } from "../../types/engine";
 import type { KerningPlace } from "../../types/font";
 import { unkerned } from "../model/Kerning";
@@ -364,13 +370,13 @@ export class EngineSession {
   strokeOutlinePreviews(
     layerId: LayerId,
     tolerance = STROKE_PREVIEW_TOLERANCE,
-  ): readonly StrokeOutlinePreviewItem[] {
+  ): StrokeOutlinePreviews {
     return this.#reads.strokeOutlinePreviews(layerId, tolerance);
   }
 
-  /** Contours on `layerId` that carry a dynamic stroke, unsaved edits included. */
-  liveStrokeContours(layerId: LayerId): readonly ContourId[] {
-    return this.#reads.liveStrokeContours(layerId);
+  /** Contours on `layerId` that carry a dynamic stroke and their styles, unsaved edits included. */
+  liveStrokes(layerId: LayerId): readonly LiveStroke[] {
+    return this.#reads.liveStrokes(layerId);
   }
 
   /** What renaming a glyph to `name` does, as shift-font's `Font::glyph_rename` decides. */

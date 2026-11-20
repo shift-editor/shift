@@ -4,6 +4,8 @@ pub mod exact_offset;
 pub mod layer_edit;
 pub mod layer_lib;
 pub mod live_stroke;
+pub mod position;
+pub mod solve_cache;
 pub mod style;
 
 pub use exact_offset::{
@@ -12,5 +14,9 @@ pub use exact_offset::{
 };
 pub use layer_edit::{contour_bounds_oracle, contour_skeleton_path, contours_closed_oracle};
 pub use layer_lib::{ContourStrokeEntry, ContourStrokeRole, LayerStrokeLib, STROKE_LIB_KEY};
-pub use live_stroke::{StrokeOutlinePreview, preview_bounds};
+pub use live_stroke::{
+    LiveStroke, StrokeContourFailure, StrokeOutlinePoints, StrokeOutlinePreview, StrokeOutlineRead,
+    preview_bounds,
+};
+pub use solve_cache::StrokeOutlineCache;
 pub use style::{OutlineStrokeStyle, StrokeCap, StrokeJoin};

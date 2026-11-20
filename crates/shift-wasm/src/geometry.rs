@@ -2,8 +2,8 @@
 //! and a component's placement as a matrix, as shift-font computes them.
 
 use pack::Pack;
-use shift_font::Contour;
 use shift_font::kurbo::{BezPath, PathEl};
+use shift_font::{Contour, SubpathPoints};
 use shift_font::{
     DecomposedTransform, Point, PointType, SegmentIndexIter, SegmentIndices, Transform,
     open_corners,
@@ -90,6 +90,16 @@ impl ContourPoints {
                 .iter()
                 .flat_map(|point| [point.x(), point.y()])
                 .collect(),
+        }
+    }
+}
+
+impl From<SubpathPoints> for ContourPoints {
+    fn from(subpath: SubpathPoints) -> Self {
+        Self {
+            closed: subpath.closed,
+            point_types: subpath.point_types,
+            coordinates: subpath.coordinates,
         }
     }
 }

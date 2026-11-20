@@ -95,7 +95,6 @@ export interface EditorRenderTheme {
     hitRadii: string;
     segmentBounds: string;
     glyphBbox: string;
-    strokePreview: string;
   };
   textRun: {
     cursorColor: string;
@@ -281,7 +280,6 @@ const DEFAULT_EDITOR_RENDER_THEME: EditorRenderTheme = {
     hitRadii: "#2196F3",
     segmentBounds: "#FF9800",
     glyphBbox: "#FF00FB",
-    strokePreview: "rgba(255, 120, 0, 0.55)",
   },
   textRun: {
     cursorColor: "#0C92F4",
@@ -469,7 +467,6 @@ export function readEditorRenderTheme(
   theme.debug.hitRadii = readColor("--editor-debug-hit-radii", theme.debug.hitRadii);
   theme.debug.segmentBounds = readColor("--editor-debug-segment-bounds", theme.debug.segmentBounds);
   theme.debug.glyphBbox = readColor("--editor-debug-glyph-bbox", theme.debug.glyphBbox);
-  theme.debug.strokePreview = readColor("--editor-debug-stroke-preview", theme.debug.strokePreview);
 
   theme.textRun.cursorColor = readColor("--editor-text-cursor-color", theme.textRun.cursorColor);
   theme.textRun.selectionFill = readColor(

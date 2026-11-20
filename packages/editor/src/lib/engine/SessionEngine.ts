@@ -2,7 +2,6 @@ import type {
   AxisId,
   ConditionRange,
   EngineFontHeader,
-  ContourId,
   EngineFontRecords,
   FontIntent,
   GlyphId,
@@ -28,7 +27,8 @@ import {
   type RevisedNode,
   type SceneIntent,
   type TextRun,
-  type StrokeOutlinePreviewItem,
+  type LiveStroke,
+  type StrokeOutlinePreviews,
 } from "@shift/wasm/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "../signals";
 import {
@@ -456,13 +456,13 @@ export class SessionEngine implements FontEngine {
     return session.counterparts(reference, target, ids);
   }
 
-  strokeOutlinePreviews(layerId: LayerId, tolerance?: number): readonly StrokeOutlinePreviewItem[] {
+  strokeOutlinePreviews(layerId: LayerId, tolerance?: number): StrokeOutlinePreviews {
     const session = this.#require();
     return session.strokeOutlinePreviews(layerId, tolerance);
   }
 
-  liveStrokeContours(layerId: LayerId): readonly ContourId[] {
-    return this.#require().liveStrokeContours(layerId);
+  liveStrokes(layerId: LayerId): readonly LiveStroke[] {
+    return this.#require().liveStrokes(layerId);
   }
 
   newAnchorName(layerIds: readonly LayerId[]): string {

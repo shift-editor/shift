@@ -6,9 +6,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::GlyphLayer;
 use crate::ir::lib_data::{LibData, LibValue};
 use crate::stroke::style::{OutlineStrokeStyle, StrokeCap, StrokeJoin};
+use crate::{ContourId, GlyphLayer};
 
 /// Layer lib key for stroke metadata (option C in the strokes spike).
 pub const STROKE_LIB_KEY: &str = "com.shift.stroke";
@@ -161,6 +161,34 @@ impl GlyphLayer {
             .set(STROKE_LIB_KEY.to_string(), stroke.to_lib());
     }
 
+    /// The stroke lib entry for `contour_id`, when that contour is a stroke.
+    pub(super) fn stroke_entry(&self, contour_id: &ContourId) -> Option<ContourStrokeEntry> {
+        self.stroke_lib()?
+            .contours
+            .get(&contour_id.to_string())
+            .cloned()
+    }
+
+    /// Makes every contour in `contour_ids` a stroke described by `entry`.
+    ///
+    /// An existing entry for any of them is replaced. Ids that are not contours of this layer
+    /// are left for [`Self::prune_orphan_stroke_lib_entries`] to drop.
+    pub(super) fn assign_stroke_entry(
+        &mut self,
+        contour_ids: &[ContourId],
+        entry: &ContourStrokeEntry,
+    ) {
+        let mut stroke_lib = self.stroke_lib().unwrap_or_else(|| LayerStrokeLib {
+            contours: BTreeMap::new(),
+        });
+        for contour_id in contour_ids {
+            stroke_lib
+                .contours
+                .insert(contour_id.to_string(), entry.clone());
+        }
+        sync_stroke_lib_on_layer(self, &stroke_lib);
+    }
+
     /// Contour ids with stroke lib entries but no matching contour on this layer.
     pub fn orphan_stroke_lib_contour_ids(&self) -> Vec<String> {
         let Some(stroke_lib) = self.stroke_lib() else {
@@ -200,15 +228,17 @@ fn outline_style_from_lib(value: &LibValue) -> Option<OutlineStrokeStyle> {
         _ => return None,
     };
     let miter_limit = fields.get("miterLimit")?.as_f64()?;
-    if !width.is_finite() || width <= 0.0 || !miter_limit.is_finite() || miter_limit <= 0.0 {
-        return None;
-    }
-    Some(OutlineStrokeStyle {
+    let position = fields.get("position")?.as_f64()?;
+    let style = OutlineStrokeStyle {
         width,
         cap,
         join,
         miter_limit,
-    })
+        position,
+    };
+    style.require_valid().ok()?;
+
+    Some(style)
 }
 
 fn outline_style_to_lib(style: OutlineStrokeStyle) -> LibValue {
@@ -223,6 +253,7 @@ fn outline_style_to_lib(style: OutlineStrokeStyle) -> LibValue {
             LibValue::String(style.join.as_str().to_string()),
         ),
         ("miterLimit".to_string(), LibValue::Float(style.miter_limit)),
+        ("position".to_string(), LibValue::Float(style.position)),
     ]))
 }
 
@@ -353,7 +384,7 @@ mod tests {
         contour.add_point(0.0, 0.0, PointType::OnCurve, false);
         contour.add_point(0.0, 100.0, PointType::OnCurve, false);
         layer.add_contour(contour);
-        let contour_id = layer.contours_iter().next().unwrap().id().clone();
+        let contour_id = layer.contours_iter().next().unwrap().id();
         let stroke_lib = LayerStrokeLib {
             contours: BTreeMap::from([(
                 contour_id.to_string(),
@@ -406,8 +437,7 @@ mod tests {
                 .unwrap()
                 .layer_for_source(source_id)
                 .unwrap()
-                .id()
-                .clone();
+                .id();
             let mut layer = font.layer(layer_id).unwrap().clone();
             stroke_style_id_on_layer(&mut layer, style_id);
             layers.push(layer);

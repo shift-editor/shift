@@ -7,7 +7,6 @@ import type {
   ConditionRange,
   FontIntent,
   FontSnapshot,
-  ContourId,
   GlyphEntry,
   GlyphId,
   GlyphLayerSnapshot,
@@ -50,7 +49,8 @@ import type {
   SideLink,
   TextRun,
   PlacedText,
-  StrokeOutlinePreviewItem,
+  LiveStroke,
+  StrokeOutlinePreviews,
 } from "@shift/wasm/protocol";
 import type { PendingEditId } from "./editing";
 import type { WorkspaceEditListener } from "./history";
@@ -304,15 +304,16 @@ export interface FontEngine {
    * @returns Empty when the layer has no live stroke metadata.
    * @throws When the engine is not open or the layer is not resident.
    */
-  strokeOutlinePreviews(layerId: LayerId, tolerance?: number): readonly StrokeOutlinePreviewItem[];
+  strokeOutlinePreviews(layerId: LayerId, tolerance?: number): StrokeOutlinePreviews;
 
   /**
-   * Contours on `layerId` that carry a dynamic stroke, in contour order. Solves no outlines.
+   * Contours on `layerId` that carry a dynamic stroke, in contour order, each with the style
+   * stored for it. Solves no outlines.
    *
    * @returns Empty when the layer has no dynamic stroke.
    * @throws When the engine is not open or the layer is not resident.
    */
-  liveStrokeContours(layerId: LayerId): readonly ContourId[];
+  liveStrokes(layerId: LayerId): readonly LiveStroke[];
 
   /**
    * The features the engine's shaper font defines, in tag order, each with

@@ -81,7 +81,7 @@ import {
   asNodeId,
 } from "@shift/types";
 import { segmentIdFor, type Contour } from "@shift/glyph-state";
-import type { SideLink, StrokeOutlinePreviewItem } from "@shift/wasm/protocol";
+import type { ContourPoints, SideLink, StrokeOutlinePreviews } from "@shift/wasm/protocol";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 import type {
@@ -289,6 +289,9 @@ export class TestEditor extends Editor implements EditorTestSurface {
   readonly #outlineIds = new Map<Path2D, number>();
   /** How many times a preview said it is read-only, for {@link readOnlyNotices}. */
   #readOnlyNotices = 0;
+
+  /** The stroke problems the editor reported, for {@link strokeProblems}. */
+  readonly #strokeProblems: string[] = [];
   /** How many times the canvas text was laid out, once {@link textLayoutCount} first counts. */
   #textLayouts: { count: number } | null = null;
   /** The Kerning tool's uncommitted preview, discarded by {@link cancelGesture}. */
@@ -305,6 +308,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode });
     this.#stack = stack;
     this.on("previewMutationAttempted", () => this.#readOnlyNotices++);
+    this.on("strokeProblem", (message) => this.#strokeProblems.push(message));
     this.#tabs = new WindowTabs(this);
     this.#clipboard = clipboard;
     this.#reads = {
@@ -1628,7 +1632,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.font.liveStrokeContours(this.requireGlyphLayer().id);
   }
 
-  strokeOutlinePreviews(): readonly StrokeOutlinePreviewItem[] {
+  strokeOutlinePreviews(): StrokeOutlinePreviews {
     return this.font.strokeOutlinePreviews(this.requireGlyphLayer().id);
   }
 
@@ -1719,6 +1723,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
     });
   }
 
+  canvasFrameCount(): number {
+    return this.#canvasFrames.length;
+  }
+
   latestCanvasFrame(): CanvasFrame {
     const frame = this.#canvasFrames.at(-1);
     return {
@@ -1727,8 +1735,43 @@ export class TestEditor extends Editor implements EditorTestSurface {
     };
   }
 
+  drawnStrokeFills(): readonly ContourPoints[] {
+    const node = this.scene.first("glyph");
+    if (!node) return [];
+
+    const model = this.glyphForId(this.drawnGlyphId(node))?.renderModelAt(
+      this.externalLocationCell,
+      this.activeSourceIdCell,
+    );
+    const fills = model?.strokeFillsCell.peek();
+    if (!fills?.path) return [];
+
+    const filled = this.#canvasFrames.at(-1)?.fills.includes(fills.path) ?? false;
+    if (!filled) return [];
+
+    return fills.items.flatMap((item) => item.outlines);
+  }
+
+  strokeFillsOutlined(): boolean {
+    const node = this.scene.first("glyph");
+    if (!node) return false;
+
+    const model = this.glyphForId(this.drawnGlyphId(node))?.renderModelAt(
+      this.externalLocationCell,
+      this.activeSourceIdCell,
+    );
+    const path = model?.strokeFillsCell.peek().path;
+    if (!path) return false;
+
+    return this.#canvasFrames.at(-1)?.strokes.includes(path) ?? false;
+  }
+
   readOnlyNotices(): number {
     return this.#readOnlyNotices;
+  }
+
+  strokeProblems(): readonly string[] {
+    return this.#strokeProblems;
   }
 
   drawnTextGlyphs(): (string | null)[] {
@@ -1745,9 +1788,11 @@ export class TestEditor extends Editor implements EditorTestSurface {
       this.externalLocationCell,
       this.activeSourceIdCell,
     );
+    const strokeFillPath = model?.strokeFillsCell.peek().path ?? null;
     return {
       closed: model ? this.#outlineId(model.closedContoursPath) : null,
       open: model ? this.#outlineId(model.openContoursPath) : null,
+      strokeFills: strokeFillPath ? this.#outlineId(strokeFillPath) : null,
     };
   }
 

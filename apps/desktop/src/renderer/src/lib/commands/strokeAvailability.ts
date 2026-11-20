@@ -1,4 +1,9 @@
-import type { StrokeAvailability, StrokeCommandId, StrokeSelection } from "@/types/stroke";
+import type {
+  StrokeAvailability,
+  StrokeCommandId,
+  StrokeSelectedContour,
+  StrokeSelection,
+} from "@/types/stroke";
 
 const AVAILABLE: StrokeAvailability = { enabled: true };
 
@@ -27,6 +32,7 @@ export function strokeAvailability(
 
     case "glyph.stroke.expand":
     case "glyph.stroke.removeDynamic":
+    case "glyph.stroke.updateStyle":
       return dynamicAvailability(selection);
 
     case "glyph.stroke.offsetContour":
@@ -60,8 +66,13 @@ function sharedAvailability(selection: StrokeSelection): StrokeAvailability {
   }
 }
 
+/** Whether `contour` carries a dynamic stroke. */
+export function isDynamicStroke(contour: StrokeSelectedContour): boolean {
+  return contour.style !== null;
+}
+
 function dynamicAvailability(selection: StrokeSelection): StrokeAvailability {
-  if (selection.contours.some((contour) => contour.dynamic)) return AVAILABLE;
+  if (selection.contours.some(isDynamicStroke)) return AVAILABLE;
 
   return unavailable("None of the selected contours has a dynamic stroke.");
 }
@@ -71,8 +82,6 @@ function offsetAvailability(selection: StrokeSelection): StrokeAvailability {
   if (selection.contours.length !== 1 || !contour) {
     return unavailable("Select exactly one contour to offset.");
   }
-
-  if (!contour.closed) return unavailable("Offset needs a closed contour.");
 
   return AVAILABLE;
 }

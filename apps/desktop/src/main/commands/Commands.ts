@@ -341,9 +341,8 @@ const glyphCommands: Command[] = [
 ];
 
 const strokeCommands: Command[] = [
-  strokeCommand("glyph.stroke.applyDynamic", "Apply Dynamic Stroke"),
+  strokeCommand("glyph.stroke.applyDynamic", "Add Dynamic Stroke"),
   strokeCommand("glyph.stroke.expand", "Expand Stroke"),
-  strokeCommand("glyph.stroke.expandWithStyle", "Expand Stroke…"),
   strokeCommand("glyph.stroke.offsetContour", "Offset Contour…"),
   strokeCommand("glyph.stroke.removeDynamic", "Remove Dynamic Stroke"),
 ];

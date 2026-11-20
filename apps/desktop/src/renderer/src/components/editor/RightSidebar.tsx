@@ -14,6 +14,7 @@ import { GlyphTagButton } from "./sidebar-right/GlyphTag";
 import { HandleSection } from "./sidebar-right/HandleSection";
 import { KerningPairSection } from "./sidebar-right/KerningPairSection";
 import { ScaleSection } from "./sidebar-right/ScaleSection";
+import { StrokeSection } from "./sidebar-right/StrokeSection";
 import { SidebarGroup } from "./sidebar-right/SidebarGroup";
 import { TextSection } from "./sidebar-right/TextSection";
 import { TransformSection } from "./sidebar-right/TransformSection";
@@ -77,7 +78,7 @@ export const RightSidebar = () => {
               <KerningPairSection />
             ) : (
               <TransformOriginProvider>
-                {/* Kerning | Handle | Transform | Anchor | Text | Features, each a group with a divider between. */}
+                {/* Kerning | Handle | Transform | Stroke | Anchor | Text | Features, each a group with a divider between. */}
                 <div ref={selectionBlockRef} className="flex flex-col">
                   <SidebarGroup>
                     <GlyphKerningSection anchorRef={selectionBlockRef} />
@@ -98,6 +99,11 @@ export const RightSidebar = () => {
                       ) : null}
                     </SidebarGroup>
                   ) : null}
+                  {textActive ? null : (
+                    <SidebarGroup>
+                      <StrokeSection />
+                    </SidebarGroup>
+                  )}
                   {!hasTransformSelection && hasAnchorSelection ? (
                     <SidebarGroup>
                       <AnchorSection />

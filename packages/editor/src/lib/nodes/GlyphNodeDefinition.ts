@@ -32,7 +32,6 @@ import { NodeDefinition } from "./NodeDefinition";
 import type { GlyphNode } from "../../types/node";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
-import type { StrokeOutlinePreviewItem } from "@shift/wasm/protocol";
 import { objectIsKindOf } from "../../types/object";
 import type { TransformAction, TransformTarget } from "../../types/transformTarget";
 import type { GlyphOutlineTarget, ResolvedGlyphOutlineTarget } from "../../types/glyphOutline";
@@ -58,6 +57,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     return [node.glyphId];
   }
   readonly #debugOverlays = new DebugOverlays();
+
   readonly #controlLines = new ControlLines();
   readonly #anchors = new Anchors();
   readonly #segments = new Segments();
@@ -441,6 +441,13 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     track(view.rootClosedContoursPathCell);
     ctx.canvas.fillPath(view.rootClosedContoursPath, ctx.canvas.theme.glyph.editableFill);
 
+    // Pulled here, in the frame, so a drag's preview is the one this frame reads.
+    track(view.strokeFillsCell);
+    const strokeFills = view.strokeFillsCell.peek();
+    this.editor.reportStrokeProblem(node.id, strokeFills.failure);
+    const strokeFillPath = strokeFills.path;
+    if (strokeFillPath) ctx.canvas.fillPath(strokeFillPath, ctx.canvas.theme.glyph.editableFill);
+
     track(view.componentsCell);
     for (const component of view.components) {
       track(component.drawsCell);
@@ -467,6 +474,15 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       ctx.canvas.theme.glyph.stroke,
       ctx.canvas.theme.glyph.widthPx,
     );
+
+    // A closed contour's edge is drawn above; a stroke's solved edge is drawn the same way.
+    if (strokeFillPath) {
+      ctx.canvas.strokePath(
+        strokeFillPath,
+        ctx.canvas.theme.glyph.stroke,
+        ctx.canvas.theme.glyph.widthPx,
+      );
+    }
 
     for (const component of view.components) {
       // A component whose condition fails here stays selectable, drawn as a ghost.
@@ -517,6 +533,10 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     track(view.closedContoursPathCell);
     track(view.openContoursPathCell);
     this.#outline.drawDisplay(ctx.canvas, view, ctx.canvas.theme.glyph);
+
+    track(view.strokeFillsCell);
+    const strokeFills = view.strokeFillsCell.peek().path;
+    if (strokeFills) ctx.canvas.fillPath(strokeFills, ctx.canvas.theme.glyph.fill);
   }
 
   /**
@@ -612,36 +632,12 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   #drawDebugOverlays(node: GlyphNode, ctx: RenderContext, view: GlyphRenderModel): void {
-    const overlays = this.editor.debugOverlays;
-    let strokePreviews: readonly StrokeOutlinePreviewItem[] = [];
-    if (overlays.strokePreview) {
-      const layer = this.editor.editableLayer(node);
-      if (layer) {
-        track(layer.geometryCell);
-        track(layer.editBaseGeometryCell);
-        track(this.editor.font.committedRevisionCell);
-        const inLocalEdit = layer.editBaseGeometryCell.peek() !== null;
-        if (!inLocalEdit) {
-          try {
-            strokePreviews = this.editor.font.strokeOutlinePreviews(layer.id);
-          } catch (error) {
-            console.warn(`stroke preview overlay failed for layer ${layer.id}`, error);
-            strokePreviews = [];
-          }
-        }
-        // Debug overlay limitation until A3.2: during a draft drag the skeleton
-        // moves in JS while engine geometry stays at the edit base, so engine
-        // stroke outlines would lag behind the skeleton.
-      }
-    }
-
     this.#debugOverlays.draw(
       ctx.canvas,
       view,
-      overlays,
+      this.editor.debugOverlays,
       this.#hoveredSegmentId(node),
       SCREEN_HIT_RADIUS,
-      strokePreviews,
     );
   }
 

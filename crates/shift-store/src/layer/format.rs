@@ -222,6 +222,7 @@ mod tests {
             cap: StrokeCap::Butt,
             join: StrokeJoin::Bevel,
             miter_limit: 5.0,
+            position: 0.5,
         };
         let stroke_lib = font::stroke::LayerStrokeLib {
             contours: BTreeMap::from([(

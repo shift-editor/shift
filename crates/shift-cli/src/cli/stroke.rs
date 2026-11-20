@@ -58,6 +58,10 @@ pub(crate) struct OutlineStrokeArgs {
     #[arg(long, default_value_t = OutlineStrokeStyle::DEFAULT_MITER_LIMIT)]
     pub miter_limit: f64,
 
+    /// Where the stroke lies: -1 entirely left of the path direction, 0 centred, 1 entirely right.
+    #[arg(long, default_value_t = 0.0, allow_negative_numbers = true)]
+    pub position: f64,
+
     /// Kurbo flattening tolerance in font units.
     #[arg(long, default_value_t = shift_font::stroke::DEFAULT_TOLERANCE)]
     pub tolerance: f64,
@@ -71,7 +75,7 @@ pub(crate) struct OffsetContourArgs {
     #[command(flatten)]
     pub target: StrokeGlyphLayerArgs,
 
-    /// Signed offset distance in font units (positive grows).
+    /// Signed offset distance in font units: negative to the left of the path direction, positive to the right.
     #[arg(long, allow_negative_numbers = true)]
     pub distance: f64,
 
@@ -104,6 +108,10 @@ pub(crate) struct SetLiveStrokeArgs {
 
     #[arg(long, default_value_t = OutlineStrokeStyle::DEFAULT_MITER_LIMIT)]
     pub miter_limit: f64,
+
+    /// Where the stroke lies: -1 entirely left of the path direction, 0 centred, 1 entirely right.
+    #[arg(long, default_value_t = 0.0, allow_negative_numbers = true)]
+    pub position: f64,
 
     #[command(flatten)]
     pub mutation: MutationArgs,

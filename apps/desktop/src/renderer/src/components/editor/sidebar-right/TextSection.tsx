@@ -14,6 +14,7 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 import { IconButton } from "./IconButton";
 import { SidebarNumberField } from "./SidebarNumberField";
 import { SidebarPicker } from "./SidebarPicker";
+import { SidebarRow as Row } from "./SidebarRow";
 import { SidebarSection } from "./SidebarSection";
 import { LanguagePanel, ScriptPanel, languageLabel, scriptName, UNSET } from "./TextShapingPanels";
 
@@ -145,20 +146,6 @@ const ShapingToggle = ({ on, onChange }: ShapingToggleProps) => {
     </Tooltip>
   );
 };
-
-/** A setting's label, and its control at the row's end. */
-const Row = ({
-  label,
-  children,
-}: {
-  readonly label: string;
-  readonly children: React.ReactNode;
-}) => (
-  <div className="flex h-6 items-center justify-between gap-4 text-ui">
-    <span className="shrink-0 text-secondary">{label}</span>
-    {children}
-  </div>
-);
 
 const ALIGNMENTS: readonly { align: TextAlign; label: string; Icon: typeof AlignLeftIcon }[] = [
   { align: "left", label: "Align text left", Icon: AlignLeftIcon },

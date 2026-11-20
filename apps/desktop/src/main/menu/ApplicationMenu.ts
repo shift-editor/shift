@@ -259,7 +259,6 @@ export class ApplicationMenu {
           this.#commandItem("glyph.stroke.removeDynamic"),
           { type: "separator" },
           this.#commandItem("glyph.stroke.expand"),
-          this.#commandItem("glyph.stroke.expandWithStyle"),
           { type: "separator" },
           this.#commandItem("glyph.stroke.offsetContour"),
         ],

@@ -8,13 +8,19 @@ import type {
   StrokeOffsetRequest,
   StrokeSelectedContour,
   StrokeSelection,
+  StrokeStylePatch,
 } from "@/types/stroke";
-import { strokeAvailability } from "./strokeAvailability";
+import { isDynamicStroke, strokeAvailability } from "./strokeAvailability";
 
 /** Flattening tolerance for baked outlines and offsets: shift-font's `DEFAULT_TOLERANCE`. */
 const STROKE_TOLERANCE = 0.25;
 
 const OK: StrokeCommandResult = { ok: true };
+
+/** The style a new stroke gets: the one last set in `editor`, or the default. */
+export function strokeStyleToApply(editor: Editor): OutlineStrokeStyle {
+  return editor.newStrokeStyleCell.peek();
+}
 
 /** The selection a stroke command would act on, and the layer it would edit. */
 export interface ResolvedStrokeSelection {
@@ -39,7 +45,11 @@ export function resolveStrokeSelection(editor: Editor): ResolvedStrokeSelection 
     selection: {
       readOnly,
       layer,
-      contours: ids.map((id) => ({ id, closed: closedByContour.get(id) === true, dynamic: false })),
+      contours: ids.map((id) => ({
+        id,
+        closed: closedByContour.get(id) === true,
+        style: null,
+      })),
     },
     layer: null,
   });
@@ -50,9 +60,8 @@ export function resolveStrokeSelection(editor: Editor): ResolvedStrokeSelection 
   if (!layer) return withoutLayer({ kind: "none" });
   if (layer.sourceId !== editor.activeSourceId) return withoutLayer({ kind: "inactiveSource" });
 
-  const dynamicIds = readDynamicContours(editor, layer);
-  if (typeof dynamicIds === "string")
-    return withoutLayer({ kind: "unreadable", message: dynamicIds });
+  const styles = readStrokeStyles(editor, layer);
+  if (typeof styles === "string") return withoutLayer({ kind: "unreadable", message: styles });
 
   return {
     selection: {
@@ -61,7 +70,7 @@ export function resolveStrokeSelection(editor: Editor): ResolvedStrokeSelection 
       contours: ids.map((id) => ({
         id,
         closed: closedByContour.get(id) === true,
-        dynamic: dynamicIds.has(id),
+        style: styles.get(id) ?? null,
       })),
     },
     layer,
@@ -73,11 +82,56 @@ export function strokeAvailabilityFor(editor: Editor, id: StrokeCommandId): Stro
   return strokeAvailability(id, resolveStrokeSelection(editor).selection);
 }
 
-/** Gives the selected contours a dynamic stroke of `style`, replacing any they already have. */
-export function applyDynamicStroke(editor: Editor, style: OutlineStrokeStyle): StrokeCommandResult {
-  return runStrokeCommand(editor, "glyph.stroke.applyDynamic", "Apply dynamic stroke", (target) => {
-    target.layer.setLiveStroke(contourIds(target.contours), style);
+/** The commands among `ids` that would run on the editor's current selection, in the order given. */
+export function availableStrokeCommands<Id extends StrokeCommandId>(
+  editor: Editor,
+  ids: readonly Id[],
+): Id[] {
+  const { selection } = resolveStrokeSelection(editor);
+
+  return ids.filter((id) => strokeAvailability(id, selection).enabled);
+}
+
+/**
+ * Gives the selected contours a dynamic stroke, replacing any they already have.
+ *
+ * The stroke takes `style`, or the style last set in this editor when none is given.
+ */
+export function applyDynamicStroke(
+  editor: Editor,
+  style: OutlineStrokeStyle = strokeStyleToApply(editor),
+): StrokeCommandResult {
+  const result = runStrokeCommand(
+    editor,
+    "glyph.stroke.applyDynamic",
+    "Apply dynamic stroke",
+    (target) => {
+      target.layer.setLiveStroke(contourIds(target.contours), style);
+    },
+  );
+  if (result.ok) editor.newStrokeStyleCell.set(style);
+
+  return result;
+}
+
+/**
+ * Changes the fields in `patch` on every selected dynamic stroke, as one undo step.
+ *
+ * Each contour keeps the fields the patch leaves out, so two strokes with different joins keep
+ * them when only the width changes. The patch also becomes part of the style new strokes start
+ * with. Selected contours without a dynamic stroke are left alone.
+ */
+export function updateStrokeStyle(editor: Editor, patch: StrokeStylePatch): StrokeCommandResult {
+  const result = runStrokeCommand(editor, "glyph.stroke.updateStyle", "Change stroke", (target) => {
+    for (const contour of target.contours) {
+      if (!contour.style) continue;
+
+      target.layer.setLiveStroke([contour.id], { ...contour.style, ...patch });
+    }
   });
+  if (result.ok) editor.newStrokeStyleCell.set({ ...strokeStyleToApply(editor), ...patch });
+
+  return result;
 }
 
 /**
@@ -122,7 +176,10 @@ export function expandStrokeWithStyle(
   });
 }
 
-/** Grows (positive distance) or shrinks (negative) the one selected closed contour. */
+/**
+ * Offsets the one selected contour, open or closed, to the left of its direction for a negative
+ * distance and to the right for a positive one: a counter-clockwise outline grows when positive.
+ */
 export function offsetSelectedContour(
   editor: Editor,
   request: StrokeOffsetRequest,
@@ -198,7 +255,7 @@ function expandLabel(
   request: StrokeExpandRequest,
 ): string {
   if (request.keepEditable) return "Apply dynamic stroke";
-  if (contours.some((contour) => contour.dynamic)) return "Expand stroke";
+  if (contours.some(isDynamicStroke)) return "Expand stroke";
 
   return "Outline stroke";
 }
@@ -208,11 +265,11 @@ function contourIds(contours: readonly StrokeSelectedContour[]): ContourId[] {
 }
 
 function dynamicContourIds(contours: readonly StrokeSelectedContour[]): ContourId[] {
-  return contours.filter((contour) => contour.dynamic).map((contour) => contour.id);
+  return contours.filter(isDynamicStroke).map((contour) => contour.id);
 }
 
 function plainContourIds(contours: readonly StrokeSelectedContour[]): ContourId[] {
-  return contours.filter((contour) => !contour.dynamic).map((contour) => contour.id);
+  return contours.filter((contour) => !isDynamicStroke(contour)).map((contour) => contour.id);
 }
 
 /** The contours the selection reaches through points, segments and contours, with whether each is closed. */
@@ -239,10 +296,14 @@ function selectedContourClosedness(editor: Editor): Map<ContourId, boolean> {
   return closedByContour;
 }
 
-/** The contours on `layer` that carry a dynamic stroke, or the reason the engine could not say. */
-function readDynamicContours(editor: Editor, layer: GlyphLayer): ReadonlySet<ContourId> | string {
+/** The style of each dynamic stroke on `layer`, or the reason the engine could not say. */
+function readStrokeStyles(
+  editor: Editor,
+  layer: GlyphLayer,
+): ReadonlyMap<ContourId, OutlineStrokeStyle> | string {
   try {
-    return new Set(editor.font.liveStrokeContours(layer.id));
+    const strokes = editor.font.liveStrokes(layer.id);
+    return new Map(strokes.map((stroke) => [stroke.contourId, stroke.style]));
   } catch (error) {
     return errorMessage(error);
   }

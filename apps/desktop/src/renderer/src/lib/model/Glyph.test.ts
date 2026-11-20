@@ -751,3 +751,150 @@ describe("GlyphLayer.addComponent with a base not yet loaded this session", () =
     stack.dispose();
   });
 });
+
+describe("Glyph render model with a dynamic stroke", () => {
+  let stack: WorkspaceStack;
+  let layer: GlyphLayer;
+  let renderModel: GlyphRenderModel;
+
+  beforeEach(async () => {
+    ({ stack, layer, renderModel } = await startWorkspaceGlyph());
+  });
+
+  afterEach(async () => {
+    await stack.editCoordinator.settled();
+    stack.dispose();
+  });
+
+  /** How many contours `path` was built from: the test stub records each `addPath`. */
+  function contoursIn(path: Path2D): number {
+    const { commands } = path as unknown as { commands: { type: string }[] };
+    return commands.filter((command) => command.type === "addPath").length;
+  }
+
+  it("fills the solved outline in place of the skeleton, and the skeleton again once it is static", async () => {
+    const triangle = drawPoints(
+      layer,
+      [
+        { x: 0, y: 0 },
+        { x: 300, y: 0 },
+        { x: 150, y: 300 },
+      ],
+      { closed: true },
+    );
+    drawPoints(
+      layer,
+      [
+        { x: 500, y: 0 },
+        { x: 700, y: 0 },
+        { x: 700, y: 200 },
+      ],
+      { closed: true },
+    );
+    await stack.editCoordinator.settled();
+    expect(contoursIn(renderModel.rootClosedContoursPath)).toBe(2);
+    expect(renderModel.strokeFillsCell.peek().path).toBeNull();
+
+    layer.setLiveStroke([triangle.contourId], {
+      width: 20,
+      cap: "round",
+      join: "round",
+      miterLimit: 4,
+      position: 0,
+    });
+    await stack.editCoordinator.settled();
+
+    expect(contoursIn(renderModel.rootClosedContoursPath)).toBe(1);
+    const fills = renderModel.strokeFillsCell.peek();
+    expect(fills.items.map((item) => item.skeletonContourId)).toEqual([triangle.contourId]);
+    expect(fills.items[0]!.outlines).toHaveLength(2);
+    expect(fills.path).not.toBeNull();
+
+    layer.removeLiveStroke([triangle.contourId]);
+    await stack.editCoordinator.settled();
+
+    expect(contoursIn(renderModel.rootClosedContoursPath)).toBe(2);
+    expect(renderModel.strokeFillsCell.peek().path).toBeNull();
+  });
+
+  it("leaves the glyph's fill and strokes the same value while nothing about the strokes changes", async () => {
+    const triangle = drawPoints(
+      layer,
+      [
+        { x: 0, y: 0 },
+        { x: 300, y: 0 },
+        { x: 150, y: 300 },
+      ],
+      { closed: true },
+    );
+    await stack.editCoordinator.settled();
+    layer.setLiveStroke([triangle.contourId], {
+      width: 20,
+      cap: "round",
+      join: "round",
+      miterLimit: 4,
+      position: 0,
+    });
+    await stack.editCoordinator.settled();
+    const seen: unknown[] = [];
+    const subscription = effect(() => {
+      seen.push(renderModel.strokeFillsCell.value, renderModel.rootClosedContoursPathCell.value);
+    });
+
+    const fills = renderModel.strokeFillsCell.peek();
+    const fillPath = renderModel.rootClosedContoursPath;
+    subscription.dispose();
+
+    expect(renderModel.strokeFillsCell.peek()).toBe(fills);
+    expect(renderModel.rootClosedContoursPath).toBe(fillPath);
+    expect(new Set(seen).size).toBe(2);
+  });
+
+  it("leaves a dynamic contour out of the display paths, open or closed, and brings it back with the stroke gone", async () => {
+    const style = { width: 20, cap: "round", join: "round", miterLimit: 4, position: 0 } as const;
+    const triangle = drawPoints(
+      layer,
+      [
+        { x: 0, y: 0 },
+        { x: 300, y: 0 },
+        { x: 150, y: 300 },
+      ],
+      { closed: true },
+    );
+    drawPoints(
+      layer,
+      [
+        { x: 500, y: 0 },
+        { x: 700, y: 0 },
+        { x: 700, y: 200 },
+      ],
+      { closed: true },
+    );
+    const line = drawPoints(
+      layer,
+      [
+        { x: 0, y: 500 },
+        { x: 400, y: 500 },
+      ],
+      { closed: false },
+    );
+    await stack.editCoordinator.settled();
+    expect(contoursIn(renderModel.closedContoursPath)).toBe(2);
+    expect(contoursIn(renderModel.openContoursPath)).toBe(1);
+    expect(renderModel.hasOpenContoursCell.peek()).toBe(true);
+
+    layer.setLiveStroke([triangle.contourId, line.contourId], style);
+    await stack.editCoordinator.settled();
+
+    expect(contoursIn(renderModel.closedContoursPath)).toBe(1);
+    expect(contoursIn(renderModel.openContoursPath)).toBe(0);
+    expect(renderModel.hasOpenContoursCell.peek()).toBe(false);
+
+    layer.removeLiveStroke([triangle.contourId, line.contourId]);
+    await stack.editCoordinator.settled();
+
+    expect(contoursIn(renderModel.closedContoursPath)).toBe(2);
+    expect(contoursIn(renderModel.openContoursPath)).toBe(1);
+    expect(renderModel.hasOpenContoursCell.peek()).toBe(true);
+  });
+});

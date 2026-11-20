@@ -55,7 +55,6 @@ export type CommandId =
 export type StrokeCommandId =
   | "glyph.stroke.applyDynamic"
   | "glyph.stroke.expand"
-  | "glyph.stroke.expandWithStyle"
   | "glyph.stroke.offsetContour"
   | "glyph.stroke.removeDynamic";
 
@@ -231,7 +230,11 @@ export type RendererCommandId =
   | "app.showSettings"
   | "file.export"
   | "glyph.addComponent"
+  | OffsetContourCommandId
   | "tab.close";
+
+/** The stroke command that opens a dialog for its distance instead of running on the editor. */
+export type OffsetContourCommandId = Extract<StrokeCommandId, "glyph.stroke.offsetContour">;
 
 /** Identifies a renderer command that acts on the current editor or text focus. */
 export type EditorCommandId =
@@ -252,4 +255,4 @@ export type EditorCommandId =
   | "glyph.decomposeComponents"
   | "glyph.reverseSelectedContour"
   | "glyph.makeFirstPoint"
-  | StrokeCommandId;
+  | Exclude<StrokeCommandId, OffsetContourCommandId>;

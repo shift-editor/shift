@@ -1,6 +1,7 @@
 //! Packable stroke style fields for intents and future bridge DTOs.
 
 use super::exact_offset::ExactStrokeStyle;
+use crate::{CoreError, CoreResult};
 use kurbo::{Cap, Join};
 
 crate::string_enum! {
@@ -45,7 +46,7 @@ impl StrokeJoin {
     }
 }
 
-/// Width, caps, joins, and miter limit for destructive outline stroke.
+/// Width, caps, joins, miter limit, and position of a stroke.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct OutlineStrokeStyle {
@@ -53,6 +54,10 @@ pub struct OutlineStrokeStyle {
     pub cap: StrokeCap,
     pub join: StrokeJoin,
     pub miter_limit: f64,
+    /// Where the stroke lies relative to its skeleton, from `-1` (entirely
+    /// left of the direction of travel) through `0` (centred) to `1`
+    /// (entirely right); shown as −100 % … +100 %.
+    pub position: f64,
 }
 
 impl OutlineStrokeStyle {
@@ -65,7 +70,37 @@ impl OutlineStrokeStyle {
             cap: StrokeCap::Round,
             join: StrokeJoin::Round,
             miter_limit: Self::DEFAULT_MITER_LIMIT,
+            position: 0.0,
         }
+    }
+
+    /// Checks that the style can be solved.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::StrokeOperationFailed`] when the width is not a
+    /// finite value above zero, the miter limit is not a finite value above
+    /// zero, or the position is not a finite value between -1 and 1.
+    pub fn require_valid(&self) -> CoreResult<()> {
+        if !(self.width > 0.0 && self.width.is_finite()) {
+            return Err(CoreError::StrokeOperationFailed {
+                message: "stroke width must be a finite value greater than zero".to_string(),
+            });
+        }
+
+        if !(self.miter_limit > 0.0 && self.miter_limit.is_finite()) {
+            return Err(CoreError::StrokeOperationFailed {
+                message: "miter limit must be a finite value greater than zero".to_string(),
+            });
+        }
+
+        if !(-1.0..=1.0).contains(&self.position) {
+            return Err(CoreError::StrokeOperationFailed {
+                message: "stroke position must be between -1 and 1".to_string(),
+            });
+        }
+
+        Ok(())
     }
 
     pub fn to_exact(self) -> ExactStrokeStyle {
@@ -74,6 +109,7 @@ impl OutlineStrokeStyle {
             cap: self.cap.to_kurbo(),
             join: self.join.to_kurbo(),
             miter_limit: self.miter_limit,
+            position: self.position,
         }
     }
 }

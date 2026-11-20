@@ -54,6 +54,8 @@ import { anchors as anchorRules } from "@shift/wasm";
 import type { PropagatedAnchors, PropagationAnchor } from "@shift/wasm/protocol";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import type { WeightedSource } from "../../types/glyphRender";
+import type { StrokeFills } from "../../types/graphics";
+import { NO_STROKE_FILLS } from "./strokeFills";
 import {
   designAxisLocationFromLocation,
   externalAxisLocationsEqual,
@@ -1714,6 +1716,7 @@ export class GlyphRenderModel {
 
   readonly #externalLocation: Signal<ExternalAxisLocation>;
   readonly #activeSourceId: Signal<SourceId | null>;
+  readonly #layerCell: Signal<GlyphLayer | null>;
 
   readonly #projectionCell: Signal<GlyphProjection | null>;
 
@@ -1754,6 +1757,8 @@ export class GlyphRenderModel {
   readonly #outlinePathCell: Signal<Path2D>;
   readonly #openCornerContoursPathCell: Signal<Path2D>;
   readonly #rootClosedContoursPathCell: Signal<Path2D>;
+  readonly #strokeFillsCell: Signal<StrokeFills>;
+  readonly #dynamicContourIdsCell: Signal<ReadonlySet<ContourId>>;
   readonly #closedContoursPathCell: Signal<Path2D>;
   readonly #openContoursPathCell: Signal<Path2D>;
   readonly #hasOpenContoursCell: Signal<boolean>;
@@ -1799,6 +1804,7 @@ export class GlyphRenderModel {
    * component sets no axis and follows its glyph.
    * @param componentDraws - Whether a component of `parentGlyphId` draws
    * where that glyph is drawn at `parent`: its condition holds there.
+   * @param strokeFillsOf - The solved fills of a layer's dynamic strokes.
    */
   constructor(
     glyphId: GlyphId,
@@ -1826,6 +1832,7 @@ export class GlyphRenderModel {
       component: Component,
       parent: ExternalAxisLocation,
     ) => boolean,
+    strokeFillsOf: (layerId: LayerId) => Signal<StrokeFills>,
   ) {
     this.#glyphId = glyphId;
     this.#baseLocation = baseLocation;
@@ -1865,6 +1872,7 @@ export class GlyphRenderModel {
     );
     this.#externalLocation = externalLocation;
     this.#activeSourceId = activeSourceId;
+    this.#layerCell = layer;
     this.#projectionCell = projectionCell;
     this.#exactSourceId = exactSourceId;
     this.#layerAt = layerAt;
@@ -1936,36 +1944,65 @@ export class GlyphRenderModel {
       }
       return path;
     });
+    this.#strokeFillsCell = computed(
+      () => {
+        const rootLayer = layer.value;
+        return rootLayer ? strokeFillsOf(rootLayer.id).value : NO_STROKE_FILLS;
+      },
+      { name: "glyph.renderModel.strokeFills" },
+    );
+    this.#dynamicContourIdsCell = computed(
+      () => new Set(this.#strokeFillsCell.value.items.map((item) => item.skeletonContourId)),
+      { name: "glyph.renderModel.dynamicContourIds", equals: sameContourIds },
+    );
     this.#rootClosedContoursPathCell = computed(() => {
+      const dynamicContourIds = this.#dynamicContourIdsCell.value;
       const path = new Path2D();
       for (const contour of this.#rootContoursCell.value) {
         contour.trackShape();
-        if (contour.contour.closed) path.addPath(contour.fillPath);
+        if (!contour.contour.closed) continue;
+        // A dynamic stroke fills as its solved outline, never as its skeleton.
+        if (dynamicContourIds.has(contour.contour.id)) continue;
+
+        path.addPath(contour.fillPath);
       }
       return path;
     });
     this.#closedContoursPathCell = computed(() => {
+      const dynamicContourIds = this.#dynamicContourIdsCell.value;
       const path = new Path2D();
       for (const contour of this.#drawnContoursCell.value) {
         contour.trackShape();
-        if (contour.contour.closed) path.addPath(contour.fillPath);
+        if (!contour.contour.closed) continue;
+        // A dynamic stroke is displayed as its solved outline, never as its skeleton.
+        if (dynamicContourIds.has(contour.contour.id)) continue;
+
+        path.addPath(contour.fillPath);
       }
       return path;
     });
     this.#openContoursPathCell = computed(() => {
+      const dynamicContourIds = this.#dynamicContourIdsCell.value;
       const path = new Path2D();
       for (const contour of this.#drawnContoursCell.value) {
         contour.trackShape();
-        if (!contour.contour.closed) path.addPath(contour.path);
+        if (contour.contour.closed) continue;
+        if (dynamicContourIds.has(contour.contour.id)) continue;
+
+        path.addPath(contour.path);
       }
       return path;
     });
     this.#hasOpenContoursCell = computed(() => {
+      const dynamicContourIds = this.#dynamicContourIdsCell.value;
       for (const contour of this.#drawnContoursCell.value) {
         // Closedness lives in the contour's shape data, as for `#openContoursPathCell`.
         // Contours after the first open one cannot change the answer, so they go untracked.
         contour.trackShape();
-        if (!contour.contour.closed) return true;
+        if (contour.contour.closed) continue;
+        if (dynamicContourIds.has(contour.contour.id)) continue;
+
+        return true;
       }
       return false;
     });
@@ -2416,6 +2453,25 @@ export class GlyphRenderModel {
     return this.#openCornerContoursPathCell;
   }
 
+  /** The drawing the model shows exactly, or null where it draws between masters. */
+  get layerCell(): Signal<GlyphLayer | null> {
+    return this.#layerCell;
+  }
+
+  /**
+   * The solved fills of the root layer's dynamic strokes, with the path they draw as.
+   *
+   * @remarks
+   * Empty when the model has no exact authored layer here, as between masters.
+   * The skeleton contours these fills replace are left out of
+   * {@link rootClosedContoursPathCell} and of the display paths
+   * ({@link closedContoursPathCell}, {@link openContoursPathCell}).
+   */
+  get strokeFillsCell(): Signal<StrokeFills> {
+    return this.#strokeFillsCell;
+  }
+
+  /** The root contours' closed fill, without the dynamic strokes' skeletons. */
   get rootClosedContoursPathCell(): Signal<Path2D> {
     return this.#rootClosedContoursPathCell;
   }
@@ -2424,6 +2480,12 @@ export class GlyphRenderModel {
     return this.#rootClosedContoursPathCell.peek();
   }
 
+  /**
+   * Every drawn closed contour's fill, as text draws it, without the dynamic strokes' skeletons.
+   *
+   * @remarks
+   * Draw {@link strokeFillsCell}'s path beside it for the strokes themselves.
+   */
   get closedContoursPathCell(): Signal<Path2D> {
     return this.#closedContoursPathCell;
   }
@@ -2432,6 +2494,7 @@ export class GlyphRenderModel {
     return this.#closedContoursPathCell.peek();
   }
 
+  /** Every drawn open contour, as text strokes it, without the dynamic strokes' skeletons. */
   get openContoursPathCell(): Signal<Path2D> {
     return this.#openContoursPathCell;
   }
@@ -2441,9 +2504,10 @@ export class GlyphRenderModel {
   }
 
   /**
-   * Whether any contour, the root's or a component's, is open.
+   * Whether any contour, the root's or a component's, is open and displays as itself.
    *
    * @remarks
+   * An open contour with a dynamic stroke displays as its solved outline, so it does not count.
    * Recomputes with the outline but notifies readers only when the answer
    * flips, so a reader can skip {@link openContoursPathCell} while it is false.
    */
@@ -2769,6 +2833,7 @@ export class Glyph {
   readonly #projectionCell: Signal<GlyphProjection | null>;
   readonly #defaultSourceId: SourceId;
   readonly #anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
+  readonly #strokeFillsCell: (layerId: LayerId) => Signal<StrokeFills>;
   readonly #space: GlyphSpace;
   /** Each drawing exactly on a source, by that source; located drawings are left out. */
   readonly #layersBySourceIdCell = computed(
@@ -2818,6 +2883,7 @@ export class Glyph {
     this.#space = new GlyphSpace(options.designspace, options.axesCell);
     this.#defaultSourceId = options.defaultSourceId;
     this.#anchorCategory = options.anchorCategory;
+    this.#strokeFillsCell = options.strokeFillsCell;
     this.replaceComponentGlyphs(options.componentGlyphs);
   }
 
@@ -2933,6 +2999,26 @@ export class Glyph {
     }
 
     return null;
+  }
+
+  /**
+   * Whether any of the glyph's drawings carries a dynamic stroke, whether or not it solves.
+   *
+   * @remarks
+   * A reader reruns when a drawing it looked at gains or loses its strokes. A
+   * drawing the engine has not loaded counts as having none until it loads.
+   */
+  hasDynamicStroke(): boolean {
+    track(this.#layersCell);
+
+    return this.#layersCell.peek().some((layer) => {
+      const fills = this.#strokeFillsCell(layer.id);
+      track(fills);
+
+      const { items, failure } = fills.peek();
+
+      return items.length > 0 || failure !== null;
+    });
   }
 
   /**
@@ -3147,6 +3233,7 @@ export class Glyph {
       (parent, component) => this.#baseLocation(parent, component),
       (parentGlyphId, component, parent) =>
         this.#designspace.componentDraws(parentGlyphId, component.condition, parent),
+      this.#strokeFillsCell,
     );
     renderModels.set(activeSourceIdCell, renderModel);
     return renderModel;
@@ -3265,6 +3352,15 @@ export class Glyph {
 
 function projectionGeometry(shape: GlyphLayerShape): GlyphGeometry {
   return new GlyphGeometry(shape.structure, shape.values, shape.componentTransformKind);
+}
+
+function sameContourIds(current: ReadonlySet<ContourId>, next: ReadonlySet<ContourId>): boolean {
+  if (current.size !== next.size) return false;
+
+  for (const id of next) {
+    if (!current.has(id)) return false;
+  }
+  return true;
 }
 
 function sameComponentGlyphs(

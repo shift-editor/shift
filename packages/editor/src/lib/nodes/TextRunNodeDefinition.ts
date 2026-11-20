@@ -23,6 +23,7 @@ import {
 import { track } from "../signals";
 import type { TransformTarget } from "../../types/transformTarget";
 import { GlyphsTransform, type GlyphsTransformPart } from "./GlyphsTransform";
+import type { Editor } from "../editor/Editor";
 
 /**
  * Projects one shared proof run through a placed, scaled scene node.
@@ -507,10 +508,15 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
    *
    * @remarks
    * One path batch for the whole run: a glyph costs one translate and one
-   * fill, plus a stroke only when it has open contours. Each distinct glyph
+   * fill, plus a stroke only when it has open contours, and a second fill when
+   * it has dynamic strokes drawn at an authored source. Each distinct glyph
    * subscribes and resolves its paths once per draw (see {@link distinctGlyph}).
    * Glyphs a feature highlight names (`Text.highlightCell`) draw after the
    * rest, in a batch of their own in the highlight colour.
+   *
+   * A glyph whose strokes fail, or whose strokes are left out because it is
+   * drawn between masters, is reported through
+   * {@link Editor.reportStrokeProblem}, once per distinct message.
    */
   #drawGlyphs(node: TextRunNode, ctx: RenderContext, layout: TextLayout): void {
     const canvas = ctx.canvas;
@@ -523,6 +529,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
     const highlight = this.editor.text.highlightCell.peek();
     const highlighted = highlight?.runId === node.runId ? highlight.glyphs : null;
     const distinct = new Map<GlyphRenderModel, DistinctGlyph>();
+    const strokes = new RunStrokeNotes();
     const paint = (
       batch: PathBatch,
       placed: PlacedGlyph,
@@ -533,9 +540,11 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       if (!glyph) {
         glyph = distinctGlyph(model);
         distinct.set(model, glyph);
+        strokes.add(this.editor, placed.glyph.glyphId, model, glyph);
       }
       batch.offset(placed.origin.x, placed.origin.y);
       batch.fill(glyph.closed);
+      if (glyph.strokeFills) batch.fill(glyph.strokeFills);
       if (glyph.open) batch.stroke(glyph.open);
       if (outlined.has(itemId)) this.#outline.draw(canvas, model, { stroke: outlineStroke });
     };
@@ -547,14 +556,17 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
         else paint(batch, placed, itemId, model);
       });
     });
-    if (later.length === 0) return;
+    if (later.length > 0) {
+      canvas.withPathBatch(
+        { ...canvas.theme.glyph, fill: canvas.theme.textRun.featureHighlightFill },
+        (batch) => {
+          for (const { placed, itemId, model } of later) paint(batch, placed, itemId, model);
+        },
+      );
+    }
 
-    canvas.withPathBatch(
-      { ...canvas.theme.glyph, fill: canvas.theme.textRun.featureHighlightFill },
-      (batch) => {
-        for (const { placed, itemId, model } of later) paint(batch, placed, itemId, model);
-      },
-    );
+    // After both batches: a highlighted glyph's stroke is noted when it paints, in the second.
+    this.editor.reportStrokeProblem(node.id, strokes.message());
   }
 
   #drawCaret(node: TextRunNode, ctx: RenderContext, layout: TextLayout): void {
@@ -664,6 +676,61 @@ interface DistinctGlyph {
   readonly closed: Path2D;
   /** Null when the glyph has no open contours, so nothing is stroked. */
   readonly open: Path2D | null;
+  /** The solved fills of the glyph's dynamic strokes; null when it draws none. */
+  readonly strokeFills: Path2D | null;
+  /** Why the glyph's dynamic strokes could not be solved; null when they could. */
+  readonly strokeFailure: string | null;
+}
+
+/** What a run says when it leaves a glyph's dynamic strokes out between masters. */
+const STROKES_HIDDEN_BETWEEN_MASTERS =
+  "Dynamic strokes show at authored sources only, so this text is drawn without them between masters.";
+
+/**
+ * What a run's glyphs say about their dynamic strokes in one draw: the first
+ * failure, else that some glyph's strokes are left out between masters.
+ */
+class RunStrokeNotes {
+  #failure: string | null = null;
+  #hidden = false;
+
+  /** Looks at one distinct glyph of the run, once per draw. */
+  add(
+    editor: Editor,
+    glyphId: GlyphId | null,
+    model: GlyphRenderModel,
+    glyph: DistinctGlyph,
+  ): void {
+    this.#failure ??= glyph.strokeFailure;
+    if (this.#hidden || !glyphId) return;
+
+    this.#hidden = strokesHiddenBetweenMasters(editor, glyphId, model);
+  }
+
+  /** The one thing the run says, or null when its strokes are fine. */
+  message(): string | null {
+    if (this.#failure !== null) return this.#failure;
+
+    return this.#hidden ? STROKES_HIDDEN_BETWEEN_MASTERS : null;
+  }
+}
+
+/**
+ * Whether a glyph the run draws between masters has dynamic strokes that are left out.
+ *
+ * @remarks
+ * A glyph drawn at an authored drawing shows its strokes, so only a glyph
+ * with no exact drawing here is asked about its other drawings.
+ */
+function strokesHiddenBetweenMasters(
+  editor: Editor,
+  glyphId: GlyphId,
+  model: GlyphRenderModel,
+): boolean {
+  track(model.layerCell);
+  if (model.layerCell.peek()) return false;
+
+  return editor.glyphForId(glyphId)?.hasDynamicStroke() ?? false;
 }
 
 /**
@@ -678,10 +745,14 @@ function distinctGlyph(model: GlyphRenderModel): DistinctGlyph {
   model.trackShape();
   track(model.closedContoursPathCell);
   track(model.hasOpenContoursCell);
-  if (!model.hasOpenContoursCell.peek()) return { closed: model.closedContoursPath, open: null };
+  // Pulled here, in the frame, so a drag's preview is the one this frame reads.
+  track(model.strokeFillsCell);
+  const { path: strokeFills, failure: strokeFailure } = model.strokeFillsCell.peek();
+  const closed = model.closedContoursPath;
+  if (!model.hasOpenContoursCell.peek()) return { closed, open: null, strokeFills, strokeFailure };
 
   track(model.openContoursPathCell);
-  return { closed: model.closedContoursPath, open: model.openContoursPath };
+  return { closed, open: model.openContoursPath, strokeFills, strokeFailure };
 }
 
 /** Whether a glyph-local point is inside a fill or within `radius` of a contour. */

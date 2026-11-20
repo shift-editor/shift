@@ -12,8 +12,6 @@ export type DebugOverlays = {
   hitRadii: boolean;
   segmentBounds: boolean;
   glyphBbox: boolean;
-  /** Computed live-stroke fill outlines from the engine (skeleton stays editable). */
-  strokePreview: boolean;
 };
 
 export type DebugOverlayId = keyof DebugOverlays;
@@ -24,7 +22,6 @@ export const NO_DEBUG_OVERLAYS: DebugOverlays = {
   hitRadii: false,
   segmentBounds: false,
   glyphBbox: false,
-  strokePreview: false,
 };
 
 /** Debug menu entries, in menu order. */
@@ -34,5 +31,4 @@ export const DEBUG_OVERLAY_ITEMS: readonly { id: DebugOverlayId; label: string }
   { id: "hitRadii", label: "Hit Radii" },
   { id: "segmentBounds", label: "Segment Bounds" },
   { id: "glyphBbox", label: "Glyph Bounding Box" },
-  { id: "strokePreview", label: "Live Stroke Preview" },
 ];

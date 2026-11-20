@@ -995,7 +995,8 @@ impl LayerIntent for SetLiveStroke {
             contour_ids,
             style,
         } = self;
-        [style.width, style.miter_limit].require_finite(Coordinates::StrokeOutline)?;
+        [style.width, style.miter_limit, style.position]
+            .require_finite(Coordinates::StrokeOutline)?;
 
         let before = font.layer_snapshot(*layer_id)?;
         {
@@ -1090,7 +1091,8 @@ impl LayerIntent for OutlineStroke {
             style,
             tolerance,
         } = self;
-        [style.width, style.miter_limit, *tolerance].require_finite(Coordinates::StrokeOutline)?;
+        [style.width, style.miter_limit, style.position, *tolerance]
+            .require_finite(Coordinates::StrokeOutline)?;
 
         let before = font.layer_snapshot(*layer_id)?;
         {
@@ -1102,7 +1104,9 @@ impl LayerIntent for OutlineStroke {
     }
 }
 
-/// Constant normal offset on one closed contour (stream A1.2).
+/// Constant normal offset on one open or closed contour (stream A1.2).
+///
+/// A negative `distance` offsets to the left of the path direction, a positive one to the right.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct OffsetContour {

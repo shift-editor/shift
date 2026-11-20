@@ -15,6 +15,7 @@ import { getShiftHost } from "@/host/shiftHost";
 import { canMakeFirstPoint } from "@/lib/commands/rendererCommands";
 import type { CanvasContextMenuProps } from "@/types/contextMenu";
 import { useEditor } from "@/workspace/WorkspaceContext";
+import { StrokeContextItems } from "./StrokeContextItems";
 
 export const CanvasContextMenu = ({ children }: CanvasContextMenuProps) => {
   const editor = useEditor();
@@ -110,6 +111,7 @@ export const CanvasContextMenu = ({ children }: CanvasContextMenuProps) => {
             >
               Make First Point
             </ContextMenuItem>
+            <StrokeContextItems onRun={runCommand} />
           </ContextMenuPopup>
         </ContextMenuPositioner>
       </ContextMenuPortal>

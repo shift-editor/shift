@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mintContourId } from "@shift/types";
+import { mintContourId, type OutlineStrokeStyle } from "@shift/types";
 import type {
   StrokeCommandId,
   StrokeLayerState,
@@ -14,10 +14,19 @@ const ALL_COMMANDS: readonly StrokeCommandId[] = [
   "glyph.stroke.expandWithStyle",
   "glyph.stroke.offsetContour",
   "glyph.stroke.removeDynamic",
+  "glyph.stroke.updateStyle",
 ];
 
+const STYLE: OutlineStrokeStyle = {
+  width: 20,
+  cap: "round",
+  join: "round",
+  miterLimit: 4,
+  position: 0,
+};
+
 function contour(overrides: Partial<StrokeSelectedContour> = {}): StrokeSelectedContour {
-  return { id: mintContourId(), closed: true, dynamic: false, ...overrides };
+  return { id: mintContourId(), closed: true, style: null, ...overrides };
 }
 
 function selection(
@@ -34,7 +43,7 @@ function selection(
 describe("strokeAvailability", () => {
   describe("what every command needs", () => {
     const blockedSelections: readonly [string, StrokeSelection][] = [
-      ["a read-only font", selection([contour({ dynamic: true })], { readOnly: true })],
+      ["a read-only font", selection([contour({ style: STYLE })], { readOnly: true })],
       ["no selected contour", selection([])],
       ["contours with no shared layer", selection([contour()], { layer: { kind: "none" } })],
       [
@@ -74,8 +83,8 @@ describe("strokeAvailability", () => {
   describe("apply and expand with a style", () => {
     it("are available for plain, dynamic and mixed selections", () => {
       const plain = selection([contour()]);
-      const dynamic = selection([contour({ dynamic: true })]);
-      const mixed = selection([contour(), contour({ dynamic: true })]);
+      const dynamic = selection([contour({ style: STYLE })]);
+      const mixed = selection([contour(), contour({ style: STYLE })]);
 
       for (const id of ["glyph.stroke.applyDynamic", "glyph.stroke.expandWithStyle"] as const) {
         for (const candidate of [plain, dynamic, mixed]) {
@@ -92,7 +101,11 @@ describe("strokeAvailability", () => {
   });
 
   describe("expand and remove dynamic stroke", () => {
-    for (const id of ["glyph.stroke.expand", "glyph.stroke.removeDynamic"] as const) {
+    for (const id of [
+      "glyph.stroke.expand",
+      "glyph.stroke.removeDynamic",
+      "glyph.stroke.updateStyle",
+    ] as const) {
       it(`${id} is disabled when no selected contour is dynamic`, () => {
         expect(strokeAvailability(id, selection([contour(), contour()]))).toEqual({
           enabled: false,
@@ -101,7 +114,7 @@ describe("strokeAvailability", () => {
       });
 
       it(`${id} is available when at least one selected contour is dynamic`, () => {
-        const mixed = selection([contour(), contour({ dynamic: true })]);
+        const mixed = selection([contour(), contour({ style: STYLE })]);
 
         expect(strokeAvailability(id, mixed)).toEqual({ enabled: true });
       });
@@ -109,16 +122,16 @@ describe("strokeAvailability", () => {
   });
 
   describe("offset contour", () => {
-    it("is available for exactly one closed contour", () => {
+    it("is available for exactly one contour, closed", () => {
       expect(strokeAvailability("glyph.stroke.offsetContour", selection([contour()]))).toEqual({
         enabled: true,
       });
     });
 
-    it("is disabled for an open contour", () => {
+    it("is available for exactly one contour, open", () => {
       expect(
         strokeAvailability("glyph.stroke.offsetContour", selection([contour({ closed: false })])),
-      ).toEqual({ enabled: false, reason: "Offset needs a closed contour." });
+      ).toEqual({ enabled: true });
     });
 
     it("is disabled for more than one contour", () => {

@@ -55,13 +55,6 @@ describe("stroke commands run from the menu", () => {
     expect(await editor.runCommand("glyph.stroke.applyDynamic")).toBe(false);
     expect(appNotificationCell.peek()).toEqual({ message: "Select a contour first." });
   });
-
-  it("refuses an open contour for offset, and says so", async () => {
-    await drawSelectedLine(editor);
-
-    expect(await editor.runCommand("glyph.stroke.offsetContour")).toBe(false);
-    expect(appNotificationCell.peek()).toEqual({ message: "Offset needs a closed contour." });
-  });
 });
 
 describe("stroke commands run in a preview session", () => {

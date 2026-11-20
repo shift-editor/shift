@@ -1,5 +1,6 @@
 export { createMemoryFontSession, newMemoryFontSource } from "./createMemoryFontSession";
 export { Editor } from "./lib/editor/Editor";
+export { DEFAULT_STROKE_STYLE } from "./lib/editor/strokeStyle";
 export { EditorHistory } from "./lib/editor/history/EditorHistory";
 export { HistoryCapture } from "./lib/editor/history/HistoryCapture";
 export { applyListSelection } from "./lib/editor/listSelection";

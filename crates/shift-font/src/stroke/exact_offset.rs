@@ -2,6 +2,8 @@
 //!
 //! This is parallel expansion plus caps and joins (Nehab-style), not a full
 //! evolute sweep. It is the F0.3 `ExactOffset` backend before nib sweep exists.
+//! [`outline`] is the one entry point: the style's `position` decides whether
+//! the stroke is centred on the skeleton or lies on a side of it.
 
 use kurbo::{BezPath, Cap, Join, PathEl, Point, Rect, Shape, Stroke, StrokeOpts, stroke};
 
@@ -12,13 +14,16 @@ pub const DEFAULT_TOLERANCE: f64 = 0.25;
 /// [`DEFAULT_TOLERANCE`]. B6 may tighten after LTTR/INK comparison.
 pub const MAX_ON_CURVE_POINTS: usize = 64;
 
-/// Width, caps, joins, and miter limit for [`outline`].
+/// Width, caps, joins, miter limit, and position for [`outline`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ExactStrokeStyle {
     pub width: f64,
     pub cap: Cap,
     pub join: Join,
     pub miter_limit: f64,
+    /// Where the stroke lies, from `-1` (entirely left of the direction of
+    /// travel) through `0` (centred) to `1` (entirely right).
+    pub position: f64,
 }
 
 impl ExactStrokeStyle {
@@ -31,6 +36,7 @@ impl ExactStrokeStyle {
             cap: Cap::Round,
             join: Join::Round,
             miter_limit: Self::DEFAULT_MITER_LIMIT,
+            position: 0.0,
         }
     }
 }
@@ -38,11 +44,21 @@ impl ExactStrokeStyle {
 /// How near an outline's end must be to its start to count as closed.
 const CLOSE_EPSILON: f64 = 1e-6;
 
-/// Expands `skeleton` to a closed fill path at constant width.
+/// Expands `skeleton` to a closed fill path at constant width, placed by
+/// `style.position` (see [`super::position`]).
 ///
 /// Open skeletons become closed outlines via the style's caps; closed skeletons
 /// stay closed. `tolerance` is forwarded to kurbo's stroke flattener.
 pub fn outline(skeleton: &BezPath, style: &ExactStrokeStyle, tolerance: f64) -> BezPath {
+    super::position::aligned_outline(skeleton, style, tolerance)
+}
+
+/// The stroke centred on `skeleton`, by kurbo's stroker.
+pub(super) fn centred_outline(
+    skeleton: &BezPath,
+    style: &ExactStrokeStyle,
+    tolerance: f64,
+) -> BezPath {
     let stroke_style = Stroke::new(style.width)
         .with_caps(style.cap)
         .with_join(style.join)
@@ -314,6 +330,7 @@ mod tests {
                         cap: Cap::Butt,
                         join: Join::Round,
                         miter_limit: ExactStrokeStyle::DEFAULT_MITER_LIMIT,
+                        position: 0.0,
                     };
                     let butt = outline(&fixture.skeleton, &butt_style, DEFAULT_TOLERANCE);
                     assert!(

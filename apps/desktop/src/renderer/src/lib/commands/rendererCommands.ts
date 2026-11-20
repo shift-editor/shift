@@ -156,8 +156,6 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
 
     case "glyph.stroke.applyDynamic":
     case "glyph.stroke.expand":
-    case "glyph.stroke.expandWithStyle":
-    case "glyph.stroke.offsetContour":
     case "glyph.stroke.removeDynamic": {
       const changed = runStrokeMenuCommand(editor, id);
       if (changed) await editor.font.editCoordinator.settled();
@@ -229,8 +227,6 @@ async function runFocusedTextEditCommand(id: EditorCommandId): Promise<boolean |
     case "glyph.makeFirstPoint":
     case "glyph.stroke.applyDynamic":
     case "glyph.stroke.expand":
-    case "glyph.stroke.expandWithStyle":
-    case "glyph.stroke.offsetContour":
     case "glyph.stroke.removeDynamic":
       return null;
   }

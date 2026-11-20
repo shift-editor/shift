@@ -82,3 +82,45 @@ fn set_live_stroke_rejects_component_only_glyph() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("no contours"));
 }
+
+#[test]
+fn set_live_stroke_takes_a_position_from_minus_one_to_one() {
+    for position in ["-1", "-0.5", "0", "1"] {
+        let output = stroke(&[
+            "set-live-stroke",
+            SOLENOID,
+            "--glyph",
+            "dot",
+            "--width",
+            "20",
+            "--position",
+            position,
+            "--dry-run",
+        ]);
+
+        assert!(
+            output.status.success(),
+            "position {position}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+#[test]
+fn set_live_stroke_refuses_a_position_beyond_the_ends_and_says_why() {
+    let output = stroke(&[
+        "set-live-stroke",
+        SOLENOID,
+        "--glyph",
+        "dot",
+        "--width",
+        "20",
+        "--position",
+        "1.5",
+        "--dry-run",
+    ]);
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("between -1 and 1"), "{stderr}");
+}

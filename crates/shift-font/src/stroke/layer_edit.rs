@@ -1,11 +1,12 @@
-//! Destructive stroke and offset helpers on [`GlyphLayer`](crate::GlyphLayer).
+//! Destructive stroke and offset helpers on [`GlyphLayer`](GlyphLayer).
 
-use kurbo::{BezPath, Diagonal2, Rect, expand_path};
+use kurbo::{BezPath, Rect};
 
 use crate::contour::Contours;
 use crate::{ContourId, CoreError, CoreResult, GlyphLayer, Require};
 
 use super::exact_offset::{self, path_bbox, path_is_closed};
+use super::position;
 use super::style::{OutlineStrokeStyle, StrokeJoin};
 
 /// Converts `contour` to a kurbo path suitable for stroke or offset solvers.
@@ -47,16 +48,6 @@ pub(crate) fn require_stroke_geometry(contour: &crate::Contour) -> CoreResult<()
     Ok(())
 }
 
-pub(crate) fn require_positive_width(width: f64) -> CoreResult<()> {
-    if width > 0.0 && width.is_finite() {
-        return Ok(());
-    }
-
-    Err(CoreError::StrokeOperationFailed {
-        message: "stroke width must be a finite value greater than zero".to_string(),
-    })
-}
-
 impl GlyphLayer {
     /// Replaces each listed contour with the constant-width stroke outline of its geometry.
     ///
@@ -73,13 +64,7 @@ impl GlyphLayer {
         style: OutlineStrokeStyle,
         tolerance: f64,
     ) -> CoreResult<Vec<ContourId>> {
-        require_positive_width(style.width)?;
-
-        if !style.miter_limit.is_finite() || style.miter_limit <= 0.0 {
-            return Err(CoreError::StrokeOperationFailed {
-                message: "miter limit must be a finite value greater than zero".to_string(),
-            });
-        }
+        style.require_valid()?;
 
         if !tolerance.is_finite() || tolerance <= 0.0 {
             return Err(CoreError::StrokeOperationFailed {
@@ -104,16 +89,20 @@ impl GlyphLayer {
         Ok(created)
     }
 
-    /// Grows or shrinks a **closed** contour by a constant normal distance.
+    /// Offsets an open or closed contour by a constant normal distance.
     ///
-    /// Positive `distance` expands outward; negative shrinks. Join style and miter limit follow
-    /// the same semantics as outline stroke.
+    /// The side follows the path direction, as stroke position does: a negative `distance`
+    /// offsets to the left of the direction of travel, a positive one to the right. A
+    /// counter-clockwise closed contour therefore grows for a positive distance and shrinks for a
+    /// negative one; a clockwise contour does the opposite. An open contour stays open. Join
+    /// style and miter limit apply where the offset opens a gap at a corner. A live stroke on the
+    /// contour moves with it, keeping its style.
     ///
     /// # Errors
     ///
     /// Returns [`CoreError::ContourNotFound`] when the contour is missing,
-    /// [`CoreError::StrokeOperationFailed`] when the contour is open or parameters are invalid,
-    /// and the same error when the offset solver returns nothing.
+    /// [`CoreError::StrokeOperationFailed`] when parameters are invalid or the contour has fewer
+    /// than two points, and the same error when the offset solver returns nothing.
     pub fn offset_contour(
         &mut self,
         contour_id: &ContourId,
@@ -141,25 +130,28 @@ impl GlyphLayer {
         }
 
         let contour = self.contour(contour_id).require(contour_id)?.clone();
-        if !contour.is_closed() {
-            return Err(CoreError::StrokeOperationFailed {
-                message: "offset path requires a closed contour".to_string(),
-            });
-        }
-
         require_stroke_geometry(&contour)?;
 
         let skeleton = contour_skeleton_path(&contour);
-        let expanded = expand_path(
-            skeleton,
-            Diagonal2::new(distance, distance),
+        // `offset_path` measures positive to the left; the user-facing sign is the position's.
+        let offset = position::offset_path(
+            &skeleton,
+            -distance,
             join.to_kurbo(),
             miter_limit,
             tolerance,
         );
 
+        // The moved contour is a new contour with a new id, so a live stroke on the original
+        // would be pruned with it; carry the entry across instead.
+        let stroke_entry = self.stroke_entry(contour_id);
         self.remove_contour_checked(contour_id)?;
-        install_path_contours(self, &expanded)
+        let created = install_path_contours(self, &offset)?;
+        if let Some(entry) = stroke_entry {
+            self.assign_stroke_entry(&created, &entry);
+        }
+
+        Ok(created)
     }
 }
 
@@ -368,7 +360,7 @@ mod tests {
                 "{} should replace the skeleton contour",
                 fixture.name
             );
-            let created: Vec<_> = layer.contours_iter().map(|c| c.id().clone()).collect();
+            let created: Vec<_> = layer.contours_iter().map(Contour::id).collect();
             assert!(!created.is_empty(), "{}", fixture.name);
             contours_closed_oracle(layer, &created, 1e-6).unwrap();
 
@@ -407,8 +399,7 @@ mod tests {
             .contours_iter()
             .next()
             .unwrap()
-            .id()
-            .clone();
+            .id();
         let mut layer = font.layer(layer_id).unwrap().clone();
         layer.set_stroke_lib(&LayerStrokeLib {
             contours: std::collections::BTreeMap::from([(
@@ -452,8 +443,7 @@ mod tests {
             .contours_iter()
             .next()
             .unwrap()
-            .id()
-            .clone();
+            .id();
 
         apply_undo_redo(
             &mut font,
@@ -468,7 +458,7 @@ mod tests {
         );
 
         let layer = font.layer(layer_id).unwrap();
-        let created: Vec<_> = layer.contours_iter().map(|c| c.id().clone()).collect();
+        let created: Vec<_> = layer.contours_iter().map(Contour::id).collect();
         contours_closed_oracle(layer, &created, 1e-6).unwrap();
         let path = contour_skeleton_path(layer.contour(&created[0]).unwrap());
         let bbox = path_bbox(&path);
@@ -489,8 +479,7 @@ mod tests {
             .contours_iter()
             .next()
             .unwrap()
-            .id()
-            .clone();
+            .id();
         let before = font.clone();
         let result = font.apply_intents(&FontIntentSet::from(OutlineStroke {
             layer_id,
@@ -500,10 +489,247 @@ mod tests {
                 cap: StrokeCap::Round,
                 join: StrokeJoin::Round,
                 miter_limit: 4.0,
+                position: 0.0,
             },
             tolerance: DEFAULT_TOLERANCE,
         }));
         assert!(result.is_err());
         assert_eq!(font, before);
+    }
+
+    /// Offsets the only contour of a fresh layer, returning the layer.
+    fn offset_only_contour(contour: Contour, distance: f64) -> CoreResult<GlyphLayer> {
+        let mut font = sample_font();
+        let layer_id = stroke_test_layer(&mut font, contour);
+        let mut layer = font.layer(layer_id).unwrap().clone();
+        let contour_id = layer.contours_iter().next().unwrap().id();
+
+        layer.offset_contour(
+            &contour_id,
+            distance,
+            StrokeJoin::Round,
+            OutlineStrokeStyle::DEFAULT_MITER_LIMIT,
+            DEFAULT_TOLERANCE,
+        )?;
+
+        Ok(layer)
+    }
+
+    fn square(corners: [(f64, f64); 4]) -> Contour {
+        let mut contour = Contour::new();
+        for (x, y) in corners {
+            contour.add_point(x, y, PointType::OnCurve, false);
+        }
+        contour.close();
+        contour
+    }
+
+    fn only_bounds(layer: &GlyphLayer) -> Rect {
+        assert_eq!(layer.contours_iter().count(), 1, "one contour out");
+        path_bbox(&contour_skeleton_path(
+            layer.contours_iter().next().unwrap(),
+        ))
+    }
+
+    #[test]
+    fn an_open_contour_offsets_to_the_left_for_a_negative_distance_and_stays_open() {
+        let line = || {
+            let mut contour = Contour::new();
+            contour.add_point(0.0, 0.0, PointType::OnCurve, false);
+            contour.add_point(100.0, 0.0, PointType::OnCurve, false);
+            contour
+        };
+
+        let left = offset_only_contour(line(), -15.0).unwrap();
+        let right = offset_only_contour(line(), 15.0).unwrap();
+
+        let (left_bounds, right_bounds) = (only_bounds(&left), only_bounds(&right));
+        assert!((left_bounds.y0 - 15.0).abs() < 1e-6 && (left_bounds.y1 - 15.0).abs() < 1e-6);
+        assert!((right_bounds.y0 + 15.0).abs() < 1e-6 && (right_bounds.y1 + 15.0).abs() < 1e-6);
+        assert!((left_bounds.x0).abs() < 1e-6 && (left_bounds.x1 - 100.0).abs() < 1e-6);
+        assert!(
+            !left.contours_iter().next().unwrap().is_closed(),
+            "stays open"
+        );
+    }
+
+    /// Whether the only contour of `layer` fills the point `(x, y)`.
+    fn fills(layer: &GlyphLayer, x: f64, y: f64) -> bool {
+        let path = contour_skeleton_path(layer.contours_iter().next().unwrap());
+
+        kurbo::Shape::winding(&path, kurbo::Point::new(x, y)) != 0
+    }
+
+    #[test]
+    fn a_counter_clockwise_contour_grows_for_a_positive_distance() {
+        let ccw = || square([(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)]);
+
+        let grown = offset_only_contour(ccw(), 10.0).unwrap();
+        let shrunk = offset_only_contour(ccw(), -10.0).unwrap();
+
+        assert!(fills(&grown, 105.0, 50.0) && fills(&grown, 50.0, 50.0));
+        assert!(!fills(&shrunk, 5.0, 50.0) && fills(&shrunk, 50.0, 50.0));
+    }
+
+    #[test]
+    fn a_clockwise_contour_offsets_the_other_way() {
+        let cw = || square([(0.0, 0.0), (0.0, 100.0), (100.0, 100.0), (100.0, 0.0)]);
+
+        let positive = offset_only_contour(cw(), 10.0).unwrap();
+        let negative = offset_only_contour(cw(), -10.0).unwrap();
+
+        assert!(!fills(&positive, 5.0, 50.0) && fills(&positive, 50.0, 50.0));
+        assert!(fills(&negative, 105.0, 50.0) && fills(&negative, 50.0, 50.0));
+    }
+
+    #[test]
+    fn a_closed_offset_stays_closed() {
+        let layer = offset_only_contour(
+            square([(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)]),
+            10.0,
+        )
+        .unwrap();
+
+        assert!(layer.contours_iter().next().unwrap().is_closed());
+    }
+
+    /// A layer holding `contour` as a live stroke in `style`, and the contour's id.
+    fn layer_with_live_stroke(
+        contour: Contour,
+        style: OutlineStrokeStyle,
+    ) -> (GlyphLayer, ContourId) {
+        let mut font = sample_font();
+        let layer_id = stroke_test_layer(&mut font, contour);
+        let mut layer = font.layer(layer_id).unwrap().clone();
+        let contour_id = layer.contours_iter().next().unwrap().id();
+        layer
+            .set_live_stroke_contours(std::slice::from_ref(&contour_id), style)
+            .unwrap();
+
+        (layer, contour_id)
+    }
+
+    fn horizontal_line() -> Contour {
+        let mut contour = Contour::new();
+        contour.add_point(0.0, 0.0, PointType::OnCurve, false);
+        contour.add_point(100.0, 0.0, PointType::OnCurve, false);
+        contour
+    }
+
+    #[test]
+    fn offsetting_a_contour_keeps_its_live_stroke_on_the_moved_contour() {
+        let style = OutlineStrokeStyle {
+            width: 24.0,
+            cap: StrokeCap::Butt,
+            join: StrokeJoin::Miter,
+            miter_limit: 7.0,
+            position: -0.5,
+        };
+        let (mut layer, old_id) = layer_with_live_stroke(horizontal_line(), style);
+
+        let created = layer
+            .offset_contour(
+                &old_id,
+                15.0,
+                StrokeJoin::Round,
+                OutlineStrokeStyle::DEFAULT_MITER_LIMIT,
+                DEFAULT_TOLERANCE,
+            )
+            .unwrap();
+
+        assert!(layer.contour(&old_id).is_none(), "the old contour is gone");
+        let strokes = layer.live_strokes();
+        assert_eq!(strokes.len(), 1, "one stroke, not one left behind");
+        assert_eq!(strokes[0].contour_id, created[0]);
+        assert_eq!(strokes[0].style, style, "the style is the one it had");
+        assert!(layer.orphan_stroke_lib_contour_ids().is_empty());
+    }
+
+    #[test]
+    fn offsetting_a_plain_contour_leaves_no_stroke_and_another_stroke_alone() {
+        let (mut layer, stroked) =
+            layer_with_live_stroke(horizontal_line(), OutlineStrokeStyle::round(10.0));
+        let mut plain = Contour::new();
+        plain.add_point(0.0, 200.0, PointType::OnCurve, false);
+        plain.add_point(100.0, 200.0, PointType::OnCurve, false);
+        let plain_id = layer.add_contour(plain);
+
+        layer
+            .offset_contour(
+                &plain_id,
+                10.0,
+                StrokeJoin::Round,
+                OutlineStrokeStyle::DEFAULT_MITER_LIMIT,
+                DEFAULT_TOLERANCE,
+            )
+            .unwrap();
+
+        let strokes = layer.live_strokes();
+        assert_eq!(strokes.len(), 1);
+        assert_eq!(strokes[0].contour_id, stroked, "the other stroke stays put");
+    }
+
+    #[test]
+    fn a_refused_offset_leaves_the_live_stroke_where_it_was() {
+        let (mut layer, id) =
+            layer_with_live_stroke(horizontal_line(), OutlineStrokeStyle::round(10.0));
+        let before = layer.clone();
+
+        let result = layer.offset_contour(
+            &id,
+            0.0,
+            StrokeJoin::Round,
+            OutlineStrokeStyle::DEFAULT_MITER_LIMIT,
+            DEFAULT_TOLERANCE,
+        );
+
+        assert!(result.is_err());
+        assert_eq!(layer, before);
+    }
+
+    #[test]
+    fn offsetting_a_dynamic_contour_through_the_intent_undoes_and_redoes_with_its_stroke() {
+        let mut font = sample_font();
+        let layer_id = stroke_test_layer(&mut font, horizontal_line());
+        let contour_id = font
+            .layer(layer_id)
+            .unwrap()
+            .contours_iter()
+            .next()
+            .unwrap()
+            .id();
+        font.apply_intents(&FontIntentSet::from(crate::SetLiveStroke {
+            layer_id,
+            contour_ids: vec![contour_id.clone()],
+            style: OutlineStrokeStyle::round(20.0),
+        }))
+        .unwrap();
+
+        apply_undo_redo(
+            &mut font,
+            FontIntentSet::from(OffsetContour {
+                layer_id,
+                contour_id,
+                distance: 10.0,
+                join: StrokeJoin::Round,
+                miter_limit: OutlineStrokeStyle::DEFAULT_MITER_LIMIT,
+                tolerance: DEFAULT_TOLERANCE,
+            }),
+        );
+
+        let strokes = font.layer(layer_id).unwrap().live_strokes();
+        assert_eq!(strokes.len(), 1);
+        assert_eq!(strokes[0].style, OutlineStrokeStyle::round(20.0));
+    }
+
+    #[test]
+    fn a_zero_offset_distance_is_refused() {
+        let mut contour = Contour::new();
+        contour.add_point(0.0, 0.0, PointType::OnCurve, false);
+        contour.add_point(100.0, 0.0, PointType::OnCurve, false);
+
+        let error = offset_only_contour(contour, 0.0).unwrap_err();
+
+        assert!(error.to_string().contains("non-zero"), "{error}");
     }
 }
