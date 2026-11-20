@@ -7,7 +7,9 @@ use crate::{Contour, ContourId, CoreError, CoreResult, GlyphLayer, Require};
 
 use super::exact_offset::{self, path_bbox};
 use super::layer_edit::{contour_skeleton_path, install_path_contours, require_positive_width};
-use super::layer_lib::{ContourStrokeEntry, ContourStrokeRole, LayerStrokeLib};
+use super::layer_lib::{
+    ContourStrokeEntry, ContourStrokeRole, LayerStrokeLib, sync_stroke_lib_on_layer,
+};
 use super::style::OutlineStrokeStyle;
 
 /// One skeleton contour and the fill outlines computed from it at read time.
@@ -56,6 +58,59 @@ impl GlyphLayer {
         }
 
         self.set_stroke_lib(&stroke_lib);
+        Ok(())
+    }
+
+    /// Contours carrying a live stroke: a skeleton entry with a stored style.
+    ///
+    /// These are the contours [`Self::stroke_outlines_for_preview`] solves and
+    /// [`Self::bake_stroke_outlines`] accepts. Answering this solves nothing.
+    /// Ids follow contour order on the layer.
+    pub fn live_stroke_contour_ids(&self) -> Vec<ContourId> {
+        let Some(stroke_lib) = self.stroke_lib() else {
+            return Vec::new();
+        };
+
+        self.contours_iter()
+            .filter(|contour| {
+                stroke_lib
+                    .contours
+                    .get(&contour.id().to_string())
+                    .is_some_and(|entry| {
+                        entry.role == ContourStrokeRole::Skeleton && entry.outline_style.is_some()
+                    })
+            })
+            .map(Contour::id)
+            .collect()
+    }
+
+    /// Drops the live stroke from each listed contour, keeping the contours.
+    ///
+    /// The `com.shift.stroke` lib key is removed once no entries remain.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::StrokeOperationFailed`] when a listed contour has no live stroke,
+    /// and [`CoreError::ContourNotFound`] when a contour id is missing.
+    pub fn remove_live_stroke_contours(&mut self, contour_ids: &[ContourId]) -> CoreResult<()> {
+        let mut stroke_lib = self
+            .stroke_lib()
+            .ok_or_else(|| CoreError::StrokeOperationFailed {
+                message: "layer has no live stroke metadata".to_string(),
+            })?;
+        let live = self.live_stroke_contour_ids();
+
+        for contour_id in contour_ids {
+            self.contour(contour_id).require(contour_id)?;
+            if !live.contains(contour_id) {
+                return Err(CoreError::StrokeOperationFailed {
+                    message: format!("contour {contour_id} has no live stroke"),
+                });
+            }
+            stroke_lib.contours.remove(&contour_id.to_string());
+        }
+
+        sync_stroke_lib_on_layer(self, &stroke_lib);
         Ok(())
     }
 
@@ -200,7 +255,7 @@ mod tests {
     use crate::test_support::{apply_undo_redo, sample_font};
     use crate::{
         Contour, CreateGlyph, CreateGlyphLayer, FontIntentSet, GlyphId, LayerId, MovePoints,
-        PointType, SetLiveStroke,
+        PointType, RemoveLiveStroke, SetLiveStroke,
     };
 
     use super::*;
@@ -305,6 +360,177 @@ mod tests {
         let restored =
             LayerStrokeLib::from_lib(&lib.to_lib()).expect("stroke lib should round-trip");
         assert_eq!(restored.contours["c1"].outline_style, Some(style));
+    }
+
+    fn first_contour_id(font: &crate::Font, layer_id: LayerId) -> ContourId {
+        font.layer(layer_id)
+            .unwrap()
+            .contours_iter()
+            .next()
+            .unwrap()
+            .id()
+    }
+
+    fn two_point_contour(end_x: f64) -> Contour {
+        let mut contour = Contour::new();
+        contour.add_point(0.0, 0.0, PointType::OnCurve, false);
+        contour.add_point(end_x, 0.0, PointType::OnCurve, false);
+        contour
+    }
+
+    #[test]
+    fn remove_live_stroke_clears_the_entry_and_keeps_the_contour() {
+        let mut font = sample_font();
+        let layer_id = stroke_test_layer(&mut font, two_point_contour(80.0));
+        let contour_id = first_contour_id(&font, layer_id);
+        font.apply_intents(&FontIntentSet::from(SetLiveStroke {
+            layer_id,
+            contour_ids: vec![contour_id.clone()],
+            style: OutlineStrokeStyle::round(16.0),
+        }))
+        .unwrap();
+        let before_remove = font.clone();
+
+        let applied = font
+            .apply_intents(&FontIntentSet::from(RemoveLiveStroke {
+                layer_id,
+                contour_ids: vec![contour_id.clone()],
+            }))
+            .unwrap();
+
+        let layer = font.layer(layer_id).unwrap();
+        assert!(layer.contour(&contour_id).is_some(), "contour stays");
+        assert!(layer.stroke_lib().is_none(), "empty lib key is dropped");
+        assert!(layer.live_stroke_contour_ids().is_empty());
+        assert!(
+            layer
+                .stroke_outlines_for_preview(DEFAULT_TOLERANCE)
+                .unwrap()
+                .is_empty(),
+            "no preview outline once the stroke is removed"
+        );
+
+        font.apply_change_set(&applied.changes.inverted()).unwrap();
+        assert_eq!(font, before_remove, "one undo restores the dynamic stroke");
+    }
+
+    #[test]
+    fn remove_live_stroke_leaves_other_dynamic_contours_alone() {
+        let mut font = sample_font();
+        let layer_id = stroke_test_layer(&mut font, two_point_contour(80.0));
+        let mut layer = font.layer(layer_id).unwrap().clone();
+        layer.add_contour(two_point_contour(40.0));
+        font.replace_glyph_layers(vec![layer]).unwrap();
+        let ids: Vec<ContourId> = font
+            .layer(layer_id)
+            .unwrap()
+            .contours_iter()
+            .map(Contour::id)
+            .collect();
+        font.apply_intents(&FontIntentSet::from(SetLiveStroke {
+            layer_id,
+            contour_ids: ids.clone(),
+            style: OutlineStrokeStyle::round(16.0),
+        }))
+        .unwrap();
+
+        font.apply_intents(&FontIntentSet::from(RemoveLiveStroke {
+            layer_id,
+            contour_ids: vec![ids[0].clone()],
+        }))
+        .unwrap();
+
+        let layer = font.layer(layer_id).unwrap();
+        assert_eq!(layer.live_stroke_contour_ids(), vec![ids[1].clone()]);
+    }
+
+    #[test]
+    fn remove_live_stroke_rejects_a_contour_without_a_live_stroke() {
+        let mut font = sample_font();
+        let layer_id = stroke_test_layer(&mut font, two_point_contour(80.0));
+        let contour_id = first_contour_id(&font, layer_id);
+        let before = font.clone();
+
+        let result = font.apply_intents(&FontIntentSet::from(RemoveLiveStroke {
+            layer_id,
+            contour_ids: vec![contour_id],
+        }));
+
+        assert!(matches!(
+            result,
+            Err(CoreError::StrokeOperationFailed { .. })
+        ));
+        assert_eq!(font, before);
+    }
+
+    #[test]
+    fn live_stroke_contour_ids_list_only_skeletons_with_a_style() {
+        let mut font = sample_font();
+        let layer_id = stroke_test_layer(&mut font, two_point_contour(80.0));
+        let mut layer = font.layer(layer_id).unwrap().clone();
+        layer.add_contour(two_point_contour(40.0));
+        layer.add_contour(two_point_contour(20.0));
+        let ids: Vec<ContourId> = layer.contours_iter().map(Contour::id).collect();
+        layer.set_stroke_lib(&LayerStrokeLib {
+            contours: std::collections::BTreeMap::from([
+                (
+                    ids[0].to_string(),
+                    ContourStrokeEntry {
+                        role: ContourStrokeRole::Skeleton,
+                        style_id: None,
+                        outline_style: Some(OutlineStrokeStyle::round(10.0)),
+                    },
+                ),
+                (
+                    ids[1].to_string(),
+                    ContourStrokeEntry {
+                        role: ContourStrokeRole::Skeleton,
+                        style_id: Some("icon".to_string()),
+                        outline_style: None,
+                    },
+                ),
+                (
+                    ids[2].to_string(),
+                    ContourStrokeEntry {
+                        role: ContourStrokeRole::Outline,
+                        style_id: None,
+                        outline_style: Some(OutlineStrokeStyle::round(10.0)),
+                    },
+                ),
+            ]),
+        });
+
+        assert_eq!(layer.live_stroke_contour_ids(), vec![ids[0].clone()]);
+    }
+
+    #[test]
+    fn baked_outline_of_an_open_skeleton_is_a_closed_contour_without_a_repeated_end_point() {
+        let mut layer = GlyphLayer::with_width(
+            LayerId::from_raw("bake_closed"),
+            crate::SourceId::from_raw("bake_closed_source"),
+            500.0,
+        );
+        let id = layer.add_contour(two_point_contour(80.0));
+        layer
+            .set_live_stroke_contours(std::slice::from_ref(&id), OutlineStrokeStyle::round(16.0))
+            .unwrap();
+
+        let created = layer
+            .bake_stroke_outlines(std::slice::from_ref(&id), DEFAULT_TOLERANCE)
+            .unwrap();
+
+        assert_eq!(created.len(), 1);
+        let baked = layer.contour(&created[0]).unwrap();
+        let first = baked.points().first().unwrap();
+        let last = baked.points().last().unwrap();
+        assert!(
+            baked.is_closed(),
+            "a baked outline is a fill, so it must be closed"
+        );
+        assert!(
+            (first.x(), first.y()) != (last.x(), last.y()),
+            "a closed contour does not repeat its start point"
+        );
     }
 
     #[test]

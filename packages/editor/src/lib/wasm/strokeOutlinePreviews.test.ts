@@ -108,6 +108,40 @@ describe("stroke outline previews", () => {
     }
   });
 
+  it("lists the contours with a dynamic stroke and follows removal", async () => {
+    const layerId = mintLayerId();
+    const contourId = mintContourId();
+
+    const { session, engine, dispose } = await strokePreviewSession({
+      layerId,
+      glyphId: mintGlyphId(),
+      contourId,
+      startId: mintPointId(),
+      endId: mintPointId(),
+    });
+
+    try {
+      const seen: (readonly string[])[] = [];
+      const subscription = effect(() => {
+        seen.push(session.font.liveStrokeContours(layerId));
+      });
+      expect(session.font.liveStrokeContours(layerId)).toEqual([contourId]);
+
+      engine.beginEdit(null);
+      engine.apply([
+        { kind: "removeLiveStroke", removeLiveStroke: { layerId, contourIds: [contourId] } },
+      ]);
+      engine.endEdit();
+      subscription.dispose();
+
+      expect(session.font.liveStrokeContours(layerId)).toEqual([]);
+      expect(seen.at(-1)).toEqual([]);
+      expect(session.font.strokeOutlinePreviews(layerId, STROKE_PREVIEW_TOLERANCE)).toEqual([]);
+    } finally {
+      dispose();
+    }
+  });
+
   it("re-runs reactive readers after live stroke width changes", async () => {
     const layerId = mintLayerId();
     const glyphId = mintGlyphId();

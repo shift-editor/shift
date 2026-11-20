@@ -5,6 +5,9 @@ use crate::segment::CurveSegmentIter;
 use kurbo::{BezPath, PathEl};
 use serde::{Deserialize, Serialize};
 
+/// How near a closing point must be to the start to count as repeating it.
+const REPEATED_POINT_EPSILON: f64 = 1e-6;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Contour {
@@ -74,6 +77,23 @@ impl Contour {
 
     pub fn len(&self) -> usize {
         self.points.len()
+    }
+
+    /// Removes a trailing on-curve point that sits on the first point.
+    ///
+    /// A path closed by `ClosePath` often ends its last segment on its own
+    /// start; a closed contour wraps to the first point and must not repeat it.
+    fn drop_end_point_repeating_start(&mut self) {
+        let [first, .., last] = self.points.as_slice() else {
+            return;
+        };
+        let repeats_start = last.point_type() == PointType::OnCurve
+            && kurbo::Point::new(last.x(), last.y())
+                .distance(kurbo::Point::new(first.x(), first.y()))
+                <= REPEATED_POINT_EPSILON;
+        if repeats_start {
+            self.points.pop();
+        }
     }
 
     pub fn close(&mut self) {
@@ -229,6 +249,7 @@ impl From<&BezPath> for Contours {
                 }
                 PathEl::ClosePath => {
                     if let Some(c) = current.as_mut() {
+                        c.drop_end_point_repeating_start();
                         c.close();
                     }
                 }
@@ -503,6 +524,33 @@ mod tests {
             contours[0].get_point_at(2).unwrap().point_type(),
             PointType::QCurve
         );
+    }
+
+    #[test]
+    fn bezpath_close_path_drops_an_end_point_that_repeats_the_start() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.curve_to((0.0, 50.0), (50.0, 100.0), (100.0, 100.0));
+        path.curve_to((50.0, 0.0), (0.0, -50.0), (0.0, 0.0));
+        path.close_path();
+
+        let contours = Contours::from(&path);
+
+        assert_eq!(contours.len(), 1);
+        assert!(contours[0].is_closed());
+        // start + 2 controls + corner + 2 controls; the final curve ends on the start.
+        assert_eq!(contours[0].len(), 6);
+    }
+
+    #[test]
+    fn bezpath_close_path_keeps_distinct_end_points() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.line_to((100.0, 0.0));
+        path.line_to((100.0, 100.0));
+        path.close_path();
+
+        assert_eq!(Contours::from(&path)[0].len(), 3);
     }
 
     #[test]

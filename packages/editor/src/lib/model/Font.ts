@@ -1496,6 +1496,13 @@ export class Font {
     return engine.strokeOutlinePreviews(layerId, tolerance);
   }
 
+  /** Contours on `layerId` that carry a dynamic stroke, when the window's engine is open. */
+  liveStrokeContours(layerId: LayerId): readonly ContourId[] {
+    const engine = this.#store.engine;
+    track(engine.revision("layers"));
+    return engine.liveStrokeContours(layerId);
+  }
+
   /**
    * Resolves drawable previews (svg path + advance) at one design location.
    *

@@ -1007,6 +1007,35 @@ impl LayerIntent for SetLiveStroke {
     }
 }
 
+/// Drops the live stroke from contours, keeping them as plain contours (stream A3.1).
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct RemoveLiveStroke {
+    pub layer_id: LayerId,
+    pub contour_ids: Vec<ContourId>,
+}
+
+impl LayerIntent for RemoveLiveStroke {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            contour_ids,
+        } = self;
+
+        let before = font.layer_snapshot(*layer_id)?;
+        {
+            let layer = font.require_layer_mut(*layer_id)?;
+            layer.remove_live_stroke_contours(contour_ids)?;
+        }
+        font.reindex_layer(*layer_id, &before)?;
+        Ok(())
+    }
+}
+
 /// Expands live stroke skeletons into fill contours (stream A2.2).
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]

@@ -2,6 +2,7 @@ import type {
   AxisId,
   ConditionRange,
   EngineFontHeader,
+  ContourId,
   EngineFontRecords,
   FontIntent,
   GlyphId,
@@ -458,6 +459,10 @@ export class SessionEngine implements FontEngine {
   strokeOutlinePreviews(layerId: LayerId, tolerance?: number): readonly StrokeOutlinePreviewItem[] {
     const session = this.#require();
     return session.strokeOutlinePreviews(layerId, tolerance);
+  }
+
+  liveStrokeContours(layerId: LayerId): readonly ContourId[] {
+    return this.#require().liveStrokeContours(layerId);
   }
 
   newAnchorName(layerIds: readonly LayerId[]): string {

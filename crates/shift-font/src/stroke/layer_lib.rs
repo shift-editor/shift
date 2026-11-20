@@ -226,7 +226,7 @@ fn outline_style_to_lib(style: OutlineStrokeStyle) -> LibValue {
     ]))
 }
 
-fn sync_stroke_lib_on_layer(layer: &mut GlyphLayer, stroke: &LayerStrokeLib) {
+pub(super) fn sync_stroke_lib_on_layer(layer: &mut GlyphLayer, stroke: &LayerStrokeLib) {
     let lib: &mut LibData = layer.lib_mut();
     if stroke.contours.is_empty() {
         lib.remove(STROKE_LIB_KEY);

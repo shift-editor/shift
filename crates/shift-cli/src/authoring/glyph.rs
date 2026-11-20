@@ -155,6 +155,26 @@ pub(crate) fn load_font(path: &Path) -> Result<Font> {
         .wrap_err("failed to load Shift font")
 }
 
+/// Replaces a directory placeholder layer with its stored geometry.
+///
+/// CLI authoring reads the font directory first; contour and component content
+/// live in layer payloads and must be fetched before geometry checks.
+///
+/// # Errors
+///
+/// Reports store, decoding, and font errors when the payload cannot be read or
+/// attached.
+pub(crate) fn hydrate_glyph_layer(path: &Path, font: &mut Font, layer_id: LayerId) -> Result<()> {
+    let layer = ShiftStore::open_document(path)
+        .and_then(|store| store.load_glyph_layer(layer_id))
+        .into_diagnostic()
+        .wrap_err("failed to read glyph layer geometry")?
+        .ok_or_else(|| miette!("glyph layer {layer_id} has no stored geometry"))?;
+    font.replace_glyph_layers(vec![layer])
+        .into_diagnostic()
+        .wrap_err("failed to attach glyph layer geometry")
+}
+
 pub(super) fn parse_unicodes(values: &[String]) -> Result<Vec<u32>> {
     let mut seen = HashSet::new();
     let mut unicodes = Vec::with_capacity(values.len());

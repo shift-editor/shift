@@ -156,6 +156,7 @@ font_intents! {
         SetXAdvance,
         ApplyBooleanOp,
         SetLiveStroke,
+        RemoveLiveStroke,
         BakeStrokeOutlines,
         OutlineStroke,
         OffsetContour,

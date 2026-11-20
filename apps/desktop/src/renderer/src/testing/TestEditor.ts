@@ -61,6 +61,7 @@ import {
   mintLayerId,
   type AnchorId,
   type Axis,
+  type ContourId,
   type GlyphId,
   type GlyphName,
   type GlyphRecord,
@@ -80,7 +81,7 @@ import {
   asNodeId,
 } from "@shift/types";
 import { segmentIdFor, type Contour } from "@shift/glyph-state";
-import type { SideLink } from "@shift/wasm/protocol";
+import type { SideLink, StrokeOutlinePreviewItem } from "@shift/wasm/protocol";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 import type {
@@ -1621,6 +1622,14 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   drawnOutline(): Outline {
     return this.#reads.editor.drawnOutline();
+  }
+
+  dynamicStrokeContours(): readonly ContourId[] {
+    return this.font.liveStrokeContours(this.requireGlyphLayer().id);
+  }
+
+  strokeOutlinePreviews(): readonly StrokeOutlinePreviewItem[] {
+    return this.font.strokeOutlinePreviews(this.requireGlyphLayer().id);
   }
 
   drawnHandles(): readonly DrawnHandle[] {

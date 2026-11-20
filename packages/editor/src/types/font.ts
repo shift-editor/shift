@@ -7,6 +7,7 @@ import type {
   ConditionRange,
   FontIntent,
   FontSnapshot,
+  ContourId,
   GlyphEntry,
   GlyphId,
   GlyphLayerSnapshot,
@@ -304,6 +305,14 @@ export interface FontEngine {
    * @throws When the engine is not open or the layer is not resident.
    */
   strokeOutlinePreviews(layerId: LayerId, tolerance?: number): readonly StrokeOutlinePreviewItem[];
+
+  /**
+   * Contours on `layerId` that carry a dynamic stroke, in contour order. Solves no outlines.
+   *
+   * @returns Empty when the layer has no dynamic stroke.
+   * @throws When the engine is not open or the layer is not resident.
+   */
+  liveStrokeContours(layerId: LayerId): readonly ContourId[];
 
   /**
    * The features the engine's shaper font defines, in tag order, each with

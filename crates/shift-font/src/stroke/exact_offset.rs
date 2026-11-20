@@ -35,6 +35,9 @@ impl ExactStrokeStyle {
     }
 }
 
+/// How near an outline's end must be to its start to count as closed.
+const CLOSE_EPSILON: f64 = 1e-6;
+
 /// Expands `skeleton` to a closed fill path at constant width.
 ///
 /// Open skeletons become closed outlines via the style's caps; closed skeletons
@@ -44,12 +47,62 @@ pub fn outline(skeleton: &BezPath, style: &ExactStrokeStyle, tolerance: f64) -> 
         .with_caps(style.cap)
         .with_join(style.join)
         .with_miter_limit(style.miter_limit);
-    stroke(
+    let stroked = stroke(
         skeleton.elements().iter().copied(),
         &stroke_style,
         &StrokeOpts::default(),
         tolerance,
-    )
+    );
+
+    close_returning_subpaths(&stroked)
+}
+
+/// Ends every subpath that returns to its start with an explicit `ClosePath`.
+///
+/// kurbo finishes the outline of an open skeleton on its start point without
+/// a `ClosePath`, which would read back as an open contour that no fill draws.
+fn close_returning_subpaths(path: &BezPath) -> BezPath {
+    let mut closed = BezPath::new();
+    let mut start = Point::ZERO;
+    let mut current = Point::ZERO;
+    let mut open_subpath = false;
+
+    for element in path.elements() {
+        match *element {
+            PathEl::MoveTo(point) => {
+                close_if_returned(&mut closed, open_subpath, start, current);
+                closed.move_to(point);
+                start = point;
+                current = point;
+                open_subpath = true;
+            }
+            PathEl::LineTo(point) => {
+                closed.line_to(point);
+                current = point;
+            }
+            PathEl::QuadTo(control, point) => {
+                closed.quad_to(control, point);
+                current = point;
+            }
+            PathEl::CurveTo(first, second, point) => {
+                closed.curve_to(first, second, point);
+                current = point;
+            }
+            PathEl::ClosePath => {
+                closed.close_path();
+                open_subpath = false;
+            }
+        }
+    }
+    close_if_returned(&mut closed, open_subpath, start, current);
+
+    closed
+}
+
+fn close_if_returned(path: &mut BezPath, open_subpath: bool, start: Point, current: Point) {
+    if open_subpath && current.distance(start) <= CLOSE_EPSILON {
+        path.close_path();
+    }
 }
 
 /// Whether `path` is closed within `epsilon` or ends with `ClosePath`.
@@ -192,6 +245,31 @@ mod tests {
             dir.display()
         );
         fixtures
+    }
+
+    #[test]
+    fn outline_ends_every_subpath_with_close_path() {
+        let mut skeleton = BezPath::new();
+        skeleton.move_to((0.0, 0.0));
+        skeleton.line_to((100.0, 0.0));
+
+        let expanded = outline(&skeleton, &ExactStrokeStyle::round(20.0), DEFAULT_TOLERANCE);
+
+        let move_tos = expanded
+            .elements()
+            .iter()
+            .filter(|element| matches!(element, PathEl::MoveTo(_)))
+            .count();
+        let close_paths = expanded
+            .elements()
+            .iter()
+            .filter(|element| matches!(element, PathEl::ClosePath))
+            .count();
+        assert_eq!(move_tos, close_paths);
+        assert!(matches!(
+            expanded.elements().last(),
+            Some(PathEl::ClosePath)
+        ));
     }
 
     #[test]

@@ -253,6 +253,18 @@ export class ApplicationMenu {
       this.#commandItem("glyph.reverseSelectedContour"),
       { type: "separator" },
       {
+        label: "Stroke",
+        submenu: [
+          this.#commandItem("glyph.stroke.applyDynamic"),
+          this.#commandItem("glyph.stroke.removeDynamic"),
+          { type: "separator" },
+          this.#commandItem("glyph.stroke.expand"),
+          this.#commandItem("glyph.stroke.expandWithStyle"),
+          { type: "separator" },
+          this.#commandItem("glyph.stroke.offsetContour"),
+        ],
+      },
+      {
         label: "Colour",
         submenu: glyphColorCommands.flatMap((command): MenuItemConstructorOptions[] => {
           const item = this.#commandItem(command.id);

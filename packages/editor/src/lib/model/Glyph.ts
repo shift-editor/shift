@@ -7,6 +7,8 @@ import type {
   ComponentId,
   ContourEnd,
   ContourId,
+  OutlineStrokeStyle,
+  StrokeJoin,
   GlyphComponents,
   GlyphHandle,
   GlyphId,
@@ -472,6 +474,36 @@ class GlyphLayerWriter {
 
   reverseContour(contourId: ContourId): void {
     this.#workspaceIntents.reverseContour({ contourId });
+  }
+
+  setLiveStroke(contourIds: readonly ContourId[], style: OutlineStrokeStyle): void {
+    this.#workspaceIntents.setLiveStroke({ contourIds: [...contourIds], style });
+  }
+
+  removeLiveStroke(contourIds: readonly ContourId[]): void {
+    this.#workspaceIntents.removeLiveStroke({ contourIds: [...contourIds] });
+  }
+
+  bakeStrokeOutlines(contourIds: readonly ContourId[], tolerance: number): void {
+    this.#workspaceIntents.bakeStrokeOutlines({ contourIds: [...contourIds], tolerance });
+  }
+
+  outlineStroke(
+    contourIds: readonly ContourId[],
+    style: OutlineStrokeStyle,
+    tolerance: number,
+  ): void {
+    this.#workspaceIntents.outlineStroke({ contourIds: [...contourIds], style, tolerance });
+  }
+
+  offsetContour(
+    contourId: ContourId,
+    distance: number,
+    join: StrokeJoin,
+    miterLimit: number,
+    tolerance: number,
+  ): void {
+    this.#workspaceIntents.offsetContour({ contourId, distance, join, miterLimit, tolerance });
   }
 
   setContourStart(contourId: ContourId, pointId: PointId): void {
@@ -1206,6 +1238,70 @@ export class GlyphLayer {
    */
   reverseContour(contourId: ContourId): void {
     this.#writer.reverseContour(contourId);
+  }
+
+  /**
+   * Gives contours a dynamic stroke: the contour stays the editable centerline and the engine
+   * computes the outline from `style`. Replaces any stroke the contours already have.
+   *
+   * @param contourIds - Contours in this source that become stroke centerlines.
+   * @param style - Width, cap, join and miter limit of the stroke.
+   */
+  setLiveStroke(contourIds: readonly ContourId[], style: OutlineStrokeStyle): void {
+    this.#writer.setLiveStroke(contourIds, style);
+  }
+
+  /**
+   * Drops the dynamic stroke from contours and keeps them as plain contours.
+   *
+   * @param contourIds - Contours in this source that currently have a dynamic stroke.
+   */
+  removeLiveStroke(contourIds: readonly ContourId[]): void {
+    this.#writer.removeLiveStroke(contourIds);
+  }
+
+  /**
+   * Replaces dynamic-stroke contours with their computed outline fills, using the stored style.
+   *
+   * @param contourIds - Contours in this source that currently have a dynamic stroke.
+   * @param tolerance - Flattening tolerance in font units.
+   */
+  bakeStrokeOutlines(contourIds: readonly ContourId[], tolerance: number): void {
+    this.#writer.bakeStrokeOutlines(contourIds, tolerance);
+  }
+
+  /**
+   * Replaces plain contours with the outline of a stroke of `style` along them.
+   *
+   * @param contourIds - Contours in this source to outline.
+   * @param style - Width, cap, join and miter limit of the stroke.
+   * @param tolerance - Flattening tolerance in font units.
+   */
+  outlineStroke(
+    contourIds: readonly ContourId[],
+    style: OutlineStrokeStyle,
+    tolerance: number,
+  ): void {
+    this.#writer.outlineStroke(contourIds, style, tolerance);
+  }
+
+  /**
+   * Grows (positive) or shrinks (negative) a closed contour by a constant distance.
+   *
+   * @param contourId - Closed contour in this source.
+   * @param distance - Signed offset in font units.
+   * @param join - How corners meet.
+   * @param miterLimit - Caps sharp miters when `join` is miter.
+   * @param tolerance - Flattening tolerance in font units.
+   */
+  offsetContour(
+    contourId: ContourId,
+    distance: number,
+    join: StrokeJoin,
+    miterLimit: number,
+    tolerance: number,
+  ): void {
+    this.#writer.offsetContour(contourId, distance, join, miterLimit, tolerance);
   }
 
   /**

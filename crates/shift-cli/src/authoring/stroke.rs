@@ -15,11 +15,11 @@ use crate::cli::{
 };
 use crate::selector::FontSelectors;
 
-use super::glyph::load_font;
+use super::glyph::{hydrate_glyph_layer, load_font};
 use super::{AuthoringReport, apply_mutation};
 
 fn resolve_layer(args: &StrokeGlyphLayerArgs) -> Result<(shift_font::Font, LayerId)> {
-    let font = load_font(&args.path)?;
+    let mut font = load_font(&args.path)?;
     let glyph_id = font.glyph_id_for(&args.glyph)?;
     let source_id = match &args.source {
         Some(selector) => font.source_id_for(selector)?,
@@ -36,6 +36,7 @@ fn resolve_layer(args: &StrokeGlyphLayerArgs) -> Result<(shift_font::Font, Layer
                 args.source.as_deref().unwrap_or("default")
             )
         })?;
+    hydrate_glyph_layer(&args.path, &mut font, layer_id)?;
     Ok((font, layer_id))
 }
 

@@ -4,6 +4,7 @@ import type {
   AddContour,
   AddPoints,
   ApplyBooleanOp,
+  BakeStrokeOutlines,
   DecomposeComponents,
   FontIntent,
   LayerId,
@@ -12,7 +13,10 @@ import type {
   RemoveAnchors,
   RenameAnchors,
   SetComponentAlignment,
+  OffsetContour,
+  OutlineStroke,
   RemoveComponents,
+  RemoveLiveStroke,
   RemovePoints,
   ReverseContour,
   SplitSegment,
@@ -27,6 +31,7 @@ import type {
   SetComponentLocations,
   SetComponentTransforms,
   SetContourStart,
+  SetLiveStroke,
   SetPointSmooth,
   SetPositions,
   SetXAdvance,
@@ -104,6 +109,41 @@ export class LayerIntents<TResult = PendingEditId> {
     return this.#sink({
       kind: "reverseContour",
       reverseContour: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  setLiveStroke(payload: Payload<SetLiveStroke>): TResult {
+    return this.#sink({
+      kind: "setLiveStroke",
+      setLiveStroke: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  removeLiveStroke(payload: Payload<RemoveLiveStroke>): TResult {
+    return this.#sink({
+      kind: "removeLiveStroke",
+      removeLiveStroke: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  bakeStrokeOutlines(payload: Payload<BakeStrokeOutlines>): TResult {
+    return this.#sink({
+      kind: "bakeStrokeOutlines",
+      bakeStrokeOutlines: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  outlineStroke(payload: Payload<OutlineStroke>): TResult {
+    return this.#sink({
+      kind: "outlineStroke",
+      outlineStroke: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  offsetContour(payload: Payload<OffsetContour>): TResult {
+    return this.#sink({
+      kind: "offsetContour",
+      offsetContour: { layerId: this.#layerId, ...payload },
     });
   }
 

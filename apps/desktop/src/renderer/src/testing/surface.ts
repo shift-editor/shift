@@ -43,6 +43,7 @@ import type {
   AxisId,
   ComponentId,
   ComponentInheritance,
+  ContourId,
   GlyphName,
   GlyphRecord,
   KerningPosition,
@@ -57,7 +58,7 @@ import type {
   SourceMetrics,
   Unicode,
 } from "@shift/types";
-import type { SideLink } from "@shift/wasm/protocol";
+import type { SideLink, StrokeOutlinePreviewItem } from "@shift/wasm/protocol";
 import type { CommandId, EditorCommandId } from "@shared/commands";
 import type { WorkspaceDocumentState } from "@shared/workspace/lanes";
 import type { DrawOptions, GlyphFixture, PointNames } from "./fixtures";
@@ -608,6 +609,10 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   kerningTool(): KerningToolState | null;
   /** The open glyph's outline as the canvas draws it now, a gesture's uncommitted preview included. */
   drawnOutline(): Outline;
+  /** The contours of the open glyph at the active source that carry a dynamic stroke. Test-only. */
+  dynamicStrokeContours(): readonly ContourId[];
+  /** The fill outlines the engine solves for the open glyph's dynamic strokes at the active source. Test-only. */
+  strokeOutlinePreviews(): readonly StrokeOutlinePreviewItem[];
   /** The point handles the canvas draws on the open glyph, with how each is styled. */
   drawnHandles(): readonly CanvasHandle[];
   /** The source and instance outlines the canvas draws around the open glyph, in drawing order. */

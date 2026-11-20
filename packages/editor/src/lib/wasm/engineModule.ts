@@ -7,6 +7,7 @@ import type {
   Condition,
   ConditionRange,
   FontIntent,
+  ContourId,
   FontReplacement,
   GlyphId,
   GlyphName,
@@ -365,6 +366,11 @@ export class EngineSession {
     tolerance = STROKE_PREVIEW_TOLERANCE,
   ): readonly StrokeOutlinePreviewItem[] {
     return this.#reads.strokeOutlinePreviews(layerId, tolerance);
+  }
+
+  /** Contours on `layerId` that carry a dynamic stroke, unsaved edits included. */
+  liveStrokeContours(layerId: LayerId): readonly ContourId[] {
+    return this.#reads.liveStrokeContours(layerId);
   }
 
   /** What renaming a glyph to `name` does, as shift-font's `Font::glyph_rename` decides. */

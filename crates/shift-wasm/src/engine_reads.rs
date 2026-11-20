@@ -30,9 +30,9 @@ use shift_font::glyph_identity::GlyphIdentityChange;
 use shift_font::linked_metrics::SideLink;
 use shift_font::{
     AnchorId, Axis, AxisId, ComponentId, ComponentInheritance, Condition, ConditionRange,
-    Counterparts, CounterpartsError, FontChangeFlag, GlyphId, GlyphPreview, GlyphRecords, LayerId,
-    MetricValue, MissingKerningOrigin, NeverUsedSwap, NodeId, PointId, ResolvedKerning, Source,
-    SourceId,
+    ContourId, Counterparts, CounterpartsError, FontChangeFlag, GlyphId, GlyphPreview,
+    GlyphRecords, LayerId, MetricValue, MissingKerningOrigin, NeverUsedSwap, NodeId, PointId,
+    ResolvedKerning, Source, SourceId,
 };
 use shift_text::layout::{LayoutError, TextLayout};
 
@@ -410,6 +410,18 @@ pub trait EngineReads {
         layer_id: LayerId,
         tolerance: f64,
     ) -> Result<Vec<StrokeOutlinePreviewItem>, StrokePreviewReadError>;
+    /// Contours on `layer_id` that carry a live stroke, in contour order,
+    /// unsaved edits included. Solves no outlines.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StrokePreviewReadError::NotLoaded`] when the layer is not
+    /// resident and [`StrokePreviewReadError::LayerNotFound`] when the font
+    /// has no such layer.
+    fn live_stroke_contours(
+        &self,
+        layer_id: LayerId,
+    ) -> Result<Vec<ContourId>, StrokePreviewReadError>;
 }
 
 /// A condition chip's value as [`EngineReads::condition_value`] reads it.
@@ -593,7 +605,7 @@ mod exports {
     use shift_font::wire::values::{self, WireParse};
     use shift_font::wire::{self as wire, GlyphLayerSnapshot};
     use shift_font::{
-        AxisMapping, AxisMappingBasis, AxisRole, DesignLocation, DesignNormalization,
+        AxisMapping, AxisMappingBasis, AxisRole, ContourId, DesignLocation, DesignNormalization,
         ExternalLocation, Font, FontChangeImpact, FontCopyId, Glyph, GlyphId, GlyphRecords,
         InterpolationBasis, Kerning, KerningSide, Location, MissingKerningOrigin, ResolvedKerning,
         SourceId, VariationBasis,
@@ -1480,6 +1492,20 @@ mod exports {
                 .ok_or(StrokePreviewReadError::LayerNotFound { layer: layer_id })?;
             crate::stroke_preview::stroke_outline_preview_items(layer, tolerance)
         }
+
+        fn live_stroke_contours(
+            &self,
+            layer_id: LayerId,
+        ) -> Result<Vec<ContourId>, StrokePreviewReadError> {
+            if self.session.residency().is_unloaded(layer_id) {
+                return Err(StrokePreviewReadError::NotLoaded { layer: layer_id });
+            }
+            let font = self.session.font();
+            let layer = font
+                .layer(layer_id)
+                .ok_or(StrokePreviewReadError::LayerNotFound { layer: layer_id })?;
+            Ok(layer.live_stroke_contour_ids())
+        }
     }
 
     impl Engine {
@@ -2270,6 +2296,60 @@ mod exports {
 
             assert_eq!(wide.len(), 1);
             assert!(wide[0].height > narrow_height + 10.0);
+        }
+
+        #[test]
+        fn live_stroke_contours_lists_only_contours_with_a_live_stroke() {
+            use shift_font::stroke::OutlineStrokeStyle;
+            use shift_font::test_support::sample_font;
+            use shift_font::{
+                Contour, CreateGlyph, CreateGlyphLayer, FontIntentSet, GlyphId, PointType,
+                SetLiveStroke,
+            };
+
+            let mut font = sample_font();
+            let glyph_id = GlyphId::from_raw("live_stroke_read_glyph");
+            let source_id = font.default_source_id().unwrap();
+            let layer_id = LayerId::from_raw("live_stroke_read_layer");
+            font.apply_intents(&FontIntentSet::from(CreateGlyph {
+                glyph_id: Some(glyph_id),
+                name: "live_stroke_read_glyph".to_string(),
+                unicodes: vec![],
+            }))
+            .unwrap();
+            font.apply_intents(&FontIntentSet::from(CreateGlyphLayer {
+                layer_id,
+                glyph_id,
+                source_id,
+            }))
+            .unwrap();
+
+            let mut dynamic = Contour::new();
+            dynamic.add_point(0.0, 0.0, PointType::OnCurve, false);
+            dynamic.add_point(100.0, 0.0, PointType::OnCurve, false);
+            let dynamic_id = dynamic.id();
+            let mut plain = Contour::new();
+            plain.add_point(0.0, 50.0, PointType::OnCurve, false);
+            plain.add_point(100.0, 50.0, PointType::OnCurve, false);
+            let mut layer = font.layer(layer_id).unwrap().clone();
+            layer.add_contour(dynamic);
+            layer.add_contour(plain);
+            font.replace_glyph_layers(vec![layer]).unwrap();
+
+            let before =
+                Session::over(&font).read(|engine| engine.live_stroke_contours(layer_id).unwrap());
+            assert!(before.is_empty());
+
+            font.apply_intents(&FontIntentSet::from(SetLiveStroke {
+                layer_id,
+                contour_ids: vec![dynamic_id.clone()],
+                style: OutlineStrokeStyle::round(20.0),
+            }))
+            .unwrap();
+
+            let after =
+                Session::over(&font).read(|engine| engine.live_stroke_contours(layer_id).unwrap());
+            assert_eq!(after, vec![dynamic_id]);
         }
     }
 }
