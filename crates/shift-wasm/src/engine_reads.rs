@@ -37,6 +37,7 @@ use shift_font::{
 use shift_text::layout::{LayoutError, TextLayout};
 
 pub use crate::page_layout::{NodeBox, PageLayout, PageLayoutError, PageLayoutRequest, RunLines};
+pub use crate::stroke_preview::{StrokeOutlinePreviewItem, StrokePreviewReadError};
 use shift_font::wire::{
     AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphSnapshot, InterpolationBasis,
     KerningSnapshot, Location, MetricDefinition, NamedInstance, SourceMetricsInterpolationSnapshot,
@@ -395,6 +396,20 @@ pub trait EngineReads {
         glyphs: Vec<GlyphId>,
         location: Vec<f64>,
     ) -> Result<Vec<GlyphPreview>, FontRecordsError>;
+    /// Fill outlines shift-font derives from live stroke skeletons on `layer_id`
+    /// at `tolerance`, unsaved edits included.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StrokePreviewReadError::NotLoaded`] when the layer is not
+    /// resident, [`StrokePreviewReadError::LayerNotFound`] when the font has
+    /// no such layer, and [`StrokePreviewReadError::Failed`] when the stroke
+    /// solver rejects the request.
+    fn stroke_outline_previews(
+        &self,
+        layer_id: LayerId,
+        tolerance: f64,
+    ) -> Result<Vec<StrokeOutlinePreviewItem>, StrokePreviewReadError>;
 }
 
 /// A condition chip's value as [`EngineReads::condition_value`] reads it.
@@ -593,7 +608,8 @@ mod exports {
         FontFeature, FontHeader, FontRecordsError, GlyphIdentityChange, GlyphSnapshot,
         InterpolatedMetrics, KerningSnapshot, LayerId, LayoutError, NeverUsedSwap, NodeId,
         PageLayout, PageLayoutError, PageLayoutRequest, PlacedText, PointId, RevisedNode,
-        SceneNode, Source, SourceSetWeights, TextLayoutRequest, engine_reads_request,
+        SceneNode, Source, SourceSetWeights, StrokeOutlinePreviewItem, StrokePreviewReadError,
+        TextLayoutRequest, engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::page_layout::{PlaceKey, RunLayouts, lay_out_page};
@@ -1449,6 +1465,21 @@ mod exports {
                 .map(|glyph| glyph.map(|glyph| GlyphPreview::from(&glyph)))
                 .collect()
         }
+
+        fn stroke_outline_previews(
+            &self,
+            layer_id: LayerId,
+            tolerance: f64,
+        ) -> Result<Vec<StrokeOutlinePreviewItem>, StrokePreviewReadError> {
+            if self.session.residency().is_unloaded(layer_id) {
+                return Err(StrokePreviewReadError::NotLoaded { layer: layer_id });
+            }
+            let font = self.session.font();
+            let layer = font
+                .layer(layer_id)
+                .ok_or(StrokePreviewReadError::LayerNotFound { layer: layer_id })?;
+            crate::stroke_preview::stroke_outline_preview_items(layer, tolerance)
+        }
     }
 
     impl Engine {
@@ -2167,6 +2198,78 @@ mod exports {
             assert_eq!(records.len(), 1);
             assert_eq!(snapshots.len(), 1);
             assert_eq!(snapshots[0].glyph_id, glyph_id);
+        }
+
+        #[test]
+        fn stroke_outline_previews_report_live_outline_bounds() {
+            use shift_font::stroke::{DEFAULT_TOLERANCE, OutlineStrokeStyle};
+            use shift_font::test_support::sample_font;
+            use shift_font::{
+                Contour, CreateGlyph, CreateGlyphLayer, FontIntentSet, GlyphId, PointType,
+                SetLiveStroke,
+            };
+
+            let mut font = sample_font();
+            let glyph_id = GlyphId::from_raw("stroke_preview_glyph");
+            let source_id = font.default_source_id().unwrap();
+            let layer_id = LayerId::from_raw("stroke_preview_layer");
+            font.apply_intents(&FontIntentSet::from(CreateGlyph {
+                glyph_id: Some(glyph_id),
+                name: "stroke_preview_glyph".to_string(),
+                unicodes: vec![],
+            }))
+            .unwrap();
+            font.apply_intents(&FontIntentSet::from(CreateGlyphLayer {
+                layer_id,
+                glyph_id,
+                source_id,
+            }))
+            .unwrap();
+
+            let mut contour = Contour::new();
+            contour.add_point(0.0, 0.0, PointType::OnCurve, false);
+            contour.add_point(100.0, 0.0, PointType::OnCurve, false);
+            let contour_id = contour.id();
+            let mut layer = font.layer(layer_id).unwrap().clone();
+            layer.add_contour(contour);
+            font.replace_glyph_layers(vec![layer]).unwrap();
+
+            font.apply_intents(&FontIntentSet::from(SetLiveStroke {
+                layer_id,
+                contour_ids: vec![contour_id.clone()],
+                style: OutlineStrokeStyle::round(20.0),
+            }))
+            .unwrap();
+
+            let session = Session::over(&font);
+            let narrow = session.read(|engine| {
+                engine
+                    .stroke_outline_previews(layer_id, DEFAULT_TOLERANCE)
+                    .unwrap()
+            });
+
+            assert_eq!(narrow.len(), 1);
+            assert_eq!(narrow[0].skeleton_contour_id, contour_id);
+            assert!(!narrow[0].outlines.is_empty());
+            assert!(narrow[0].width > 100.0);
+            let narrow_height = narrow[0].height;
+            assert!(narrow_height > 0.0);
+
+            font.apply_intents(&FontIntentSet::from(SetLiveStroke {
+                layer_id,
+                contour_ids: vec![contour_id],
+                style: OutlineStrokeStyle::round(48.0),
+            }))
+            .unwrap();
+
+            let wide = Session::over(&font).read(|engine| {
+                engine
+                    .stroke_outline_previews(layer_id, DEFAULT_TOLERANCE)
+                    .unwrap()
+            });
+
+            assert_eq!(wide.len(), 1);
+            assert!(wide[0].height > narrow_height + 10.0);
         }
     }
 }

@@ -1,8 +1,7 @@
 //! Packable stroke style fields for intents and future bridge DTOs.
 
-use kurbo::{Cap, Join};
-
 use super::exact_offset::ExactStrokeStyle;
+use kurbo::{Cap, Join};
 
 crate::string_enum! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]

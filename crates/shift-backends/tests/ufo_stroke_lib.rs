@@ -26,6 +26,7 @@ fn single_layer_font() -> Font {
                 ContourStrokeEntry {
                     role: ContourStrokeRole::Skeleton,
                     style_id: Some("stem".to_string()),
+                    outline_style: None,
                 },
             )]),
         }

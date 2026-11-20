@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::GlyphLayer;
 use crate::ir::lib_data::{LibData, LibValue};
+use crate::stroke::style::{OutlineStrokeStyle, StrokeCap, StrokeJoin};
 
 /// Layer lib key for stroke metadata (option C in the strokes spike).
 pub const STROKE_LIB_KEY: &str = "com.shift.stroke";
@@ -21,16 +22,19 @@ pub enum ContourStrokeRole {
 }
 
 /// Stroke metadata for one contour, keyed by contour id in [`LayerStrokeLib`].
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContourStrokeEntry {
     pub role: ContourStrokeRole,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style_id: Option<String>,
+    /// Inline constant-width stroke for live (A2) preview and bake (lib dict only).
+    #[serde(skip)]
+    pub outline_style: Option<OutlineStrokeStyle>,
 }
 
 /// `com.shift.stroke` payload: contour id → role and optional style preset id.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerStrokeLib {
     pub contours: BTreeMap<String, ContourStrokeEntry>,
@@ -66,7 +70,17 @@ impl LayerStrokeLib {
                 None => None,
                 _ => return None,
             };
-            parsed.insert(contour_id.clone(), ContourStrokeEntry { role, style_id });
+            let outline_style = entry_fields
+                .get("outlineStyle")
+                .and_then(outline_style_from_lib);
+            parsed.insert(
+                contour_id.clone(),
+                ContourStrokeEntry {
+                    role,
+                    style_id,
+                    outline_style,
+                },
+            );
         }
         Some(Self { contours: parsed })
     }
@@ -86,6 +100,9 @@ impl LayerStrokeLib {
                 )]);
                 if let Some(style_id) = &entry.style_id {
                     fields.insert("styleId".to_string(), LibValue::String(style_id.clone()));
+                }
+                if let Some(style) = entry.outline_style {
+                    fields.insert("outlineStyle".to_string(), outline_style_to_lib(style));
                 }
                 (contour_id.clone(), LibValue::Dict(fields))
             })
@@ -169,6 +186,46 @@ impl GlyphLayer {
 }
 
 /// Installs `stroke` on `layer`, or removes [`STROKE_LIB_KEY`] when empty.
+fn outline_style_from_lib(value: &LibValue) -> Option<OutlineStrokeStyle> {
+    let LibValue::Dict(fields) = value else {
+        return None;
+    };
+    let width = fields.get("width")?.as_f64()?;
+    let cap = match fields.get("cap")? {
+        LibValue::String(text) => text.parse::<StrokeCap>().ok()?,
+        _ => return None,
+    };
+    let join = match fields.get("join")? {
+        LibValue::String(text) => text.parse::<StrokeJoin>().ok()?,
+        _ => return None,
+    };
+    let miter_limit = fields.get("miterLimit")?.as_f64()?;
+    if !width.is_finite() || width <= 0.0 || !miter_limit.is_finite() || miter_limit <= 0.0 {
+        return None;
+    }
+    Some(OutlineStrokeStyle {
+        width,
+        cap,
+        join,
+        miter_limit,
+    })
+}
+
+fn outline_style_to_lib(style: OutlineStrokeStyle) -> LibValue {
+    LibValue::Dict(BTreeMap::from([
+        ("width".to_string(), LibValue::Float(style.width)),
+        (
+            "cap".to_string(),
+            LibValue::String(style.cap.as_str().to_string()),
+        ),
+        (
+            "join".to_string(),
+            LibValue::String(style.join.as_str().to_string()),
+        ),
+        ("miterLimit".to_string(), LibValue::Float(style.miter_limit)),
+    ]))
+}
+
 fn sync_stroke_lib_on_layer(layer: &mut GlyphLayer, stroke: &LayerStrokeLib) {
     let lib: &mut LibData = layer.lib_mut();
     if stroke.contours.is_empty() {
@@ -195,6 +252,7 @@ mod tests {
             ContourStrokeEntry {
                 role: ContourStrokeRole::Skeleton,
                 style_id: Some("icon".to_string()),
+                outline_style: None,
             },
         );
         let stored = LayerStrokeLib { contours };
@@ -257,6 +315,7 @@ mod tests {
                     ContourStrokeEntry {
                         role: ContourStrokeRole::Skeleton,
                         style_id: None,
+                        outline_style: None,
                     },
                 ),
                 (
@@ -264,6 +323,7 @@ mod tests {
                     ContourStrokeEntry {
                         role: ContourStrokeRole::Skeleton,
                         style_id: Some("icon".to_string()),
+                        outline_style: None,
                     },
                 ),
             ]),
@@ -300,6 +360,7 @@ mod tests {
                 ContourStrokeEntry {
                     role: ContourStrokeRole::Skeleton,
                     style_id: None,
+                    outline_style: None,
                 },
             )]),
         };
@@ -319,6 +380,7 @@ mod tests {
                 ContourStrokeEntry {
                     role: ContourStrokeRole::Skeleton,
                     style_id: Some(style_id.to_string()),
+                    outline_style: None,
                 },
             )]),
         };

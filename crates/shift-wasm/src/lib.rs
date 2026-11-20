@@ -40,6 +40,8 @@ pub mod page_layout;
 pub mod proof_text;
 pub mod scene;
 pub mod shaping;
+#[cfg(feature = "engine-protocol")]
+pub mod stroke_preview;
 pub mod svg;
 #[cfg(feature = "engine-protocol")]
 pub mod typed_text;

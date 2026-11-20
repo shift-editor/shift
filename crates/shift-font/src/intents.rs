@@ -155,6 +155,8 @@ font_intents! {
         TransformLayer,
         SetXAdvance,
         ApplyBooleanOp,
+        SetLiveStroke,
+        BakeStrokeOutlines,
         OutlineStroke,
         OffsetContour,
         DeletePoints,

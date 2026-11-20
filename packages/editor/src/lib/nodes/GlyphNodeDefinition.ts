@@ -32,6 +32,7 @@ import { NodeDefinition } from "./NodeDefinition";
 import type { GlyphNode } from "../../types/node";
 import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
+import type { StrokeOutlinePreviewItem } from "@shift/wasm/protocol";
 import { objectIsKindOf } from "../../types/object";
 import type { TransformAction, TransformTarget } from "../../types/transformTarget";
 import type { GlyphOutlineTarget, ResolvedGlyphOutlineTarget } from "../../types/glyphOutline";
@@ -611,12 +612,36 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
   }
 
   #drawDebugOverlays(node: GlyphNode, ctx: RenderContext, view: GlyphRenderModel): void {
+    const overlays = this.editor.debugOverlays;
+    let strokePreviews: readonly StrokeOutlinePreviewItem[] = [];
+    if (overlays.strokePreview) {
+      const layer = this.editor.editableLayer(node);
+      if (layer) {
+        track(layer.geometryCell);
+        track(layer.editBaseGeometryCell);
+        track(this.editor.font.committedRevisionCell);
+        const inLocalEdit = layer.editBaseGeometryCell.peek() !== null;
+        if (!inLocalEdit) {
+          try {
+            strokePreviews = this.editor.font.strokeOutlinePreviews(layer.id);
+          } catch (error) {
+            console.warn(`stroke preview overlay failed for layer ${layer.id}`, error);
+            strokePreviews = [];
+          }
+        }
+        // Debug overlay limitation until A3.2: during a draft drag the skeleton
+        // moves in JS while engine geometry stays at the edit base, so engine
+        // stroke outlines would lag behind the skeleton.
+      }
+    }
+
     this.#debugOverlays.draw(
       ctx.canvas,
       view,
-      this.editor.debugOverlays,
+      overlays,
       this.#hoveredSegmentId(node),
       SCREEN_HIT_RADIUS,
+      strokePreviews,
     );
   }
 

@@ -126,8 +126,8 @@ flowchart LR
 | A1.1 | Destructive **Outline stroke** command (open + closed paths, round/butt/square caps, miter/bevel/round joins) | `done` | M | kurbo vs font point types conversion | `OutlineStroke` intent + fixtures; undo via `FontChange` |
 | A1.2 | Destructive **Offset path** (grow/shrink); ticks product “Offset path” when upstreamed | `done` | M | Offset failure on tight concave icon paths | `OffsetContour` intent (closed contours); grow/shrink test |
 | A1.3 | Closed skeleton → ring (hole rules documented) | `—` | S | Winding vs remove-overlap policy | Test on donut icon |
-| A2.1 | **Non-destructive stroke:** store style + skeleton; regenerate outline on edit | `—` | L | Invalidation graph in glyph model | Edit skeleton → outline updates; save/reopen |
-| A2.2 | **Expand to outlines** (bake) for export/font constraints | `—` | S | When UFO stores skeleton vs outlines only | Export path documented |
+| A2.1 | **Non-destructive stroke:** store style + skeleton; regenerate outline on edit | `done` | L | Invalidation graph in glyph model | `SetLiveStroke` + `stroke_outlines_for_preview`; lib `outlineStyle`; tests on branch |
+| A2.2 | **Expand to outlines** (bake) for export/font constraints | `done` | S | When UFO stores skeleton vs outlines only | `BakeStrokeOutlines` intent; CLI `glyph stroke bake-stroke` |
 | A3.1 | Stroke panel: width, caps, joins, miter limit | `—` | M | Base UI patterns for sidebars | Manual QA script |
 | A3.2 | Canvas preview of generated outline (distinct from skeleton) | `—` | M | Render pass ownership | Visible skeleton + outline |
 | A4.1 | Dashed strokes | `—` | M | SVG dash parity | Deferred until D2 |
@@ -135,6 +135,12 @@ flowchart LR
 | A4.3 | Define **extrude** (if not plain offset): shadow/long extrusion vs thickness | `—` | spike | User expectation | Decision or park in parking lot |
 
 **Depends on:** F0.*; product **Remove overlap** for A2 mixing with filled contours (or local union-only workaround flagged as tech debt).
+
+**A3.2 follow-ups (debug overlay on branch, not done):**
+
+- Preview solve needs **revision-keyed memoization** before always-on preview is affordable every frame.
+- **Draft-drag geometry** must come from a Rust-owned preview source, not TS `geometryCell`; until then the overlay skips engine reads during local edits.
+- **Preview read errors** should surface in the UI, not only `console.warn`.
 
 **Phase exit (CP1):** A1.1 on branch with tests; quality bar from F0.4 met; go/no-go for A2.
 
@@ -217,7 +223,7 @@ flowchart LR
 | ------ | ----------- | ---------------- |
 | R | Wave 0 done | R1 theory before CP2; R2–R3 parallel with F0 |
 | F | CP0 met on branch | F0.2 types; F0.3 nib sweep; alignment ping |
-| A | A1.1–A1.2 on branch | CP1 quality gate on fixtures |
+| A | A2.1–A2.2 on branch | CP1 quality gate; renderer preview (A3) still blocked on Kostya |
 | B | — | Blocked on CP0 |
 | C | — | C1.1 can run in parallel (read-only audit) |
 | D | — | D1.1 can spike in Rust in parallel with F0.3 |

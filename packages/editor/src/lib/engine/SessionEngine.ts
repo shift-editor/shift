@@ -27,6 +27,7 @@ import {
   type RevisedNode,
   type SceneIntent,
   type TextRun,
+  type StrokeOutlinePreviewItem,
 } from "@shift/wasm/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "../signals";
 import {
@@ -452,6 +453,11 @@ export class SessionEngine implements FontEngine {
     // Loading a glyph changes nothing a reader holds, so no revision changes.
     session.preload([glyphId]);
     return session.counterparts(reference, target, ids);
+  }
+
+  strokeOutlinePreviews(layerId: LayerId, tolerance?: number): readonly StrokeOutlinePreviewItem[] {
+    const session = this.#require();
+    return session.strokeOutlinePreviews(layerId, tolerance);
   }
 
   newAnchorName(layerIds: readonly LayerId[]): string {

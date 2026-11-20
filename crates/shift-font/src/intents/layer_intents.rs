@@ -975,6 +975,70 @@ impl LayerIntent for ApplyBooleanOp {
     }
 }
 
+/// Attaches live stroke metadata to skeleton contours (stream A2.1).
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct SetLiveStroke {
+    pub layer_id: LayerId,
+    pub contour_ids: Vec<ContourId>,
+    pub style: OutlineStrokeStyle,
+}
+
+impl LayerIntent for SetLiveStroke {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            contour_ids,
+            style,
+        } = self;
+        [style.width, style.miter_limit].require_finite(Coordinates::StrokeOutline)?;
+
+        let before = font.layer_snapshot(*layer_id)?;
+        {
+            let layer = font.require_layer_mut(*layer_id)?;
+            layer.set_live_stroke_contours(contour_ids, *style)?;
+        }
+        font.reindex_layer(*layer_id, &before)?;
+        Ok(())
+    }
+}
+
+/// Expands live stroke skeletons into fill contours (stream A2.2).
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct BakeStrokeOutlines {
+    pub layer_id: LayerId,
+    pub contour_ids: Vec<ContourId>,
+    pub tolerance: f64,
+}
+
+impl LayerIntent for BakeStrokeOutlines {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            contour_ids,
+            tolerance,
+        } = self;
+        [*tolerance].require_finite(Coordinates::StrokeOutline)?;
+
+        let before = font.layer_snapshot(*layer_id)?;
+        {
+            let layer = font.require_layer_mut(*layer_id)?;
+            layer.bake_stroke_outlines(contour_ids, *tolerance)?;
+        }
+        font.reindex_layer(*layer_id, &before)?;
+        Ok(())
+    }
+}
+
 /// Bakes constant-width stroke outlines from skeleton contours (stream A1.1).
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]

@@ -17,6 +17,7 @@ const DEFAULT_DEBUG_OVERLAYS: DebugOverlays = {
   hitRadii: false,
   segmentBounds: false,
   glyphBbox: false,
+  strokePreview: false,
 };
 
 export type EditorGesturePhase = "idle" | "pressed" | "dragging";

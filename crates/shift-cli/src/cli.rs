@@ -38,6 +38,11 @@ mod variation;
 pub(crate) use variation::{
     AddInstanceArgs, InstanceCommand, RemoveInstanceArgs, SetAxisArgs, SetInstanceArgs,
 };
+mod stroke;
+pub(crate) use stroke::{
+    BakeStrokeArgs, OffsetContourArgs, OutlineStrokeArgs, SetLiveStrokeArgs, StrokeCommand,
+    StrokeGlyphLayerArgs, StrokePreviewArgs,
+};
 
 const CLAP_STYLES: Styles = Styles::styled()
     .header(AnsiColor::BrightCyan.on_default().effects(Effects::BOLD))
@@ -207,6 +212,12 @@ pub(crate) enum GlyphCommand {
     Swap {
         #[command(subcommand)]
         command: GlyphSwapCommand,
+    },
+
+    /// Stroke and offset path intents (`explore/strokes` dev hook).
+    Stroke {
+        #[command(subcommand)]
+        command: StrokeCommand,
     },
 }
 

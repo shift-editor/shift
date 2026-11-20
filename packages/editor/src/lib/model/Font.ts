@@ -85,6 +85,7 @@ import type {
   NeverUsedSwap,
   SideLink,
   PlacedText,
+  StrokeOutlinePreviewItem,
   TextRun,
 } from "@shift/wasm/protocol";
 import { FontVariation, locationValues } from "../wasm/variation";
@@ -1486,6 +1487,13 @@ export class Font {
     if (!glyphId) throw new Error(`no glyph owns layer ${reference}`);
 
     return engine.counterparts(glyphId, reference, target, ids);
+  }
+
+  /** Live stroke fill outlines for `layerId`, when the window's engine is open. */
+  strokeOutlinePreviews(layerId: LayerId, tolerance?: number): readonly StrokeOutlinePreviewItem[] {
+    const engine = this.#store.engine;
+    track(engine.revision("layers"));
+    return engine.strokeOutlinePreviews(layerId, tolerance);
   }
 
   /**

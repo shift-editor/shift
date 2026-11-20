@@ -75,15 +75,19 @@ import type {
   SceneIntent,
   SourceSetWeights,
   PlacedText,
+  StrokeOutlinePreviewItem,
 } from "@shift/wasm/protocol";
 
 export { initEngine, svgPaths, typedText } from "@shift/wasm/engine";
-export type { ContourPoints } from "@shift/wasm/protocol";
+export type { ContourPoints, StrokeOutlinePreviewItem } from "@shift/wasm/protocol";
 import type { EngineStore } from "../../types/engine";
 import type { KerningPlace } from "../../types/font";
 import { unkerned } from "../model/Kerning";
 import type { DesignAxisLocation } from "../../types/variation";
 import { locationValues } from "./variation";
+
+/** shift-font's default stroke offset tolerance for live previews (0.25). */
+export const STROKE_PREVIEW_TOLERANCE = 0.25;
 
 const released = new FinalizationRegistry<number>(engineRelease);
 
@@ -350,6 +354,17 @@ export class EngineSession {
    */
   counterparts(reference: LayerId, target: LayerId, ids: Counterparts): Counterparts | null {
     return this.#reads.counterparts(reference, target, ids.points, ids.anchors, ids.components);
+  }
+
+  /**
+   * Fill outlines derived from live stroke skeletons on `layerId`, unsaved edits
+   * included.
+   */
+  strokeOutlinePreviews(
+    layerId: LayerId,
+    tolerance = STROKE_PREVIEW_TOLERANCE,
+  ): readonly StrokeOutlinePreviewItem[] {
+    return this.#reads.strokeOutlinePreviews(layerId, tolerance);
   }
 
   /** What renaming a glyph to `name` does, as shift-font's `Font::glyph_rename` decides. */

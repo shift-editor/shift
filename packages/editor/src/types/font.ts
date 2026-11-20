@@ -49,6 +49,7 @@ import type {
   SideLink,
   TextRun,
   PlacedText,
+  StrokeOutlinePreviewItem,
 } from "@shift/wasm/protocol";
 import type { PendingEditId } from "./editing";
 import type { WorkspaceEditListener } from "./history";
@@ -295,6 +296,14 @@ export interface FontEngine {
     target: LayerId,
     ids: Counterparts,
   ): Counterparts | null;
+
+  /**
+   * Fill outlines shift-font derives from live stroke skeletons on `layerId`.
+   *
+   * @returns Empty when the layer has no live stroke metadata.
+   * @throws When the engine is not open or the layer is not resident.
+   */
+  strokeOutlinePreviews(layerId: LayerId, tolerance?: number): readonly StrokeOutlinePreviewItem[];
 
   /**
    * The features the engine's shaper font defines, in tag order, each with

@@ -5,4 +5,5 @@ export type DebugOverlays = {
   hitRadii: boolean;
   segmentBounds: boolean;
   glyphBbox: boolean;
+  strokePreview: boolean;
 };

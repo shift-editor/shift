@@ -1,6 +1,8 @@
 import type { Canvas } from "../Canvas";
 import type { GlyphRenderModel } from "../../../model/Glyph";
-import type { SegmentId } from "@shift/types";
+import type { PointType, SegmentId } from "@shift/types";
+import type { ContourPoints, StrokeOutlinePreviewItem } from "@shift/wasm/protocol";
+import { ContourPath } from "../../../graphics/ContourPath";
 
 export class DebugOverlays {
   draw(
@@ -11,9 +13,11 @@ export class DebugOverlays {
       tightBounds: boolean;
       hitRadii: boolean;
       glyphBbox: boolean;
+      strokePreview: boolean;
     },
     hoveredSegmentId: SegmentId | null,
     hitRadiusPx: number,
+    strokePreviews: readonly StrokeOutlinePreviewItem[],
   ): void {
     const { debug } = canvas.theme;
 
@@ -28,6 +32,21 @@ export class DebugOverlays {
     }
     if (overlays.glyphBbox) {
       this.#drawGlyphBbox(canvas, view, debug.glyphBbox);
+    }
+    if (overlays.strokePreview) {
+      this.#drawStrokePreviews(canvas, strokePreviews, debug.strokePreview);
+    }
+  }
+
+  #drawStrokePreviews(
+    canvas: Canvas,
+    previews: readonly StrokeOutlinePreviewItem[],
+    color: string,
+  ): void {
+    for (const preview of previews) {
+      for (const outline of preview.outlines) {
+        canvas.fillPath(pathFromContourPoints(outline).path, color);
+      }
     }
   }
 
@@ -72,4 +91,14 @@ export class DebugOverlays {
     if (!b) return;
     canvas.strokeRect(b.min.x, b.min.y, b.max.x - b.min.x, b.max.y - b.min.y, color, 1);
   }
+}
+
+function pathFromContourPoints(contour: ContourPoints): ContourPath {
+  const points = contour.pointTypes.map((pointType, index) => ({
+    x: contour.coordinates[index * 2]!,
+    y: contour.coordinates[index * 2 + 1]!,
+    pointType: pointType as PointType,
+    smooth: false,
+  }));
+  return ContourPath.fromPoints(points, contour.closed);
 }

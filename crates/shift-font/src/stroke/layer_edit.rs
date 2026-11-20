@@ -14,7 +14,10 @@ pub fn contour_skeleton_path(contour: &crate::Contour) -> BezPath {
 }
 
 /// Installs fill contours parsed from `path`, returning their ids.
-fn install_path_contours(layer: &mut GlyphLayer, path: &BezPath) -> CoreResult<Vec<ContourId>> {
+pub(crate) fn install_path_contours(
+    layer: &mut GlyphLayer,
+    path: &BezPath,
+) -> CoreResult<Vec<ContourId>> {
     if path.elements().is_empty() {
         return Err(CoreError::StrokeOperationFailed {
             message: "solver produced an empty path".to_string(),
@@ -34,7 +37,7 @@ fn install_path_contours(layer: &mut GlyphLayer, path: &BezPath) -> CoreResult<V
         .collect())
 }
 
-fn require_stroke_geometry(contour: &crate::Contour) -> CoreResult<()> {
+pub(crate) fn require_stroke_geometry(contour: &crate::Contour) -> CoreResult<()> {
     if contour.points().len() < 2 {
         return Err(CoreError::StrokeOperationFailed {
             message: "contour needs at least two points".to_string(),
@@ -44,7 +47,7 @@ fn require_stroke_geometry(contour: &crate::Contour) -> CoreResult<()> {
     Ok(())
 }
 
-fn require_positive_width(width: f64) -> CoreResult<()> {
+pub(crate) fn require_positive_width(width: f64) -> CoreResult<()> {
     if width > 0.0 && width.is_finite() {
         return Ok(());
     }
@@ -216,8 +219,8 @@ mod tests {
     };
 
     use super::*;
-    use crate::stroke::exact_offset::outline;
     use crate::stroke::DEFAULT_TOLERANCE;
+    use crate::stroke::exact_offset::outline;
 
     struct Fixture {
         name: String,
@@ -413,6 +416,7 @@ mod tests {
                 ContourStrokeEntry {
                     role: ContourStrokeRole::Skeleton,
                     style_id: Some("icon".to_string()),
+                    outline_style: None,
                 },
             )]),
         });
