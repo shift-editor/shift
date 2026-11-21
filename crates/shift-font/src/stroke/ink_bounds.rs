@@ -3,12 +3,11 @@
 use std::collections::HashSet;
 
 use crate::composite::{ResolvedContour, resolved_contours_bbox};
-use crate::contour::SubpathPoints;
-use crate::ir::{Contour, Transform};
+use crate::ir::Transform;
 use crate::{ContourId, CoreError, CoreResult, Font, GlyphLayer, LayerId};
 
 use super::exact_offset::DEFAULT_TOLERANCE;
-use super::ink::{LayerExtent, LayerExtentFallback, Measure, MeasureBounds};
+use super::ink::{LayerExtent, LayerExtentFallback, Measure, MeasureBounds, union_bounds};
 use super::ink_fit::{InkBoxEdge, InkEdgeFitRequest, InkEdgeFitResult, fit_ink_edge};
 use super::solve_cache::StrokeOutlineCache;
 
@@ -53,10 +52,16 @@ impl Font {
         layer_id: LayerId,
         filter: SelectionExtentFilter,
     ) -> CoreResult<LayerExtent> {
-        match filter {
+        match &filter {
             SelectionExtentFilter::WholeLayer => self.layer_extent(layer_id),
             SelectionExtentFilter::Contours(contour_ids) => {
-                self.contour_set_extent(layer_id, &contour_ids)
+                let measure = self.metrics_measure();
+                let contour_ids = contour_ids.clone();
+                self.ink_measure_runtime().with_extent_memo(|memo| {
+                    memo.extent(self, layer_id, filter, measure, DEFAULT_TOLERANCE, || {
+                        self.contour_set_extent(layer_id, &contour_ids)
+                    })
+                })
             }
         }
     }
@@ -192,15 +197,15 @@ fn contour_set_ink_bounds(
     }
 
     let live: HashSet<_> = layer.live_stroke_contour_ids().into_iter().collect();
-    let mut contours = Vec::new();
+    let mut bounds: Option<(f64, f64, f64, f64)> = None;
 
+    // Solved bounds were measured at solve time; union them instead of
+    // re-measuring every outline point on every read.
     for item in &stroke_read.solved {
         if !selection.contains(&item.skeleton_contour_id) {
             continue;
         }
-        for subpath in &item.outlines {
-            contours.push(resolved_contour_from_subpath(subpath));
-        }
+        bounds = union_bounds(bounds, Some(item.bounds));
     }
 
     for contour in layer.contours_iter() {
@@ -208,19 +213,18 @@ fn contour_set_ink_bounds(
         if !selection.contains(&contour_id) || live.contains(&contour_id) {
             continue;
         }
-        contours.push(ResolvedContour::transformed(contour, Transform::identity()));
+        let resolved = ResolvedContour::transformed(contour, Transform::identity());
+        bounds = union_bounds(
+            bounds,
+            resolved_contours_bbox(std::slice::from_ref(&resolved)),
+        );
     }
 
-    resolved_contours_bbox(&contours)
+    bounds
         .map(MeasureBounds::from)
         .ok_or_else(|| InkSolveFailure {
             message: "selection has no outline to measure".to_string(),
         })
-}
-
-fn resolved_contour_from_subpath(subpath: &SubpathPoints) -> ResolvedContour {
-    let contour = Contour::from(subpath.clone());
-    ResolvedContour::transformed(&contour, Transform::identity())
 }
 
 /// Scales selected contours about the opposite edge so an ink edge lands on

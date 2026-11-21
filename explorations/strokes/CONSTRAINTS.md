@@ -53,7 +53,8 @@ Until **2026-12-05**, violations of the stroke-specific rows are called out in r
 
 | Metric | Today | Direction |
 | --- | --- | --- |
-| Ink read cost (~600-point stroked glyph, one read) | **18.56 ms** cold / **14.53 ms** warm on 601-pt closed wavy ring (round 24, tol 0.25, `cargo test --release`, 2026-11-21) | must not grow |
+| Clippy outside ratchet (`node scripts/clippy-ratchet.mjs`) | **2** (`shift-cli/tests/support/mod.rs` dead code only); verified at `7caca0c11` on 2026-11-21 — earlier “15 hit” gate count miscounted stroke ink debt | must not grow |
+| Ink read cost (~600-point stroked glyph, one read) | **17.27 ms** cold / **~14 µs** warm on 601-pt closed wavy ring (round 24, tol 0.25, `cargo test --release -- --ignored ink_read_cost_on_six_hundred_point_wavy_ring`, 2026-11-21): cold pays first solve + projection/assembly; **warm hits extent memo + stroke solve cache** (no projection/assembly/solver) | must not grow |
 
 ## Exceptions
 

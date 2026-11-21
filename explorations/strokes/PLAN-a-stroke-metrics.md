@@ -2,7 +2,7 @@
 
 **Spec:** [SPEC-a-stroke-metrics.md](./SPEC-a-stroke-metrics.md) (rev 2, decided)  
 **Branch:** `explore/strokes` (local only)  
-**Status:** planned, not started. Next after this plan: grill [SPEC-a-stroke-snap.md](./SPEC-a-stroke-snap.md), then `a-stroke-export`.
+**Status:** M1–M9a shipped; M10 verify/docs done 2026-11-21. Hand checks E/F remain for Tasos. Next: grill [SPEC-a-stroke-snap.md](./SPEC-a-stroke-snap.md), then `a-stroke-export`.
 
 ## Overview
 
@@ -87,14 +87,21 @@ M1, M3 can start together. M9a (the spike) needs only M1 and can run any time af
 
 ### Phase 4: Close
 
-- [ ] **M10. Verify, docs, Checkpoint E** (S)
+- [x] **M10. Verify, docs, Checkpoint E** (S)
   - Acceptance: `cargo fmt`, clippy at the ratchet, `pnpm typecheck`, `lint:check`, format on touched files, `shift-font`, `shift-wasm`, editor and desktop suites green; DOCS (`model`, `editor`, `shift-font` and `shift-wasm` where they describe measures) updated; ROADMAP A3.3 ticked; Tasos hand-checks the switch, a sidebearing, the re-apply and a bound.
   - Verify: the full commands in the spec.
 
 ## Checkpoints
 
-- **Checkpoint E (after M8, Tasos):** a stroked glyph spaces by its ink in the inspector and the spacing tool; the switch flips it; re-apply works.
-- **Checkpoint F (after M9, Tasos):** type a Y minimum on a stroked `o` and on a sibling; the ink edge lands.
+- **Checkpoint E (after M8, Tasos — hand):**
+  1. Open MutatorSans **H**, apply a ~40 unit round stroke to one contour.
+  2. Confirm inspector LSB/RSB sit on the ink; toggle **Include stroke** off and on; numbers flip skeleton ↔ ink with no outline jump.
+  3. Spacing tool: hover the gap between two stroked letters; gap sidebearings match ink; flip the switch and see skeleton values.
+  4. Glyph heading menu **Re-apply → This glyph** after changing a keyed base glyph's stroke width; one undo restores.
+- **Checkpoint F (after M9, Tasos — hand):**
+  1. Glyph **o** with a round stroke, whole contour selected; Transform **Y** minimum **−10** — ink bottom lands on −10.
+  2. Repeat on a component glyph referencing **o**; same typed Y gives the same ink bottom.
+  3. Partial point selection: Transform bounds show **skeleton** label; resize refusal below stroke width leaves geometry unchanged (toast).
 
 ## Risks and mitigations
 
@@ -156,14 +163,14 @@ pub fn fit_ink_edge(font: &Font, request: InkEdgeFitRequest) -> Result<InkEdgeFi
 | `cargo test -p shift-font` | pass (incl. ink tests that failed under concurrent edits) | — |
 | `cargo test -p shift-wasm --features engine` | pass | — |
 | `cargo fmt --check` | pass | — |
-| `node scripts/clippy-ratchet.mjs` | exit 1, **15** warnings outside ratchet | **Ours:** 14 from `ink.rs` / `ink_fit.rs` / stroke test helpers (vs **2** at `9691ec1e5` before M1); **Ours (fixed):** +1 `redundant_clone` in `apply.rs` (16th hit) → `1e81b1101` |
+| `node scripts/clippy-ratchet.mjs` | exit 1, **15** warnings outside ratchet *(miscount)* | **Corrected (2026-11-21):** only **2** warnings outside the ratchet at `7caca0c11` (`shift-cli` test helpers); the other **13** were stroke ink debt, fixed in `4a160e238`. Ratchet still exits 1 until those two are in the allowlist. |
 | `pnpm typecheck` | pass | **Ours (fixed):** LayerExtent union, reapply scope, metrics empty state — `65b7e95fb` |
 | `pnpm lint:check` (turbo) | fail `@shift/wasm` | **Pre-existing:** local untracked `packages/wasm/src/generated-reference/` (oxlint passes with that dir removed) |
 | `pnpm lint:check` (`packages/editor`, `apps/desktop` oxlint) | pass | **Ours (fixed):** reactive reads, duplicate imports, test surface — `65b7e95fb`, `192840f73` |
 | `pnpm format:check` | fail | **Pre-existing:** untracked `generated-reference/`; touched paths formatted |
 | `pnpm --dir packages/editor exec vitest run` | **736** pass | — |
 | `pnpm --dir apps/desktop exec vitest run src/renderer/src/behaviour/strokes` | **29** pass | — |
-| `pnpm --dir apps/desktop exec vitest run` | **7** fail / **1753** pass | **Pre-existing:** same `linked-metrics.test.ts` failure at `7e3e44772` (e.g. LSB 50 vs 40 after undo) |
+| `pnpm --dir apps/desktop exec vitest run` | **7** fail / **1753** pass *(miscounted baseline)* | **Corrected (2026-11-21):** at `7caca0c11`, `linked-metrics.test.ts`, `spacing-tool.test.ts`, and `batch-actions.test.ts` pass. At HEAD before `14e6541d6`, **5** fails were **ours** (ink sidebearings on non-stroked layers); `strokeMetricsBounds.test.ts` did not exist on the baseline commit. |
 | `python3 scripts/context-drift-check.py` | pass (doc drift WARNs only) | — |
 
 **Checkpoint E (hand):** automation for M6–M8 is green on strokes/metrics paths after integration fixes; safe for Tasos to verify switch, ink sidebearings, spacing, re-apply. **Not** ready for M10 sign-off (full desktop green, root `lint:check`/`format:check` with local wasm reference tree, clippy debt on ink files, M9 open).
@@ -174,5 +181,44 @@ pub fn fit_ink_edge(font: &Font, request: InkEdgeFitRequest) -> Result<InkEdgeFi
 - **Resize semantics:** typing **width** fits the **right** ink edge (`target = left + W`, left fixed via anchor at skeleton `min_x`); typing **height** fits the **top** ink edge (`target = bottom + H`, bottom fixed). Move (x/y) translates by `typed − current` on the displayed ink box.
 - **TS:** `transformSelectionBounds` + `Engine.transformSelectionBoundsCell`; Transform panel uses ink bounds for whole stroked contour / whole-glyph selection, shows **skeleton** label for partial selection or fallback; resize refuses via toast (`notify`) on fit errors.
 - **Tests:** `strokeMetricsBounds.test.ts` — move Y (top shifts by the same delta), one undo step, resize within tolerance, refusal below stroke width (geometry unchanged), component glyph same ink bottom, partial skeleton label, include-stroke off; `TestEditor` transform-panel helpers on `EditorTestSurface`. `pnpm --dir apps/desktop exec vitest run src/renderer/src/behaviour/strokes` → **36** pass.
+
+### Results (M10, 2026-11-21)
+
+| Command | Result | Pre-existing or ours |
+| --- | --- | --- |
+| `pnpm build:wasm` | pass | — |
+| `pnpm generate:bridge-types` | pass | — |
+| `cargo test -p shift-font -p shift-wasm --features engine` | pass | — |
+| `cargo test -p shift-backends --lib ignore_stroke_round_trips` | pass | ours (new) |
+| `cargo test -p shift-backends --lib compile_ttf_does_not_read_ignore_stroke_switch` | pass | ours (new) |
+| `cargo fmt --check` | pass | — |
+| `node scripts/clippy-ratchet.mjs` | exit 0, **2** outside ratchet (`shift-cli` test helpers) | pre-existing |
+| `pnpm typecheck` | pass | — |
+| `pnpm lint:check` | pass after `Font.ts` + `TransformSection.tsx` fixes | ours |
+| `pnpm format:check` | pass | — |
+| `pnpm --dir packages/editor exec vitest run` | **736** pass | — |
+| `pnpm --dir apps/desktop exec vitest run` | **1760** pass (43 stroke/metrics tests) | — |
+| `pnpm test:desktop src/renderer/src/behaviour/strokes` | pass | — |
+| `measure_mutation_check_follows_ink_not_skeleton` | pass | — |
+| `python3 scripts/context-drift-check.py` | pass | — |
+
+**Perf (release, ~601 pt wavy ring, tol 0.25):** cold **16.25 ms**, warm **14.47 ms** per `layer_extent` (`ink_read_cost_on_six_hundred_point_wavy_ring`). Warm hits the stroke solve cache (no extra solves) but still pays projection/assembly. **Decision:** a drag-frame ink extent read alone nears the **16 ms** frame budget before stroke preview JS; **extent memo not implemented** in M10 — track as follow-up beside the solve cache.
+
+### Results (extent memo, 2026-11-21)
+
+| Before | After |
+| --- | --- |
+| Warm **14.47 ms** (solve cache hit; still pays projection/assembly) | Warm **~14 µs** (extent memo hit; no projection/assembly/solve) |
+| Cold **16.25 ms** | Cold **17.27 ms** (first read unchanged order of magnitude) |
+
+**Key design:** `LayerExtentMemo` on `InkMeasureRuntime` (64-entry LRU, same lifetime rules as `StrokeOutlineCache`). Key = `layer_id` + design location (font axes) + `Measure` + `com.shift.ignoreStroke` + tolerance + selection filter + DFS over the component closure hashing each visited layer (contours/points, components/decomposed transforms, live stroke lib styles). No workspace content-revision hash exists; geometry is walked (≪1 ms on ~600 points in `extent_key_on_six_hundred_points_stays_under_one_millisecond`).
+
+**Mutation checks:** `extent_key_mutation_check_style_change_must_alter_key` fails if style is omitted from the key; `extent_key_changes_when_a_point_moves` covers geometry.
+
+**Could go stale:** multi-master interpolation when a base glyph has no layer at the composite’s source (falls back to hashing all layers of that glyph — conservative); axis mapping / source table changes not hashed beyond axis values at the layer’s source location; memo resets when `FontState` is CoW-cloned (`InkMeasureRuntime::clone` → default), same as stroke solve cache.
+
+**Store round-trip:** UFO `lib.plist` via `ignore_stroke_round_trips_through_font_lib_plist`; `.shift` package round-trip of the switch not behaviour-tested (reopen lost stroke metadata in-memory fixture).
+
+**Gap tests closed in M10:** `strokeMetrics.test.ts` (typed LSB/RSB, switch undo, re-apply undo, plain glyph label); backend export ignores switch.
 - **Mutation:** forcing ink selections to skeleton mode fails `measure === "ink"` on the move test (`transformSelectionBounds` return path).
 - **Deviations:** `FitInkBound` crosses wasm protocol first; bridge `protocol.ts` still lacks the variant until a bridge rebuild (editor uses `@shift/wasm/protocol` for the payload type). Component-only glyphs use `wholeLayerTransformBounds` when every component is selected (no local contours).

@@ -86,6 +86,7 @@ impl From<StrokeOutlinePoints> for StrokeOutlinePreviewItem {
             skeleton_contour_id,
             width,
             height,
+            bounds: _,
             outlines,
         } = preview;
         Self {

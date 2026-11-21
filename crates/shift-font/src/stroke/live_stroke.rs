@@ -3,7 +3,7 @@
 use kurbo::{BezPath, PathEl};
 
 use crate::contour::SubpathPoints;
-use crate::{Contour, ContourId, CoreError, CoreResult, GlyphLayer, Require};
+use crate::{Contour, ContourId, CoreError, CoreResult, GlyphLayer, Require, SegmentIndexIter};
 
 use super::exact_offset::{self, path_bbox};
 use super::layer_edit::{contour_skeleton_path, install_path_contours};
@@ -32,6 +32,9 @@ pub struct StrokeOutlinePoints {
     pub width: f64,
     /// The largest height of any outline, in font units, as [`preview_bounds`] measures it.
     pub height: f64,
+    /// Union of the outlines' bounds as `(min_x, min_y, max_x, max_y)`,
+    /// measured when the outline was solved.
+    pub bounds: (f64, f64, f64, f64),
     pub outlines: Vec<SubpathPoints>,
 }
 
@@ -413,10 +416,39 @@ fn solve_skeleton(
     let solved = cache.outline(&path, &style, tolerance, || {
         let outline = exact_offset::outline(&path, &style, tolerance);
         let (width, height) = outline_extent(&outline);
+        let outlines = subpaths_of_outline_path(&outline)?;
+        // Measured here, once per solve, so a cached read unions bounds
+        // instead of re-measuring every outline point. Segment bounds over
+        // the solved points give the same tight box the resolved contours
+        // would — without rebuilding contours (and minting a fresh point
+        // id) per point, which cost more than the solve itself.
+        let bounds = outlines.iter().fold(None, |union, subpath| {
+            let position = |index: usize| {
+                (
+                    subpath.coordinates[2 * index],
+                    subpath.coordinates[2 * index + 1],
+                )
+            };
+            SegmentIndexIter::new(subpath.point_types.as_slice(), subpath.closed)
+                .map(|segment| segment.bounds(position))
+                .fold(union, |union: Option<(f64, f64, f64, f64)>, bounds| {
+                    Some(match union {
+                        None => bounds,
+                        Some((min_x, min_y, max_x, max_y)) => (
+                            min_x.min(bounds.0),
+                            min_y.min(bounds.1),
+                            max_x.max(bounds.2),
+                            max_y.max(bounds.3),
+                        ),
+                    })
+                })
+        });
+        let bounds = bounds.unwrap_or((0.0, 0.0, 0.0, 0.0));
         Ok(SolvedOutline {
             width,
             height,
-            outlines: subpaths_of_outline_path(&outline)?,
+            bounds,
+            outlines,
         })
     })?;
 
@@ -424,6 +456,7 @@ fn solve_skeleton(
         skeleton_contour_id: skeleton.id.clone(),
         width: solved.width,
         height: solved.height,
+        bounds: solved.bounds,
         outlines: solved.outlines,
     })
 }

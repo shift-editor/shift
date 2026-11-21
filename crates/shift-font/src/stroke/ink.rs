@@ -1,17 +1,19 @@
 //! Extent of a glyph layer under skeleton or ink measure.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use crate::composite::{GlyphComponents, ResolvedContour, resolved_contours_bbox};
 use crate::contour::SubpathPoints;
 use crate::projection::FontProjection;
 use crate::{
-    Contour, ContourId, CoreError, CoreResult, Font, GlyphId, GlyphLayer, LayerId, LibValue,
+    ContourId, CoreError, CoreResult, Font, GlyphId, GlyphLayer, LayerId, LibValue, Point, PointId,
     Require, Transform,
 };
 
 use super::exact_offset::DEFAULT_TOLERANCE;
+use super::extent_memo::LayerExtentMemo;
+use super::ink_bounds::SelectionExtentFilter;
 use super::solve_cache::StrokeOutlineCache;
 
 /// Which geometry a layer extent read uses.
@@ -78,9 +80,18 @@ impl LayerExtent {
 }
 
 /// Contours resolved for one glyph under the font's current metrics measure.
+/// Ink contours of one glyph with their unioned bounds as
+/// `(min_x, min_y, max_x, max_y)`; the bounds are `None` when the contours
+/// have no segments.
+type InkContours = (Vec<ResolvedContour>, Option<(f64, f64, f64, f64)>);
+
 #[derive(Clone, Debug)]
 pub(crate) struct GlyphExtentContours {
     pub contours: Vec<ResolvedContour>,
+    /// Bounds of `contours` as `(min_x, min_y, max_x, max_y)`, unioned
+    /// during assembly from the solved outlines' cached bounds where the
+    /// contours are solved ink; `None` when they have no segments.
+    pub bounds: Option<(f64, f64, f64, f64)>,
     pub skeleton: MeasureBounds,
     pub ink: Option<MeasureBounds>,
     pub effective: Measure,
@@ -88,22 +99,29 @@ pub(crate) struct GlyphExtentContours {
 }
 
 /// Memo of stroke solves for ink extent reads on one font.
-#[derive(Default)]
+///
+/// Copies of a font share one runtime: a font is copied for every edit and
+/// every preview frame, and both memos are keyed by the content they answer
+/// from, so an entry one copy wrote is a pure answer any copy may reuse.
+/// Resetting the caches on copy would leave every drag frame solving cold,
+/// which is the case they exist for.
+#[derive(Clone, Default)]
 pub struct InkMeasureRuntime {
+    inner: Arc<InkMeasureRuntimeInner>,
+}
+
+#[derive(Default)]
+struct InkMeasureRuntimeInner {
     stroke_cache: RwLock<StrokeOutlineCache>,
+    extent_memo: RwLock<LayerExtentMemo>,
 }
 
 impl std::fmt::Debug for InkMeasureRuntime {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InkMeasureRuntime")
             .field("stroke_cache_solves", &self.stroke_cache_solves())
+            .field("extent_memo_computes", &self.extent_memo_computes())
             .finish()
-    }
-}
-
-impl Clone for InkMeasureRuntime {
-    fn clone(&self) -> Self {
-        Self::default()
     }
 }
 
@@ -113,18 +131,38 @@ impl InkMeasureRuntime {
         work: impl FnOnce(&mut StrokeOutlineCache) -> R,
     ) -> R {
         let mut cache = self
+            .inner
             .stroke_cache
             .write()
             .expect("stroke outline cache lock poisoned");
         work(&mut cache)
     }
 
-    /// Solver misses since this font copy was created.
+    pub(crate) fn with_extent_memo<R>(&self, work: impl FnOnce(&mut LayerExtentMemo) -> R) -> R {
+        let mut memo = self
+            .inner
+            .extent_memo
+            .write()
+            .expect("layer extent memo lock poisoned");
+        work(&mut memo)
+    }
+
+    /// Solver misses on this font's caches, shared with its copies.
     pub fn stroke_cache_solves(&self) -> u64 {
-        self.stroke_cache
+        self.inner
+            .stroke_cache
             .read()
             .expect("stroke outline cache lock poisoned")
             .solves()
+    }
+
+    /// Full extent assemblies on this font's caches, shared with its copies.
+    pub fn extent_memo_computes(&self) -> u64 {
+        self.inner
+            .extent_memo
+            .read()
+            .expect("layer extent memo lock poisoned")
+            .computes()
     }
 }
 
@@ -174,6 +212,20 @@ impl Font {
     /// Returns [`CoreError::LayerNotFound`] when the layer is missing and the
     /// font's error when the layer cannot be resolved at its source.
     pub fn layer_extent(&self, layer_id: LayerId) -> CoreResult<LayerExtent> {
+        let measure = self.metrics_measure();
+        self.ink_measure_runtime().with_extent_memo(|memo| {
+            memo.extent(
+                self,
+                layer_id,
+                SelectionExtentFilter::WholeLayer,
+                measure,
+                DEFAULT_TOLERANCE,
+                || self.compute_layer_extent(layer_id),
+            )
+        })
+    }
+
+    fn compute_layer_extent(&self, layer_id: LayerId) -> CoreResult<LayerExtent> {
         let layer = self.require_layer(layer_id)?;
         let glyph_id = self.require_layer_owner(layer_id)?;
         let source_id = layer
@@ -182,11 +234,11 @@ impl Font {
         let location = self.require_source(source_id)?.location().clone();
         let mut projection = self.projection(&location);
         let resolved = self.glyph_extent_contours(&mut projection, glyph_id)?;
-        let bounds = resolved_contours_bbox(&resolved.contours).ok_or_else(|| {
-            CoreError::StrokeOperationFailed {
+        let bounds = resolved
+            .bounds
+            .ok_or_else(|| CoreError::StrokeOperationFailed {
                 message: format!("glyph {glyph_id} has no outline to measure"),
-            }
-        })?;
+            })?;
         let (min_x, min_y, max_x, max_y) = bounds;
         Ok(LayerExtent {
             min_x,
@@ -215,8 +267,10 @@ impl Font {
                 .glyph(glyph_id)?
                 .map_or_else(Vec::new, |glyph| glyph.contours().to_vec());
             let skeleton = skeleton_bounds_for_extent(&skeleton_contours);
+            let bounds = resolved_contours_bbox(&skeleton_contours);
             return Ok(GlyphExtentContours {
                 contours: skeleton_contours,
+                bounds,
                 skeleton,
                 ink: None,
                 effective: Measure::Skeleton,
@@ -228,6 +282,7 @@ impl Font {
             .glyph(glyph_id)?
             .map_or_else(Vec::new, |glyph| glyph.contours().to_vec());
         let skeleton = skeleton_bounds_for_extent(&skeleton_contours);
+        let skeleton_bbox = resolved_contours_bbox(&skeleton_contours);
 
         let has_stroke = glyph_has_live_stroke_without_prepare(projection, glyph_id);
 
@@ -241,7 +296,8 @@ impl Font {
         let ink_bounds = ink_result
             .as_ref()
             .and_then(|result| result.as_ref().ok())
-            .and_then(|contours| measure_bounds_of(contours));
+            .and_then(|(_, bounds)| *bounds)
+            .map(MeasureBounds::from);
 
         if self.metrics_measure() == Measure::Skeleton {
             let fallback = self
@@ -249,6 +305,7 @@ impl Font {
                 .then_some(LayerExtentFallback::IgnoreStroke);
             return Ok(GlyphExtentContours {
                 contours: skeleton_contours,
+                bounds: skeleton_bbox,
                 skeleton,
                 ink: ink_bounds,
                 effective: Measure::Skeleton,
@@ -259,6 +316,7 @@ impl Font {
         if !has_stroke {
             return Ok(GlyphExtentContours {
                 contours: skeleton_contours,
+                bounds: skeleton_bbox,
                 skeleton,
                 ink: None,
                 effective: Measure::Skeleton,
@@ -267,8 +325,9 @@ impl Font {
         }
 
         match ink_result.expect("stroke layers have an ink result") {
-            Ok(contours) => Ok(GlyphExtentContours {
+            Ok((contours, bounds)) => Ok(GlyphExtentContours {
                 contours,
+                bounds,
                 skeleton,
                 ink: ink_bounds,
                 effective: Measure::Ink,
@@ -276,6 +335,7 @@ impl Font {
             }),
             Err(InkSolveFailure { message }) => Ok(GlyphExtentContours {
                 contours: skeleton_contours,
+                bounds: skeleton_bbox,
                 skeleton,
                 ink: ink_bounds,
                 effective: Measure::Skeleton,
@@ -316,14 +376,14 @@ fn ink_contours_for_glyph(
     root_glyph_id: GlyphId,
     cache: &mut StrokeOutlineCache,
     tolerance: f64,
-) -> Result<Vec<ResolvedContour>, InkSolveFailure> {
+) -> Result<InkContours, InkSolveFailure> {
     if !projection
         .prepare_layer_for_extent(root_glyph_id)
         .map_err(|error| InkSolveFailure {
             message: error.to_string(),
         })?
     {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), None));
     }
 
     let layers = projection.layers_for_extent();
@@ -332,7 +392,7 @@ fn ink_contours_for_glyph(
         message: error.to_string(),
     })?;
 
-    let mut contours = root_layer_contours(root_layer, cache, tolerance)?;
+    let (mut contours, mut bounds) = root_layer_contours(root_layer, cache, tolerance)?;
     let components =
         GlyphComponents::from_layers(root_glyph_id, &view).map_err(|error| InkSolveFailure {
             message: error.to_string(),
@@ -346,21 +406,25 @@ fn ink_contours_for_glyph(
         .map(|occurrence| (occurrence.base_glyph_id(), occurrence.transform()))
         .collect::<Vec<_>>();
     for (base_glyph_id, transform) in occurrence_placements {
-        let base_contours = ink_contours_for_glyph(projection, base_glyph_id, cache, tolerance)?;
-        contours.extend(
-            base_contours
-                .into_iter()
-                .map(|contour| transform_resolved_contour(contour, transform)),
-        );
+        let (base_contours, _) =
+            ink_contours_for_glyph(projection, base_glyph_id, cache, tolerance)?;
+        let transformed: Vec<ResolvedContour> = base_contours
+            .into_iter()
+            .map(|contour| transform_resolved_contour(contour, transform))
+            .collect();
+        // A placed outline's bounds are measured from its transformed
+        // contours: the base's own bounds do not survive a rotation.
+        bounds = union_bounds(bounds, resolved_contours_bbox(&transformed));
+        contours.extend(transformed);
     }
-    Ok(contours)
+    Ok((contours, bounds))
 }
 
 fn root_layer_contours(
     layer: &GlyphLayer,
     cache: &mut StrokeOutlineCache,
     tolerance: f64,
-) -> Result<Vec<ResolvedContour>, InkSolveFailure> {
+) -> Result<InkContours, InkSolveFailure> {
     let stroke_read = layer
         .stroke_outline_points_for_preview_with(tolerance, cache)
         .map_err(|error| InkSolveFailure {
@@ -382,18 +446,26 @@ fn root_layer_contours(
         .collect();
 
     let mut by_skeleton: HashMap<&ContourId, Vec<&SubpathPoints>> = HashMap::new();
+    let mut bounds_by_skeleton: HashMap<&ContourId, (f64, f64, f64, f64)> = HashMap::new();
     for item in &stroke_read.solved {
         by_skeleton.insert(&item.skeleton_contour_id, item.outlines.iter().collect());
+        bounds_by_skeleton.insert(&item.skeleton_contour_id, item.bounds);
     }
 
     let live_ids: HashSet<_> = layer.live_stroke_contour_ids().into_iter().collect();
     let mut contours = Vec::new();
+    let mut bounds: Option<(f64, f64, f64, f64)> = None;
+    let mut subpath_index = 0usize;
     for contour in layer.contours_iter() {
         let contour_id = contour.id();
         if let Some(outlines) = by_skeleton.get(&contour_id) {
             for subpath in outlines.iter().copied() {
-                contours.push(resolved_contour_from_subpath(subpath));
+                contours.push(resolved_contour_from_subpath(subpath, subpath_index));
+                subpath_index += 1;
             }
+            // The solved bounds were measured at solve time; union them
+            // instead of re-measuring every outline point on every read.
+            bounds = union_bounds(bounds, bounds_by_skeleton.get(&contour_id).copied());
             continue;
         }
         if live_ids.contains(&contour_id) && !solved_ids.contains(&contour_id) {
@@ -401,14 +473,60 @@ fn root_layer_contours(
                 message: format!("stroke could not be solved for contour {contour_id}"),
             });
         }
-        contours.push(ResolvedContour::transformed(contour, Transform::identity()));
+        let resolved = ResolvedContour::transformed(contour, Transform::identity());
+        bounds = union_bounds(
+            bounds,
+            resolved_contours_bbox(std::slice::from_ref(&resolved)),
+        );
+        contours.push(resolved);
     }
-    Ok(contours)
+    Ok((contours, bounds))
 }
 
-fn resolved_contour_from_subpath(subpath: &SubpathPoints) -> ResolvedContour {
-    let contour = Contour::from(subpath.clone());
-    ResolvedContour::transformed(&contour, Transform::identity())
+/// Unions two `(min_x, min_y, max_x, max_y)` bounds, keeping `None` until
+/// either side has one.
+pub(super) fn union_bounds(
+    current: Option<(f64, f64, f64, f64)>,
+    next: Option<(f64, f64, f64, f64)>,
+) -> Option<(f64, f64, f64, f64)> {
+    match (current, next) {
+        (Some(a), Some(b)) => Some((a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3))),
+        (Some(a), None) => Some(a),
+        (None, next) => next,
+    }
+}
+
+/// Builds the resolved contour for one solved subpath straight from its
+/// flat points, with no editable-`Contour` round trip.
+///
+/// Resolved points are derived render-time geometry whose IDs carry no
+/// identity (see `ResolvedContour`), so each point takes an ID derived from
+/// its place in this read rather than a fresh random one: minting a random
+/// ID costs a system randomness call per point and dominated this read on
+/// stroked layers. `subpath_index` is the subpath's index within the read,
+/// keeping the derived IDs unique across the read's contours.
+fn resolved_contour_from_subpath(subpath: &SubpathPoints, subpath_index: usize) -> ResolvedContour {
+    let (coordinates, _) = subpath.coordinates.as_chunks::<2>();
+    let points = subpath
+        .point_types
+        .iter()
+        .zip(coordinates)
+        .enumerate()
+        .map(|(point_index, (point_type, &[x, y]))| {
+            Point::new(
+                PointId::derived("ink", &format!("{subpath_index}:{point_index}")),
+                x,
+                y,
+                *point_type,
+                false,
+            )
+        })
+        .collect();
+
+    ResolvedContour {
+        points,
+        closed: subpath.closed,
+    }
 }
 
 fn transform_resolved_contour(contour: ResolvedContour, transform: Transform) -> ResolvedContour {
@@ -611,7 +729,7 @@ mod tests {
     }
 
     #[test]
-    fn second_read_of_unchanged_ink_layer_adds_no_solver_work() {
+    fn second_read_of_unchanged_ink_layer_adds_no_extent_or_solver_work() {
         let mut font = sample_font();
         let layer_id = stroke_test_layer(&mut font, vertical_stem_at(100.0, 200.0));
         let contour_id = font
@@ -629,11 +747,16 @@ mod tests {
         .unwrap();
 
         font.layer_extent(layer_id).unwrap();
-        let after_first = font.ink_measure_runtime().stroke_cache_solves();
+        let after_first_solves = font.ink_measure_runtime().stroke_cache_solves();
+        let after_first_computes = font.ink_measure_runtime().extent_memo_computes();
         font.layer_extent(layer_id).unwrap();
         assert_eq!(
             font.ink_measure_runtime().stroke_cache_solves(),
-            after_first
+            after_first_solves
+        );
+        assert_eq!(
+            font.ink_measure_runtime().extent_memo_computes(),
+            after_first_computes
         );
     }
 
@@ -914,7 +1037,7 @@ mod tests {
         }
     }
 
-    fn last_point(font: &Font, layer_id: LayerId, contour_id: &ContourId) -> crate::PointId {
+    fn last_point(font: &Font, layer_id: LayerId, contour_id: &ContourId) -> PointId {
         font.layer(layer_id)
             .unwrap()
             .contour(contour_id)

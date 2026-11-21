@@ -26,6 +26,10 @@ const DEFAULT_CACHED_POINTS: usize = 200_000;
 pub(super) struct SolvedOutline {
     pub(super) width: f64,
     pub(super) height: f64,
+    /// Union of the outlines' bounds as `(min_x, min_y, max_x, max_y)`,
+    /// measured when the outline was solved so extent reads can union
+    /// bounds instead of re-measuring every outline point.
+    pub(super) bounds: (f64, f64, f64, f64),
     pub(super) outlines: Vec<SubpathPoints>,
 }
 
@@ -238,6 +242,7 @@ mod tests {
         SolvedOutline {
             width: 1.0,
             height: 1.0,
+            bounds: (0.0, 0.0, 1.0, 1.0),
             outlines: vec![SubpathPoints {
                 closed: false,
                 point_types: vec![PointType::OnCurve; points],

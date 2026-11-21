@@ -1,6 +1,7 @@
 //! Stroke solvers and layer lib metadata (F0.1 / F0.3).
 
 pub mod exact_offset;
+pub mod extent_memo;
 pub mod ink;
 pub mod ink_bounds;
 pub mod ink_fit;
