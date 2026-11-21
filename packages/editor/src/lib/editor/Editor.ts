@@ -62,6 +62,8 @@ import {
   spaceTransform,
   transformBounds,
 } from "./spaces";
+import { transformSelectionBounds } from "../transform/transformSelectionBounds";
+import type { TransformSelectionBounds } from "../../types/transformSelectionBounds";
 import {
   asDesignAxisLocation,
   asExternalAxisLocation,
@@ -257,6 +259,7 @@ export class Editor {
   /** The selection resolved once into one layer's points, when it is only that. */
   #selectedPoints: Signal<SelectedPoints | null>;
   #selectionBounds: Signal<LocalBounds | null>;
+  #transformSelectionBounds: Signal<TransformSelectionBounds | null>;
   #selectionSceneBounds: Signal<SceneBounds | null>;
   readonly #handlesCell = signal<ReadonlyMap<symbol, PointId | ContourId>>(new Map(), {
     name: "editor.handles",
@@ -417,6 +420,14 @@ export class Editor {
       {
         name: "editor.selection.bounds",
       },
+    );
+    this.#transformSelectionBounds = computed(
+      () => {
+        track(this.selection.stateCell);
+        track(this.font.includeStrokeInMetricsCell);
+        return transformSelectionBounds(this);
+      },
+      { name: "editor.transformSelection.bounds" },
     );
     this.#selectionSceneBounds = computed(
       () => {
@@ -1740,6 +1751,17 @@ export class Editor {
   /** Reactive bounds of the current selection in its node's units; see {@link selectionBounds}. */
   public get selectionBoundsCell(): Signal<LocalBounds | null> {
     return this.#selectionBounds;
+  }
+
+  /** Reactive ink- or skeleton-aware bounds for the transform panel. */
+  public get transformSelectionBoundsCell(): Signal<TransformSelectionBounds | null> {
+    return this.#transformSelectionBounds;
+  }
+
+  public transformSelectionBounds(
+    ids: readonly SelectableId[] = this.selection.ids,
+  ): TransformSelectionBounds | null {
+    return transformSelectionBounds(this, ids);
   }
 
   /** Selects every glyph item of every run; the run level's select-all. */

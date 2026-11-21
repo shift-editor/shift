@@ -1,7 +1,7 @@
 //! Extent of a glyph layer under skeleton or ink measure.
 
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::sync::RwLock;
 
 use crate::composite::{GlyphComponents, ResolvedContour, resolved_contours_bbox};
 use crate::contour::SubpathPoints;
@@ -28,6 +28,28 @@ pub enum Measure {
 pub enum LayerExtentFallback {
     StrokeCouldNotBeSolved { message: String },
     IgnoreStroke,
+    BetweenMasters,
+}
+
+/// Axis-aligned bounds under one measure.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct MeasureBounds {
+    pub min_x: f64,
+    pub min_y: f64,
+    pub max_x: f64,
+    pub max_y: f64,
+}
+
+impl From<(f64, f64, f64, f64)> for MeasureBounds {
+    fn from((min_x, min_y, max_x, max_y): (f64, f64, f64, f64)) -> Self {
+        Self {
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+        }
+    }
 }
 
 /// Bounds and which measure answered the read.
@@ -38,6 +60,8 @@ pub struct LayerExtent {
     pub min_y: f64,
     pub max_x: f64,
     pub max_y: f64,
+    pub skeleton: MeasureBounds,
+    pub ink: Option<MeasureBounds>,
     pub effective: Measure,
     pub fallback: Option<LayerExtentFallback>,
 }
@@ -57,6 +81,8 @@ impl LayerExtent {
 #[derive(Clone, Debug)]
 pub(crate) struct GlyphExtentContours {
     pub contours: Vec<ResolvedContour>,
+    pub skeleton: MeasureBounds,
+    pub ink: Option<MeasureBounds>,
     pub effective: Measure,
     pub fallback: Option<LayerExtentFallback>,
 }
@@ -64,7 +90,7 @@ pub(crate) struct GlyphExtentContours {
 /// Memo of stroke solves for ink extent reads on one font.
 #[derive(Default)]
 pub struct InkMeasureRuntime {
-    stroke_cache: RefCell<StrokeOutlineCache>,
+    stroke_cache: RwLock<StrokeOutlineCache>,
 }
 
 impl std::fmt::Debug for InkMeasureRuntime {
@@ -86,12 +112,19 @@ impl InkMeasureRuntime {
         &self,
         work: impl FnOnce(&mut StrokeOutlineCache) -> R,
     ) -> R {
-        work(&mut self.stroke_cache.borrow_mut())
+        let mut cache = self
+            .stroke_cache
+            .write()
+            .expect("stroke outline cache lock poisoned");
+        work(&mut cache)
     }
 
     /// Solver misses since this font copy was created.
     pub fn stroke_cache_solves(&self) -> u64 {
-        self.stroke_cache.borrow().solves()
+        self.stroke_cache
+            .read()
+            .expect("stroke outline cache lock poisoned")
+            .solves()
     }
 }
 
@@ -145,7 +178,7 @@ impl Font {
         let glyph_id = self.require_layer_owner(layer_id)?;
         let source_id = layer
             .source_id()
-            .ok_or_else(|| CoreError::LayerNotFound(layer_id))?;
+            .ok_or(CoreError::LayerNotFound(layer_id))?;
         let location = self.require_source(source_id)?.location().clone();
         let mut projection = self.projection(&location);
         let resolved = self.glyph_extent_contours(&mut projection, glyph_id)?;
@@ -160,6 +193,8 @@ impl Font {
             min_y,
             max_x,
             max_y,
+            skeleton: resolved.skeleton,
+            ink: resolved.ink,
             effective: resolved.effective,
             fallback: resolved.fallback,
         })
@@ -175,41 +210,74 @@ impl Font {
         projection: &mut FontProjection<'_>,
         glyph_id: GlyphId,
     ) -> CoreResult<GlyphExtentContours> {
-        let skeleton = projection
+        if !projection.prepare_layer_for_extent(glyph_id)? {
+            let skeleton_contours = projection
+                .glyph(glyph_id)?
+                .map_or_else(Vec::new, |glyph| glyph.contours().to_vec());
+            let skeleton = skeleton_bounds_for_extent(&skeleton_contours);
+            return Ok(GlyphExtentContours {
+                contours: skeleton_contours,
+                skeleton,
+                ink: None,
+                effective: Measure::Skeleton,
+                fallback: Some(LayerExtentFallback::BetweenMasters),
+            });
+        }
+
+        let skeleton_contours = projection
             .glyph(glyph_id)?
             .map_or_else(Vec::new, |glyph| glyph.contours().to_vec());
+        let skeleton = skeleton_bounds_for_extent(&skeleton_contours);
+
+        let has_stroke = glyph_has_live_stroke_without_prepare(projection, glyph_id);
+
+        let ink_result = if has_stroke {
+            Some(self.ink_measure_runtime().with_stroke_cache(|cache| {
+                ink_contours_for_glyph(projection, glyph_id, cache, DEFAULT_TOLERANCE)
+            }))
+        } else {
+            None
+        };
+        let ink_bounds = ink_result
+            .as_ref()
+            .and_then(|result| result.as_ref().ok())
+            .and_then(|contours| measure_bounds_of(contours));
 
         if self.metrics_measure() == Measure::Skeleton {
             let fallback = self
                 .ignore_stroke_in_metrics()
                 .then_some(LayerExtentFallback::IgnoreStroke);
             return Ok(GlyphExtentContours {
-                contours: skeleton,
+                contours: skeleton_contours,
+                skeleton,
+                ink: ink_bounds,
                 effective: Measure::Skeleton,
                 fallback,
             });
         }
 
-        if !glyph_has_live_stroke(projection, glyph_id)? {
+        if !has_stroke {
             return Ok(GlyphExtentContours {
-                contours: skeleton,
+                contours: skeleton_contours,
+                skeleton,
+                ink: None,
                 effective: Measure::Skeleton,
                 fallback: None,
             });
         }
 
-        let ink = self.ink_measure_runtime().with_stroke_cache(|cache| {
-            ink_contours_for_glyph(projection, glyph_id, cache, DEFAULT_TOLERANCE)
-        });
-
-        match ink {
+        match ink_result.expect("stroke layers have an ink result") {
             Ok(contours) => Ok(GlyphExtentContours {
                 contours,
+                skeleton,
+                ink: ink_bounds,
                 effective: Measure::Ink,
                 fallback: None,
             }),
             Err(InkSolveFailure { message }) => Ok(GlyphExtentContours {
-                contours: skeleton,
+                contours: skeleton_contours,
+                skeleton,
+                ink: ink_bounds,
                 effective: Measure::Skeleton,
                 fallback: Some(LayerExtentFallback::StrokeCouldNotBeSolved { message }),
             }),
@@ -217,21 +285,30 @@ impl Font {
     }
 }
 
-fn glyph_has_live_stroke(
+fn measure_bounds_of(contours: &[ResolvedContour]) -> Option<MeasureBounds> {
+    resolved_contours_bbox(contours).map(MeasureBounds::from)
+}
+
+/// Skeleton bounds for extent assembly; an empty layer keeps zero bounds so
+/// measure readers can report a missing outline.
+fn skeleton_bounds_for_extent(contours: &[ResolvedContour]) -> MeasureBounds {
+    measure_bounds_of(contours).unwrap_or(MeasureBounds {
+        min_x: 0.0,
+        min_y: 0.0,
+        max_x: 0.0,
+        max_y: 0.0,
+    })
+}
+
+fn glyph_has_live_stroke_without_prepare(
     projection: &mut FontProjection<'_>,
     glyph_id: GlyphId,
-) -> CoreResult<bool> {
-    if !projection.prepare_layer_for_extent(glyph_id)? {
-        return Ok(false);
-    }
-    if projection
+) -> bool {
+    let _ = glyph_id;
+    projection
         .layers_for_extent()
         .values()
         .any(|layer| !layer.live_stroke_contour_ids().is_empty())
-    {
-        return Ok(true);
-    }
-    Ok(false)
 }
 
 fn ink_contours_for_glyph(
@@ -291,11 +368,10 @@ fn root_layer_contours(
         })?;
 
     if !stroke_read.failed.is_empty() {
-        let message = stroke_read
-            .failed
-            .first()
-            .map(|failure| failure.error.to_string())
-            .unwrap_or_else(|| "stroke could not be solved".to_string());
+        let message = stroke_read.failed.first().map_or_else(
+            || "stroke could not be solved".to_string(),
+            |failure| failure.error.to_string(),
+        );
         return Err(InkSolveFailure { message });
     }
 
@@ -362,12 +438,13 @@ fn layer_for_glyph<'a>(
 mod tests {
     use super::*;
     use crate::SetLiveStroke;
-    use crate::stroke::OutlineStrokeStyle;
+    use crate::stroke::style::{OutlineStrokeStyle, StrokeCap, StrokeJoin};
     use crate::test_support::sample_font;
     use crate::{
         Contour, CreateGlyph, CreateGlyphLayer, FontIntentSet, GlyphId, LayerId, MovePoints,
-        PointType,
+        PointType, Transform,
     };
+    use kurbo::Point;
 
     fn stroke_test_layer(font: &mut Font, contour: Contour) -> LayerId {
         let glyph_id = GlyphId::from_raw("ink_extent_glyph");
@@ -411,7 +488,7 @@ mod tests {
 
         font.apply_intents(&FontIntentSet::from(SetLiveStroke {
             layer_id,
-            contour_ids: vec![contour_id.clone()],
+            contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(40.0),
         }))
         .unwrap();
@@ -442,6 +519,36 @@ mod tests {
         assert!((extent.min_y - min_y).abs() < 1e-6);
         assert!((extent.max_x - max_x).abs() < 1e-6);
         assert!((extent.max_y - max_y).abs() < 1e-6);
+        assert_eq!(extent.skeleton.min_x, extent.min_x);
+        assert_eq!(extent.skeleton.max_x, extent.max_x);
+        assert!(extent.ink.is_none());
+    }
+
+    #[test]
+    fn stroked_layer_extent_carries_both_skeleton_and_ink_bounds() {
+        let mut font = sample_font();
+        let layer_id = stroke_test_layer(&mut font, vertical_stem_at(100.0, 200.0));
+        let contour_id = font
+            .layer(layer_id)
+            .unwrap()
+            .contours_iter()
+            .next()
+            .unwrap()
+            .id();
+        font.apply_intents(&FontIntentSet::from(SetLiveStroke {
+            layer_id,
+            contour_ids: vec![contour_id],
+            style: OutlineStrokeStyle::round(40.0),
+        }))
+        .unwrap();
+
+        let extent = font.layer_extent(layer_id).unwrap();
+        assert_eq!(extent.effective, Measure::Ink);
+        assert!((extent.skeleton.min_x - 100.0).abs() < 1e-6);
+        assert!((extent.skeleton.max_x - 100.0).abs() < 1e-6);
+        let ink = extent.ink.expect("stroked layer has ink bounds");
+        assert!(ink.min_x < extent.skeleton.min_x);
+        assert_eq!(extent.min_x, ink.min_x);
     }
 
     #[test]
@@ -589,7 +696,10 @@ mod tests {
             .unwrap()
             .points()
             .len();
-        assert!(points >= 150, "expected a dense skeleton, got {points} points");
+        assert!(
+            points >= 150,
+            "expected a dense skeleton, got {points} points"
+        );
 
         let started = std::time::Instant::now();
         font.layer_extent(layer_id).unwrap();
@@ -611,7 +721,7 @@ mod tests {
             .id();
         font.apply_intents(&FontIntentSet::from(SetLiveStroke {
             layer_id,
-            contour_ids: vec![contour_id.clone()],
+            contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(40.0),
         }))
         .unwrap();
@@ -620,6 +730,188 @@ mod tests {
         font.apply_set_ignore_stroke(true);
         let skeleton = font.layer_extent(layer_id).unwrap();
         assert_ne!(ink.left_sidebearing(), skeleton.left_sidebearing());
+    }
+
+    #[test]
+    fn square_cap_open_stem_extends_ink_half_width_past_skeleton_end() {
+        let mut font = sample_font();
+        let layer_id = stroke_test_layer(&mut font, vertical_stem_at(100.0, 200.0));
+        let contour_id = font
+            .layer(layer_id)
+            .unwrap()
+            .contours_iter()
+            .next()
+            .unwrap()
+            .id();
+        font.apply_intents(&FontIntentSet::from(SetLiveStroke {
+            layer_id,
+            contour_ids: vec![contour_id],
+            style: OutlineStrokeStyle {
+                width: 40.0,
+                cap: StrokeCap::Square,
+                join: StrokeJoin::Round,
+                miter_limit: OutlineStrokeStyle::DEFAULT_MITER_LIMIT,
+                position: 0.0,
+            },
+        }))
+        .unwrap();
+
+        let extent = font.layer_extent(layer_id).unwrap();
+        assert!((extent.skeleton.min_y - 0.0).abs() < 1e-6);
+        assert!((extent.min_y - (-20.0)).abs() < 2.0);
+    }
+
+    #[test]
+    fn component_ink_matches_transformed_outline_not_transformed_skeleton_box() {
+        use crate::{Component, CreateGlyph, CreateGlyphLayer, DecomposedTransform};
+        let mut font = sample_font();
+        let source_id = font.default_source_id().unwrap();
+        let base_id = GlyphId::from_raw("ink_rot_base");
+        let base_layer = LayerId::from_raw("ink_rot_base_layer");
+        font.apply_intents(&FontIntentSet::from(CreateGlyph {
+            glyph_id: Some(base_id),
+            name: "ink_rot_base".to_string(),
+            unicodes: vec![],
+        }))
+        .unwrap();
+        font.apply_intents(&FontIntentSet::from(CreateGlyphLayer {
+            layer_id: base_layer,
+            glyph_id: base_id,
+            source_id,
+        }))
+        .unwrap();
+        let mut stem = Contour::new();
+        stem.add_point(0.0, 100.0, PointType::OnCurve, false);
+        stem.add_point(200.0, 100.0, PointType::OnCurve, false);
+        let mut layer = font.layer(base_layer).unwrap().clone();
+        layer.add_contour(stem);
+        font.replace_glyph_layers(vec![layer]).unwrap();
+        let contour_id = font
+            .layer(base_layer)
+            .unwrap()
+            .contours_iter()
+            .next()
+            .unwrap()
+            .id();
+        font.apply_intents(&FontIntentSet::from(SetLiveStroke {
+            layer_id: base_layer,
+            contour_ids: vec![contour_id],
+            style: OutlineStrokeStyle {
+                width: 40.0,
+                cap: StrokeCap::Square,
+                join: StrokeJoin::Round,
+                miter_limit: OutlineStrokeStyle::DEFAULT_MITER_LIMIT,
+                position: 0.0,
+            },
+        }))
+        .unwrap();
+
+        let composite_id = GlyphId::from_raw("ink_rot_comp");
+        let composite_layer = LayerId::from_raw("ink_rot_comp_layer");
+        font.apply_intents(&FontIntentSet::from(CreateGlyph {
+            glyph_id: Some(composite_id),
+            name: "ink_rot_comp".to_string(),
+            unicodes: vec![],
+        }))
+        .unwrap();
+        font.apply_intents(&FontIntentSet::from(CreateGlyphLayer {
+            layer_id: composite_layer,
+            glyph_id: composite_id,
+            source_id,
+        }))
+        .unwrap();
+        let transform = DecomposedTransform {
+            translate_x: 50.0,
+            translate_y: 20.0,
+            rotation: 30.0,
+            ..DecomposedTransform::identity()
+        };
+        let mut comp_layer = font.layer(composite_layer).unwrap().clone();
+        comp_layer.add_component(Component::with_transform(
+            base_id,
+            "ink_rot_base",
+            transform,
+        ));
+        font.replace_glyph_layers(vec![comp_layer]).unwrap();
+
+        let composite_extent = font.layer_extent(composite_layer).unwrap();
+        let matrix = transform.to_matrix();
+        let base = font.layer_extent(base_layer).unwrap();
+        let skeleton_box = transform_aabb(&matrix, base.skeleton);
+
+        assert_eq!(composite_extent.effective, Measure::Ink);
+        assert!(composite_extent.max_y - composite_extent.min_y > 30.0);
+        assert!(composite_extent.min_y < skeleton_box.min_y - 5.0);
+        assert!((composite_extent.min_x - skeleton_box.min_x).abs() > 5.0);
+    }
+
+    #[test]
+    fn stroke_style_change_resolves_again_identical_read_does_not() {
+        let mut font = sample_font();
+        let layer_id = stroke_test_layer(&mut font, vertical_stem_at(100.0, 200.0));
+        let contour_id = font
+            .layer(layer_id)
+            .unwrap()
+            .contours_iter()
+            .next()
+            .unwrap()
+            .id();
+        font.apply_intents(&FontIntentSet::from(SetLiveStroke {
+            layer_id,
+            contour_ids: vec![contour_id.clone()],
+            style: OutlineStrokeStyle::round(40.0),
+        }))
+        .unwrap();
+        let narrow = font.layer_extent(layer_id).unwrap();
+        font.apply_intents(&FontIntentSet::from(SetLiveStroke {
+            layer_id,
+            contour_ids: vec![contour_id],
+            style: OutlineStrokeStyle::round(50.0),
+        }))
+        .unwrap();
+        let wide = font.layer_extent(layer_id).unwrap();
+        assert!(wide.left_sidebearing() < narrow.left_sidebearing() - 2.0);
+        let after_style = font.ink_measure_runtime().stroke_cache_solves();
+        font.layer_extent(layer_id).unwrap();
+        assert_eq!(
+            font.ink_measure_runtime().stroke_cache_solves(),
+            after_style
+        );
+    }
+
+    fn transform_aabb(matrix: &Transform, bounds: MeasureBounds) -> MeasureBounds {
+        let corners = [
+            Point::new(bounds.min_x, bounds.min_y),
+            Point::new(bounds.min_x, bounds.max_y),
+            Point::new(bounds.max_x, bounds.min_y),
+            Point::new(bounds.max_x, bounds.max_y),
+        ];
+        let transformed: Vec<_> = corners
+            .iter()
+            .map(|point| matrix.transform_point(*point))
+            .collect();
+        let min_x = transformed
+            .iter()
+            .map(|p| p.x)
+            .fold(f64::INFINITY, f64::min);
+        let max_x = transformed
+            .iter()
+            .map(|p| p.x)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let min_y = transformed
+            .iter()
+            .map(|p| p.y)
+            .fold(f64::INFINITY, f64::min);
+        let max_y = transformed
+            .iter()
+            .map(|p| p.y)
+            .fold(f64::NEG_INFINITY, f64::max);
+        MeasureBounds {
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+        }
     }
 
     fn last_point(font: &Font, layer_id: LayerId, contour_id: &ContourId) -> crate::PointId {

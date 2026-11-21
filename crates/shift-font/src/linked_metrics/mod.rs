@@ -60,4 +60,6 @@ pub enum MetricsKeyError {
 #[cfg(test)]
 mod property_tests;
 #[cfg(test)]
+mod stroke_metrics_tests;
+#[cfg(test)]
 mod tests;

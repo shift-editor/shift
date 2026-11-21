@@ -27,7 +27,10 @@ import {
   type RevisedNode,
   type SceneIntent,
   type TextRun,
+  type LayerExtent,
   type LiveStroke,
+  type ReapplyLinkedMetricsScope,
+  type SelectionExtentRequest,
   type StrokeOutlinePreviews,
 } from "@shift/wasm/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "../signals";
@@ -463,6 +466,22 @@ export class SessionEngine implements FontEngine {
 
   liveStrokes(layerId: LayerId): readonly LiveStroke[] {
     return this.#require().liveStrokes(layerId);
+  }
+
+  layerExtent(layerId: LayerId): LayerExtent {
+    return this.#require().layerExtent(layerId);
+  }
+
+  selectionExtent(request: SelectionExtentRequest): LayerExtent {
+    return this.#require().selectionExtent(request);
+  }
+
+  includeStrokeInMetrics(): boolean {
+    return this.#require().includeStrokeInMetrics();
+  }
+
+  reapplyLinkedMetricsDisabledReason(scope: ReapplyLinkedMetricsScope): string | null {
+    return this.#require().reapplyLinkedMetricsDisabledReason(scope);
   }
 
   newAnchorName(layerIds: readonly LayerId[]): string {

@@ -26,6 +26,27 @@ pub struct ReapplyLinkedMetricsOutcome {
 }
 
 impl Font {
+    /// Why [`reapply_linked_metrics`](Self::reapply_linked_metrics) would change no layer for `scope`.
+    pub fn reapply_linked_metrics_disabled_reason(
+        &self,
+        scope: ReapplyLinkedMetricsScope,
+    ) -> Option<&'static str> {
+        if self.metrics_keyed_glyph_ids().next().is_none() {
+            return Some("this font has no linked metrics");
+        }
+
+        match scope {
+            ReapplyLinkedMetricsScope::Font => None,
+            ReapplyLinkedMetricsScope::Glyph { glyph, source } => {
+                if self.glyph_has_linked_metrics_in_source(glyph, source) {
+                    None
+                } else {
+                    Some("this glyph has no linked metrics")
+                }
+            }
+        }
+    }
+
     /// Re-applies linked metrics for `scope` in one pass.
     ///
     /// # Errors
@@ -35,10 +56,10 @@ impl Font {
         &mut self,
         scope: ReapplyLinkedMetricsScope,
     ) -> CoreResult<ReapplyLinkedMetricsOutcome> {
-        if self.metrics_keyed_glyph_ids().next().is_none() {
+        if let Some(reason) = self.reapply_linked_metrics_disabled_reason(scope) {
             return Ok(ReapplyLinkedMetricsOutcome {
                 moved_layers: Vec::new(),
-                reason: Some("this font has no linked metrics"),
+                reason: Some(reason),
             });
         }
 
@@ -54,12 +75,6 @@ impl Font {
                 }
             }
             ReapplyLinkedMetricsScope::Glyph { glyph, source } => {
-                if !self.glyph_has_linked_metrics_in_source(glyph, source) {
-                    return Ok(ReapplyLinkedMetricsOutcome {
-                        moved_layers: Vec::new(),
-                        reason: Some("this glyph has no linked metrics"),
-                    });
-                }
                 let roots = BTreeSet::from([glyph]);
                 moved.extend(self.reapply_linked_metrics_in_source(source, roots)?);
             }
@@ -93,7 +108,7 @@ impl Font {
             return Ok(Vec::new());
         }
 
-        let order = self.linked_metrics_order_of(source_id, affected.clone());
+        let order = self.linked_metrics_order_of(source_id, affected);
         let mut moved = Vec::new();
         let mut changed = roots;
         for ordered in order.keys {

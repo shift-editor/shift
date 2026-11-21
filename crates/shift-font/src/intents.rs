@@ -36,6 +36,8 @@ mod glyph_intents;
 mod layer_intents;
 mod swap_intents;
 
+pub use crate::stroke::ink_bounds::FitInkBound;
+
 pub use font_intents::*;
 pub use glyph_axis_intents::*;
 pub use glyph_intents::*;
@@ -170,6 +172,7 @@ font_intents! {
         ShiftSidebearing,
         SetLayerMetricsKey,
         ReplaceGlyphLayerContent,
+        FitInkBound,
     }
     font {
         CreateGlyph,

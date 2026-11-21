@@ -41,6 +41,8 @@ pub mod proof_text;
 pub mod scene;
 pub mod shaping;
 #[cfg(feature = "engine-protocol")]
+pub mod stroke_extent;
+#[cfg(feature = "engine-protocol")]
 pub mod stroke_preview;
 pub mod svg;
 #[cfg(feature = "engine-protocol")]

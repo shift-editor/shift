@@ -12,6 +12,7 @@ import type { RenderContext, RenderPass } from "../../types/rendering";
 import type { PointerTarget } from "../../types/target";
 import { spacingGapCenter, type SpacingGap, type SpacingSide } from "../../types/spacing";
 import type { GlyphRenderModel } from "../model/Glyph";
+import { track } from "../signals";
 import { Bounds, Mat, type Point2D } from "@shift/geo";
 import {
   isTextItemId,
@@ -20,7 +21,6 @@ import {
   type SelectableId,
   type TextItemId,
 } from "@shift/types";
-import { track } from "../signals";
 import type { TransformTarget } from "../../types/transformTarget";
 import { GlyphsTransform, type GlyphsTransformPart } from "./GlyphsTransform";
 import type { Editor } from "../editor/Editor";
@@ -432,14 +432,21 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
   ): SpacingSide | null {
     const itemId = placed.glyph.sourceItemIds[0];
     const glyphId = placed.glyph.glyphId;
-    const bounds = glyphId ? modelFor(glyphId)?.bounds : null;
-    if (!itemId || !glyphId || !bounds) return null;
+    const model = glyphId ? modelFor(glyphId) : null;
+    if (!itemId || !glyphId || !model) return null;
+
+    track(model.sidebearingsCell);
+    track(model.xAdvanceCell);
+    const { lsb, rsb } = model.sidebearingsCell.peek();
+    if (lsb === null || rsb === null) return null;
+
+    const xAdvance = model.xAdvanceCell.peek();
 
     if (facing === "right") {
-      const edge = placed.origin.x + bounds.max.x;
+      const edge = placed.origin.x + xAdvance - rsb;
       return { itemId, glyphId, sidebearing: boundary - edge, edge };
     }
-    const edge = placed.origin.x + bounds.min.x;
+    const edge = placed.origin.x + lsb;
     return { itemId, glyphId, sidebearing: edge - boundary, edge };
   }
 

@@ -49,7 +49,10 @@ import type {
   SideLink,
   TextRun,
   PlacedText,
+  LayerExtent,
   LiveStroke,
+  ReapplyLinkedMetricsScope,
+  SelectionExtentRequest,
   StrokeOutlinePreviews,
 } from "@shift/wasm/protocol";
 import type { PendingEditId } from "./editing";
@@ -314,6 +317,18 @@ export interface FontEngine {
    * @throws When the engine is not open or the layer is not resident.
    */
   liveStrokes(layerId: LayerId): readonly LiveStroke[];
+
+  /** Skeleton, ink and effective bounds of `layerId` under the metrics measure. */
+  layerExtent(layerId: LayerId): LayerExtent;
+
+  /** Bounds of a whole layer or contour subset under the metrics measure. */
+  selectionExtent(request: SelectionExtentRequest): LayerExtent;
+
+  /** Whether metrics read ink rather than the skeleton. */
+  includeStrokeInMetrics(): boolean;
+
+  /** Why re-apply linked metrics would change nothing for `scope`, or null. */
+  reapplyLinkedMetricsDisabledReason(scope: ReapplyLinkedMetricsScope): string | null;
 
   /**
    * The features the engine's shaper font defines, in tag order, each with

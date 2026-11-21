@@ -1350,6 +1350,20 @@ pub struct ShiftSidebearing {
     pub delta: f64,
 }
 
+impl LayerIntent for FitInkBound {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn structural(&self) -> bool {
+        false
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        crate::stroke::ink_bounds::apply_fit_ink_bound(font, self)
+    }
+}
+
 impl LayerIntent for ShiftSidebearing {
     fn layer_id(&self) -> &LayerId {
         &self.layer_id

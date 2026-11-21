@@ -31,11 +31,12 @@ import type {
   NewGlyph,
   PositionGuide,
   SourceSelectionMode,
+  TransformSelectionBounds,
 } from "@shift/editor/types";
 import type { ToolName } from "@shift/editor/tools";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import type { Bounds, Point2D, Rect2D } from "@shift/geo";
-import type { LocalPoint, ScreenPoint, ScreenVector } from "@shift/editor/spaces";
+import type { LocalBounds, LocalPoint, ScreenPoint, ScreenVector } from "@shift/editor/spaces";
 import type { EditorTool, KerningToolView, ResolvedGlyph } from "@shift/runtime";
 import type { AgentCallMap, DocumentOperation, TextOperation } from "@shared/agent/protocol";
 import type {
@@ -116,6 +117,9 @@ export interface DrawnGlyph {
   readonly advanceWidth: number;
   readonly bounds: Bounds | null;
   readonly sidebearings: { readonly lsb: number | null; readonly rsb: number | null };
+  readonly skeletonLsb: number | null;
+  readonly skeletonRsb: number | null;
+  readonly fallbackTooltip: string | null;
   /** Each placed component, by its base glyph's name, with where it is placed and the bounds it draws. */
   readonly components: readonly {
     readonly glyph: string;
@@ -312,6 +316,23 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   setLeftSidebearing(value: number): void;
   /** Sets the open glyph's right sidebearing by changing its advance, as the sidebar's RSB field does. */
   setRightSidebearing(value: number): void;
+  /** Toggles whether metrics include stroke ink, as the glyph sidebar's Include stroke checkbox does. */
+  setIncludeStrokeInMetrics(include: boolean): void;
+  /** Re-applies linked metrics for the open glyph or the whole font, as the glyph heading menu does. */
+  reapplyLinkedMetrics(scope: "font" | "glyph"): void;
+  /** Bounds the transform panel's numeric fields show for the current selection. Test-only. */
+  transformPanelBounds(): TransformSelectionBounds | null;
+  /** Skeleton bounds of the current selection in the open glyph's units. Test-only. */
+  skeletonSelectionBounds(): LocalBounds | null;
+  /** Moves the transform panel Y minimum to `value`, as typing Y with ink bounds does. Test-only. */
+  setTransformPanelY(value: number): void;
+  /** Sets transform panel height through ink-bound fit, as typing H with ink bounds does. Test-only. */
+  setTransformPanelHeight(height: number): void;
+  /**
+   * Like {@link setTransformPanelHeight} but leaves geometry unchanged and
+   * throws when Rust refuses the fit.
+   */
+  setTransformPanelHeightUnchecked(height: number): void;
   /**
    * Links one side of the open glyph with a metrics key, as typing `=…` into
    * its sidebar field does.
@@ -659,6 +680,14 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
    * regions. Null without one open glyph. Test-only.
    */
   editedGlyph(): { readonly glyph: string; readonly drawnAs: string } | null;
+  /** Sidebearings the glyph inspector would show now, including ink and skeleton labels. Test-only. */
+  glyphMetrics(): {
+    readonly lsb: number | null;
+    readonly rsb: number | null;
+    readonly skeletonLsb: number | null;
+    readonly skeletonRsb: number | null;
+    readonly fallbackTooltip: string | null;
+  };
   /** A glyph as the canvas draws it at the current location; the open glyph when `glyph` is omitted. Test-only. */
   drawnGlyph(glyph?: string): Promise<DrawnGlyph>;
   /**

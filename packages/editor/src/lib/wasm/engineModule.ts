@@ -77,6 +77,9 @@ import type {
   PlacedText,
   StrokeOutlinePreviews,
   LiveStroke,
+  LayerExtent,
+  ReapplyLinkedMetricsScope,
+  SelectionExtentRequest,
 } from "@shift/wasm/protocol";
 
 export { initEngine, svgPaths, typedText } from "@shift/wasm/engine";
@@ -377,6 +380,22 @@ export class EngineSession {
   /** Contours on `layerId` that carry a dynamic stroke and their styles, unsaved edits included. */
   liveStrokes(layerId: LayerId): readonly LiveStroke[] {
     return this.#reads.liveStrokes(layerId);
+  }
+
+  layerExtent(layerId: LayerId): LayerExtent {
+    return this.#reads.layerExtent(layerId);
+  }
+
+  selectionExtent(request: SelectionExtentRequest): LayerExtent {
+    return this.#reads.selectionExtent(request);
+  }
+
+  includeStrokeInMetrics(): boolean {
+    return this.#reads.includeStrokeInMetrics();
+  }
+
+  reapplyLinkedMetricsDisabledReason(scope: ReapplyLinkedMetricsScope): string | null {
+    return this.#reads.reapplyLinkedMetricsDisabledReason(scope);
   }
 
   /** What renaming a glyph to `name` does, as shift-font's `Font::glyph_rename` decides. */

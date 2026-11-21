@@ -18,6 +18,7 @@ import type { Designspace } from "../lib/variation/Designspace";
 import type { Glyph, GlyphLayer } from "../lib/model/Glyph";
 import type { Axis } from "../lib/model/Axis";
 import type { Signal } from "../lib/signals/signal";
+import type { GlyphMetricsSidebearings } from "./metricsMeasure";
 import type { StrokeFills } from "./graphics";
 import type { DesignAxisLocation } from "./variation";
 
@@ -93,6 +94,8 @@ export interface GlyphOptions {
   readonly anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
   /** The solved fills of a layer's dynamic strokes; one cell per layer, so readers share a value. */
   readonly strokeFillsCell: (layerId: LayerId) => Signal<StrokeFills>;
+  /** Ink-aware sidebearings of a layer; one cell per layer, so readers share a value. */
+  readonly metricsSidebearingsCell: (layerId: LayerId) => Signal<GlyphMetricsSidebearings>;
 }
 
 /**

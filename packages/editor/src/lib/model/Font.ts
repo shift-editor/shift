@@ -86,6 +86,7 @@ import type {
   SideLink,
   PlacedText,
   LiveStroke,
+  ReapplyLinkedMetricsScope,
   StrokeOutlinePreviews,
   TextRun,
 } from "@shift/wasm/protocol";
@@ -116,6 +117,11 @@ import { fallbackGlyphNameForUnicode, parseCodepoint } from "../utils/unicode";
 import { createBatchRequest } from "../utils/batchRequest";
 import { EditGate } from "./EditGate";
 import { solveStrokeFills } from "./strokeFills";
+import { isUnreadLayerExtent, readLayerExtent, type LayerExtentRead } from "./layerExtent";
+import {
+  sidebearingsFromLayerExtent,
+  type GlyphMetricsSidebearings,
+} from "../../types/metricsMeasure";
 
 /**
  * Directory queries over the store's committed glyph index.
@@ -293,7 +299,13 @@ export class Font {
   readonly #metadataCell: Signal<FontMetadata>;
   readonly #sourcesCell: Signal<readonly Source[]>;
 
+  // non-reactive: lazy cache of per-layer computed cells; each cell subscribes when read
   readonly #strokeFillsCells = new Map<LayerId, ComputedSignal<StrokeFills>>();
+  // non-reactive: lazy cache of per-layer computed cells; each cell subscribes when read
+  readonly #layerExtentCells = new Map<LayerId, ComputedSignal<LayerExtentRead>>();
+  // non-reactive: lazy cache of per-layer computed cells; each cell subscribes when read
+  readonly #metricsSidebearingsCells = new Map<LayerId, ComputedSignal<GlyphMetricsSidebearings>>();
+  readonly #includeStrokeInMetricsCell: Signal<boolean>;
   readonly #axesCell: ComputedSignal<readonly Axis[]>;
   readonly #externalAxesCell: Signal<readonly Axis[]>;
   readonly #axisMappingsCell: Signal<readonly AxisMapping[]>;
@@ -380,6 +392,13 @@ export class Font {
     this.#namedInstancesCell = computed(() => fontCell.value?.namedInstances ?? []);
     this.#languageIdsCell = computed(() => fontCell.value?.languageIds ?? null);
     this.#gridCell = computed(() => fontCell.value?.grid ?? null);
+    this.#includeStrokeInMetricsCell = computed(
+      () => {
+        track(store.engine.revision("strokeMeasure"));
+        return store.engine.includeStrokeInMetrics();
+      },
+      { name: "font.includeStrokeInMetrics" },
+    );
     this.#directoryCell = computed(
       () => new GlyphDirectory(this.#store.recordIndexCell.value, this.#glyphInfo),
     );
@@ -1262,6 +1281,7 @@ export class Font {
       axesCell: this.#glyphAxesCell(glyphId),
       defaultSourceId: this.defaultSource.id,
       strokeFillsCell: (layerId) => this.strokeFillsCell(layerId),
+      metricsSidebearingsCell: (layerId) => this.metricsSidebearingsCell(layerId),
       anchorCategory: (glyphId) => {
         // Called from render-model computeds: a re-read glyph directory re-runs them.
         track(this.#directoryCell);
@@ -1302,7 +1322,11 @@ export class Font {
         continue;
       }
 
-      layers.push(new GlyphLayer(source, this.#editCoordinator, state, this.#edits, placement));
+      layers.push(
+        new GlyphLayer(source, this.#editCoordinator, state, this.#edits, placement, (layerId) =>
+          this.metricsSidebearingsCell(layerId),
+        ),
+      );
     }
 
     return layers;
@@ -1542,6 +1566,135 @@ export class Font {
   /** Contours on `layerId` that carry a dynamic stroke, when the window's engine is open. */
   liveStrokeContours(layerId: LayerId): readonly ContourId[] {
     return this.liveStrokes(layerId).map((stroke) => stroke.contourId);
+  }
+
+  /** Live stroke contours when the preview read is available; otherwise none. */
+  liveStrokeContoursWhenLoaded(layerId: LayerId): readonly ContourId[] {
+    try {
+      return this.liveStrokeContours(layerId);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Whether metrics read ink rather than the skeleton for this font. */
+  get includeStrokeInMetricsCell(): Signal<boolean> {
+    return this.#includeStrokeInMetricsCell;
+  }
+
+  /** The extent of `layerId` under the font's current metrics measure. */
+  selectionExtent(layerId: LayerId, contourIds: readonly ContourId[]): LayerExtentRead {
+    const engine = this.#store.engine;
+    track(engine.revision("strokeMeasure"));
+    track(engine.revision("layers"));
+    return readLayerExtent(layerId, () =>
+      engine.selectionExtent({ layerId, contourIds: [...contourIds] }),
+    );
+  }
+
+  layerExtent(layerId: LayerId): LayerExtentRead {
+    const engine = this.#store.engine;
+    track(engine.revision("layers"));
+    track(engine.revision("strokeMeasure"));
+    return readLayerExtent(layerId, () => engine.layerExtent(layerId));
+  }
+
+  /**
+   * One cell per layer for its extent read; invalidates on layer edits and on
+   * the include-stroke switch.
+   */
+  layerExtentCell(layerId: LayerId): Signal<LayerExtentRead> {
+    const existing = this.#layerExtentCells.get(layerId);
+    if (existing) return existing;
+
+    const cell = computed(() => this.layerExtent(layerId), {
+      name: `font.layerExtent.${layerId}`,
+    });
+    this.#layerExtentCells.set(layerId, cell);
+    return cell;
+  }
+
+  /** Sidebearings that spacing and the inspector read for `layerId`. */
+  metricsSidebearingsCell(layerId: LayerId): Signal<GlyphMetricsSidebearings> {
+    const existing = this.#metricsSidebearingsCells.get(layerId);
+    if (existing) return existing;
+
+    const cell = computed(
+      (): GlyphMetricsSidebearings => {
+        const state = this.#store.layerStateCell(layerId).value;
+        const advance = state?.xAdvance ?? 0;
+        const skeletonOnly = {
+          lsb: state?.sidebearings.lsb ?? null,
+          rsb: state?.sidebearings.rsb ?? null,
+          skeletonLsb: null,
+          skeletonRsb: null,
+          fallbackTooltip: null,
+        };
+
+        if (!state) return skeletonOnly;
+
+        track(this.#includeStrokeInMetricsCell);
+        if (!this.#includeStrokeInMetricsCell.value) return skeletonOnly;
+
+        if (this.liveStrokeContoursWhenLoaded(layerId).length === 0) {
+          return skeletonOnly;
+        }
+
+        const extent = this.layerExtent(layerId);
+        if (isUnreadLayerExtent(extent)) {
+          return { ...skeletonOnly, fallbackTooltip: extent.reason };
+        }
+
+        return sidebearingsFromLayerExtent(extent, advance);
+      },
+      {
+        name: `font.metricsSidebearings.${layerId}`,
+      },
+    );
+    this.#metricsSidebearingsCells.set(layerId, cell);
+    return cell;
+  }
+
+  /**
+   * Sets whether metrics read ink or the skeleton; one undo step, touches no layer.
+   */
+  setIncludeStrokeInMetrics(include: boolean): void {
+    this.editCoordinator.push({
+      kind: "setIgnoreStroke",
+      setIgnoreStroke: { ignore: !include },
+    });
+  }
+
+  /** Re-applies linked metrics for one glyph or the whole font in one step. */
+  reapplyLinkedMetrics(
+    scope:
+      | { readonly kind: "glyph"; readonly glyphId: GlyphId; readonly sourceId: SourceId }
+      | { readonly kind: "font" },
+  ): void {
+    const intentScope: ReapplyLinkedMetricsScope =
+      scope.kind === "font"
+        ? { kind: "font" }
+        : { kind: "glyph", glyph: scope.glyphId, source: scope.sourceId };
+    this.editCoordinator.push({
+      kind: "reapplyLinkedMetrics",
+      reapplyLinkedMetrics: { scope: intentScope },
+    });
+  }
+
+  /** Why re-apply would change nothing for `scope`, or null when it may run. */
+  reapplyLinkedMetricsDisabledReason(
+    scope:
+      | { readonly kind: "glyph"; readonly glyphId: GlyphId; readonly sourceId: SourceId }
+      | { readonly kind: "font" },
+  ): string | null {
+    const engine = this.#store.engine;
+    track(engine.revision("layers"));
+    track(engine.revision("strokeMeasure"));
+    const intentScope: ReapplyLinkedMetricsScope =
+      scope.kind === "font"
+        ? { kind: "font" }
+        : { kind: "glyph", glyph: scope.glyphId, source: scope.sourceId };
+    return engine.reapplyLinkedMetricsDisabledReason(intentScope);
   }
 
   /**

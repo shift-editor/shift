@@ -6,6 +6,10 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 import { useSignalState } from "@shift/editor/signals";
 import { Bounds, Mat, Vec2, type PointAxis } from "@shift/geo";
 import { useSelectionBounds } from "@/hooks/useSelectionBounds";
+import { useTransformSelectionBounds } from "@/hooks/useTransformSelectionBounds";
+import { notify } from "@/lib/notifications/notify";
+import type { InkBoundEdge } from "@shift/editor/types";
+import type { LocalBounds } from "@shift/editor/spaces";
 import { getShiftHost } from "@/host/shiftHost";
 import {
   alignSelection,
@@ -132,20 +136,46 @@ export const TransformSection = () => {
   const selectedPointIds = (positionSelection?.targets ?? PositionTargets.NONE).points;
   const isEditing = useSignalState(editor.isEditingCell);
   const selectionBounds = useSelectionBounds();
+  const transformBounds = useTransformSelectionBounds();
+  const includeStrokeInMetrics = useSignalState(editor.font.includeStrokeInMetricsCell);
   const [rotation, setRotation] = useState(0);
 
   const layer = isEditing ? null : (positionSelection?.layer ?? null);
   const editable = positionSelection !== null || componentSelection !== null;
 
-  const shownBounds = editable ? selectionBounds : null;
+  const boundsMeasure = transformBounds ? transformBounds.measure : "skeleton";
+  let shownBounds: LocalBounds | null = null;
+  if (editable) {
+    shownBounds = transformBounds ? transformBounds.bounds : selectionBounds;
+  }
+  const skeletonLabel = boundsMeasure === "skeleton" && includeStrokeInMetrics ? "skeleton" : null;
 
   const handleDimensionsChange = useCallback(
     (dimension: "width" | "height", value: number) => {
-      if (!editable || !selectionBounds) return;
+      if (!editable || !shownBounds) return;
 
       const current =
-        dimension === "width" ? Bounds.width(selectionBounds) : Bounds.height(selectionBounds);
+        dimension === "width" ? Bounds.width(shownBounds) : Bounds.height(shownBounds);
       if (current === 0) return;
+
+      if (transformBounds && transformBounds.measure === "ink" && layer && !componentSelection) {
+        const inkBounds = transformBounds;
+        const contourIds =
+          inkBounds.contourIds.length > 0
+            ? inkBounds.contourIds
+            : editor.font.liveStrokeContours(layer.id);
+        const edge: InkBoundEdge = dimension === "width" ? "right" : "top";
+        const target =
+          dimension === "width" ? shownBounds.min.x + value : shownBounds.min.y + value;
+        try {
+          layer.transaction(`Set ink ${dimension}`, () =>
+            layer.fitInkBound(contourIds, edge, target),
+          );
+        } catch (error) {
+          notify(error instanceof Error ? error.message : String(error));
+        }
+        return;
+      }
 
       const factor = value / current;
       const sx = dimension === "width" ? factor : 1;
@@ -168,10 +198,19 @@ export const TransformSection = () => {
 
       if (!layer) return;
 
-      const anchorPoint = { x: selectionBounds.min.x, y: selectionBounds.max.y };
+      const anchorPoint = { x: shownBounds.min.x, y: shownBounds.max.y };
       layer.scale(selectedPointIds, sx, sy, anchorPoint);
     },
-    [componentSelection, editable, isEditing, layer, selectedPointIds, selectionBounds],
+    [
+      componentSelection,
+      editable,
+      editor.font,
+      isEditing,
+      layer,
+      selectedPointIds,
+      shownBounds,
+      transformBounds,
+    ],
   );
 
   const canDistribute = editable && selectedPointIds.length >= 3;
@@ -210,9 +249,9 @@ export const TransformSection = () => {
 
   const handlePositionChange = useCallback(
     (axis: PointAxis, value: number) => {
-      if (!editable || !selectionBounds) return;
+      if (!editable || !shownBounds) return;
 
-      const position = selectionBounds.min;
+      const position = shownBounds.min;
       if (componentSelection && !isEditing) {
         const delta = Vec2.fromAxis(axis, value - position[axis]);
         componentSelection.layer.transformComponents(componentSelection, "Move components", () =>
@@ -226,7 +265,7 @@ export const TransformSection = () => {
       const target = Vec2.setAxis(position, axis, value);
       layer.moveSelectionTo([...selectedPointIds], target, position);
     },
-    [componentSelection, editable, isEditing, layer, selectedPointIds, selectionBounds],
+    [componentSelection, editable, isEditing, layer, selectedPointIds, shownBounds],
   );
 
   return (
@@ -242,7 +281,10 @@ export const TransformSection = () => {
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="text-ui text-secondary">Dimensions</div>
+        <div className="flex items-center gap-2 text-ui text-secondary">
+          <span>Dimensions</span>
+          {skeletonLabel ? <span className="text-muted text-ui">{skeletonLabel}</span> : null}
+        </div>
         <div className="flex gap-2">
           <SidebarNumberField
             ariaLabel="Dimension width"
@@ -262,7 +304,10 @@ export const TransformSection = () => {
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="text-ui text-secondary">Position</div>
+        <div className="flex items-center gap-2 text-ui text-secondary">
+          <span>Position</span>
+          {skeletonLabel ? <span className="text-muted text-ui">{skeletonLabel}</span> : null}
+        </div>
         <div className="flex gap-2">
           <SidebarNumberField
             ariaLabel="X position"

@@ -21,6 +21,7 @@ import {
   scenePoint,
   screenPoint,
   screenVector,
+  type LocalBounds,
   type LocalPoint,
   type ScreenPoint,
   type ScreenVector,
@@ -54,7 +55,7 @@ import {
   rotateSelection,
 } from "@/lib/editor/sidebarActions";
 import type { CommandId, EditorCommandId } from "@shared/commands";
-import { Bounds, Rect, type Point2D, type Rect2D } from "@shift/geo";
+import { Bounds, Mat, Rect, Vec2, type Point2D, type Rect2D } from "@shift/geo";
 import {
   mintAxisMappingId,
   mintGlyphId,
@@ -65,6 +66,7 @@ import {
   type GlyphId,
   type GlyphName,
   type GlyphRecord,
+  type LayerId,
   type KerningGroupId,
   type KerningPosition,
   type MetricsKeySide,
@@ -90,6 +92,7 @@ import type {
   PositionGuide,
   SourceSelectionMode,
   TextRunNode,
+  TransformSelectionBounds,
 } from "@shift/editor/types";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/lanes";
 import type { GlyphFixture, PointNames } from "./fixtures";
@@ -827,6 +830,93 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   setAdvanceWidth(width: number): void {
     this.setXAdvance(width);
+  }
+
+  setIncludeStrokeInMetrics(include: boolean): void {
+    this.font.setIncludeStrokeInMetrics(include);
+  }
+
+  reapplyLinkedMetrics(scope: "font" | "glyph"): void {
+    if (scope === "font") {
+      this.font.reapplyLinkedMetrics({ kind: "font" });
+      return;
+    }
+
+    const glyphId = this.glyphRecord?.id;
+    if (!glyphId) throw new Error("reapplyLinkedMetrics needs an open glyph");
+
+    const sourceId = this.activeSourceId;
+    if (!sourceId) throw new Error("reapplyLinkedMetrics needs an active source");
+
+    this.font.reapplyLinkedMetrics({ kind: "glyph", glyphId, sourceId });
+  }
+
+  transformPanelBounds(): TransformSelectionBounds | null {
+    return this.transformSelectionBounds();
+  }
+
+  skeletonSelectionBounds(): LocalBounds | null {
+    return this.selectionBounds();
+  }
+
+  setTransformPanelY(value: number): void {
+    this.#setTransformPanelInkMinimumY(value, "Set ink Y");
+  }
+
+  setTransformPanelHeight(height: number): void {
+    const bounds = this.transformSelectionBounds();
+    if (!bounds) throw new Error("setTransformPanelHeight needs transform bounds");
+
+    const position = this.positionSelection(this.selection.ids);
+    if (!position) throw new Error("setTransformPanelHeight needs a position selection");
+
+    const contourIds = this.#contourIdsForTransformBounds(bounds, position.layer.id);
+    const target = bounds.bounds.min.y + height;
+    position.layer.transaction("Set ink height", () =>
+      position.layer.fitInkBound(contourIds, "top", target),
+    );
+  }
+
+  setTransformPanelHeightUnchecked(height: number): void {
+    const bounds = this.transformSelectionBounds();
+    if (!bounds) throw new Error("setTransformPanelHeightUnchecked needs transform bounds");
+
+    const position = this.positionSelection(this.selection.ids);
+    if (!position) throw new Error("setTransformPanelHeightUnchecked needs a position selection");
+
+    const contourIds = this.#contourIdsForTransformBounds(bounds, position.layer.id);
+    const target = bounds.bounds.min.y + height;
+    position.layer.transaction("Set ink height", () =>
+      position.layer.fitInkBound(contourIds, "top", target),
+    );
+  }
+
+  #setTransformPanelInkMinimumY(value: number, label: string): void {
+    const bounds = this.transformSelectionBounds();
+    if (!bounds) throw new Error("setTransformPanelY needs transform bounds");
+
+    const component = this.componentTransformSelection(this.selection.ids);
+    if (component) {
+      const delta = Vec2.fromAxis("y", value - bounds.bounds.min.y);
+      component.layer.transformComponents(component, label, () => Mat.Translate(delta.x, delta.y));
+      return;
+    }
+
+    const position = this.positionSelection(this.selection.ids);
+    if (!position) throw new Error("setTransformPanelY needs a position selection");
+
+    position.layer.transaction(label, () =>
+      position.layer.moveSelectionTo(
+        [...position.targets.points],
+        { x: bounds.bounds.min.x, y: value },
+        bounds.bounds.min,
+      ),
+    );
+  }
+
+  #contourIdsForTransformBounds(bounds: TransformSelectionBounds, layerId: LayerId): ContourId[] {
+    if (bounds.contourIds.length > 0) return [...bounds.contourIds];
+    return [...this.font.liveStrokeContours(layerId)];
   }
 
   linkMetric(side: MetricsKeySide, key: string): string | null {
@@ -1676,6 +1766,27 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return { glyph: name(edited.glyphId), drawnAs: name(edited.drawnGlyphId) };
   }
 
+  glyphMetrics(): {
+    readonly lsb: number | null;
+    readonly rsb: number | null;
+    readonly skeletonLsb: number | null;
+    readonly skeletonRsb: number | null;
+    readonly fallbackTooltip: string | null;
+  } {
+    const model = this.sceneGlyphRenderModel;
+    if (!model) {
+      return {
+        lsb: null,
+        rsb: null,
+        skeletonLsb: null,
+        skeletonRsb: null,
+        fallbackTooltip: null,
+      };
+    }
+
+    return model.sidebearingsCell.peek();
+  }
+
   async drawnGlyph(glyph?: string): Promise<DrawnGlyph> {
     const model =
       glyph === undefined
@@ -1686,12 +1797,15 @@ export class TestEditor extends Editor implements EditorTestSurface {
           );
     if (!model) throw new Error("drawnGlyph needs an open glyph");
 
-    const { lsb, rsb } = model.sidebearings;
+    const { lsb, rsb, skeletonLsb, skeletonRsb, fallbackTooltip } = model.sidebearingsCell.peek();
     return {
       glyph: this.font.glyphName(model.glyphId) ?? model.glyphId,
       advanceWidth: model.xAdvance,
       bounds: plainBounds(model.bounds),
       sidebearings: { lsb, rsb },
+      skeletonLsb,
+      skeletonRsb,
+      fallbackTooltip,
       components: model.components.map((component) => ({
         glyph: this.font.glyphName(component.glyphId) ?? component.glyphId,
         dx: component.transform.e,

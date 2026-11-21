@@ -107,8 +107,8 @@ pub struct ReapplyLinkedMetrics {
 
 impl FontLevelIntent for ReapplyLinkedMetrics {
     fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)> {
-        font.reapply_linked_metrics(self.scope)?;
-        Ok((Vec::new(), Vec::new()))
+        let outcome = font.reapply_linked_metrics(self.scope)?;
+        Ok((outcome.moved_layers, Vec::new()))
     }
 }
 

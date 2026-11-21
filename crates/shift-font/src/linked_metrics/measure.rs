@@ -4,7 +4,6 @@ use kurbo::{Line, ParamCurve, PathSeg, Point as KurboPoint};
 
 use super::MetricsKeyError;
 use crate::composite::{ResolvedContour, resolved_contours_bbox};
-use crate::projection::ResolvedGlyph;
 use crate::{CurveSegment, CurveSegmentIter};
 
 /// A metric a measurement reads, after the key's side resolved
@@ -51,27 +50,6 @@ pub(super) fn measure_contours(
         Metric::RightSidebearing => advance - max_x,
         Metric::Width => advance,
     })
-}
-
-impl ResolvedGlyph {
-    /// Reads `metric` from the glyph, named `name` in errors.
-    ///
-    /// A sidebearing is the distance from the advance edge to the outline's
-    /// extreme, or, with `at`, to where the outline crosses that height.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`MetricsKeyError::NoOutline`] for a sidebearing of a glyph
-    /// with no outline, and [`MetricsKeyError::NothingAtHeight`] when no
-    /// contour crosses `at`.
-    pub(super) fn measure(
-        &self,
-        name: &str,
-        metric: Metric,
-        at: Option<f64>,
-    ) -> Result<f64, MetricsKeyError> {
-        measure_contours(self.contours(), name, metric, at, self.x_advance())
-    }
 }
 
 /// The leftmost and rightmost x where `contours` cross the horizontal line

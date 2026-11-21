@@ -32,7 +32,8 @@ import type {
   SetComponentAlignment,
   SetComponentLocations,
 } from "@shift/types";
-import { mintAnchorId, mintComponentId, mintContourId, mintPointId, EntityMap } from "@shift/types";
+import { EntityMap, mintAnchorId, mintComponentId, mintContourId, mintPointId } from "@shift/types";
+import type { InkBoundEdge } from "../../types/transformSelectionBounds";
 import {
   computed,
   keyedCache,
@@ -56,6 +57,7 @@ import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/varia
 import type { WeightedSource } from "../../types/glyphRender";
 import type { StrokeFills } from "../../types/graphics";
 import { NO_STROKE_FILLS } from "./strokeFills";
+import type { GlyphMetricsSidebearings } from "../../types/metricsMeasure";
 import {
   designAxisLocationFromLocation,
   externalAxisLocationsEqual,
@@ -397,6 +399,10 @@ class GlyphLayerWriter {
     this.#workspaceIntents.shiftSidebearing({ sidebearing, delta });
   }
 
+  fitInkBound(contourIds: readonly ContourId[], edge: InkBoundEdge, target: number): void {
+    this.#workspaceIntents.fitInkBound({ contourIds: [...contourIds], edge, target });
+  }
+
   linkMetricsSide(side: MetricsKeySide, key: string): void {
     this.#send({
       kind: "linkMetricsSide",
@@ -695,6 +701,7 @@ export class GlyphLayer {
   readonly #writer: GlyphLayerWriter;
   readonly #editBaseGeometry: ComputedSignal<GlyphGeometry | null>;
   readonly #editBaseOutline: ComputedSignal<Path2D | null>;
+  readonly #metricsSidebearingsCell: Signal<GlyphMetricsSidebearings>;
 
   constructor(
     source: Source,
@@ -702,7 +709,18 @@ export class GlyphLayer {
     state: GlyphLayerState,
     gate: EditGate = new EditGate(),
     placement: LayerPlacement | null = null,
+    metricsSidebearingsCell: (layerId: LayerId) => Signal<GlyphMetricsSidebearings> = () =>
+      computed(() => {
+        const sidebearings = state.sidebearingsCell.value;
+        return {
+          ...sidebearings,
+          skeletonLsb: null,
+          skeletonRsb: null,
+          fallbackTooltip: null,
+        };
+      }),
   ) {
+    this.#metricsSidebearingsCell = metricsSidebearingsCell(state.layerId);
     this.#sourceCell = signal(source, { name: "glyphLayer.source" });
     this.#placementCell = signal(placement, {
       name: "glyphLayer.placement",
@@ -866,11 +884,11 @@ export class GlyphLayer {
 
   /** @knipclassignore — public authored-source metrics API. */
   get sidebearings(): GlyphSidebearings {
-    return this.#writer.layerState.sidebearings;
+    return this.#metricsSidebearingsCell.peek();
   }
 
-  get sidebearingsCell(): Signal<GlyphSidebearings> {
-    return this.#writer.layerState.sidebearingsCell;
+  get sidebearingsCell(): Signal<GlyphMetricsSidebearings> {
+    return this.#metricsSidebearingsCell;
   }
 
   get allPoints(): Point[] {
@@ -1645,6 +1663,14 @@ export class GlyphLayer {
   }
 
   /**
+   * Resizes the selection skeleton about the opposite edge until an ink box
+   * edge lands on `target`, as one undo step.
+   */
+  fitInkBound(contourIds: readonly ContourId[], edge: InkBoundEdge, target: number): void {
+    this.#writer.fitInkBound(contourIds, edge, target);
+  }
+
+  /**
    * Reflects points across an axis through an origin.
    *
    * @param pointIds - Points to reflect.
@@ -1763,7 +1789,7 @@ export class GlyphRenderModel {
   readonly #openContoursPathCell: Signal<Path2D>;
   readonly #hasOpenContoursCell: Signal<boolean>;
   readonly #svgPathCell: Signal<string>;
-  readonly #sidebearingsCell: Signal<GlyphSidebearings>;
+  readonly #sidebearingsCell: Signal<GlyphMetricsSidebearings>;
   readonly #anchorsCell: Signal<readonly RenderAnchor[]>;
   readonly #anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
   readonly #propagatedCache: KeyedCache<GlyphId, GlyphId, ComputedSignal<PropagatedAnchors>>;
@@ -1833,6 +1859,7 @@ export class GlyphRenderModel {
       parent: ExternalAxisLocation,
     ) => boolean,
     strokeFillsOf: (layerId: LayerId) => Signal<StrokeFills>,
+    metricsSidebearingsOf: (layerId: LayerId) => Signal<GlyphMetricsSidebearings>,
   ) {
     this.#glyphId = glyphId;
     this.#baseLocation = baseLocation;
@@ -2013,13 +2040,57 @@ export class GlyphRenderModel {
       return contours.map((contour) => contour.svgPath).join(" ");
     });
     this.#sidebearingsCell = computed(() => {
+      const rootLayer = layer.value;
       const bounds = this.#boundsCell.value;
-      if (!bounds) return { lsb: null, rsb: null };
+      const xAdvance = this.#geometry.xAdvanceCell.value;
 
-      return {
+      if (!rootLayer) {
+        if (!bounds) {
+          return {
+            lsb: null,
+            rsb: null,
+            skeletonLsb: null,
+            skeletonRsb: null,
+            fallbackTooltip: "Between masters",
+          };
+        }
+
+        return {
+          lsb: bounds.min.x,
+          rsb: xAdvance - bounds.max.x,
+          skeletonLsb: null,
+          skeletonRsb: null,
+          fallbackTooltip: "Between masters",
+        };
+      }
+
+      if (!bounds) {
+        return {
+          lsb: null,
+          rsb: null,
+          skeletonLsb: null,
+          skeletonRsb: null,
+          fallbackTooltip: null,
+        };
+      }
+
+      const fromOutline = {
         lsb: bounds.min.x,
-        rsb: this.#geometry.xAdvanceCell.value - bounds.max.x,
+        rsb: xAdvance - bounds.max.x,
+        skeletonLsb: null,
+        skeletonRsb: null,
+        fallbackTooltip: null,
       };
+
+      if (rootLayer) {
+        const strokeFills = strokeFillsOf(rootLayer.id).value;
+        const usesInkMetrics = strokeFills.items.length > 0 || strokeFills.failure !== null;
+        if (usesInkMetrics) {
+          return metricsSidebearingsOf(rootLayer.id).value;
+        }
+      }
+
+      return fromOutline;
     });
   }
 
@@ -2551,7 +2622,7 @@ export class GlyphRenderModel {
     return this.#sidebearingsCell.peek();
   }
 
-  get sidebearingsCell(): Signal<GlyphSidebearings> {
+  get sidebearingsCell(): Signal<GlyphMetricsSidebearings> {
     return this.#sidebearingsCell;
   }
 
@@ -2834,6 +2905,7 @@ export class Glyph {
   readonly #defaultSourceId: SourceId;
   readonly #anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
   readonly #strokeFillsCell: (layerId: LayerId) => Signal<StrokeFills>;
+  readonly #metricsSidebearingsCell: (layerId: LayerId) => Signal<GlyphMetricsSidebearings>;
   readonly #space: GlyphSpace;
   /** Each drawing exactly on a source, by that source; located drawings are left out. */
   readonly #layersBySourceIdCell = computed(
@@ -2884,6 +2956,7 @@ export class Glyph {
     this.#defaultSourceId = options.defaultSourceId;
     this.#anchorCategory = options.anchorCategory;
     this.#strokeFillsCell = options.strokeFillsCell;
+    this.#metricsSidebearingsCell = options.metricsSidebearingsCell;
     this.replaceComponentGlyphs(options.componentGlyphs);
   }
 
@@ -3234,6 +3307,7 @@ export class Glyph {
       (parentGlyphId, component, parent) =>
         this.#designspace.componentDraws(parentGlyphId, component.condition, parent),
       this.#strokeFillsCell,
+      (layerId) => this.#metricsSidebearingsCell(layerId),
     );
     renderModels.set(activeSourceIdCell, renderModel);
     return renderModel;

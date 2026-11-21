@@ -37,6 +37,7 @@ import type {
   SetXAdvance,
   TransformLayer,
 } from "@shift/types";
+import type { FitInkBound } from "@shift/wasm/protocol";
 import type { PendingEditId } from "../../types/editing";
 
 /** An intent payload minus the layer id this channel already carries. */
@@ -200,6 +201,13 @@ export class LayerIntents<TResult = PendingEditId> {
     return this.#sink({
       kind: "shiftSidebearing",
       shiftSidebearing: { layerId: this.#layerId, ...payload },
+    });
+  }
+
+  fitInkBound(payload: Payload<FitInkBound>): TResult {
+    return this.#sink({
+      kind: "fitInkBound",
+      fitInkBound: { layerId: this.#layerId, ...payload },
     });
   }
 

@@ -37,9 +37,11 @@ use shift_font::{
 use shift_text::layout::{LayoutError, TextLayout};
 
 pub use crate::page_layout::{NodeBox, PageLayout, PageLayoutError, PageLayoutRequest, RunLines};
+pub use crate::stroke_extent::{LayerExtentReadError, ReapplyLinkedMetricsScope};
 pub use crate::stroke_preview::{
     StrokeOutlineFailure, StrokeOutlinePreviewItem, StrokeOutlinePreviews, StrokePreviewReadError,
 };
+pub use shift_font::stroke::LayerExtent;
 pub use shift_font::stroke::LiveStroke;
 use shift_font::wire::{
     AxisMapping, AxisMappingBasis, FontMetadata, FontMetrics, GlyphSnapshot, InterpolationBasis,
@@ -424,6 +426,30 @@ pub trait EngineReads {
     /// resident and [`StrokePreviewReadError::LayerNotFound`] when the font
     /// has no such layer.
     fn live_strokes(&self, layer_id: LayerId) -> Result<Vec<LiveStroke>, StrokePreviewReadError>;
+    /// Skeleton, ink and effective bounds of `layer_id` under the font's metrics
+    /// measure, unsaved edits included. Follows a gesture's preview while one
+    /// is under way.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LayerExtentReadError::NotLoaded`] when the layer is not
+    /// resident, [`LayerExtentReadError::LayerNotFound`] when the font has no
+    /// such layer, and [`LayerExtentReadError::Failed`] when the extent cannot
+    /// be computed.
+    fn layer_extent(&self, layer_id: LayerId) -> Result<LayerExtent, LayerExtentReadError>;
+    /// Bounds of a whole layer or a contour subset under the current metrics measure.
+    fn selection_extent(
+        &self,
+        request: crate::stroke_extent::SelectionExtentRequest,
+    ) -> Result<LayerExtent, LayerExtentReadError>;
+    /// Whether metrics read ink (`true`) or skeleton only (`false`).
+    fn include_stroke_in_metrics(&self) -> bool;
+    /// Why [`shift_font::Font::reapply_linked_metrics`] would change no layer
+    /// for `scope`, or null when it may run.
+    fn reapply_linked_metrics_disabled_reason(
+        &self,
+        scope: ReapplyLinkedMetricsScope,
+    ) -> Option<String>;
 }
 
 /// A condition chip's value as [`EngineReads::condition_value`] reads it.
@@ -448,6 +474,8 @@ pub struct FontHeader {
     pub named_instances: Vec<NamedInstance>,
     /// Tracked Hyperglot language ids; `None` when the font stores no list.
     pub language_ids: Option<Vec<String>>,
+    /// Whether metrics read ink rather than the skeleton; absent means include.
+    pub include_stroke_in_metrics: bool,
     /// The grid the font is drawn on; `None` when it stores none.
     pub grid: Option<shift_font::Grid>,
 }
@@ -620,10 +648,11 @@ mod exports {
         Condition, ConditionRange, ConditionValue, Counterparts, CounterpartsReadError,
         EditablePair, EngineReads, FeatureListError, FeatureSubstitution, FontChangeFlag,
         FontFeature, FontHeader, FontRecordsError, GlyphIdentityChange, GlyphSnapshot,
-        InterpolatedMetrics, KerningSnapshot, LayerId, LayoutError, LiveStroke, NeverUsedSwap,
-        NodeId, PageLayout, PageLayoutError, PageLayoutRequest, PlacedText, PointId, RevisedNode,
-        SceneNode, Source, SourceSetWeights, StrokeOutlinePreviews, StrokePreviewReadError,
-        TextLayoutRequest, engine_reads_request,
+        InterpolatedMetrics, KerningSnapshot, LayerExtent, LayerExtentReadError, LayerId,
+        LayoutError, LiveStroke, NeverUsedSwap, NodeId, PageLayout, PageLayoutError,
+        PageLayoutRequest, PlacedText, PointId, ReapplyLinkedMetricsScope, RevisedNode, SceneNode,
+        Source, SourceSetWeights, StrokeOutlinePreviews, StrokePreviewReadError, TextLayoutRequest,
+        engine_reads_request,
     };
     use crate::engine::{Engine, with_engine};
     use crate::page_layout::{PlaceKey, RunLayouts, lay_out_page};
@@ -1367,6 +1396,7 @@ mod exports {
                     .map(wire::NamedInstance::from)
                     .collect(),
                 language_ids: font.language_ids(),
+                include_stroke_in_metrics: font.include_stroke_in_metrics(),
                 grid: font.grid(),
             })
         }
@@ -1518,6 +1548,51 @@ mod exports {
                 .layer(layer_id)
                 .ok_or(StrokePreviewReadError::LayerNotFound { layer: layer_id })?;
             Ok(layer.live_strokes())
+        }
+
+        fn layer_extent(&self, layer_id: LayerId) -> Result<LayerExtent, LayerExtentReadError> {
+            if self.session.residency().is_unloaded(layer_id) {
+                return Err(LayerExtentReadError::NotLoaded { layer: layer_id });
+            }
+            let font = self
+                .previewed
+                .as_ref()
+                .unwrap_or_else(|| self.session.font());
+            crate::stroke_extent::layer_extent_of_font(font, layer_id)
+        }
+
+        fn selection_extent(
+            &self,
+            request: crate::stroke_extent::SelectionExtentRequest,
+        ) -> Result<LayerExtent, LayerExtentReadError> {
+            if self.session.residency().is_unloaded(request.layer_id) {
+                return Err(LayerExtentReadError::NotLoaded {
+                    layer: request.layer_id,
+                });
+            }
+            let font = self
+                .previewed
+                .as_ref()
+                .unwrap_or_else(|| self.session.font());
+            crate::stroke_extent::selection_extent_of_font(font, request)
+        }
+
+        fn include_stroke_in_metrics(&self) -> bool {
+            let font = self
+                .previewed
+                .as_ref()
+                .unwrap_or_else(|| self.session.font());
+            font.include_stroke_in_metrics()
+        }
+
+        fn reapply_linked_metrics_disabled_reason(
+            &self,
+            scope: ReapplyLinkedMetricsScope,
+        ) -> Option<String> {
+            self.session
+                .font()
+                .reapply_linked_metrics_disabled_reason(scope)
+                .map(str::to_owned)
         }
     }
 

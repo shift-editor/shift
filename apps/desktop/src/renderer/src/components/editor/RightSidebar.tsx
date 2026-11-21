@@ -1,4 +1,4 @@
-import { GlyphSidebar } from "@shift/editor/ui";
+import { GlyphReapplyMetrics, GlyphSidebar } from "@shift/editor/ui";
 import { useSignalState } from "@shift/editor/signals";
 import { isSegmentId } from "@shift/glyph-state";
 import { isAnchorId, isComponentId, isContourId, isPointId } from "@shift/types";
@@ -49,6 +49,8 @@ export const RightSidebar = () => {
   const severalGlyphs = tagTargetsOf(pathname, gridSelection.ids, null).length > 1;
   const hasAnchorSelection = selection.ids.some(isAnchorId);
   const hasBooleanSelection = !textActive && selection.ids.filter(isContourId).length >= 2;
+  const shownGlyph = useSignalState(editor.scene.onlyCell("glyph"))?.glyphId ?? null;
+  const activeSourceId = useSignalState(editor.activeSourceIdCell);
 
   return (
     <GlyphSidebar
@@ -71,7 +73,16 @@ export const RightSidebar = () => {
             <ZoomMenu />
           </div>
         ),
-        glyphHeading: <GlyphTagButton />,
+        glyphHeading: (
+          <span className="flex items-center gap-0.5">
+            <GlyphReapplyMetrics
+              font={session.font}
+              glyphId={shownGlyph}
+              sourceId={activeSourceId}
+            />
+            <GlyphTagButton />
+          </span>
+        ),
         selection: (
           <>
             {kerningActive ? (
