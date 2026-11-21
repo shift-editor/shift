@@ -16,6 +16,43 @@ pub enum Metric {
     Width,
 }
 
+/// Reads `metric` from `contours` at `advance`, naming the glyph `name` in errors.
+///
+/// # Errors
+///
+/// Returns [`MetricsKeyError::NoOutline`] for a sidebearing of a glyph
+/// with no outline, and [`MetricsKeyError::NothingAtHeight`] when no
+/// contour crosses `at`.
+pub(super) fn measure_contours(
+    contours: &[ResolvedContour],
+    name: &str,
+    metric: Metric,
+    at: Option<f64>,
+    advance: f64,
+) -> Result<f64, MetricsKeyError> {
+    if metric == Metric::Width {
+        return Ok(advance);
+    }
+
+    let (min_x, max_x) = match at {
+        None => resolved_contours_bbox(contours)
+            .map(|(min_x, _, max_x, _)| (min_x, max_x))
+            .ok_or_else(|| MetricsKeyError::NoOutline(name.to_owned()))?,
+        Some(height) => {
+            crossings_at(contours, height).ok_or_else(|| MetricsKeyError::NothingAtHeight {
+                glyph: name.to_owned(),
+                height,
+            })?
+        }
+    };
+
+    Ok(match metric {
+        Metric::LeftSidebearing => min_x,
+        Metric::RightSidebearing => advance - max_x,
+        Metric::Width => advance,
+    })
+}
+
 impl ResolvedGlyph {
     /// Reads `metric` from the glyph, named `name` in errors.
     ///
@@ -33,28 +70,7 @@ impl ResolvedGlyph {
         metric: Metric,
         at: Option<f64>,
     ) -> Result<f64, MetricsKeyError> {
-        let advance = self.x_advance();
-        if metric == Metric::Width {
-            return Ok(advance);
-        }
-
-        let (min_x, max_x) = match at {
-            None => resolved_contours_bbox(self.contours())
-                .map(|(min_x, _, max_x, _)| (min_x, max_x))
-                .ok_or_else(|| MetricsKeyError::NoOutline(name.to_owned()))?,
-            Some(height) => crossings_at(self.contours(), height).ok_or_else(|| {
-                MetricsKeyError::NothingAtHeight {
-                    glyph: name.to_owned(),
-                    height,
-                }
-            })?,
-        };
-
-        Ok(match metric {
-            Metric::LeftSidebearing => min_x,
-            Metric::RightSidebearing => advance - max_x,
-            Metric::Width => advance,
-        })
+        measure_contours(self.contours(), name, metric, at, self.x_advance())
     }
 }
 

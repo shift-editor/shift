@@ -11,6 +11,7 @@ use bitflags::bitflags;
 use crate::collection::Identified;
 use crate::error::{CoreError, CoreResult, EntityKind};
 
+use crate::stroke::IGNORE_STROKE_LIB_KEY;
 use crate::{
     Axis, AxisMapping, Component, FontMetadata, GRID_LIB_KEY, Glyph, GlyphId, GlyphLayer,
     KerningGroup, KerningGroupId, KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue,
@@ -25,6 +26,8 @@ use crate::{
 pub enum FontChangeFlag {
     Metadata,
     Languages,
+    /// Whether metrics read ink or skeleton (`com.shift.ignoreStroke`).
+    StrokeMeasure,
     Glyphs,
     Axes,
     AxisMappings,
@@ -48,9 +51,10 @@ pub enum FontChangeFlag {
 
 impl FontChangeFlag {
     /// Every flag, in bit order.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::Metadata,
         Self::Languages,
+        Self::StrokeMeasure,
         Self::Glyphs,
         Self::Axes,
         Self::AxisMappings,
@@ -85,6 +89,7 @@ bitflags! {
     pub struct FontChangeImpact: u16 {
         const METADATA = FontChangeFlag::Metadata.bit();
         const LANGUAGES = FontChangeFlag::Languages.bit();
+        const STROKE_MEASURE = FontChangeFlag::StrokeMeasure.bit();
         const GLYPHS = FontChangeFlag::Glyphs.bit();
         const AXES = FontChangeFlag::Axes.bit();
         const AXIS_MAPPINGS = FontChangeFlag::AxisMappings.bit();
@@ -381,6 +386,9 @@ impl FontChange {
         match self {
             Self::Metadata(_) => FontChangeImpact::METADATA,
             Self::LibValue { key, .. } if key == LANGUAGES_LIB_KEY => FontChangeImpact::LANGUAGES,
+            Self::LibValue { key, .. } if key == IGNORE_STROKE_LIB_KEY => {
+                FontChangeImpact::STROKE_MEASURE
+            }
             Self::LibValue { key, .. } if key == GRID_LIB_KEY => FontChangeImpact::GRID,
             Self::Axes(_) => {
                 FontChangeImpact::AXES

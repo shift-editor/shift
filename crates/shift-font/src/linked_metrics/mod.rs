@@ -17,7 +17,7 @@ mod order;
 mod report;
 mod syntax;
 
-pub use apply::ChangedGlyphs;
+pub use apply::{ChangedGlyphs, ReapplyLinkedMetricsOutcome, ReapplyLinkedMetricsScope};
 pub use evaluate::MetricsKeyEvaluator;
 pub use measure::Metric;
 pub use order::{LinkedMetricsOrder, LinkedSide, OrderedKey};

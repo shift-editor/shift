@@ -82,6 +82,36 @@ impl FontLevelIntent for SetLanguages {
     }
 }
 
+/// Toggles whether metrics read the skeleton instead of the ink.
+///
+/// Stored under [`crate::stroke::IGNORE_STROKE_LIB_KEY`]; touches no layer.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct SetIgnoreStroke {
+    pub ignore: bool,
+}
+
+impl FontLevelIntent for SetIgnoreStroke {
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)> {
+        font.apply_set_ignore_stroke(self.ignore);
+        Ok((Vec::new(), Vec::new()))
+    }
+}
+
+/// Re-applies linked metrics for one glyph or the whole font in one step.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct ReapplyLinkedMetrics {
+    pub scope: crate::linked_metrics::ReapplyLinkedMetricsScope,
+}
+
+impl FontLevelIntent for ReapplyLinkedMetrics {
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)> {
+        font.reapply_linked_metrics(self.scope)?;
+        Ok((Vec::new(), Vec::new()))
+    }
+}
+
 /// Replaces the grid the font is drawn on, stored under [`crate::GRID_LIB_KEY`];
 /// `None` removes it, so the editor falls back to its default grid.
 #[derive(Clone, Debug)]

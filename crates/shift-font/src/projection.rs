@@ -650,6 +650,16 @@ impl GlyphProjectionSet {
 }
 
 impl FontProjection<'_> {
+    /// Prepared layers for extent and ink reads.
+    pub(crate) fn layers_for_extent(&self) -> &HashMap<GlyphId, GlyphLayer> {
+        &self.layers
+    }
+
+    /// Ensures `glyph_id` and its component closure are loaded in `layers`.
+    pub(crate) fn prepare_layer_for_extent(&mut self, glyph_id: GlyphId) -> CoreResult<bool> {
+        self.prepare_layer_tree(glyph_id)
+    }
+
     /// Returns the internal authoring location fixed for this projection.
     pub fn location(&self) -> &DesignLocation {
         &self.location
