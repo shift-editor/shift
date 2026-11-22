@@ -77,6 +77,7 @@ import type {
   PlacedText,
   StrokeOutlinePreviews,
   LiveStroke,
+  InkSnapContourPoints,
   LayerExtent,
   ReapplyLinkedMetricsScope,
   SelectionExtentRequest,
@@ -85,6 +86,7 @@ import type {
 export { initEngine, svgPaths, typedText } from "@shift/wasm/engine";
 export type {
   ContourPoints,
+  InkSnapContourPoints,
   LiveStroke,
   StrokeOutlineFailure,
   StrokeOutlinePreviewItem,
@@ -396,6 +398,17 @@ export class EngineSession {
 
   reapplyLinkedMetricsDisabledReason(scope: ReapplyLinkedMetricsScope): string | null {
     return this.#reads.reapplyLinkedMetricsDisabledReason(scope);
+  }
+
+  /**
+   * On-curve points and extrema of the solved stroke outlines on `layerId`,
+   * grouped by skeleton contour. These are the snap targets and probes for
+   * ink snapping. Follows a gesture's preview while one is under way.
+   *
+   * Returns empty when "Include stroke" is off or the layer has no strokes.
+   */
+  inkSnapPoints(layerId: LayerId): readonly InkSnapContourPoints[] {
+    return this.#reads.inkSnapPoints(layerId);
   }
 
   /** What renaming a glyph to `name` does, as shift-font's `Font::glyph_rename` decides. */

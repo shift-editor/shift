@@ -5,6 +5,7 @@ pub mod extent_memo;
 pub mod ink;
 pub mod ink_bounds;
 pub mod ink_fit;
+pub mod ink_snap;
 pub mod layer_edit;
 pub mod layer_lib;
 pub mod live_stroke;
@@ -22,6 +23,7 @@ pub use ink::{
 };
 pub use ink_bounds::{FitInkBound, InkBoundEdge, SelectionExtentFilter};
 pub use ink_fit::{InkBoxEdge, InkEdgeFitError, InkEdgeFitRequest, InkEdgeFitResult, fit_ink_edge};
+pub use ink_snap::InkSnapContour;
 pub use layer_edit::{contour_bounds_oracle, contour_skeleton_path, contours_closed_oracle};
 pub use layer_lib::{ContourStrokeEntry, ContourStrokeRole, LayerStrokeLib, STROKE_LIB_KEY};
 pub use live_stroke::{

@@ -93,18 +93,40 @@ describe("apply dynamic stroke", () => {
     expect(editor.dynamicStrokeContours()).toEqual([]);
   });
 
-  it("replaces the style of a contour that is already dynamic", async () => {
+  it("refuses when every selected contour is already dynamic, changing nothing", async () => {
     await drawLine(editor, { x: 100, y: 100 }, { x: 400, y: 100 });
     const [line] = await contours(editor);
     selectContours(editor, [line!]);
     applyDynamicStroke(editor.asEditor(), ROUND_20);
     await editor.settle();
 
-    applyDynamicStroke(editor.asEditor(), ROUND_60);
+    const result = applyDynamicStroke(editor.asEditor(), ROUND_60);
     await editor.settle();
 
+    expect(result).toEqual({
+      ok: false,
+      reason: "Every selected contour already has a dynamic stroke.",
+    });
+    // The contour keeps the stroke it had; changing it is updateStrokeStyle's job.
     const [preview] = editor.strokeOutlinePreviews().items;
-    expect(preview!.height).toBeGreaterThan(55);
+    expect(preview!.height).toBeLessThan(25);
+  });
+
+  it("applies to a mixed selection, replacing the dynamic contour's style", async () => {
+    await drawLine(editor, { x: 100, y: 100 }, { x: 400, y: 100 });
+    await drawLine(editor, { x: 100, y: 300 }, { x: 400, y: 300 });
+    const [dynamic, plain] = await contours(editor);
+    selectContours(editor, [dynamic!]);
+    applyDynamicStroke(editor.asEditor(), ROUND_20);
+    await editor.settle();
+
+    selectContours(editor, [dynamic!, plain!]);
+    const result = applyDynamicStroke(editor.asEditor(), ROUND_60);
+    await editor.settle();
+
+    expect(result).toEqual({ ok: true });
+    expect(editor.dynamicStrokeContours()).toHaveLength(2);
+    expect(editor.strokeOutlinePreviews().items.every((item) => item.height > 55)).toBe(true);
   });
 
   it("refuses without a selected contour and changes nothing", async () => {
@@ -599,14 +621,18 @@ describe("the stroke commands a selection can run", () => {
     ]);
   });
 
-  it("offers every command once the contour has a dynamic stroke", async () => {
+  it("offers expand, remove and offset once the contour has a dynamic stroke, but not apply again", async () => {
     await drawLine(editor, { x: 100, y: 100 }, { x: 400, y: 100 });
     const [line] = await contours(editor);
     selectContours(editor, [line!]);
     applyDynamicStroke(editor.asEditor(), ROUND_20);
     await editor.settle();
 
-    expect(availableStrokeCommands(editor.asEditor(), CONTEXT_COMMANDS)).toEqual(CONTEXT_COMMANDS);
+    expect(availableStrokeCommands(editor.asEditor(), CONTEXT_COMMANDS)).toEqual([
+      "glyph.stroke.expand",
+      "glyph.stroke.removeDynamic",
+      "glyph.stroke.offsetContour",
+    ]);
   });
 
   it("stops offering offset for two contours, which it cannot offset at once", async () => {

@@ -27,6 +27,8 @@ export function strokeAvailability(
 
   switch (id) {
     case "glyph.stroke.applyDynamic":
+      return applyAvailability(selection);
+
     case "glyph.stroke.expandWithStyle":
       return AVAILABLE;
 
@@ -69,6 +71,14 @@ function sharedAvailability(selection: StrokeSelection): StrokeAvailability {
 /** Whether `contour` carries a dynamic stroke. */
 export function isDynamicStroke(contour: StrokeSelectedContour): boolean {
   return contour.style !== null;
+}
+
+function applyAvailability(selection: StrokeSelection): StrokeAvailability {
+  if (selection.contours.every(isDynamicStroke)) {
+    return unavailable("Every selected contour already has a dynamic stroke.");
+  }
+
+  return AVAILABLE;
 }
 
 function dynamicAvailability(selection: StrokeSelection): StrokeAvailability {

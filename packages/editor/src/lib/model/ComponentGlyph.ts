@@ -3,10 +3,13 @@ import { Point, Segment, erasedOutline, segmentContour } from "@shift/glyph-stat
 import type {
   ComponentGlyph as ComponentGlyphDefinition,
   ComponentId,
+  ContourId,
   GlyphId,
   SourceId,
 } from "@shift/types";
 import { ContourPath } from "../graphics/ContourPath";
+import type { StrokeFills } from "../../types/graphics";
+import { dynamicContourIds, placeStrokeFills, sameDynamicContourIds } from "./strokeFills";
 import { computed, track, type Signal } from "../signals";
 import type { GlyphRenderContour, PlacedContours } from "../../types/glyphRender";
 import type { ExternalAxisLocation } from "../../types/variation";
@@ -50,6 +53,9 @@ export class ComponentGlyph {
 
   readonly transformCell: Signal<MatModel>;
   readonly resolvedTransformCell: Signal<MatModel>;
+  /** This occurrence's base strokes solved and placed in root coordinates. */
+  readonly strokeFillsCell: Signal<StrokeFills>;
+  readonly #dynamicContourIdsCell: Signal<ReadonlySet<ContourId>>;
   readonly contoursCell: Signal<readonly GlyphContour[]>;
   readonly #placedContoursCell: Signal<readonly RenderContour[] | null>;
   readonly closedContoursPathCell: Signal<Path2D>;
@@ -125,6 +131,19 @@ export class ComponentGlyph {
       return Mat.Compose(parent.resolvedTransformCell.value, this.transformCell.value);
     });
 
+    this.strokeFillsCell = computed(
+      () =>
+        placeStrokeFills(
+          this.#renderModel.strokeFillsWhere(this.#glyphIdCell.value, this.locationCell.value),
+          this.resolvedTransformCell.value,
+        ),
+      { name: "glyph.component.strokeFills" },
+    );
+    this.#dynamicContourIdsCell = computed(() => dynamicContourIds(this.strokeFillsCell.value), {
+      name: "glyph.component.dynamicContourIds",
+      equals: sameDynamicContourIds,
+    });
+
     this.#placedContoursCell = computed(() => this.#placedContours());
     const placementCell = computed(() =>
       this.#placedContoursCell.value ? IDENTITY : this.resolvedTransformCell.value,
@@ -137,10 +156,15 @@ export class ComponentGlyph {
       this.locationCell,
     );
     this.closedContoursPathCell = computed(() => {
+      const dynamicContourIds = this.#dynamicContourIdsCell.value;
       const path = new Path2D();
       for (const contour of this.contoursCell.value) {
         contour.trackShape();
-        if (contour.contour.closed) path.addPath(contour.fillPath);
+        if (!contour.contour.closed) continue;
+        // A dynamic stroke fills as its solved outline, never as its skeleton.
+        if (dynamicContourIds.has(contour.contour.id)) continue;
+
+        path.addPath(contour.fillPath);
       }
       return path;
     });
@@ -192,6 +216,11 @@ export class ComponentGlyph {
 
   get resolvedTransform(): MatModel {
     return this.resolvedTransformCell.peek();
+  }
+
+  /** The base contours this occurrence's stroke fills replace, by contour id. */
+  get dynamicContourIdsCell(): Signal<ReadonlySet<ContourId>> {
+    return this.#dynamicContourIdsCell;
   }
 
   get contours(): readonly GlyphContour[] {

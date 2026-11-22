@@ -1,6 +1,6 @@
 import { Bounds, Mat, Vec2, type Point2D } from "@shift/geo";
 import { Point, type Contour, type Segment } from "@shift/glyph-state";
-import type { PointId, SelectableId } from "@shift/types";
+import type { ContourId, PointId, SelectableId } from "@shift/types";
 
 import type { ToolContext } from "../../core/Behavior";
 import type { Editor } from "../../../editor/Editor";
@@ -225,13 +225,21 @@ export class Translate implements SelectBehavior {
     const neighbours =
       candidates.length > 1 ? edgeNeighbours(layer, movingIds) : new Set<PointId>();
     const excluding = movingIds.union(neighbours);
+
+    const movingContourIds = movingInkContourIds(layer, movingIds);
+    const inkProbes = movingInkProbes(editor, layer, movingContourIds);
+
     drag.move.snappedBy(
       editor.snapping.forLayer(layer, editor.selectionNode(), {
         excluding,
         marking: neighbours,
+        excludingInkContours: movingContourIds.size > 0 ? movingContourIds : undefined,
         condition,
       }),
-      candidates.map((pointId) => PositionReference.point(pointId)),
+      [
+        ...candidates.map((pointId) => PositionReference.point(pointId)),
+        ...inkProbes.map((point) => PositionReference.position(point)),
+      ],
     );
   }
 
@@ -540,4 +548,31 @@ function handleFollowsLine(contour: Contour, handle: Point): boolean {
   const towardHandle = Math.abs(step) === 1 ? step : -Math.sign(step);
   const opposite = contour.pointAt(anchorIndex - towardHandle);
   return opposite?.isOnCurve ?? false;
+}
+
+/** Skeleton contour IDs that contain at least one moving point. */
+function movingInkContourIds(layer: GlyphLayer, moving: ReadonlySet<PointId>): Set<ContourId> {
+  const geometry = layer.geometry;
+  const ids = new Set<ContourId>();
+
+  for (const pointId of moving) {
+    const contourId = geometry.contourIdOfPoint(pointId);
+    if (contourId) ids.add(contourId);
+  }
+
+  return ids;
+}
+
+/** Ink extrema of the moving contours, frozen as drag-start positions for snap probes. */
+function movingInkProbes(
+  editor: Editor,
+  layer: GlyphLayer,
+  movingContourIds: ReadonlySet<ContourId>,
+): Point2D[] {
+  if (movingContourIds.size === 0) return [];
+
+  const inkContours = editor.font.inkSnapContours(layer.id);
+  return inkContours
+    .filter((c) => movingContourIds.has(c.skeletonContourId))
+    .flatMap((c) => c.points);
 }

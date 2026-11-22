@@ -552,6 +552,7 @@ export class TextRunNodeDefinition extends NodeDefinition<TextRunNode> {
       batch.offset(placed.origin.x, placed.origin.y);
       batch.fill(glyph.closed);
       if (glyph.strokeFills) batch.fill(glyph.strokeFills);
+      if (glyph.componentStrokeFills) batch.fill(glyph.componentStrokeFills);
       if (glyph.open) batch.stroke(glyph.open);
       if (outlined.has(itemId)) this.#outline.draw(canvas, model, { stroke: outlineStroke });
     };
@@ -685,6 +686,8 @@ interface DistinctGlyph {
   readonly open: Path2D | null;
   /** The solved fills of the glyph's dynamic strokes; null when it draws none. */
   readonly strokeFills: Path2D | null;
+  /** The solved fills its components place; null when no placed base draws a stroke. */
+  readonly componentStrokeFills: Path2D | null;
   /** Why the glyph's dynamic strokes could not be solved; null when they could. */
   readonly strokeFailure: string | null;
 }
@@ -754,12 +757,18 @@ function distinctGlyph(model: GlyphRenderModel): DistinctGlyph {
   track(model.hasOpenContoursCell);
   // Pulled here, in the frame, so a drag's preview is the one this frame reads.
   track(model.strokeFillsCell);
-  const { path: strokeFills, failure: strokeFailure } = model.strokeFillsCell.peek();
+  const { path: strokeFills, failure } = model.strokeFillsCell.peek();
+  track(model.componentStrokeFillsCell);
+  const componentFills = model.componentStrokeFillsCell.peek();
+  const strokeFailure = failure ?? componentFills.failure;
   const closed = model.closedContoursPath;
-  if (!model.hasOpenContoursCell.peek()) return { closed, open: null, strokeFills, strokeFailure };
+  const componentStrokeFills = componentFills.path;
+  if (!model.hasOpenContoursCell.peek()) {
+    return { closed, open: null, strokeFills, componentStrokeFills, strokeFailure };
+  }
 
   track(model.openContoursPathCell);
-  return { closed, open: model.openContoursPath, strokeFills, strokeFailure };
+  return { closed, open: model.openContoursPath, strokeFills, componentStrokeFills, strokeFailure };
 }
 
 /** Whether a glyph-local point is inside a fill or within `radius` of a contour. */

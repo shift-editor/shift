@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { Mat } from "@shift/geo";
 import { mintContourId, mintLayerId } from "@shift/types";
 import type { StrokeOutlinePreviewItem } from "@shift/wasm/protocol";
-import { NO_STROKE_FILLS, solveStrokeFills } from "./strokeFills";
+import {
+  NO_STROKE_FILLS,
+  dynamicContourIds,
+  placeStrokeFills,
+  sameDynamicContourIds,
+  solveStrokeFills,
+} from "./strokeFills";
 
 /** What the engine throws for a failed stroke read: a `PackError` carrying the reason. */
 function strokeReadError(reason: object): Error {
@@ -104,5 +111,63 @@ describe("solving a layer's stroke fills", () => {
 
   it("reads a layer with no strokes as the shared empty value", () => {
     expect(solveStrokeFills(() => ({ items: [], failures: [] }))).toBe(NO_STROKE_FILLS);
+  });
+});
+
+describe("the contours solved fills replace", () => {
+  it("names each solved item's skeleton contour", () => {
+    const first = solvedItem();
+    const second = solvedItem();
+    const fills = solveStrokeFills(() => ({ items: [first, second], failures: [] }));
+
+    expect(dynamicContourIds(fills)).toEqual(
+      new Set([first.skeletonContourId, second.skeletonContourId]),
+    );
+    expect(dynamicContourIds(NO_STROKE_FILLS)).toEqual(new Set());
+  });
+
+  it("compares id sets by their members", () => {
+    const item = solvedItem();
+    const ids = new Set([item.skeletonContourId]);
+
+    expect(sameDynamicContourIds(ids, new Set([item.skeletonContourId]))).toBe(true);
+    expect(sameDynamicContourIds(ids, new Set())).toBe(false);
+    expect(sameDynamicContourIds(ids, new Set([mintContourId()]))).toBe(false);
+  });
+});
+
+describe("placing solved fills", () => {
+  it("returns the fills themselves under an identity transform", () => {
+    const fills = solveStrokeFills(() => ({ items: [solvedItem()], failures: [] }));
+
+    expect(placeStrokeFills(fills, Mat.Identity())).toBe(fills);
+  });
+
+  it("returns the fills themselves when nothing solved, failure included", () => {
+    const fills = solveStrokeFills(() => ({
+      items: [],
+      failures: [failedContour("nothing to outline")],
+    }));
+
+    const placed = placeStrokeFills(fills, Mat.Translate(50, 0));
+
+    expect(placed).toBe(fills);
+    expect(placed.failure).not.toBeNull();
+  });
+
+  it("rebuilds the path under a transform, keeping the items and failure", () => {
+    const item = solvedItem();
+    const fills = solveStrokeFills(() => ({
+      items: [item],
+      failures: [failedContour("another did not solve")],
+    }));
+
+    const placed = placeStrokeFills(fills, Mat.Translate(50, 20));
+
+    expect(placed).not.toBe(fills);
+    expect(placed.items).toEqual([item]);
+    expect(placed.path).not.toBeNull();
+    expect(placed.path).not.toBe(fills.path);
+    expect(placed.failure).toBe(fills.failure);
   });
 });

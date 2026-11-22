@@ -90,6 +90,8 @@ import type {
   StrokeOutlinePreviews,
   TextRun,
 } from "@shift/wasm/protocol";
+import { Mat, type Point2D } from "@shift/geo";
+import { Point } from "@shift/glyph-state";
 import { FontVariation, locationValues } from "../wasm/variation";
 import type { GlyphIdentityEdit, GlyphReader } from "../../types/glyph";
 import type { StrokeFills } from "../../types/graphics";
@@ -122,6 +124,12 @@ import {
   sidebearingsFromLayerExtent,
   type GlyphMetricsSidebearings,
 } from "../../types/metricsMeasure";
+
+/** Ink snap points for one skeleton contour, unpacked from the WASM protocol. */
+export interface InkSnapContourTargets {
+  readonly skeletonContourId: ContourId;
+  readonly points: readonly Point2D[];
+}
 
 /**
  * Directory queries over the store's committed glyph index.
@@ -1577,9 +1585,109 @@ export class Font {
     }
   }
 
+  /**
+   * Whether `layerId`'s drawing, or a base glyph it places, carries a dynamic
+   * stroke on the drawing at the same source, so its extent reads as ink.
+   *
+   * @remarks
+   * Called from the metrics computed: the reads it makes (the glyph directory,
+   * each drawing's geometry, the engine's stroke lists) subscribe it to every
+   * change that could give the closure a stroke.
+   */
+  #hasLiveStrokeInClosure(layerId: LayerId): boolean {
+    track(this.#directoryCell);
+    const glyphId = this.glyphIdForLayer(layerId);
+    const glyph = glyphId ? this.#glyph(glyphId) : null;
+    const layer = glyph?.layerForId(layerId) ?? null;
+    if (!layer) return this.liveStrokeContoursWhenLoaded(layerId).length > 0;
+
+    const seen = new Set<GlyphId>();
+    const pending: GlyphLayer[] = [layer];
+    while (pending.length > 0) {
+      const current = pending.pop()!;
+      if (this.liveStrokeContoursWhenLoaded(current.id).length > 0) return true;
+
+      track(current.geometryCell);
+      for (const component of current.geometry.components) {
+        if (seen.has(component.baseGlyphId)) continue;
+        seen.add(component.baseGlyphId);
+
+        const baseLayer = this.#glyph(component.baseGlyphId)?.layerForSource(current.sourceId);
+        if (baseLayer) pending.push(baseLayer);
+      }
+    }
+
+    return false;
+  }
+
   /** Whether metrics read ink rather than the skeleton for this font. */
   get includeStrokeInMetricsCell(): Signal<boolean> {
     return this.#includeStrokeInMetricsCell;
+  }
+
+  /**
+   * Ink-outline on-curve points and parametric extrema for a layer's stroked contours.
+   *
+   * @returns Empty when "Include stroke" is off or the layer has no stroke data.
+   */
+  inkSnapTargets(layerId: LayerId): readonly Point2D[] {
+    return this.inkSnapContours(layerId).flatMap((contour) => contour.points);
+  }
+
+  /**
+   * Ink snap points grouped by skeleton contour identity, so callers can filter
+   * moving contours from stationary ones.
+   *
+   * @returns Empty when "Include stroke" is off or the layer has no stroke data.
+   */
+  inkSnapContours(layerId: LayerId): readonly InkSnapContourTargets[] {
+    if (!this.#includeStrokeInMetricsCell.peek()) return [];
+
+    const contours = this.#store.engine.inkSnapPoints(layerId);
+    return contours.map((contour) => {
+      const coords = contour.coordinates;
+      const points: Point2D[] = [];
+      for (let i = 0; i < coords.length; i += 2) {
+        points.push({ x: coords[i]!, y: coords[i + 1]! });
+      }
+      return { skeletonContourId: contour.skeletonContourId, points };
+    });
+  }
+
+  /**
+   * On-curve points from each component's resolved base glyph outline, transformed
+   * by the component's affine matrix.
+   *
+   * @returns Empty when the layer has no components or a base glyph is not loaded.
+   */
+  componentOnCurveTargets(layerId: LayerId): readonly Point2D[] {
+    const glyphId = this.glyphIdForLayer(layerId);
+    if (!glyphId) return [];
+
+    const glyph = this.#glyph(glyphId);
+    if (!glyph) return [];
+
+    const layer = glyph.layerForId(layerId);
+    if (!layer) return [];
+
+    const components = layer.geometry.components;
+    if (components.length === 0) return [];
+
+    const targets: Point2D[] = [];
+
+    for (const component of components) {
+      const baseGlyph = this.#glyph(component.baseGlyphId);
+      if (!baseGlyph) continue;
+
+      const matrix = component.matrix;
+
+      for (const point of baseGlyph.allPoints) {
+        if (!Point.isOnCurve(point)) continue;
+        targets.push(Mat.applyToPoint(matrix, point));
+      }
+    }
+
+    return targets;
   }
 
   /** The extent of `layerId` under the font's current metrics measure. */
@@ -1636,7 +1744,7 @@ export class Font {
         track(this.#includeStrokeInMetricsCell);
         if (!this.#includeStrokeInMetricsCell.value) return skeletonOnly;
 
-        if (this.liveStrokeContoursWhenLoaded(layerId).length === 0) {
+        if (!this.#hasLiveStrokeInClosure(layerId)) {
           return skeletonOnly;
         }
 

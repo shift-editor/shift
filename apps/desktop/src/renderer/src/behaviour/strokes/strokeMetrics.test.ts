@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OutlineStrokeStyle, PointId } from "@shift/types";
-import { applyDynamicStroke } from "@/lib/commands/strokeCommands";
+import { applyDynamicStroke, updateStrokeStyle } from "@/lib/commands/strokeCommands";
 import { rect } from "@/testing/fixtures";
 import { FONTS, useTestEditor } from "@/testing/fontFixture";
 
@@ -123,9 +123,7 @@ describe("stroke metrics", () => {
 
       await editor.openGlyph("n");
       editor.select([nContour!.points[0]!.id as PointId]);
-      expect(applyDynamicStroke(editor.asEditor(), { ...ROUND_40, width: 80 })).toEqual({
-        ok: true,
-      });
+      expect(updateStrokeStyle(editor.asEditor(), { width: 80 })).toEqual({ ok: true });
       await editor.settle();
 
       await editor.openGlyph("o");

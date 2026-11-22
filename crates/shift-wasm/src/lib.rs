@@ -33,6 +33,8 @@ pub mod engine_edits;
 pub mod engine_reads;
 pub mod geometry;
 pub mod index_keys;
+#[cfg(feature = "engine-protocol")]
+pub mod ink_snap;
 pub mod names;
 mod numbers;
 #[cfg(feature = "engine-protocol")]

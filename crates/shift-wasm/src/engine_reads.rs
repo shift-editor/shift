@@ -450,6 +450,22 @@ pub trait EngineReads {
         &self,
         scope: ReapplyLinkedMetricsScope,
     ) -> Option<String>;
+    /// On-curve points and parametric extrema of the solved stroke outlines
+    /// on `layer_id`, grouped by skeleton contour. These are the snap targets
+    /// and probes for ink snapping. Follows a gesture's preview while one is
+    /// under way.
+    ///
+    /// Returns empty when "Include stroke" is off or the layer has no strokes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::ink_snap::InkSnapReadError::NotLoaded`] when the layer
+    /// is not resident and [`crate::ink_snap::InkSnapReadError::LayerNotFound`]
+    /// when the font has no such layer.
+    fn ink_snap_points(
+        &self,
+        layer_id: LayerId,
+    ) -> Result<Vec<crate::ink_snap::InkSnapContourPoints>, crate::ink_snap::InkSnapReadError>;
 }
 
 /// A condition chip's value as [`EngineReads::condition_value`] reads it.
@@ -1593,6 +1609,21 @@ mod exports {
                 .font()
                 .reapply_linked_metrics_disabled_reason(scope)
                 .map(str::to_owned)
+        }
+
+        fn ink_snap_points(
+            &self,
+            layer_id: LayerId,
+        ) -> Result<Vec<crate::ink_snap::InkSnapContourPoints>, crate::ink_snap::InkSnapReadError>
+        {
+            if self.session.residency().is_unloaded(layer_id) {
+                return Err(crate::ink_snap::InkSnapReadError::NotLoaded { layer: layer_id });
+            }
+            let font = self
+                .previewed
+                .as_ref()
+                .unwrap_or_else(|| self.session.font());
+            crate::ink_snap::ink_snap_points_of_font(font, layer_id)
         }
     }
 

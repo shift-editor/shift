@@ -71,8 +71,7 @@ export function useGlyphMetrics(editor: Editor): GlyphMetricsState {
           activeSourceId !== null
             ? glyph.layerForSource(activeSourceId)
             : glyph.layerAt(editLocation);
-        const hasDynamicStroke =
-          layer !== null && editor.font.liveStrokeContours(layer.id).length > 0;
+        const hasDynamicStroke = glyph.hasDynamicStroke();
 
         return {
           glyph,

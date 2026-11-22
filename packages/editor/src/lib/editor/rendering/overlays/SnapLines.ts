@@ -86,7 +86,7 @@ export function snapFeedback(
   }
 
   for (const guide of guides) {
-    if (guide.kind !== "alignment") continue;
+    if (guide.kind !== "alignment" && guide.kind !== "inkAlignment") continue;
 
     addLine(guide.target, guide.point);
     addMarker(guide.target);

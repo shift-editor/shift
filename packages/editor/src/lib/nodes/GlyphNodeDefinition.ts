@@ -444,7 +444,9 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     // Pulled here, in the frame, so a drag's preview is the one this frame reads.
     track(view.strokeFillsCell);
     const strokeFills = view.strokeFillsCell.peek();
-    this.editor.reportStrokeProblem(node.id, strokeFills.failure);
+    track(view.componentStrokeFillsCell);
+    const componentFills = view.componentStrokeFillsCell.peek();
+    this.editor.reportStrokeProblem(node.id, strokeFills.failure ?? componentFills.failure);
     const strokeFillPath = strokeFills.path;
     if (strokeFillPath) ctx.canvas.fillPath(strokeFillPath, ctx.canvas.theme.glyph.editableFill);
 
@@ -455,6 +457,11 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
       track(component.closedContoursPathCell);
       ctx.canvas.fillPath(component.closedContoursPath, ctx.canvas.theme.component.fill);
+    }
+
+    // The strokes the components place fill as one ink, as the root's do.
+    if (componentFills.path) {
+      ctx.canvas.fillPath(componentFills.path, ctx.canvas.theme.component.fill);
     }
 
     this.#drawEditGhost(node, ctx);
@@ -491,6 +498,13 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
         : ctx.canvas.theme.component.hidden;
       for (const contour of component.contours) {
         ctx.canvas.strokePath(contour.fillPath, stroke, widthPx);
+      }
+
+      // A stroked base's solved edge is drawn the same way, over its skeleton.
+      if (component.draws) {
+        track(component.strokeFillsCell);
+        const fillsPath = component.strokeFillsCell.peek().path;
+        if (fillsPath) ctx.canvas.strokePath(fillsPath, stroke, widthPx);
       }
     }
 
@@ -537,6 +551,10 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     track(view.strokeFillsCell);
     const strokeFills = view.strokeFillsCell.peek().path;
     if (strokeFills) ctx.canvas.fillPath(strokeFills, ctx.canvas.theme.glyph.fill);
+
+    track(view.componentStrokeFillsCell);
+    const componentFills = view.componentStrokeFillsCell.peek().path;
+    if (componentFills) ctx.canvas.fillPath(componentFills, ctx.canvas.theme.glyph.fill);
   }
 
   /**

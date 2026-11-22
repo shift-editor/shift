@@ -173,6 +173,8 @@ export interface DrawnOutlineIds {
   readonly closed: number | null;
   readonly open: number | null;
   readonly strokeFills: number | null;
+  /** The solved fills the glyph's components place; null while no placed base draws a stroke. */
+  readonly componentStrokeFills: number | null;
 }
 
 // The read types tests see beyond {@link EditorReads}'s. Each aliases the
@@ -640,6 +642,11 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
    * contour points; empty when that frame filled none. Needs {@link recordCanvas}. Test-only.
    */
   drawnStrokeFills(): readonly ContourPoints[];
+  /**
+   * Every outline the latest recorded canvas frame filled, as plain contour points in drawing
+   * order, whatever glyph part drew it. Needs {@link recordCanvas}. Test-only.
+   */
+  canvasFills(): readonly ContourPoints[];
   /**
    * Whether the latest recorded canvas frame also drew the edge of the solved stroke fills, the
    * way a closed contour gets one; false when it drew no stroke fills. Needs {@link recordCanvas}.

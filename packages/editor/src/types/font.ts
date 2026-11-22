@@ -45,6 +45,7 @@ import type {
   FontChangeFlag,
   FontFeature,
   GlyphIdentityChange,
+  InkSnapContourPoints,
   NeverUsedSwap,
   SideLink,
   TextRun,
@@ -326,6 +327,14 @@ export interface FontEngine {
 
   /** Whether metrics read ink rather than the skeleton. */
   includeStrokeInMetrics(): boolean;
+
+  /**
+   * Ink-outline on-curve points and parametric extrema for one layer's
+   * stroked contours, grouped by skeleton contour.
+   *
+   * @returns Empty when "Include stroke" is off or the layer has no strokes.
+   */
+  inkSnapPoints(layerId: LayerId): readonly InkSnapContourPoints[];
 
   /** Why re-apply linked metrics would change nothing for `scope`, or null. */
   reapplyLinkedMetricsDisabledReason(scope: ReapplyLinkedMetricsScope): string | null;

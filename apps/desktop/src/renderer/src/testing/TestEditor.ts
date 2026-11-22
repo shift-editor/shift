@@ -73,6 +73,7 @@ import {
   type MarkColor,
   type SidebearingEdit,
   type PointId,
+  type PointType,
   type SelectableId,
   type Axis as AxisRecord,
   type NamedInstance,
@@ -182,6 +183,85 @@ interface DragResult {
  * A stand-in canvas the renderer can draw to, 1000 by 800 screen pixels,
  * whose context records nothing until a caller replaces its methods.
  */
+/** One verb the test `Path2D` stub recorded; the only window tests have into a filled path's shape. */
+type RecordedPathCommand =
+  | { readonly type: "moveTo" | "lineTo"; readonly x: number; readonly y: number }
+  | {
+      readonly type: "quadraticCurveTo";
+      readonly cpx: number;
+      readonly cpy: number;
+      readonly x: number;
+      readonly y: number;
+    }
+  | {
+      readonly type: "bezierCurveTo";
+      readonly cpx1: number;
+      readonly cpy1: number;
+      readonly cpx2: number;
+      readonly cpy2: number;
+      readonly x: number;
+      readonly y: number;
+    }
+  | { readonly type: "closePath" }
+  | { readonly type: "addPath"; readonly path: Path2D }
+  | { readonly type: "constructor"; readonly path?: string | Path2D };
+
+/** The outlines `path` draws, rebuilt from the verbs the test `Path2D` stub recorded for it. */
+function contourPointsOf(path: Path2D): ContourPoints[] {
+  const contours: ContourPoints[] = [];
+  let coordinates: number[] = [];
+  let pointTypes: PointType[] = [];
+
+  const flush = (closed: boolean) => {
+    if (coordinates.length === 0) return;
+
+    contours.push({ coordinates, pointTypes, closed });
+    coordinates = [];
+    pointTypes = [];
+  };
+  const push = (x: number, y: number, pointType: PointType) => {
+    coordinates.push(x, y);
+    pointTypes.push(pointType);
+  };
+  const walk = (walked: Path2D) => {
+    const commands =
+      (walked as { readonly commands?: readonly RecordedPathCommand[] }).commands ?? [];
+    for (const command of commands) {
+      switch (command.type) {
+        case "constructor":
+          if (typeof command.path === "object") walk(command.path);
+          break;
+        case "addPath":
+          walk(command.path);
+          break;
+        case "moveTo":
+          flush(false);
+          push(command.x, command.y, "onCurve");
+          break;
+        case "lineTo":
+          push(command.x, command.y, "onCurve");
+          break;
+        case "quadraticCurveTo":
+          push(command.cpx, command.cpy, "offCurve");
+          push(command.x, command.y, "onCurve");
+          break;
+        case "bezierCurveTo":
+          push(command.cpx1, command.cpy1, "offCurve");
+          push(command.cpx2, command.cpy2, "offCurve");
+          push(command.x, command.y, "onCurve");
+          break;
+        case "closePath":
+          flush(true);
+          break;
+      }
+    }
+  };
+
+  walk(path);
+  flush(false);
+  return contours;
+}
+
 function recordingSurface() {
   const rect = { x: 0, y: 0, width: 1000, height: 800, left: 0, top: 0, right: 1000, bottom: 800 };
   const canvas = {
@@ -1866,6 +1946,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return fills.items.flatMap((item) => item.outlines);
   }
 
+  canvasFills(): readonly ContourPoints[] {
+    return (this.#canvasFrames.at(-1)?.fills ?? []).flatMap((path) => contourPointsOf(path));
+  }
+
   strokeFillsOutlined(): boolean {
     const node = this.scene.first("glyph");
     if (!node) return false;
@@ -1903,10 +1987,12 @@ export class TestEditor extends Editor implements EditorTestSurface {
       this.activeSourceIdCell,
     );
     const strokeFillPath = model?.strokeFillsCell.peek().path ?? null;
+    const componentFillPath = model?.componentStrokeFillsCell.peek().path ?? null;
     return {
       closed: model ? this.#outlineId(model.closedContoursPath) : null,
       open: model ? this.#outlineId(model.openContoursPath) : null,
       strokeFills: strokeFillPath ? this.#outlineId(strokeFillPath) : null,
+      componentStrokeFills: componentFillPath ? this.#outlineId(componentFillPath) : null,
     };
   }
 

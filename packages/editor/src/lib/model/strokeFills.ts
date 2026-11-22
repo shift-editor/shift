@@ -1,4 +1,5 @@
-import type { PointType } from "@shift/types";
+import { Mat, type MatModel } from "@shift/geo";
+import type { ContourId, PointType } from "@shift/types";
 import type {
   ContourPoints,
   StrokeOutlineFailure,
@@ -32,7 +33,7 @@ export function solveStrokeFills(read: () => StrokeOutlinePreviews): StrokeFills
     if (items.length === 0 && failures.length === 0) return NO_STROKE_FILLS;
 
     const failure = contourFailureMessage(failures);
-    const path = items.length === 0 ? null : strokeFillPath(items);
+    const path = items.length === 0 ? null : strokeFillPath(items, Mat.Identity());
     return { items, path, failure };
   } catch (error) {
     const readError = strokeReadError(error);
@@ -75,19 +76,65 @@ function strokeFailureMessage(error: unknown, readError: StrokePreviewReadError 
   }
 }
 
-function strokeFillPath(items: readonly StrokeOutlinePreviewItem[]): Path2D {
+/**
+ * The contours `fills` replace, by id: the skeletons its solved outlines
+ * stand in for, which drawing leaves out wherever the fills are drawn.
+ */
+export function dynamicContourIds(fills: StrokeFills): ReadonlySet<ContourId> {
+  return new Set(fills.items.map((item) => item.skeletonContourId));
+}
+
+/** Whether two dynamic-contour id sets hold the same ids, for a computed's `equals`. */
+export function sameDynamicContourIds(
+  current: ReadonlySet<ContourId>,
+  next: ReadonlySet<ContourId>,
+): boolean {
+  if (current.size !== next.size) return false;
+
+  for (const id of next) {
+    if (!current.has(id)) return false;
+  }
+  return true;
+}
+
+/**
+ * `fills` as drawn under `transform`: the same solved items and failure, with
+ * the path rebuilt in the placed space.
+ *
+ * @remarks
+ * The items stay in the solving layer's coordinates, where their
+ * `skeletonContourId`s name that layer's contours; only the path moves. Fills
+ * with nothing solved, or an identity transform, return `fills` itself.
+ *
+ * @param fills - Solved fills in their own layer's coordinates.
+ * @param transform - Placement from that layer's coordinates into the drawing's.
+ * @returns The fills to draw at that placement.
+ */
+export function placeStrokeFills(fills: StrokeFills, transform: MatModel): StrokeFills {
+  if (fills.path === null || Mat.isIdentity(transform)) return fills;
+
+  return {
+    items: fills.items,
+    path: strokeFillPath(fills.items, transform),
+    failure: fills.failure,
+  };
+}
+
+function strokeFillPath(items: readonly StrokeOutlinePreviewItem[], transform: MatModel): Path2D {
   const path = new Path2D();
   for (const item of items) {
-    for (const outline of item.outlines) path.addPath(contourPath(outline).path);
+    for (const outline of item.outlines) path.addPath(contourPath(outline, transform).path);
   }
 
   return path;
 }
 
-function contourPath(contour: ContourPoints): ContourPath {
+function contourPath(contour: ContourPoints, transform: MatModel): ContourPath {
   const points = contour.pointTypes.map((pointType, index) => ({
-    x: contour.coordinates[index * 2]!,
-    y: contour.coordinates[index * 2 + 1]!,
+    ...Mat.applyToPoint(transform, {
+      x: contour.coordinates[index * 2]!,
+      y: contour.coordinates[index * 2 + 1]!,
+    }),
     pointType: pointType as PointType,
     smooth: false,
   }));

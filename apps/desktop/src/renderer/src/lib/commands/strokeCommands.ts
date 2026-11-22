@@ -93,9 +93,12 @@ export function availableStrokeCommands<Id extends StrokeCommandId>(
 }
 
 /**
- * Gives the selected contours a dynamic stroke, replacing any they already have.
+ * Gives the selected contours a dynamic stroke.
  *
  * The stroke takes `style`, or the style last set in this editor when none is given.
+ * In a mixed selection the contours that already have a stroke take the new style
+ * with the plain ones; when every selected contour is already dynamic the command
+ * refuses, and {@link updateStrokeStyle} is how their styles change.
  */
 export function applyDynamicStroke(
   editor: Editor,

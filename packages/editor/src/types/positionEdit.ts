@@ -52,6 +52,13 @@ export interface AlignmentPositionGuide {
   readonly point: Point2D;
 }
 
+/** Axis-aligned line from a stationary ink edge to a moving position that now shares its x or y. */
+export interface InkAlignmentPositionGuide {
+  readonly kind: "inkAlignment";
+  readonly target: Point2D;
+  readonly point: Point2D;
+}
+
 /** Grid intersection, in glyph-local units, that a moving position now sits on along one axis. */
 export interface GridPositionGuide {
   readonly kind: "grid";
@@ -63,6 +70,7 @@ export type PositionGuide =
   | DirectionPositionGuide
   | MetricPositionGuide
   | AlignmentPositionGuide
+  | InkAlignmentPositionGuide
   | GridPositionGuide;
 
 /** Correction along one axis; its distance is the absolute offset. */

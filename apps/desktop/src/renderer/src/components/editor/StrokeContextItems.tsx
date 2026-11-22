@@ -6,8 +6,8 @@ import { useEditor } from "@/workspace/WorkspaceContext";
 
 const STROKE_CONTEXT_ITEMS: readonly { id: StrokeContextCommandId; label: string }[] = [
   { id: "glyph.stroke.applyDynamic", label: "Add Dynamic Stroke" },
-  { id: "glyph.stroke.expand", label: "Expand Stroke" },
   { id: "glyph.stroke.removeDynamic", label: "Remove Dynamic Stroke" },
+  { id: "glyph.stroke.expand", label: "Expand Stroke" },
   { id: "glyph.stroke.offsetContour", label: "Offset Contour…" },
 ];
 

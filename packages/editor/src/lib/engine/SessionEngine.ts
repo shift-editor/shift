@@ -27,6 +27,7 @@ import {
   type RevisedNode,
   type SceneIntent,
   type TextRun,
+  type InkSnapContourPoints,
   type LayerExtent,
   type LiveStroke,
   type ReapplyLinkedMetricsScope,
@@ -482,6 +483,10 @@ export class SessionEngine implements FontEngine {
 
   reapplyLinkedMetricsDisabledReason(scope: ReapplyLinkedMetricsScope): string | null {
     return this.#require().reapplyLinkedMetricsDisabledReason(scope);
+  }
+
+  inkSnapPoints(layerId: LayerId): readonly InkSnapContourPoints[] {
+    return this.#require().inkSnapPoints(layerId);
   }
 
   newAnchorName(layerIds: readonly LayerId[]): string {

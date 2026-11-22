@@ -80,23 +80,46 @@ describe("strokeAvailability", () => {
     });
   });
 
-  describe("apply and expand with a style", () => {
-    it("are available for plain, dynamic and mixed selections", () => {
+  describe("apply dynamic stroke", () => {
+    it("is available for plain contours", () => {
+      expect(strokeAvailability("glyph.stroke.applyDynamic", selection([contour()]))).toEqual({
+        enabled: true,
+      });
+    });
+
+    it("is available for a mix of plain and dynamic contours", () => {
+      const mixed = selection([contour(), contour({ style: STYLE })]);
+
+      expect(strokeAvailability("glyph.stroke.applyDynamic", mixed)).toEqual({ enabled: true });
+    });
+
+    it("is disabled when every selected contour already has a dynamic stroke", () => {
+      const allDynamic = selection([contour({ style: STYLE }), contour({ style: STYLE })]);
+
+      expect(strokeAvailability("glyph.stroke.applyDynamic", allDynamic)).toEqual({
+        enabled: false,
+        reason: "Every selected contour already has a dynamic stroke.",
+      });
+    });
+
+    it("is available for an open contour", () => {
+      expect(
+        strokeAvailability("glyph.stroke.applyDynamic", selection([contour({ closed: false })])),
+      ).toEqual({ enabled: true });
+    });
+  });
+
+  describe("expand with a style", () => {
+    it("is available for plain, dynamic and mixed selections", () => {
       const plain = selection([contour()]);
       const dynamic = selection([contour({ style: STYLE })]);
       const mixed = selection([contour(), contour({ style: STYLE })]);
 
-      for (const id of ["glyph.stroke.applyDynamic", "glyph.stroke.expandWithStyle"] as const) {
-        for (const candidate of [plain, dynamic, mixed]) {
-          expect(strokeAvailability(id, candidate), id).toEqual({ enabled: true });
-        }
+      for (const candidate of [plain, dynamic, mixed]) {
+        expect(strokeAvailability("glyph.stroke.expandWithStyle", candidate)).toEqual({
+          enabled: true,
+        });
       }
-    });
-
-    it("are available for an open contour", () => {
-      expect(
-        strokeAvailability("glyph.stroke.applyDynamic", selection([contour({ closed: false })])),
-      ).toEqual({ enabled: true });
     });
   });
 

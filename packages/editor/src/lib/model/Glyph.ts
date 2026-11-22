@@ -52,11 +52,15 @@ import type {
 } from "../../types/glyph";
 import { followingPlacements } from "../wasm/anchors";
 import { anchors as anchorRules } from "@shift/wasm";
-import type { PropagatedAnchors, PropagationAnchor } from "@shift/wasm/protocol";
+import type {
+  PropagatedAnchors,
+  PropagationAnchor,
+  StrokeOutlinePreviewItem,
+} from "@shift/wasm/protocol";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import type { WeightedSource } from "../../types/glyphRender";
 import type { StrokeFills } from "../../types/graphics";
-import { NO_STROKE_FILLS } from "./strokeFills";
+import { NO_STROKE_FILLS, dynamicContourIds, sameDynamicContourIds } from "./strokeFills";
 import type { GlyphMetricsSidebearings } from "../../types/metricsMeasure";
 import {
   designAxisLocationFromLocation,
@@ -1783,7 +1787,9 @@ export class GlyphRenderModel {
   readonly #outlinePathCell: Signal<Path2D>;
   readonly #openCornerContoursPathCell: Signal<Path2D>;
   readonly #rootClosedContoursPathCell: Signal<Path2D>;
+  readonly #strokeFillsOf: (layerId: LayerId) => Signal<StrokeFills>;
   readonly #strokeFillsCell: Signal<StrokeFills>;
+  readonly #componentStrokeFillsCell: Signal<StrokeFills>;
   readonly #dynamicContourIdsCell: Signal<ReadonlySet<ContourId>>;
   readonly #closedContoursPathCell: Signal<Path2D>;
   readonly #openContoursPathCell: Signal<Path2D>;
@@ -1865,6 +1871,7 @@ export class GlyphRenderModel {
     this.#baseLocation = baseLocation;
     this.#componentDraws = componentDraws;
     this.#anchorCategory = anchorCategory;
+    this.#strokeFillsOf = strokeFillsOf;
     this.#propagatedCache = keyedCache<GlyphId, GlyphId, ComputedSignal<PropagatedAnchors>>({
       name: "glyph.renderModel.propagatedAnchors",
       key: (id) => id,
@@ -1978,9 +1985,33 @@ export class GlyphRenderModel {
       },
       { name: "glyph.renderModel.strokeFills" },
     );
-    this.#dynamicContourIdsCell = computed(
-      () => new Set(this.#strokeFillsCell.value.items.map((item) => item.skeletonContourId)),
-      { name: "glyph.renderModel.dynamicContourIds", equals: sameContourIds },
+    this.#dynamicContourIdsCell = computed(() => dynamicContourIds(this.#strokeFillsCell.value), {
+      name: "glyph.renderModel.dynamicContourIds",
+      equals: sameDynamicContourIds,
+    });
+    this.#componentStrokeFillsCell = computed(
+      () => {
+        const items: StrokeOutlinePreviewItem[] = [];
+        let path: Path2D | null = null;
+        let failure: string | null = null;
+
+        for (const component of this.#componentsCell.value) {
+          if (!component.drawsCell.value) continue;
+
+          const fills = component.strokeFillsCell.value;
+          failure ??= fills.failure;
+          items.push(...fills.items);
+          if (fills.path) {
+            path ??= new Path2D();
+            path.addPath(fills.path);
+          }
+        }
+
+        if (items.length === 0 && failure === null) return NO_STROKE_FILLS;
+
+        return { items, path, failure };
+      },
+      { name: "glyph.renderModel.componentStrokeFills" },
     );
     this.#rootClosedContoursPathCell = computed(() => {
       const dynamicContourIds = this.#dynamicContourIdsCell.value;
@@ -1996,38 +2027,35 @@ export class GlyphRenderModel {
       return path;
     });
     this.#closedContoursPathCell = computed(() => {
-      const dynamicContourIds = this.#dynamicContourIdsCell.value;
       const path = new Path2D();
       for (const contour of this.#drawnContoursCell.value) {
         contour.trackShape();
         if (!contour.contour.closed) continue;
         // A dynamic stroke is displayed as its solved outline, never as its skeleton.
-        if (dynamicContourIds.has(contour.contour.id)) continue;
+        if (this.#isDynamicSkeleton(contour)) continue;
 
         path.addPath(contour.fillPath);
       }
       return path;
     });
     this.#openContoursPathCell = computed(() => {
-      const dynamicContourIds = this.#dynamicContourIdsCell.value;
       const path = new Path2D();
       for (const contour of this.#drawnContoursCell.value) {
         contour.trackShape();
         if (contour.contour.closed) continue;
-        if (dynamicContourIds.has(contour.contour.id)) continue;
+        if (this.#isDynamicSkeleton(contour)) continue;
 
         path.addPath(contour.path);
       }
       return path;
     });
     this.#hasOpenContoursCell = computed(() => {
-      const dynamicContourIds = this.#dynamicContourIdsCell.value;
       for (const contour of this.#drawnContoursCell.value) {
         // Closedness lives in the contour's shape data, as for `#openContoursPathCell`.
         // Contours after the first open one cannot change the answer, so they go untracked.
         contour.trackShape();
         if (contour.contour.closed) continue;
-        if (dynamicContourIds.has(contour.contour.id)) continue;
+        if (this.#isDynamicSkeleton(contour)) continue;
 
         return true;
       }
@@ -2084,7 +2112,12 @@ export class GlyphRenderModel {
 
       if (rootLayer) {
         const strokeFills = strokeFillsOf(rootLayer.id).value;
-        const usesInkMetrics = strokeFills.items.length > 0 || strokeFills.failure !== null;
+        const componentFills = this.#componentStrokeFillsCell.value;
+        const usesInkMetrics =
+          strokeFills.items.length > 0 ||
+          strokeFills.failure !== null ||
+          componentFills.items.length > 0 ||
+          componentFills.failure !== null;
         if (usesInkMetrics) {
           return metricsSidebearingsOf(rootLayer.id).value;
         }
@@ -2292,6 +2325,41 @@ export class GlyphRenderModel {
     if (location === this.#externalLocation.peek()) return this.geometryAt(glyphId, location);
 
     return this.#geometryAt(glyphId, location, null);
+  }
+
+  /**
+   * @internal The solved stroke fills of `glyphId`'s drawing at `location`,
+   * in that drawing's own coordinates.
+   *
+   * @remarks
+   * Reads the authored layer drawn there, as {@link geometryWhere} resolves
+   * its geometry: this model's layer where the occurrence follows the model,
+   * the layer at `location` where a component moved its base. Between
+   * masters there is no authored layer, so there are no fills: strokes show
+   * at authored sources only.
+   */
+  strokeFillsWhere(glyphId: GlyphId, location: ExternalAxisLocation): StrokeFills {
+    track(this.#externalLocation);
+    track(this.#activeSourceId);
+    const layer = this.#layerAt(
+      glyphId,
+      location,
+      location === this.#externalLocation.peek() ? this.#activeSourceId.peek() : null,
+    );
+    if (!layer) return NO_STROKE_FILLS;
+
+    const fills = this.#strokeFillsOf(layer.id);
+    track(fills);
+    return fills.peek();
+  }
+
+  /** Whether `contour` is a dynamic stroke's skeleton, which its occurrence draws as fills instead. */
+  #isDynamicSkeleton(contour: GlyphContour): boolean {
+    const component = contour.component;
+    // Called from the path computeds: track, then read.
+    const ids = component ? component.dynamicContourIdsCell : this.#dynamicContourIdsCell;
+    track(ids);
+    return ids.peek().has(contour.contour.id);
   }
 
   /**
@@ -2540,6 +2608,20 @@ export class GlyphRenderModel {
    */
   get strokeFillsCell(): Signal<StrokeFills> {
     return this.#strokeFillsCell;
+  }
+
+  /**
+   * The solved fills of the dynamic strokes this model's components place,
+   * each occurrence's fills under its placement, in root coordinates.
+   *
+   * @remarks
+   * Only occurrences that draw here contribute. The items stay in their own
+   * layers' coordinates, where their `skeletonContourId`s name contours;
+   * `failure` is the first occurrence's that could not be solved. Empty when
+   * no placed base carries a stroke here, as between masters.
+   */
+  get componentStrokeFillsCell(): Signal<StrokeFills> {
+    return this.#componentStrokeFillsCell;
   }
 
   /** The root contours' closed fill, without the dynamic strokes' skeletons. */
@@ -3075,16 +3157,22 @@ export class Glyph {
   }
 
   /**
-   * Whether any of the glyph's drawings carries a dynamic stroke, whether or not it solves.
+   * Whether any of the glyph's drawings, or a loaded base glyph's, carries a
+   * dynamic stroke, whether or not it solves.
    *
    * @remarks
    * A reader reruns when a drawing it looked at gains or loses its strokes. A
    * drawing the engine has not loaded counts as having none until it loads.
    */
   hasDynamicStroke(): boolean {
+    return this.#hasDynamicStroke(new Set());
+  }
+
+  /** {@link hasDynamicStroke} over this glyph and its loaded bases; `seen` stops at a cycle. */
+  #hasDynamicStroke(seen: Set<GlyphId>): boolean {
     track(this.#layersCell);
 
-    return this.#layersCell.peek().some((layer) => {
+    const own = this.#layersCell.peek().some((layer) => {
       const fills = this.#strokeFillsCell(layer.id);
       track(fills);
 
@@ -3092,6 +3180,17 @@ export class Glyph {
 
       return items.length > 0 || failure !== null;
     });
+    if (own) return true;
+
+    track(this.#componentGlyphsCell);
+    seen.add(this.id);
+    for (const base of this.#componentGlyphsCell.peek().values()) {
+      if (seen.has(base.id)) continue;
+
+      if (base.#hasDynamicStroke(seen)) return true;
+    }
+
+    return false;
   }
 
   /**
@@ -3426,15 +3525,6 @@ export class Glyph {
 
 function projectionGeometry(shape: GlyphLayerShape): GlyphGeometry {
   return new GlyphGeometry(shape.structure, shape.values, shape.componentTransformKind);
-}
-
-function sameContourIds(current: ReadonlySet<ContourId>, next: ReadonlySet<ContourId>): boolean {
-  if (current.size !== next.size) return false;
-
-  for (const id of next) {
-    if (!current.has(id)) return false;
-  }
-  return true;
 }
 
 function sameComponentGlyphs(
