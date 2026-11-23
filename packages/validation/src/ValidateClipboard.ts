@@ -15,10 +15,25 @@ function isValidPoint(v: unknown): boolean {
   return true;
 }
 
+const VALID_STROKE_CAPS: ReadonlySet<string> = new Set(["butt", "square", "round"]);
+const VALID_STROKE_JOINS: ReadonlySet<string> = new Set(["bevel", "miter", "round"]);
+
+/** A pasted contour's dynamic stroke, checked only when the field is present. */
+function isValidStroke(v: unknown): boolean {
+  if (!isRecord(v)) return false;
+  if (typeof v.width !== "number" || !Number.isFinite(v.width) || v.width <= 0) return false;
+  if (typeof v.cap !== "string" || !VALID_STROKE_CAPS.has(v.cap)) return false;
+  if (typeof v.join !== "string" || !VALID_STROKE_JOINS.has(v.join)) return false;
+  if (typeof v.miterLimit !== "number" || !Number.isFinite(v.miterLimit)) return false;
+  if (typeof v.position !== "number" || !Number.isFinite(v.position)) return false;
+  return true;
+}
+
 function isValidContour(v: unknown): boolean {
   if (!isRecord(v)) return false;
   if (typeof v.closed !== "boolean") return false;
   if (!Array.isArray(v.points)) return false;
+  if (v.stroke !== undefined && !isValidStroke(v.stroke)) return false;
   return v.points.every((p: unknown) => isValidPoint(p));
 }
 

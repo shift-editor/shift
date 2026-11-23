@@ -568,6 +568,10 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
    * @returns Handle state keyed by point; empty when the node has no render model.
    */
   handleStates(node: GlyphNode): ReadonlyMap<PointId, HandleState> {
+    // The controls pass draws handles only for a node being edited; modes
+    // that suspend editing (Hand, Text) draw the glyph as plain content.
+    if (!this.#isEditing(node)) return new Map();
+
     const view = this.#view(node);
     if (!view) return new Map();
 

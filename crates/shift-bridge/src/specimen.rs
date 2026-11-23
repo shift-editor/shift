@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use napi::bindgen_prelude::*;
 use napi::{Error, Status};
 use napi_derive::napi;
-use shift_backends::{FontExporter, FontView, GlyphSubsetView, font_loader::FontLoader};
+use shift_backends::{
+  FontExporter, FontView, GlyphSubsetView, bake_strokes_for_export, font_loader::FontLoader,
+};
 use shift_font::{DesignLocation, Font, Glyph, GlyphId};
 use shift_workspace::{AcquireScope, FontWorkspace, WorkspaceError};
 
@@ -232,7 +234,8 @@ fn source_specimen(
   font: &Font,
 ) -> std::result::Result<Option<shift_specimen::Specimen>, SpecimenError> {
   let font = font.with_component_conditions_drawn_at(&DesignLocation::new())?;
-  let font = &font;
+  let baked = bake_strokes_for_export(&font)?;
+  let font = &*baked;
   let characters = font_characters(font);
   let plan = shift_specimen::subset_plan(&characters, family_name(font));
 

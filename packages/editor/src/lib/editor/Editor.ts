@@ -2627,10 +2627,20 @@ export class Editor {
     const layer = this.layerForGeometry({ points: pointIds });
     if (!layer) return null;
 
-    const content = ClipboardSelection.fromPointIds([...pointIds]).contentFrom(layer);
+    const content = ClipboardSelection.fromPointIds([...pointIds]).contentFrom(
+      layer,
+      this.#strokesByContour(layer.id),
+    );
     if (!content || content.contours.length === 0) return null;
 
     return content;
+  }
+
+  /** Dynamic stroke styles of `layerId`'s contours, by contour id. */
+  #strokesByContour(layerId: LayerId): ReadonlyMap<ContourId, OutlineStrokeStyle> {
+    return new Map(
+      this.font.liveStrokes(layerId).map((stroke) => [stroke.contourId, stroke.style]),
+    );
   }
 
   /**
@@ -2676,6 +2686,10 @@ export class Editor {
           if (contour.closed) {
             layer.closeContour(contourId);
           }
+
+          if (contour.stroke) {
+            layer.setLiveStroke([contourId], contour.stroke);
+          }
         }
       }),
     );
@@ -2706,7 +2720,10 @@ export class Editor {
       return false;
     }
 
-    const content = ClipboardSelection.fromPointIds(pointIds).contentFrom(selection.layer);
+    const content = ClipboardSelection.fromPointIds(pointIds).contentFrom(
+      selection.layer,
+      this.#strokesByContour(selection.layer.id),
+    );
     if (!content || content.contours.length === 0) return false;
 
     const written = await this.#clipboard.write(content);
