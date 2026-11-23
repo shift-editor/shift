@@ -432,6 +432,7 @@ mod tests {
             layer_id,
             contour_ids,
             style: OutlineStrokeStyle::round(20.0),
+                preset_id: None,
         }))
         .unwrap();
 
@@ -477,6 +478,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(20.0),
+                preset_id: None,
         }))
         .unwrap();
 
@@ -522,6 +524,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(20.0),
+                preset_id: None,
         }))
         .unwrap();
         font.layer_extent(layer_id).unwrap();
@@ -564,6 +567,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(40.0),
+                preset_id: None,
         }))
         .unwrap();
 
@@ -591,6 +595,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id.clone()],
             style: OutlineStrokeStyle::round(40.0),
+                preset_id: None,
         }))
         .unwrap();
 
@@ -651,6 +656,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(40.0),
+                preset_id: None,
         }))
         .unwrap();
 
@@ -680,6 +686,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id.clone()],
             style: OutlineStrokeStyle::round(40.0),
+                preset_id: None,
         }))
         .unwrap();
 
@@ -697,6 +704,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(50.0),
+                preset_id: None,
         }))
         .unwrap();
         let key_after_style = extent_key(
@@ -754,6 +762,7 @@ mod tests {
             layer_id: base_layer,
             contour_ids: vec![contour_id.clone()],
             style: OutlineStrokeStyle::round(20.0),
+                preset_id: None,
         }))
         .unwrap();
 
@@ -784,6 +793,7 @@ mod tests {
             layer_id: base_layer,
             contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(44.0),
+                preset_id: None,
         }))
         .unwrap();
         let after_base = font.layer_extent(composite_layer).unwrap();
@@ -816,6 +826,7 @@ mod tests {
             layer_id,
             contour_ids: ids.clone(),
             style: OutlineStrokeStyle::round(20.0),
+                preset_id: None,
         }))
         .unwrap();
 
@@ -973,6 +984,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id.clone()],
             style: OutlineStrokeStyle::round(40.0),
+                preset_id: None,
         }))
         .unwrap();
         let narrow_key = extent_key(
@@ -988,6 +1000,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(50.0),
+                preset_id: None,
         }))
         .unwrap();
         let wide_key = extent_key(
@@ -1041,6 +1054,7 @@ mod tests {
             layer_id: base_layer,
             contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(20.0),
+                preset_id: None,
         }))
         .unwrap();
 

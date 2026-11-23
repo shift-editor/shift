@@ -84,7 +84,13 @@ import {
   asNodeId,
 } from "@shift/types";
 import { segmentIdFor, type Contour } from "@shift/glyph-state";
-import type { ContourPoints, SideLink, StrokeOutlinePreviews } from "@shift/wasm/protocol";
+import type {
+  ContourPoints,
+  LiveStroke,
+  SideLink,
+  StrokeOutlinePreviews,
+  StrokePreset,
+} from "@shift/wasm/protocol";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 import type {
@@ -1800,6 +1806,18 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   dynamicStrokeContours(): readonly ContourId[] {
     return this.font.liveStrokeContours(this.requireGlyphLayer().id);
+  }
+
+  strokeStyles(): readonly LiveStroke[] {
+    return this.font.liveStrokes(this.requireGlyphLayer().id);
+  }
+
+  strokePresets(): readonly StrokePreset[] {
+    return this.font.strokePresetsCell.peek();
+  }
+
+  strokePreset(selector: { readonly id: string }): StrokePreset | undefined {
+    return this.font.strokePresetsCell.peek().find((p) => p.id === selector.id);
   }
 
   strokeOutlinePreviews(): StrokeOutlinePreviews {

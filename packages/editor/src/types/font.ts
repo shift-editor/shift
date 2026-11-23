@@ -55,6 +55,7 @@ import type {
   ReapplyLinkedMetricsScope,
   SelectionExtentRequest,
   StrokeOutlinePreviews,
+  StrokePreset,
 } from "@shift/wasm/protocol";
 import type { PendingEditId } from "./editing";
 import type { DesignAxisLocation } from "./variation";
@@ -343,6 +344,9 @@ export interface FontEngine {
 
   /** Whether metrics read ink rather than the skeleton. */
   includeStrokeInMetrics(): boolean;
+
+  /** Named stroke style presets stored at the font level, in creation order. */
+  strokePresets(): readonly StrokePreset[];
 
   /**
    * Ink-outline on-curve points and parametric extrema for one layer's

@@ -129,6 +129,7 @@ pub(crate) fn set_live_stroke(args: &SetLiveStrokeArgs) -> Result<AuthoringRepor
         layer_id,
         contour_ids,
         style,
+        preset_id: None,
     });
     apply_mutation(&args.target.path, &args.mutation, &set)
 }

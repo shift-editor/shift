@@ -81,6 +81,7 @@ import type {
   LayerExtent,
   ReapplyLinkedMetricsScope,
   SelectionExtentRequest,
+  StrokePreset,
 } from "@shift/wasm/protocol";
 
 export { initEngine, svgPaths, typedText } from "@shift/wasm/engine";
@@ -91,6 +92,7 @@ export type {
   StrokeOutlineFailure,
   StrokeOutlinePreviewItem,
   StrokeOutlinePreviews,
+  StrokePreset,
 } from "@shift/wasm/protocol";
 import type { EngineStore } from "../../types/engine";
 import type { KerningPlace } from "../../types/font";
@@ -411,6 +413,10 @@ export class EngineSession {
 
   includeStrokeInMetrics(): boolean {
     return this.#reads.includeStrokeInMetrics();
+  }
+
+  strokePresets(): readonly StrokePreset[] {
+    return this.#reads.strokePresets();
   }
 
   reapplyLinkedMetricsDisabledReason(scope: ReapplyLinkedMetricsScope): string | null {

@@ -239,7 +239,7 @@ impl GlyphLayer {
 }
 
 /// Installs `stroke` on `layer`, or removes [`STROKE_LIB_KEY`] when empty.
-fn outline_style_from_lib(value: &LibValue) -> Option<OutlineStrokeStyle> {
+pub(super) fn outline_style_from_lib(value: &LibValue) -> Option<OutlineStrokeStyle> {
     let LibValue::Dict(fields) = value else {
         return None;
     };
@@ -266,7 +266,7 @@ fn outline_style_from_lib(value: &LibValue) -> Option<OutlineStrokeStyle> {
     Some(style)
 }
 
-fn outline_style_to_lib(style: OutlineStrokeStyle) -> LibValue {
+pub(super) fn outline_style_to_lib(style: OutlineStrokeStyle) -> LibValue {
     LibValue::Dict(BTreeMap::from([
         ("width".to_string(), LibValue::Float(style.width)),
         (

@@ -1,4 +1,5 @@
 import type { ContourId, OutlineStrokeStyle, StrokeCap, StrokeJoin } from "@shift/types";
+import type { StrokePreset } from "@shift/wasm/protocol";
 
 /** Commands that act on the selection's dynamic strokes and contours. */
 export type StrokeCommandId =
@@ -120,4 +121,6 @@ export interface StrokeSectionView {
   /** Caps only matter on an open contour, so the row shows only when one is selected. */
   readonly showsCap: boolean;
   readonly cap: StrokeCap | null;
+  /** Named stroke presets stored at the font level, in creation order. */
+  readonly presets: readonly StrokePreset[];
 }

@@ -1,6 +1,7 @@
 import type { Editor } from "@shift/editor";
 import { computed, track, type Signal } from "@shift/editor/signals";
 import type { OutlineStrokeStyle } from "@shift/types";
+import type { StrokePreset } from "@shift/wasm/protocol";
 import type {
   StrokeSectionView,
   StrokeSelectedContour,
@@ -24,7 +25,9 @@ export function strokeSectionViewCell(editor: Editor): Signal<StrokeSectionView 
       track(editor.selection.stateCell);
       track(editor.activeSourceIdCell);
 
-      return strokeSectionView(resolveStrokeSelection(editor).selection);
+      const presets = editor.font.strokePresetsCell.value;
+
+      return strokeSectionView(resolveStrokeSelection(editor).selection, presets);
     },
     { name: "strokeSectionView" },
   );
@@ -37,7 +40,10 @@ export function strokeSectionViewCell(editor: Editor): Signal<StrokeSectionView 
  * The section waits for a selected contour on one layer. A read-only font, a source that is not
  * the one being edited, or an unreadable layer keeps the section but disables its controls.
  */
-export function strokeSectionView(selection: StrokeSelection): StrokeSectionView | null {
+export function strokeSectionView(
+  selection: StrokeSelection,
+  presets: readonly StrokePreset[] = [],
+): StrokeSectionView | null {
   if (selection.contours.length === 0) return null;
   if (selection.layer.kind === "none") return null;
 
@@ -61,6 +67,7 @@ export function strokeSectionView(selection: StrokeSelection): StrokeSectionView
     miterLimit: shared(styles, (style) => style.miterLimit),
     showsCap: openStyles.length > 0,
     cap: shared(openStyles, (style) => style.cap),
+    presets,
   };
 }
 

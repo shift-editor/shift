@@ -465,6 +465,10 @@ pub trait EngineReads {
     ) -> Result<LayerExtent, LayerExtentReadError>;
     /// Whether metrics read ink (`true`) or skeleton only (`false`).
     fn include_stroke_in_metrics(&self) -> bool;
+    /// The font's named stroke presets, in creation order.
+    ///
+    /// Returns an empty list when the font stores none.
+    fn stroke_presets(&self) -> Vec<shift_font::stroke::StrokePreset>;
     /// Why [`shift_font::Font::reapply_linked_metrics`] would change no layer
     /// for `scope`, or null when it may run.
     fn reapply_linked_metrics_disabled_reason(
@@ -515,6 +519,8 @@ pub struct FontHeader {
     pub include_stroke_in_metrics: bool,
     /// The grid the font is drawn on; `None` when it stores none.
     pub grid: Option<shift_font::Grid>,
+    /// Named stroke style presets stored at the font level, in creation order.
+    pub stroke_presets: Vec<shift_font::stroke::StrokePreset>,
 }
 
 /// Why [`EngineReads::variation_at`] could not evaluate a compiled basis.
@@ -1435,6 +1441,7 @@ mod exports {
                 language_ids: font.language_ids(),
                 include_stroke_in_metrics: font.include_stroke_in_metrics(),
                 grid: font.grid(),
+                stroke_presets: font.stroke_presets(),
             })
         }
 
@@ -1651,6 +1658,10 @@ mod exports {
                 .as_ref()
                 .unwrap_or_else(|| self.session.font());
             font.include_stroke_in_metrics()
+        }
+
+        fn stroke_presets(&self) -> Vec<shift_font::stroke::StrokePreset> {
+            self.session.font().stroke_presets()
         }
 
         fn reapply_linked_metrics_disabled_reason(
@@ -2459,6 +2470,7 @@ mod exports {
                 layer_id,
                 contour_ids: vec![contour_id.clone()],
                 style: OutlineStrokeStyle::round(20.0),
+                preset_id: None,
             }))
             .unwrap();
 
@@ -2480,6 +2492,7 @@ mod exports {
                 layer_id,
                 contour_ids: vec![contour_id],
                 style: OutlineStrokeStyle::round(48.0),
+                preset_id: None,
             }))
             .unwrap();
 
@@ -2607,6 +2620,7 @@ mod exports {
                 layer_id,
                 contour_ids: vec![good_id.clone(), bad_id.clone()],
                 style: OutlineStrokeStyle::round(20.0),
+                preset_id: None,
             }))
             .unwrap();
             font.apply_intents(&FontIntentSet::from(MovePoints {
@@ -2678,6 +2692,7 @@ mod exports {
                 layer_id,
                 contour_ids: vec![dynamic_id.clone()],
                 style: OutlineStrokeStyle::round(20.0),
+                preset_id: None,
             }))
             .unwrap();
 
@@ -2727,6 +2742,7 @@ mod exports {
                 layer_id,
                 contour_ids: vec![contour_id],
                 style: OutlineStrokeStyle::round(20.0),
+                preset_id: None,
             }))
             .unwrap();
 
@@ -2808,6 +2824,7 @@ mod exports {
                 layer_id,
                 contour_ids,
                 style: OutlineStrokeStyle::round(20.0),
+                preset_id: None,
             }))
             .unwrap();
 

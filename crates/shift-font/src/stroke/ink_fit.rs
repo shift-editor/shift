@@ -525,6 +525,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id.clone()],
             style,
+            preset_id: None,
         }))
         .unwrap();
     }

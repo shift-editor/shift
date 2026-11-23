@@ -1,7 +1,7 @@
 //! Intents that edit one existing layer.
 
 use super::*;
-use crate::stroke::{OutlineStrokeStyle, StrokeJoin};
+use crate::stroke::{LayerStrokeLib, OutlineStrokeStyle, StrokeJoin};
 
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
@@ -976,12 +976,18 @@ impl LayerIntent for ApplyBooleanOp {
 }
 
 /// Attaches live stroke metadata to skeleton contours (stream A2.1).
+///
+/// When `preset_id` is `Some`, the contours' stroke lib entries record it as
+/// `style_id`, linking them to a named font-level preset. When `None`, any
+/// previous preset link is cleared (the style was manually edited).
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct SetLiveStroke {
     pub layer_id: LayerId,
     pub contour_ids: Vec<ContourId>,
     pub style: OutlineStrokeStyle,
+    /// A preset id to link this stroke to, or `None` to clear any preset link.
+    pub preset_id: Option<String>,
 }
 
 impl LayerIntent for SetLiveStroke {
@@ -994,6 +1000,7 @@ impl LayerIntent for SetLiveStroke {
             layer_id,
             contour_ids,
             style,
+            preset_id,
         } = self;
         [style.width, style.miter_limit, style.position]
             .require_finite(Coordinates::StrokeOutline)?;
@@ -1002,6 +1009,18 @@ impl LayerIntent for SetLiveStroke {
         {
             let layer = font.require_layer_mut(*layer_id)?;
             layer.set_live_stroke_contours(contour_ids, *style)?;
+            // Record the preset link (or clear it) in the stroke lib.
+            if let Some(id) = preset_id {
+                let mut stroke_lib = layer.stroke_lib().unwrap_or_else(|| LayerStrokeLib {
+                    contours: Default::default(),
+                });
+                for contour_id in contour_ids {
+                    if let Some(entry) = stroke_lib.contours.get_mut(&contour_id.to_string()) {
+                        entry.style_id = Some(id.clone());
+                    }
+                }
+                layer.set_stroke_lib(&stroke_lib);
+            }
         }
         font.reindex_layer(*layer_id, &before)?;
         Ok(())

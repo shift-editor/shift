@@ -60,6 +60,12 @@ pub enum CoreError {
     #[error("stroke operation failed: {message}")]
     StrokeOperationFailed { message: String },
 
+    #[error("stroke preset \"{0}\" already exists")]
+    DuplicateStrokePresetId(String),
+
+    #[error("stroke preset \"{0}\" not found")]
+    StrokePresetNotFound(String),
+
     #[error("missing glyph value at {index}")]
     MissingGlyphValue { index: usize },
 

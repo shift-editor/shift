@@ -632,3 +632,67 @@ impl FontLevelIntent for SetMarkColor {
         Ok((Vec::new(), glyph_ids.clone()))
     }
 }
+
+// — Stroke preset intents ——————————————————————————————————————————————————
+
+use crate::stroke::OutlineStrokeStyle;
+
+/// Creates a new named stroke preset at the font level (stream A-stroke-presets).
+///
+/// The `id` must be unique across the font's presets; callers pre-mint it so
+/// the new preset's identity is known synchronously. Use `StrokePreset`'s
+/// `uuid`-based id minting or any other unique string.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct CreateStrokePreset {
+    /// Caller-minted stable identifier; must not match an existing preset.
+    pub id: String,
+    /// User-visible label.
+    pub name: String,
+    /// The style parameters to store.
+    pub style: OutlineStrokeStyle,
+}
+
+impl FontLevelIntent for CreateStrokePreset {
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)> {
+        font.apply_create_stroke_preset(self.id.clone(), self.name.clone(), self.style)?;
+        Ok((Vec::new(), Vec::new()))
+    }
+}
+
+/// Renames an existing stroke preset.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct RenameStrokePreset {
+    /// Stable id of the preset to rename.
+    pub preset_id: String,
+    /// New user-visible label.
+    pub name: String,
+}
+
+impl FontLevelIntent for RenameStrokePreset {
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)> {
+        font.apply_rename_stroke_preset(&self.preset_id, self.name.clone())?;
+        Ok((Vec::new(), Vec::new()))
+    }
+}
+
+/// Deletes an existing stroke preset.
+///
+/// Contours that referenced this preset by id keep their inline style but
+/// their `style_id` becomes an orphaned reference. It is the caller's
+/// responsibility to clear `style_id` from any contours that referenced the
+/// preset when that is desired.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct DeleteStrokePreset {
+    /// Stable id of the preset to delete.
+    pub preset_id: String,
+}
+
+impl FontLevelIntent for DeleteStrokePreset {
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)> {
+        font.apply_delete_stroke_preset(&self.preset_id)?;
+        Ok((Vec::new(), Vec::new()))
+    }
+}

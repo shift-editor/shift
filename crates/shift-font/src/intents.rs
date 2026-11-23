@@ -218,6 +218,9 @@ font_intents! {
         AddGlyphSwap,
         EditGlyphSwap,
         SetComponentCondition,
+        CreateStrokePreset,
+        RenameStrokePreset,
+        DeleteStrokePreset,
     }
 }
 

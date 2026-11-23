@@ -33,6 +33,7 @@ import {
   type ReapplyLinkedMetricsScope,
   type SelectionExtentRequest,
   type StrokeOutlinePreviews,
+  type StrokePreset,
 } from "@shift/wasm/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "../signals";
 import {
@@ -491,6 +492,10 @@ export class SessionEngine implements FontEngine {
 
   includeStrokeInMetrics(): boolean {
     return this.#require().includeStrokeInMetrics();
+  }
+
+  strokePresets(): readonly StrokePreset[] {
+    return this.#require().strokePresets();
   }
 
   reapplyLinkedMetricsDisabledReason(scope: ReapplyLinkedMetricsScope): string | null {

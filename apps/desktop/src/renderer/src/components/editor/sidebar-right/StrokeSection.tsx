@@ -1,15 +1,18 @@
-import { useMemo } from "react";
+import { useRef, useState, useMemo } from "react";
 import { useSignalState } from "@shift/editor/signals";
 import {
   Button,
+  Input,
   Menu,
   MenuItem,
   MenuPopup,
   MenuPortal,
   MenuPositioner,
+  MenuSeparator,
   MenuTrigger,
   Tooltip,
 } from "@shift/ui";
+import MinusIcon from "@/assets/general/minus.svg";
 import PlusIcon from "@/assets/general/plus.svg";
 import VerticalEllipsis from "@/assets/general/vertical-ellipsis.svg";
 import { SidebarActionButton } from "@/components/sidebar";
@@ -20,7 +23,16 @@ import {
   removeDynamicStroke,
   updateStrokeStyle,
 } from "@/lib/commands/strokeCommands";
+import {
+  applyStrokePreset,
+  copiedStrokeStyleCell,
+  copyStrokeStyle,
+  deleteStrokePreset,
+  pasteStrokeStyle,
+  saveAsStrokePreset,
+} from "@/lib/commands/strokePresetCommands";
 import { notify } from "@/lib/notifications/notify";
+import type { StrokePreset } from "@shift/wasm/protocol";
 import type { StrokeCommandResult, StrokeSectionView, StrokeStylePatch } from "@/types/stroke";
 import { useEditor } from "@/workspace/WorkspaceContext";
 import { IconButton } from "./IconButton";
@@ -65,9 +77,36 @@ export const StrokeSection = () => {
   const editor = useEditor();
   const viewCell = useMemo(() => strokeSectionViewCell(editor), [editor]);
   const view = useSignalState(viewCell);
+  const hasCopied = useSignalState(copiedStrokeStyleCell) !== null;
+  const [savingPreset, setSavingPreset] = useState(false);
+  const [presetName, setPresetName] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
   if (!view) return null;
 
   const change = (patch: StrokeStylePatch) => report(updateStrokeStyle(editor, patch));
+
+  function commitSavePreset(): void {
+    if (!view) return;
+
+    // Build the style from the view's current fields, falling back to the editor's
+    // last-used style for fields the view could not determine (mixed selection).
+    const base = editor.newStrokeStyleCell.peek();
+    const style = {
+      width: view.width ?? base.width,
+      position: view.positionPercent != null ? view.positionPercent / 100 : base.position,
+      join: view.join ?? base.join,
+      miterLimit: view.miterLimit ?? base.miterLimit,
+      cap: view.cap ?? base.cap,
+    };
+    const result = saveAsStrokePreset(editor, presetName, style);
+    if (!result.ok) {
+      notify(result.reason);
+      return;
+    }
+    setSavingPreset(false);
+    setPresetName("");
+  }
 
   return (
     <SidebarSection
@@ -84,15 +123,51 @@ export const StrokeSection = () => {
           ) : null}
           {view.hasStroke ? (
             <StrokeMenu
+              hasCopied={hasCopied}
               onExpand={() => report(expandStroke(editor))}
               onRemove={() => report(removeDynamicStroke(editor))}
               onOffset={openOffsetDialog}
+              onSaveAsPreset={() => {
+                setSavingPreset(true);
+                setTimeout(() => nameInputRef.current?.focus(), 0);
+              }}
+              onCopy={() => report(copyStrokeStyle(editor))}
+              onPaste={() => report(pasteStrokeStyle(editor))}
             />
           ) : null}
         </div>
       }
     >
       {view.hasStroke ? <StrokeFields view={view} onChange={change} /> : null}
+      {savingPreset ? (
+        <div className="flex gap-1 px-1 pb-1">
+          <Input
+            ref={nameInputRef}
+            placeholder="Preset name"
+            value={presetName}
+            onChange={(e) => setPresetName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitSavePreset();
+              if (e.key === "Escape") {
+                setSavingPreset(false);
+                setPresetName("");
+              }
+            }}
+            size="compact"
+            className="flex-1"
+          />
+          <Button size="sm" onClick={commitSavePreset}>
+            Save
+          </Button>
+        </div>
+      ) : null}
+      {view.presets.length > 0 ? (
+        <StrokePresetList
+          presets={view.presets}
+          onApply={(id) => report(applyStrokePreset(editor, id))}
+          onDelete={(id) => report(deleteStrokePreset(editor, id))}
+        />
+      ) : null}
     </SidebarSection>
   );
 };
@@ -175,13 +250,25 @@ const StrokeFields = ({ view, onChange }: StrokeFieldsProps) => {
 };
 
 interface StrokeMenuProps {
+  readonly hasCopied: boolean;
   readonly onExpand: () => void;
   readonly onRemove: () => void;
   readonly onOffset: () => Promise<void>;
+  readonly onSaveAsPreset: () => void;
+  readonly onCopy: () => void;
+  readonly onPaste: () => void;
 }
 
 /** The commands that act on the strokes already there, beyond editing their style. */
-const StrokeMenu = ({ onExpand, onRemove, onOffset }: StrokeMenuProps) => (
+const StrokeMenu = ({
+  hasCopied,
+  onExpand,
+  onRemove,
+  onOffset,
+  onSaveAsPreset,
+  onCopy,
+  onPaste,
+}: StrokeMenuProps) => (
   <Menu modal={false}>
     <Tooltip content="Stroke actions">
       <MenuTrigger
@@ -200,6 +287,13 @@ const StrokeMenu = ({ onExpand, onRemove, onOffset }: StrokeMenuProps) => (
     <MenuPortal>
       <MenuPositioner sideOffset={4} align="end">
         <MenuPopup>
+          <MenuItem onClick={onCopy}>Copy Stroke Style</MenuItem>
+          <MenuItem onClick={onPaste} disabled={!hasCopied}>
+            Paste Stroke Style
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem onClick={onSaveAsPreset}>Save as Preset…</MenuItem>
+          <MenuSeparator />
           <MenuItem onClick={onExpand}>Expand Stroke</MenuItem>
           <MenuItem onClick={onRemove}>Remove Dynamic Stroke</MenuItem>
           <MenuItem onClick={onOffset}>Offset Contour…</MenuItem>
@@ -207,4 +301,35 @@ const StrokeMenu = ({ onExpand, onRemove, onOffset }: StrokeMenuProps) => (
       </MenuPositioner>
     </MenuPortal>
   </Menu>
+);
+
+interface StrokePresetListProps {
+  readonly presets: readonly StrokePreset[];
+  readonly onApply: (id: string) => void;
+  readonly onDelete: (id: string) => void;
+}
+
+/** Minimal list of named stroke presets. Click to apply; trash icon to delete. */
+const StrokePresetList = ({ presets, onApply, onDelete }: StrokePresetListProps) => (
+  <div className="flex flex-col gap-0.5 px-1 pb-1">
+    {presets.map((preset) => (
+      <div key={preset.id} className="group flex items-center gap-1">
+        <button
+          type="button"
+          className="flex-1 truncate rounded px-1 py-0.5 text-left text-xs hover:bg-hover"
+          onClick={() => onApply(preset.id)}
+        >
+          {preset.name}
+        </button>
+        <button
+          type="button"
+          aria-label={`Delete preset ${preset.name}`}
+          className="shrink-0 rounded p-0.5 opacity-0 hover:bg-hover group-hover:opacity-100"
+          onClick={() => onDelete(preset.id)}
+        >
+          <MinusIcon className="h-3 w-3 text-icon-subtle" />
+        </button>
+      </div>
+    ))}
+  </div>
 );

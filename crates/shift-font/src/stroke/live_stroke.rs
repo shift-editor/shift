@@ -575,6 +575,8 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id.clone()],
             style: OutlineStrokeStyle::round(20.0),
+                preset_id: None,
+
         }))
         .unwrap();
 
@@ -652,6 +654,7 @@ mod tests {
             layer_id,
             contour_ids: ids,
             style,
+            preset_id: None,
         }))
         .unwrap();
         layer_id
@@ -997,6 +1000,8 @@ mod tests {
             layer_id,
             contour_ids: vec![ids[0].clone()],
             style: OutlineStrokeStyle::round(40.0),
+                preset_id: None,
+
         }))
         .unwrap();
         let wider = read(&font, DEFAULT_TOLERANCE, &mut cache);
@@ -1063,6 +1068,7 @@ mod tests {
                 layer_id,
                 contour_ids: ids.clone(),
                 style,
+                preset_id: None,
             }))
             .unwrap();
             let layer = font.layer(layer_id).unwrap();
@@ -1217,6 +1223,8 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id.clone()],
             style: OutlineStrokeStyle::round(16.0),
+                preset_id: None,
+
         }))
         .unwrap();
         let before_remove = font.clone();
@@ -1261,6 +1269,8 @@ mod tests {
             layer_id,
             contour_ids: ids.clone(),
             style: OutlineStrokeStyle::round(16.0),
+                preset_id: None,
+
         }))
         .unwrap();
 
@@ -1446,6 +1456,7 @@ mod tests {
                 layer_id,
                 contour_ids: vec![contour_id.clone()],
                 style: OutlineStrokeStyle::round(16.0),
+                preset_id: None,
             }),
         );
 
@@ -1594,6 +1605,7 @@ mod tests {
                 layer_id,
                 contour_ids: ids.clone(),
                 style: positioned(position),
+                preset_id: None,
             }));
             assert!(set.is_err(), "set live stroke accepted position {position}");
             assert_eq!(font, before);

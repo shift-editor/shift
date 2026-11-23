@@ -59,7 +59,13 @@ import type {
   SourceMetrics,
   Unicode,
 } from "@shift/types";
-import type { ContourPoints, SideLink, StrokeOutlinePreviews } from "@shift/wasm/protocol";
+import type {
+  ContourPoints,
+  LiveStroke,
+  SideLink,
+  StrokeOutlinePreviews,
+  StrokePreset,
+} from "@shift/wasm/protocol";
 import type { CommandId, EditorCommandId } from "@shared/commands";
 import type { WorkspaceDocumentState } from "@shared/workspace/lanes";
 import type { DrawOptions, GlyphFixture, PointNames } from "./fixtures";
@@ -637,6 +643,21 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   drawnOutline(): Outline;
   /** The contours of the open glyph at the active source that carry a dynamic stroke. Test-only. */
   dynamicStrokeContours(): readonly ContourId[];
+  /**
+   * The live strokes on the open glyph at the active source, with their styles.
+   *
+   * Use this to verify the stroke style the engine has stored after applying a stroke or preset.
+   * Test-only.
+   */
+  strokeStyles(): readonly LiveStroke[];
+  /** All stroke presets stored at the font level, in creation order. Test-only. */
+  strokePresets(): readonly StrokePreset[];
+  /**
+   * The stroke preset with `id`, or `undefined` when none matches.
+   *
+   * Prefer this selector over searching the `strokePresets()` array by id. Test-only.
+   */
+  strokePreset(selector: { readonly id: string }): StrokePreset | undefined;
   /**
    * The solved stroke fills the latest recorded canvas frame filled for the open glyph, as plain
    * contour points; empty when that frame filled none. Needs {@link recordCanvas}. Test-only.

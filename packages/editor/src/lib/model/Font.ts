@@ -48,6 +48,7 @@ import type {
   GlyphSwap,
   GlyphSwapEdit,
   SetComponentCondition,
+  OutlineStrokeStyle,
 } from "@shift/types";
 import {
   alphabetical,
@@ -90,6 +91,7 @@ import type {
   LiveStroke,
   ReapplyLinkedMetricsScope,
   StrokeOutlinePreviews,
+  StrokePreset,
   TextRun,
 } from "@shift/wasm/protocol";
 import { Mat, type Point2D } from "@shift/geo";
@@ -322,6 +324,7 @@ export class Font {
   // non-reactive: lazy cache of per-layer computed cells; each cell subscribes when read
   readonly #metricsSidebearingsCells = new Map<LayerId, ComputedSignal<GlyphMetricsSidebearings>>();
   readonly #includeStrokeInMetricsCell: Signal<boolean>;
+  readonly #strokePresetsCell: Signal<readonly StrokePreset[]>;
   readonly #axesCell: ComputedSignal<readonly Axis[]>;
   readonly #externalAxesCell: Signal<readonly Axis[]>;
   readonly #axisMappingsCell: Signal<readonly AxisMapping[]>;
@@ -414,6 +417,13 @@ export class Font {
         return store.engine.includeStrokeInMetrics();
       },
       { name: "font.includeStrokeInMetrics" },
+    );
+    this.#strokePresetsCell = computed(
+      () => {
+        track(store.engine.revision("strokePresets"));
+        return store.engine.strokePresets();
+      },
+      { name: "font.strokePresets" },
     );
     this.#directoryCell = computed(
       () => new GlyphDirectory(this.#store.recordIndexCell.value, this.#glyphInfo),
@@ -1675,6 +1685,11 @@ export class Font {
     return this.#includeStrokeInMetricsCell;
   }
 
+  /** Named stroke style presets stored at the font level, in creation order. */
+  get strokePresetsCell(): Signal<readonly StrokePreset[]> {
+    return this.#strokePresetsCell;
+  }
+
   /**
    * Ink-outline on-curve points and parametric extrema for a layer's stroked contours.
    *
@@ -1821,6 +1836,43 @@ export class Font {
       kind: "setIgnoreStroke",
       setIgnoreStroke: { ignore: !include },
     });
+  }
+
+  /**
+   * Creates a named stroke preset from `style` and returns the minted id.
+   *
+   * Call inside a transaction to control the undo step label.
+   */
+  createStrokePreset(name: string, style: OutlineStrokeStyle): string {
+    const id = crypto.randomUUID();
+    this.editCoordinator.push({
+      kind: "createStrokePreset",
+      createStrokePreset: { id, name, style },
+    });
+
+    return id;
+  }
+
+  /**
+   * Renames an existing stroke preset.
+   *
+   * Call inside a transaction to control the undo step label.
+   */
+  renameStrokePreset(presetId: string, name: string): void {
+    this.editCoordinator.push({
+      kind: "renameStrokePreset",
+      renameStrokePreset: { presetId, name },
+    });
+  }
+
+  /**
+   * Deletes a stroke preset.  Contours that referenced it keep their inline style
+   * but lose the preset link.
+   *
+   * Call inside a transaction to control the undo step label.
+   */
+  deleteStrokePreset(presetId: string): void {
+    this.editCoordinator.push({ kind: "deleteStrokePreset", deleteStrokePreset: { presetId } });
   }
 
   /** Re-applies linked metrics for one glyph or the whole font in one step. */

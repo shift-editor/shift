@@ -11,7 +11,7 @@ use bitflags::bitflags;
 use crate::collection::Identified;
 use crate::error::{CoreError, CoreResult, EntityKind};
 
-use crate::stroke::IGNORE_STROKE_LIB_KEY;
+use crate::stroke::{IGNORE_STROKE_LIB_KEY, STROKE_PRESETS_LIB_KEY};
 use crate::{
     Axis, AxisMapping, Component, FontMetadata, GRID_LIB_KEY, Glyph, GlyphId, GlyphLayer,
     KerningGroup, KerningGroupId, KerningPair, LANGUAGES_LIB_KEY, LayerId, LibValue,
@@ -47,11 +47,13 @@ pub enum FontChangeFlag {
     Scene,
     /// The grid the font is drawn on.
     Grid,
+    /// The font's named stroke style presets (`com.shift.strokePresets`).
+    StrokePresets,
 }
 
 impl FontChangeFlag {
     /// Every flag, in bit order.
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::Metadata,
         Self::Languages,
         Self::StrokeMeasure,
@@ -67,6 +69,7 @@ impl FontChangeFlag {
         Self::Layers,
         Self::Scene,
         Self::Grid,
+        Self::StrokePresets,
     ];
 
     /// The flag's bit in a [`FontChangeImpact`].
@@ -107,6 +110,8 @@ bitflags! {
         const SCENE = FontChangeFlag::Scene.bit();
         /// The grid the font is drawn on.
         const GRID = FontChangeFlag::Grid.bit();
+        /// The font's named stroke style presets.
+        const STROKE_PRESETS = FontChangeFlag::StrokePresets.bit();
     }
 }
 
@@ -390,6 +395,9 @@ impl FontChange {
                 FontChangeImpact::STROKE_MEASURE
             }
             Self::LibValue { key, .. } if key == GRID_LIB_KEY => FontChangeImpact::GRID,
+            Self::LibValue { key, .. } if key == STROKE_PRESETS_LIB_KEY => {
+                FontChangeImpact::STROKE_PRESETS
+            }
             Self::Axes(_) => {
                 FontChangeImpact::AXES
                     | FontChangeImpact::SOURCES

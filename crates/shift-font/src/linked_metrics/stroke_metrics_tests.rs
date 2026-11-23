@@ -59,6 +59,7 @@ fn add_stroked_glyph(
         layer_id,
         contour_ids: vec![contour_id.clone()],
         style,
+        preset_id: None,
     }))
     .unwrap();
     (layer_id, contour_id)
@@ -112,6 +113,7 @@ fn key_equal_base_follows_ink_after_stroke_width_changes() {
         layer_id: base_layer,
         contour_ids: vec![contour_id],
         style: OutlineStrokeStyle::round(80.0),
+                preset_id: None,
     }))
     .unwrap();
     let after = eval_key(&font, source_id, "o", RIGHT, "=n");
@@ -292,6 +294,7 @@ fn stroked_n_with_follower_keyed_to_base() -> (Font, SourceId, LayerId, ContourI
         layer_id,
         contour_ids: vec![contour_id.clone()],
         style: OutlineStrokeStyle::round(40.0),
+                preset_id: None,
     }))
     .unwrap();
     set_key(&mut font, "o", LEFT, "=n");

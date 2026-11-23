@@ -488,8 +488,12 @@ class GlyphLayerWriter {
     this.#workspaceIntents.reverseContour({ contourId });
   }
 
-  setLiveStroke(contourIds: readonly ContourId[], style: OutlineStrokeStyle): void {
-    this.#workspaceIntents.setLiveStroke({ contourIds: [...contourIds], style });
+  setLiveStroke(
+    contourIds: readonly ContourId[],
+    style: OutlineStrokeStyle,
+    presetId?: string | null,
+  ): void {
+    this.#workspaceIntents.setLiveStroke({ contourIds: [...contourIds], style, presetId });
   }
 
   removeLiveStroke(contourIds: readonly ContourId[]): void {
@@ -1270,9 +1274,14 @@ export class GlyphLayer {
    *
    * @param contourIds - Contours in this source that become stroke centerlines.
    * @param style - Width, cap, join and miter limit of the stroke.
+   * @param presetId - Optional preset id to link the stroke to; `null` or omitted clears the link.
    */
-  setLiveStroke(contourIds: readonly ContourId[], style: OutlineStrokeStyle): void {
-    this.#writer.setLiveStroke(contourIds, style);
+  setLiveStroke(
+    contourIds: readonly ContourId[],
+    style: OutlineStrokeStyle,
+    presetId?: string | null,
+  ): void {
+    this.#writer.setLiveStroke(contourIds, style, presetId);
   }
 
   /**
