@@ -57,6 +57,7 @@ import type {
   StrokeOutlinePreviews,
 } from "@shift/wasm/protocol";
 import type { PendingEditId } from "./editing";
+import type { DesignAxisLocation } from "./variation";
 import type { WorkspaceEditListener } from "./history";
 import type { GlyphReader } from "./glyph";
 
@@ -309,6 +310,21 @@ export interface FontEngine {
    * @throws When the engine is not open or the layer is not resident.
    */
   strokeOutlinePreviews(layerId: LayerId, tolerance?: number): StrokeOutlinePreviews;
+
+  /**
+   * Fill outlines shift-font derives from live stroke skeletons of `glyphId`
+   * interpolated at a design location: skeleton and style interpolated from
+   * the glyph's masters, then solved.
+   *
+   * @returns Empty when the glyph does not interpolate or no contour is
+   * stroked across its masters.
+   * @throws When the engine is not open or the glyph is not resident.
+   */
+  strokeOutlinePreviewsAt(
+    glyphId: GlyphId,
+    location: DesignAxisLocation,
+    tolerance?: number,
+  ): StrokeOutlinePreviews;
 
   /**
    * Contours on `layerId` that carry a dynamic stroke, in contour order, each with the style

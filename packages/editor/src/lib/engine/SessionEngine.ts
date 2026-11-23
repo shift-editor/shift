@@ -465,6 +465,18 @@ export class SessionEngine implements FontEngine {
     return session.strokeOutlinePreviews(layerId, tolerance);
   }
 
+  strokeOutlinePreviewsAt(
+    glyphId: GlyphId,
+    location: DesignAxisLocation,
+    tolerance?: number,
+  ): StrokeOutlinePreviews {
+    const session = this.#require();
+    // Loading a glyph changes nothing a reader holds, so no revision changes:
+    // this read is tracked by computeds, which a bump would re-run forever.
+    session.preload([glyphId]);
+    return session.strokeOutlinePreviewsAt(glyphId, location, tolerance);
+  }
+
   liveStrokes(layerId: LayerId): readonly LiveStroke[] {
     return this.#require().liveStrokes(layerId);
   }

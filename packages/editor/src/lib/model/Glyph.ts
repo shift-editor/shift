@@ -1788,6 +1788,7 @@ export class GlyphRenderModel {
   readonly #openCornerContoursPathCell: Signal<Path2D>;
   readonly #rootClosedContoursPathCell: Signal<Path2D>;
   readonly #strokeFillsOf: (layerId: LayerId) => Signal<StrokeFills>;
+  readonly #strokeFillsAt: (glyphId: GlyphId, location: ExternalAxisLocation) => StrokeFills;
   readonly #strokeFillsCell: Signal<StrokeFills>;
   readonly #componentStrokeFillsCell: Signal<StrokeFills>;
   readonly #dynamicContourIdsCell: Signal<ReadonlySet<ContourId>>;
@@ -1837,6 +1838,8 @@ export class GlyphRenderModel {
    * @param componentDraws - Whether a component of `parentGlyphId` draws
    * where that glyph is drawn at `parent`: its condition holds there.
    * @param strokeFillsOf - The solved fills of a layer's dynamic strokes.
+   * @param strokeFillsAt - The solved fills of a glyph's dynamic strokes
+   * interpolated at an external location, for positions between masters.
    */
   constructor(
     glyphId: GlyphId,
@@ -1865,6 +1868,7 @@ export class GlyphRenderModel {
       parent: ExternalAxisLocation,
     ) => boolean,
     strokeFillsOf: (layerId: LayerId) => Signal<StrokeFills>,
+    strokeFillsAt: (glyphId: GlyphId, location: ExternalAxisLocation) => StrokeFills,
     metricsSidebearingsOf: (layerId: LayerId) => Signal<GlyphMetricsSidebearings>,
   ) {
     this.#glyphId = glyphId;
@@ -1872,6 +1876,7 @@ export class GlyphRenderModel {
     this.#componentDraws = componentDraws;
     this.#anchorCategory = anchorCategory;
     this.#strokeFillsOf = strokeFillsOf;
+    this.#strokeFillsAt = strokeFillsAt;
     this.#propagatedCache = keyedCache<GlyphId, GlyphId, ComputedSignal<PropagatedAnchors>>({
       name: "glyph.renderModel.propagatedAnchors",
       key: (id) => id,
@@ -1981,7 +1986,11 @@ export class GlyphRenderModel {
     this.#strokeFillsCell = computed(
       () => {
         const rootLayer = layer.value;
-        return rootLayer ? strokeFillsOf(rootLayer.id).value : NO_STROKE_FILLS;
+        if (rootLayer) return strokeFillsOf(rootLayer.id).value;
+
+        // Between masters there is no authored layer: the stroke solved
+        // around the interpolated skeleton at this model's location.
+        return strokeFillsAt(this.#glyphId, externalLocation.value);
       },
       { name: "glyph.renderModel.strokeFills" },
     );
@@ -2335,8 +2344,8 @@ export class GlyphRenderModel {
    * Reads the authored layer drawn there, as {@link geometryWhere} resolves
    * its geometry: this model's layer where the occurrence follows the model,
    * the layer at `location` where a component moved its base. Between
-   * masters there is no authored layer, so there are no fills: strokes show
-   * at authored sources only.
+   * masters there is no authored layer, so the fills are the stroke solved
+   * around the interpolated skeleton there.
    */
   strokeFillsWhere(glyphId: GlyphId, location: ExternalAxisLocation): StrokeFills {
     track(this.#externalLocation);
@@ -2346,7 +2355,7 @@ export class GlyphRenderModel {
       location,
       location === this.#externalLocation.peek() ? this.#activeSourceId.peek() : null,
     );
-    if (!layer) return NO_STROKE_FILLS;
+    if (!layer) return this.#strokeFillsAt(glyphId, location);
 
     const fills = this.#strokeFillsOf(layer.id);
     track(fills);
@@ -2618,7 +2627,7 @@ export class GlyphRenderModel {
    * Only occurrences that draw here contribute. The items stay in their own
    * layers' coordinates, where their `skeletonContourId`s name contours;
    * `failure` is the first occurrence's that could not be solved. Empty when
-   * no placed base carries a stroke here, as between masters.
+   * no placed base carries a stroke here.
    */
   get componentStrokeFillsCell(): Signal<StrokeFills> {
     return this.#componentStrokeFillsCell;
@@ -2987,6 +2996,7 @@ export class Glyph {
   readonly #defaultSourceId: SourceId;
   readonly #anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
   readonly #strokeFillsCell: (layerId: LayerId) => Signal<StrokeFills>;
+  readonly #strokeFillsAt: (glyphId: GlyphId, location: DesignAxisLocation) => StrokeFills;
   readonly #metricsSidebearingsCell: (layerId: LayerId) => Signal<GlyphMetricsSidebearings>;
   readonly #space: GlyphSpace;
   /** Each drawing exactly on a source, by that source; located drawings are left out. */
@@ -3038,6 +3048,7 @@ export class Glyph {
     this.#defaultSourceId = options.defaultSourceId;
     this.#anchorCategory = options.anchorCategory;
     this.#strokeFillsCell = options.strokeFillsCell;
+    this.#strokeFillsAt = options.strokeFillsAt;
     this.#metricsSidebearingsCell = options.metricsSidebearingsCell;
     this.replaceComponentGlyphs(options.componentGlyphs);
   }
@@ -3201,6 +3212,15 @@ export class Glyph {
     if (!this.#space.atOwnDefaults(location)) return null;
 
     return this.#designspace.sourceAt(location);
+  }
+
+  /**
+   * The solved fills of this glyph's dynamic strokes interpolated at
+   * `location`: between masters, the stroke solved around the interpolated
+   * skeleton there, named by the reference layer's contour ids.
+   */
+  strokeFillsAtLocation(location: ExternalAxisLocation): StrokeFills {
+    return this.#strokeFillsAt(this.id, this.#space.toDesign(location));
   }
 
   geometryAt(externalLocation: ExternalAxisLocation): GlyphGeometry {
@@ -3406,6 +3426,10 @@ export class Glyph {
       (parentGlyphId, component, parent) =>
         this.#designspace.componentDraws(parentGlyphId, component.condition, parent),
       this.#strokeFillsCell,
+      (glyphId, location) => {
+        const glyph = glyphId === this.id ? this : this.#componentGlyphsCell.peek().get(glyphId);
+        return glyph ? glyph.strokeFillsAtLocation(location) : NO_STROKE_FILLS;
+      },
       (layerId) => this.#metricsSidebearingsCell(layerId),
     );
     renderModels.set(activeSourceIdCell, renderModel);

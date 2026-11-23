@@ -112,7 +112,7 @@ describe("a dynamic stroke that cannot be solved, in a text run", () => {
     await editor.settle();
   }
 
-  it("still says the run's strokes are hidden between masters", async () => {
+  it("says why the run's stroke cannot be drawn between masters, as at its master", async () => {
     await collapsedStrokeInA();
     editor.selectTool("text");
     editor.typeText("A");
@@ -122,9 +122,19 @@ describe("a dynamic stroke that cannot be solved, in a text run", () => {
 
     editor.setLocation({ wdth: 0, wght: 500 });
 
+    // The stroke is attempted between masters now, so it fails there for the
+    // same reason as at its master: once for the edited glyph, once for the
+    // run. The hidden-between-masters notice is not said.
     await expect
-      .poll(() => editor.strokeProblems().filter((message) => HIDDEN_BETWEEN_MASTERS.test(message)))
-      .toHaveLength(1);
+      .poll(() =>
+        editor
+          .strokeProblems()
+          .filter((message) => /^A dynamic stroke could not be drawn: .+\.$/.test(message)),
+      )
+      .toHaveLength(2);
+    expect(
+      editor.strokeProblems().filter((message) => HIDDEN_BETWEEN_MASTERS.test(message)),
+    ).toEqual([]);
   });
 });
 

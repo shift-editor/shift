@@ -125,6 +125,10 @@ impl GlyphLayer {
         }
 
         self.set_stroke_lib(&stroke_lib);
+        // Writing the lib back drops entries naming contours this layer no
+        // longer has (a copy made before the ids were remapped, say), so a
+        // stroke edit heals the layer instead of failing on it forever.
+        self.prune_orphan_stroke_lib_entries();
         Ok(())
     }
 
@@ -190,6 +194,7 @@ impl GlyphLayer {
         }
 
         sync_stroke_lib_on_layer(self, &stroke_lib);
+        self.prune_orphan_stroke_lib_entries();
         Ok(())
     }
 
@@ -1286,6 +1291,35 @@ mod tests {
             Err(CoreError::StrokeOperationFailed { .. })
         ));
         assert_eq!(font, before);
+    }
+
+    #[test]
+    fn a_stroke_edit_drops_entries_naming_contours_the_layer_lacks() {
+        let mut font = sample_font();
+        let layer_id = stroke_test_layer(&mut font, two_point_contour(80.0));
+        let mut layer = font.layer(layer_id).unwrap().clone();
+        let contour_id = layer.contours_iter().next().expect("one contour").id();
+        layer.set_stroke_lib(&LayerStrokeLib {
+            contours: std::collections::BTreeMap::from([(
+                "contour_missing".to_string(),
+                ContourStrokeEntry {
+                    role: ContourStrokeRole::Skeleton,
+                    style_id: None,
+                    outline_style: Some(OutlineStrokeStyle::round(10.0)),
+                },
+            )]),
+        });
+        assert_eq!(
+            layer.orphan_stroke_lib_contour_ids(),
+            vec!["contour_missing".to_string()]
+        );
+
+        layer
+            .set_live_stroke_contours(&[contour_id], OutlineStrokeStyle::round(20.0))
+            .expect("stroking the real contour");
+
+        assert!(layer.orphan_stroke_lib_contour_ids().is_empty());
+        assert!(layer.stroke_outlines_for_preview(0.25).is_ok());
     }
 
     #[test]

@@ -7,7 +7,7 @@ use pack::Pack;
 use shift_font::stroke::{
     StrokeContourFailure, StrokeOutlineCache, StrokeOutlinePoints, StrokeOutlineRead,
 };
-use shift_font::{ContourId, CoreError, GlyphLayer, LayerId};
+use shift_font::{ContourId, CoreError, GlyphId, GlyphLayer, LayerId};
 
 use crate::geometry::ContourPoints;
 
@@ -43,6 +43,8 @@ pub struct StrokeOutlinePreviews {
 pub enum StrokePreviewReadError {
     NotLoaded { layer: LayerId },
     LayerNotFound { layer: LayerId },
+    GlyphNotLoaded { glyph: GlyphId },
+    GlyphNotFound { glyph: GlyphId },
     Failed { message: String },
 }
 
@@ -98,7 +100,7 @@ impl From<StrokeOutlinePoints> for StrokeOutlinePreviewItem {
     }
 }
 
-fn stroke_error(error: CoreError) -> StrokePreviewReadError {
+pub(crate) fn stroke_error(error: CoreError) -> StrokePreviewReadError {
     StrokePreviewReadError::Failed {
         message: error.to_string(),
     }

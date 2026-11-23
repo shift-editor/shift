@@ -730,7 +730,10 @@ class RunStrokeNotes {
  *
  * @remarks
  * A glyph drawn at an authored drawing shows its strokes, so only a glyph
- * with no exact drawing here is asked about its other drawings.
+ * with no exact drawing here is asked about its other drawings. A stroke
+ * stroked across the glyph's masters solves around the interpolated
+ * skeleton and draws; only a glyph whose fills did not solve here — one
+ * stroked on some masters but not all — is left out.
  */
 function strokesHiddenBetweenMasters(
   editor: Editor,
@@ -740,7 +743,11 @@ function strokesHiddenBetweenMasters(
   track(model.layerCell);
   if (model.layerCell.peek()) return false;
 
-  return editor.glyphForId(glyphId)?.hasDynamicStroke() ?? false;
+  if (!(editor.glyphForId(glyphId)?.hasDynamicStroke() ?? false)) return false;
+
+  track(model.strokeFillsCell);
+  track(model.componentStrokeFillsCell);
+  return !model.strokeFillsCell.peek().path && !model.componentStrokeFillsCell.peek().path;
 }
 
 /**

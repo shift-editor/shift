@@ -199,6 +199,31 @@ impl GlyphLayer {
 
     /// Removes stroke lib entries that do not match a contour on this layer.
     ///
+    /// Points every stroke lib entry at the contour its rename names: after
+    /// a copy gave this layer's contours fresh ids, the entries copied with
+    /// the lib still name the originals. Entries with no rename keep their
+    /// key; [`Self::prune_orphan_stroke_lib_entries`] drops what is left
+    /// naming no contour of this layer.
+    pub fn remap_stroke_lib_contour_ids(&mut self, renames: &[(ContourId, ContourId)]) {
+        let Some(mut stroke_lib) = self.stroke_lib() else {
+            return;
+        };
+
+        stroke_lib.contours = stroke_lib
+            .contours
+            .into_iter()
+            .map(|(contour_id, entry)| {
+                let renamed = renames
+                    .iter()
+                    .find(|(old, _)| old.to_string() == contour_id)
+                    .map(|(_, new)| new.to_string());
+
+                (renamed.unwrap_or(contour_id), entry)
+            })
+            .collect();
+        sync_stroke_lib_on_layer(self, &stroke_lib);
+    }
+
     /// When every entry is removed, the `com.shift.stroke` lib key is dropped.
     ///
     /// Returns the contour ids that were removed from the stroke lib.

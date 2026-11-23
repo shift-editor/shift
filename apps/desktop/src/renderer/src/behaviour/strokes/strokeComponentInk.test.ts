@@ -110,7 +110,7 @@ describe("a component instance between masters", () => {
     open: "oref",
   });
 
-  it("shows the instance's stroke at its authored source only", async () => {
+  it("shows the instance's stroke between masters when its base is drawn on one master", async () => {
     editor.clickSource("Regular");
     await editor.openGlyph("o");
     const [contour] = await editor.outline();
@@ -121,8 +121,10 @@ describe("a component instance between masters", () => {
     await editor.openGlyph("oref");
     expect(editor.drawnOutlineIds("oref").componentStrokeFills).not.toBeNull();
 
+    // `o` is drawn on Regular only, so its stroke is the interpolated
+    // stroke everywhere: the instance keeps drawing it between masters.
     editor.setLocation({ wght: 350 });
-    expect(editor.drawnOutlineIds("oref").componentStrokeFills).toBeNull();
+    expect(editor.drawnOutlineIds("oref").componentStrokeFills).not.toBeNull();
   });
 });
 

@@ -50,6 +50,8 @@ import type {
   SetComponentCondition,
 } from "@shift/types";
 import {
+  alphabetical,
+  comparing,
   mintSwapId,
   mintAxisId,
   mintGlyphId,
@@ -118,7 +120,7 @@ import { uniqueInOrder } from "../utils/utils";
 import { fallbackGlyphNameForUnicode, parseCodepoint } from "../utils/unicode";
 import { createBatchRequest } from "../utils/batchRequest";
 import { EditGate } from "./EditGate";
-import { solveStrokeFills } from "./strokeFills";
+import { NO_STROKE_FILLS, solveStrokeFills } from "./strokeFills";
 import { isUnreadLayerExtent, readLayerExtent, type LayerExtentRead } from "./layerExtent";
 import {
   sidebearingsFromLayerExtent,
@@ -309,6 +311,12 @@ export class Font {
 
   // non-reactive: lazy cache of per-layer computed cells; each cell subscribes when read
   readonly #strokeFillsCells = new Map<LayerId, ComputedSignal<StrokeFills>>();
+  // non-reactive: last interpolated fills per glyph, so the frame that drew a
+  // path and a reader that peeks it hold the same value
+  readonly #strokeFillsAtMemo = new Map<
+    GlyphId,
+    { readonly key: string; readonly fills: StrokeFills }
+  >();
   // non-reactive: lazy cache of per-layer computed cells; each cell subscribes when read
   readonly #layerExtentCells = new Map<LayerId, ComputedSignal<LayerExtentRead>>();
   // non-reactive: lazy cache of per-layer computed cells; each cell subscribes when read
@@ -1289,6 +1297,7 @@ export class Font {
       axesCell: this.#glyphAxesCell(glyphId),
       defaultSourceId: this.defaultSource.id,
       strokeFillsCell: (layerId) => this.strokeFillsCell(layerId),
+      strokeFillsAt: (glyphId, location) => this.strokeFillsAt(glyphId, location),
       metricsSidebearingsCell: (layerId) => this.metricsSidebearingsCell(layerId),
       anchorCategory: (glyphId) => {
         // Called from render-model computeds: a re-read glyph directory re-runs them.
@@ -1531,6 +1540,47 @@ export class Font {
     const engine = this.#store.engine;
     track(engine.revision("layers"));
     return engine.strokeOutlinePreviews(layerId, tolerance);
+  }
+
+  /**
+   * Live stroke fill outlines for `glyphId` interpolated at a design
+   * location, when the window's engine is open.
+   */
+  strokeOutlinePreviewsAt(
+    glyphId: GlyphId,
+    location: DesignAxisLocation,
+    tolerance?: number,
+  ): StrokeOutlinePreviews {
+    const engine = this.#store.engine;
+    track(engine.revision("layers"));
+    return engine.strokeOutlinePreviewsAt(glyphId, location, tolerance);
+  }
+
+  /**
+   * The solved fills of `glyphId`'s dynamic strokes interpolated at a design
+   * `location`, and the path they draw as: the between-masters counterpart of
+   * {@link strokeFillsCell}.
+   *
+   * @remarks
+   * A plain read, not a cell: the caller holds the location in its own
+   * reactive state and re-asks as it moves, while the engine revision this
+   * tracks re-asks when a master changes. The last answer per glyph is kept
+   * while the location and the revision stand, so the frame that drew a path
+   * and a reader that peeks it hold the same value; the shared empty value
+   * is not kept, so a glyph that loads later is asked again. Never throws,
+   * as {@link strokeFillsCell} never does.
+   */
+  strokeFillsAt(glyphId: GlyphId, location: DesignAxisLocation): StrokeFills {
+    const revision = this.#store.engine.revision("layers");
+    track(revision);
+    const key = `${revision.peek()}|${designLocationKey(location)}`;
+    const memo = this.#strokeFillsAtMemo.get(glyphId);
+    if (memo?.key === key) return memo.fills;
+
+    const fills = solveStrokeFills(() => this.strokeOutlinePreviewsAt(glyphId, location));
+    if (fills !== NO_STROKE_FILLS) this.#strokeFillsAtMemo.set(glyphId, { key, fills });
+
+    return fills;
   }
 
   /**
@@ -2880,6 +2930,14 @@ const SWAP_EDIT_LABELS = {
   move: "Move Swap",
   remove: "Delete Swap",
 } as const satisfies Record<GlyphSwapEdit["kind"], string>;
+
+/** A design location as one string: axis ids in alphabetical order, each with its value. */
+function designLocationKey(location: DesignAxisLocation): string {
+  return [...location.entries()]
+    .sort(comparing(([axis]) => axis, alphabetical))
+    .map(([axis, value]) => `${axis}=${value}`)
+    .join(";");
+}
 
 /** Whether a read glyph has something to draw: a projection, or authored layers. */
 function hasGeometry(snapshot: GlyphSnapshot): boolean {

@@ -6,6 +6,7 @@ pub mod ink;
 pub mod ink_bounds;
 pub mod ink_fit;
 pub mod ink_snap;
+pub mod interpolated;
 pub mod layer_edit;
 pub mod layer_lib;
 pub mod live_stroke;

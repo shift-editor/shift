@@ -379,6 +379,23 @@ export class EngineSession {
     return this.#reads.strokeOutlinePreviews(layerId, tolerance);
   }
 
+  /**
+   * Fill outlines derived from live stroke skeletons of `glyphId` interpolated
+   * at a design location, unsaved edits included: skeleton and style
+   * interpolated from the glyph's masters, then solved.
+   */
+  strokeOutlinePreviewsAt(
+    glyphId: GlyphId,
+    location: DesignAxisLocation,
+    tolerance = STROKE_PREVIEW_TOLERANCE,
+  ): StrokeOutlinePreviews {
+    return this.#reads.strokeOutlinePreviewsAt(
+      glyphId,
+      locationValues(this.#reads.axes(), location),
+      tolerance,
+    );
+  }
+
   /** Contours on `layerId` that carry a dynamic stroke and their styles, unsaved edits included. */
   liveStrokes(layerId: LayerId): readonly LiveStroke[] {
     return this.#reads.liveStrokes(layerId);

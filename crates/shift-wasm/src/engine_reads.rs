@@ -417,6 +417,27 @@ pub trait EngineReads {
         layer_id: LayerId,
         tolerance: f64,
     ) -> Result<StrokeOutlinePreviews, StrokePreviewReadError>;
+    /// Fill outlines shift-font derives from live stroke skeletons of
+    /// `glyph_id` interpolated at `location` (design coordinates in the
+    /// font's axis order, NaN for an axis default), unsaved edits included:
+    /// skeleton and style interpolated from the glyph's compatible drawings,
+    /// then solved, as `Font::stroke_outlines_at_location` answers. Between
+    /// masters this is the stroke the interpolated skeleton carries; at an
+    /// authored source the layer read above answers instead.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`StrokePreviewReadError::GlyphNotLoaded`] when a layer of
+    /// the glyph is not resident, [`StrokePreviewReadError::GlyphNotFound`]
+    /// when the font has no such glyph, and
+    /// [`StrokePreviewReadError::Failed`] when the stroke solver rejects
+    /// the request itself (an unusable tolerance).
+    fn stroke_outline_previews_at(
+        &self,
+        glyph_id: GlyphId,
+        location: Vec<f64>,
+        tolerance: f64,
+    ) -> Result<StrokeOutlinePreviews, StrokePreviewReadError>;
     /// Contours on `layer_id` that carry a live stroke, in contour order, each
     /// with its stored style, unsaved edits included. Solves no outlines.
     ///
@@ -1549,6 +1570,37 @@ mod exports {
             )
         }
 
+        fn stroke_outline_previews_at(
+            &self,
+            glyph_id: GlyphId,
+            location: Vec<f64>,
+            tolerance: f64,
+        ) -> Result<StrokeOutlinePreviews, StrokePreviewReadError> {
+            let font = self
+                .previewed
+                .as_ref()
+                .unwrap_or_else(|| self.session.font());
+            let glyph = font
+                .glyph(glyph_id)
+                .ok_or(StrokePreviewReadError::GlyphNotFound { glyph: glyph_id })?;
+            if glyph
+                .layers()
+                .keys()
+                .any(|layer_id| self.session.residency().is_unloaded(*layer_id))
+            {
+                return Err(StrokePreviewReadError::GlyphNotLoaded { glyph: glyph_id });
+            }
+            let read = font
+                .stroke_outlines_at_location(
+                    glyph_id,
+                    &design_location(font, &location),
+                    tolerance,
+                    &mut self.stroke_outlines.borrow_mut(),
+                )
+                .map_err(crate::stroke_preview::stroke_error)?;
+            Ok(read.into())
+        }
+
         fn live_strokes(
             &self,
             layer_id: LayerId,
@@ -2439,6 +2491,77 @@ mod exports {
 
             assert_eq!(wide.items.len(), 1);
             assert!(wide.items[0].height > narrow_height + 10.0);
+        }
+
+        #[test]
+        fn stroke_outline_previews_at_interpolates_between_masters() {
+            use shift_font::stroke::{DEFAULT_TOLERANCE, OutlineStrokeStyle};
+            use shift_font::{
+                Axis, Contour, DesignLocation, Glyph, GlyphId, GlyphLayer, PointType, Source,
+            };
+
+            let mut font = shift_font::Font::new();
+            let weight = Axis::weight();
+            let weight_id = weight.id();
+            font.add_axis(weight).unwrap();
+            let regular_id = font.default_source_id().unwrap();
+            font.source_mut(regular_id)
+                .unwrap()
+                .set_location(DesignLocation::from([(weight_id, 400.0)]));
+            let heavy_id = font.add_source(Source::new(
+                "Heavy".to_string(),
+                DesignLocation::from([(weight_id, 900.0)]),
+            ));
+
+            let square = |source_id, x: f64, stroke_width: f64| {
+                let mut layer = GlyphLayer::with_width(LayerId::new(), source_id, 500.0);
+                let mut contour = Contour::new();
+                contour.add_point(x, 0.0, PointType::OnCurve, false);
+                contour.add_point(x + 200.0, 0.0, PointType::OnCurve, false);
+                contour.add_point(x + 200.0, 400.0, PointType::OnCurve, false);
+                contour.add_point(x, 400.0, PointType::OnCurve, false);
+                contour.close();
+                let contour_id = contour.id();
+                layer.add_contour(contour);
+                layer
+                    .set_live_stroke_contours(
+                        std::slice::from_ref(&contour_id),
+                        OutlineStrokeStyle::round(stroke_width),
+                    )
+                    .unwrap();
+                (layer, contour_id)
+            };
+            let (regular_layer, regular_contour_id) = square(regular_id, 100.0, 20.0);
+            let (heavy_layer, _) = square(heavy_id, 200.0, 60.0);
+            let mut glyph = Glyph::new("interp_stroke".to_string());
+            glyph.set_layer(regular_layer);
+            glyph.set_layer(heavy_layer);
+            let glyph_id = font.insert_glyph(glyph).unwrap();
+
+            let session = Session::over(&font);
+            let midway = session.read(|engine| {
+                engine
+                    .stroke_outline_previews_at(glyph_id, vec![650.0], DEFAULT_TOLERANCE)
+                    .unwrap()
+            });
+
+            // Halfway: skeleton 150..350, width 40, so the ink is 240 wide.
+            assert_eq!(midway.items.len(), 1);
+            assert_eq!(midway.items[0].skeleton_contour_id, regular_contour_id);
+            assert!((midway.items[0].width - 240.0).abs() < 0.5);
+            assert!(midway.failures.is_empty());
+
+            let missing = session.read(|engine| {
+                engine.stroke_outline_previews_at(
+                    GlyphId::from_raw("no_such_glyph"),
+                    vec![650.0],
+                    DEFAULT_TOLERANCE,
+                )
+            });
+            assert!(matches!(
+                missing,
+                Err(StrokePreviewReadError::GlyphNotFound { .. })
+            ));
         }
 
         #[test]

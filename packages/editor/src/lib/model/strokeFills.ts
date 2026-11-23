@@ -37,7 +37,9 @@ export function solveStrokeFills(read: () => StrokeOutlinePreviews): StrokeFills
     return { items, path, failure };
   } catch (error) {
     const readError = strokeReadError(error);
-    if (readError?.kind === "notLoaded") return NO_STROKE_FILLS;
+    if (readError?.kind === "notLoaded" || readError?.kind === "glyphNotLoaded") {
+      return NO_STROKE_FILLS;
+    }
 
     return { items: [], path: null, failure: strokeFailureMessage(error, readError) };
   }
@@ -70,7 +72,10 @@ function strokeFailureMessage(error: unknown, readError: StrokePreviewReadError 
       return `${prefix}: ${readError.message}.`;
     case "layerNotFound":
       return `${prefix}: its layer is not in the font.`;
+    case "glyphNotFound":
+      return `${prefix}: its glyph is not in the font.`;
     case "notLoaded":
+    case "glyphNotLoaded":
     case undefined:
       return error instanceof Error ? `${prefix}: ${error.message}.` : `${prefix}.`;
   }

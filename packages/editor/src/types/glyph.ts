@@ -94,6 +94,8 @@ export interface GlyphOptions {
   readonly anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
   /** The solved fills of a layer's dynamic strokes; one cell per layer, so readers share a value. */
   readonly strokeFillsCell: (layerId: LayerId) => Signal<StrokeFills>;
+  /** The solved fills of a glyph's dynamic strokes interpolated at a design location; a plain read the caller re-asks as its location moves. */
+  readonly strokeFillsAt: (glyphId: GlyphId, location: DesignAxisLocation) => StrokeFills;
   /** Ink-aware sidebearings of a layer; one cell per layer, so readers share a value. */
   readonly metricsSidebearingsCell: (layerId: LayerId) => Signal<GlyphMetricsSidebearings>;
 }
