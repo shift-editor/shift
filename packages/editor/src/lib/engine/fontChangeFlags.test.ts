@@ -21,6 +21,7 @@ const RUST_FONT_CHANGE_FLAGS = [
   "layers",
   "scene",
   "grid",
+  "strokePresets",
 ] as const;
 
 describe("FontChangeFlagSchema", () => {

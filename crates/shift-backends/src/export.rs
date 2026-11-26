@@ -1224,6 +1224,7 @@ mod tests {
                 miter_limit: 4.0,
                 position: 0.0,
             },
+            preset_id: None,
         }))
         .unwrap();
 
@@ -1347,6 +1348,7 @@ mod tests {
                 miter_limit: 4.0,
                 position: 0.0,
             },
+            preset_id: None,
         }))
         .unwrap();
 
