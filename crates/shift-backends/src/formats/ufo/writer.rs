@@ -177,7 +177,18 @@ impl UfoWriter {
 
         // Preserve the contour id as a UFO identifier so the stroke lib survives
         // a write→read round-trip; the reader uses it to restore the same id.
+        //
+        // Shift ContourIds consist of "contour_" followed by nanoid characters
+        // (letters, digits, hyphens, underscores) — all within the printable
+        // ASCII range 0x20–0x7E that norad requires, and always ≤ 100 chars.
+        // `Identifier::new` therefore never fails for Shift-generated ids.
         let identifier = Identifier::new(contour.id().as_str()).ok();
+        debug_assert!(
+            identifier.is_some(),
+            "ContourId {:?} produced an invalid UFO identifier; \
+             the id alphabet may have drifted outside 0x20–0x7E",
+            contour.id().as_str()
+        );
         norad::Contour::new(points, identifier)
     }
 

@@ -71,7 +71,13 @@ export function strokeSectionView(
   };
 }
 
-/** The thinnest stroke the section sets: below this the engine refuses, so the field stops here. */
+/**
+ * The thinnest stroke the UI section sets.
+ *
+ * The engine accepts any finite positive value, so this is a UI-level design
+ * constraint (sub-unit strokes are impractical in font units) rather than an
+ * engine limit.  CLI callers and direct intent use can pass smaller values.
+ */
 const MIN_WIDTH = 1;
 
 /** The smallest miter limit that still means something: a limit under 1 would bevel every corner. */

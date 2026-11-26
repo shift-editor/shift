@@ -87,6 +87,17 @@ impl Font {
 /// `None` when any sample does not stroke that contour: the contour then has
 /// no interpolated stroke. Samples match the reference by contour order,
 /// the correspondence the interpolation itself is built on.
+///
+/// # Contour-index contract
+///
+/// This function pairs masters by contour **order** (index), not by id.
+/// That is correct today because variable font compatibility already requires
+/// masters to be structurally parallel (same contour count and order).
+///
+/// When per-point nib shapes are introduced they will attach more data to
+/// individual contours.  Before that work begins, decide whether this
+/// index-based contract is still sufficient or whether id-stable matching
+/// across masters is needed.
 fn blended_style(
     sample_layers: &[Option<&GlyphLayer>],
     weights: &[f64],

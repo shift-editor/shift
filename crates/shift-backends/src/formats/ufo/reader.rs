@@ -70,6 +70,13 @@ impl UfoReader {
     pub(crate) fn convert_contour(contour: &norad::Contour) -> Contour {
         // Restore the contour id from the UFO identifier when present, so that
         // a write→read round-trip is lossless and the stroke lib stays intact.
+        //
+        // Shift always writes contour identifiers (see `writer.rs`), so a
+        // round-trip through Shift is fully lossless.  Third-party or legacy
+        // GLIFs that have no identifier get a fresh id; any `com.shift.stroke`
+        // entries they carry will be pruned as orphans by
+        // `prune_orphan_stroke_lib_entries`.  This is intentional: a foreign
+        // GLIF has no guaranteed id stability across writes.
         let mut shift_contour = match contour.identifier() {
             Some(id) => Contour::with_id(ContourId::from_raw(id.as_str())),
             None => Contour::new(),
