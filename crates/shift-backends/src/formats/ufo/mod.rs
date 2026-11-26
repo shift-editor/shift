@@ -172,7 +172,8 @@ mod tests {
         assert!(glif.contains("<glyph name=\"A\""));
         assert!(glif.contains("x=\"115.29469168717605\""));
         assert!(glif.contains("y=\"452.51873449628556\""));
-        assert_eq!(glif.matches("<contour>").count(), 1);
+        // `<contour` matches both bare and identifier-bearing contour elements.
+        assert_eq!(glif.matches("<contour").count(), 1);
     }
 
     #[test]

@@ -2,7 +2,7 @@ use crate::atomic::sync_parent;
 use crate::errors::{FormatBackendError, FormatBackendResult};
 use crate::numeric::{rounded_i32, saturating_u32};
 use crate::traits::{FontView, FontWriter};
-use norad::{Font as NoradFont, Glyph as NoradGlyph, Line, Name};
+use norad::{Font as NoradFont, Glyph as NoradGlyph, Identifier, Line, Name};
 use shift_font::{
     Contour, Font, Glyph, GlyphLayer, Guideline, LibData, LibValue, Point, PointType,
     StandardMetrics,
@@ -175,7 +175,10 @@ impl UfoWriter {
             })
             .collect();
 
-        norad::Contour::new(points, None)
+        // Preserve the contour id as a UFO identifier so the stroke lib survives
+        // a write→read round-trip; the reader uses it to restore the same id.
+        let identifier = Identifier::new(contour.id().as_str()).ok();
+        norad::Contour::new(points, identifier)
     }
 
     fn convert_component(
