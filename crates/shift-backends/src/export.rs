@@ -12,6 +12,7 @@
 //! TTF re-encoded, which needs an encoder crate that passes `cargo deny`) and
 //! a Glyphs writer (`glyphs-reader` only reads).
 
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 use write_fonts::FontBuilder;
@@ -26,7 +27,8 @@ use crate::formats::designspace::DesignspaceWriter;
 use crate::formats::ufo::UfoWriter;
 use crate::shift2fontir::{PropagatedGlyphAnchors, ShiftIrSource, ShiftIrSourceError};
 use crate::traits::FontView;
-use shift_font::{Axis, AxisRole, Font};
+use shift_font::stroke::ContourStrokeRole;
+use shift_font::{Axis, AxisRole, ContourId, Font};
 
 /// A component that carries a condition, named by its glyph and its
 /// position in the glyph's drawings.
@@ -260,6 +262,13 @@ pub enum ExportError {
     #[error("{0}")]
     ComponentConditions(ComponentConditions),
 
+    #[error("cannot export: stroke on glyph '{glyph}' ({source_name}) failed to solve: {message}")]
+    StrokeBakeFailed {
+        glyph: String,
+        source_name: String,
+        message: String,
+    },
+
     #[error("failed to compile TrueType font: {message}")]
     CompileTtf { message: String },
 
@@ -319,6 +328,91 @@ pub enum VariableComponents {
     /// Kept as a variable component in a `VARC` table, smaller, but drawn
     /// only by renderers that read `VARC`.
     Varc,
+}
+
+/// Tolerance for stroke baking at export, matching the editing canvas and commands.
+const EXPORT_STROKE_TOLERANCE: f64 = 0.25;
+
+/// Whether any glyph in `font` carries a dynamic stroke that needs baking.
+pub fn font_has_strokes(font: &Font) -> bool {
+    font.glyphs().any(|glyph| {
+        glyph.layers().values().any(|layer| {
+            layer.stroke_lib().is_some_and(|lib| {
+                lib.contours
+                    .values()
+                    .any(|entry| entry.role == ContourStrokeRole::Skeleton)
+            })
+        })
+    })
+}
+
+/// Bakes every dynamic stroke skeleton in every layer of `font`, returning
+/// a font whose contours are all plain fills. The result borrows `font`
+/// when it has no dynamic strokes; otherwise it is an owned clone with the
+/// skeletons replaced by their solved outlines. The source font is never
+/// mutated.
+///
+/// Call this before passing a `Font` to [`FontExporter::compile_ttf`] or
+/// [`FontExporter::compile_preview_ttf`] when the font may carry dynamic
+/// strokes; those entry points compile the view they are given and do not
+/// bake. [`FontExporter::export_with`] calls it internally.
+///
+/// # Errors
+///
+/// Returns [`ExportError::StrokeBakeFailed`] when any skeleton cannot be solved.
+pub fn bake_strokes_for_export(font: &Font) -> Result<Cow<'_, Font>, ExportError> {
+    if !font_has_strokes(font) {
+        return Ok(Cow::Borrowed(font));
+    }
+
+    let mut baked = font.clone();
+
+    for glyph in font.glyphs() {
+        let glyph_name = glyph.name().to_string();
+
+        for (layer_id, layer) in glyph.layers() {
+            let Some(stroke_lib) = layer.stroke_lib() else {
+                continue;
+            };
+
+            let skeleton_ids: Vec<ContourId> = stroke_lib
+                .contours
+                .iter()
+                .filter(|(_, entry)| entry.role == ContourStrokeRole::Skeleton)
+                .map(|(id, _)| ContourId::from_raw(id))
+                .collect();
+
+            if skeleton_ids.is_empty() {
+                continue;
+            }
+
+            let source_name = match layer
+                .source_id()
+                .and_then(|sid| font.sources().iter().find(|s| s.id() == sid))
+            {
+                Some(s) => s.name().to_string(),
+                None => format!("layer {layer_id}"),
+            };
+
+            let baked_layer = baked.require_layer_mut(*layer_id).map_err(|error| {
+                ExportError::StrokeBakeFailed {
+                    glyph: glyph_name.clone(),
+                    source_name: source_name.clone(),
+                    message: error.to_string(),
+                }
+            })?;
+
+            baked_layer
+                .bake_stroke_outlines(&skeleton_ids, EXPORT_STROKE_TOLERANCE)
+                .map_err(|error| ExportError::StrokeBakeFailed {
+                    glyph: glyph_name.clone(),
+                    source_name,
+                    message: error.to_string(),
+                })?;
+        }
+    }
+
+    Ok(Cow::Owned(baked))
 }
 
 /// Exports [`FontView`] snapshots as binaries or editable sources.
@@ -386,6 +480,7 @@ impl FontExporter {
     ) -> Result<FontExportResult, ExportError> {
         let files = self.plan_with(font, &request, encodings)?;
         ComponentConditions::refuse(font)?;
+        let baked = bake_strokes_for_export(font)?;
         if let Some(directory) = request.path.parent()
             && request.format != ExportFormat::StaticTtf
         {
@@ -393,12 +488,12 @@ impl FontExporter {
         }
         match request.format {
             ExportFormat::Ttf => {
-                self.export_binary(font, &request.path, encodings)?;
+                self.export_binary(baked.as_ref(), &request.path, encodings)?;
             }
-            ExportFormat::Designspace => Self::export_designspace(font, &request.path)?,
-            ExportFormat::Ufo => Self::export_ufo(font, &request.path)?,
+            ExportFormat::Designspace => Self::export_designspace(baked.as_ref(), &request.path)?,
+            ExportFormat::Ufo => Self::export_ufo(baked.as_ref(), &request.path)?,
             ExportFormat::StaticTtf => {
-                self.export_static_instances_with(font, &request.path, encodings)?;
+                self.export_static_instances_with(baked.as_ref(), &request.path, encodings)?;
             }
         }
 
@@ -500,6 +595,10 @@ impl FontExporter {
     /// Compiles a TrueType binary from the supplied font in memory without
     /// writing it anywhere.
     ///
+    /// The view is compiled as given: dynamic strokes are not baked. Call
+    /// [`bake_strokes_for_export`] first when the font may carry them, or
+    /// the skeletons compile as open paths that draw nothing.
+    ///
     /// # Errors
     ///
     /// Returns [`ExportError::ComponentConditions`] when a component carries
@@ -515,6 +614,10 @@ impl FontExporter {
     /// is drawn everywhere, as if it had none, and the result lists them so
     /// the preview can say so. A font without component conditions compiles
     /// exactly as [`Self::compile_ttf`] compiles it.
+    ///
+    /// Like [`Self::compile_ttf`], the view is compiled as given: call
+    /// [`bake_strokes_for_export`] first when the font may carry dynamic
+    /// strokes.
     ///
     /// # Errors
     ///
@@ -1080,5 +1183,312 @@ mod tests {
             ExportError::UnsupportedCrossAxisMappings { mapping_count: 1 }
         ));
         assert!(!output_path.exists());
+    }
+
+    /// Creates a single-master font with one glyph that has a dynamic stroke.
+    fn font_with_stroked_glyph() -> (Font, shift_font::LayerId) {
+        use shift_font::stroke::{OutlineStrokeStyle, StrokeCap, StrokeJoin};
+        use shift_font::{Contour, FontIntentSet, GlyphLayer, LayerId, PointType, SetLiveStroke};
+
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let layer_id = LayerId::new();
+
+        let mut glyph = shift_font::Glyph::with_unicode("o".to_string(), 0x006F);
+        let mut layer = GlyphLayer::with_width(layer_id, source_id, 500.0);
+        let mut contour = Contour::new();
+        contour.add_point(50.0, 0.0, PointType::OnCurve, false);
+        contour.add_point(450.0, 0.0, PointType::OnCurve, false);
+        contour.add_point(450.0, 700.0, PointType::OnCurve, false);
+        contour.add_point(50.0, 700.0, PointType::OnCurve, false);
+        contour.close();
+        layer.add_contour(contour);
+        glyph.set_layer(layer);
+        font.insert_glyph(glyph).unwrap();
+
+        let contour_id = font
+            .layer(layer_id)
+            .unwrap()
+            .contours_iter()
+            .next()
+            .unwrap()
+            .id();
+
+        font.apply_intents(&FontIntentSet::from(SetLiveStroke {
+            layer_id,
+            contour_ids: vec![contour_id],
+            style: OutlineStrokeStyle {
+                width: 40.0,
+                cap: StrokeCap::Round,
+                join: StrokeJoin::Round,
+                miter_limit: 4.0,
+                position: 0.0,
+            },
+            preset_id: None,
+        }))
+        .unwrap();
+
+        (font, layer_id)
+    }
+
+    /// Bounds of the compiled `o` glyph in `bytes` as
+    /// `(x_min, y_min, x_max, y_max)`.
+    fn compiled_o_bounds(bytes: &[u8]) -> (f32, f32, f32, f32) {
+        let compiled = FontRef::new(bytes).unwrap();
+        let gid = compiled
+            .charmap()
+            .map(0x006Fu32)
+            .expect("o should be mapped");
+        let bounds = compiled
+            .glyph_metrics(
+                skrifa::instance::Size::unscaled(),
+                skrifa::instance::LocationRef::default(),
+            )
+            .bounds(gid)
+            .expect("compiled o should have bounds");
+        (bounds.x_min, bounds.y_min, bounds.x_max, bounds.y_max)
+    }
+
+    /// Asserts `bounds` are the baked ring's, grown past the skeleton
+    /// rectangle (50, 0)–(450, 700) by half the 40-wide stroke on every
+    /// side — the skeleton itself would compile to exactly that rectangle.
+    fn assert_baked_ring_bounds(bounds: (f32, f32, f32, f32)) {
+        let (x_min, y_min, x_max, y_max) = bounds;
+        assert!(x_min < 40.0, "left edge should grow past 50: {x_min}");
+        assert!(y_min < -10.0, "bottom edge should grow past 0: {y_min}");
+        assert!(x_max > 460.0, "right edge should grow past 450: {x_max}");
+        assert!(y_max > 710.0, "top edge should grow past 700: {y_max}");
+    }
+
+    #[test]
+    fn bake_replaces_skeleton_with_closed_outlines() {
+        let (font, layer_id) = font_with_stroked_glyph();
+        let skeleton_id = font
+            .layer(layer_id)
+            .unwrap()
+            .contours_iter()
+            .next()
+            .unwrap()
+            .id();
+
+        let baked = bake_strokes_for_export(&font).unwrap();
+        let layer = baked.layer(layer_id).unwrap();
+
+        assert!(
+            layer.stroke_lib().is_none(),
+            "baked layer should drop its stroke lib"
+        );
+        assert!(
+            layer.contour(&skeleton_id).is_none(),
+            "baked layer should drop the skeleton contour"
+        );
+        let contours: Vec<_> = layer.contours_iter().collect();
+        assert_eq!(
+            contours.len(),
+            2,
+            "a stroked closed rectangle bakes to an outer and an inner outline"
+        );
+        assert!(
+            contours.iter().all(|contour| contour.is_closed()),
+            "baked outlines are fills, so they are closed"
+        );
+    }
+
+    #[test]
+    fn export_bakes_dynamic_strokes() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let output_path = temp_dir.path().join("Stroked.ttf");
+        let (font, _) = font_with_stroked_glyph();
+
+        FontExporter::new()
+            .export(
+                &font,
+                FontExportRequest {
+                    path: output_path.clone(),
+                    format: ExportFormat::Ttf,
+                },
+            )
+            .unwrap();
+
+        let bytes = std::fs::read(&output_path).unwrap();
+        assert_baked_ring_bounds(compiled_o_bounds(&bytes));
+    }
+
+    #[test]
+    fn export_refuses_unsolvable_stroke() {
+        use shift_font::stroke::{OutlineStrokeStyle, StrokeCap, StrokeJoin};
+        use shift_font::{Contour, FontIntentSet, GlyphLayer, LayerId, PointType, SetLiveStroke};
+
+        // A one-point skeleton has no path to stroke, so the solve fails
+        // and export must refuse rather than ship the skeleton.
+        let mut font = Font::new();
+        let source_id = font.default_source_id().unwrap();
+        let layer_id = LayerId::new();
+        let mut glyph = shift_font::Glyph::with_unicode("o".to_string(), 0x006F);
+        let mut layer = GlyphLayer::with_width(layer_id, source_id, 500.0);
+        let mut contour = Contour::new();
+        contour.add_point(50.0, 50.0, PointType::OnCurve, false);
+        layer.add_contour(contour);
+        glyph.set_layer(layer);
+        font.insert_glyph(glyph).unwrap();
+        let contour_id = font
+            .layer(layer_id)
+            .unwrap()
+            .contours_iter()
+            .next()
+            .unwrap()
+            .id();
+        font.apply_intents(&FontIntentSet::from(SetLiveStroke {
+            layer_id,
+            contour_ids: vec![contour_id],
+            style: OutlineStrokeStyle {
+                width: 40.0,
+                cap: StrokeCap::Round,
+                join: StrokeJoin::Round,
+                miter_limit: 4.0,
+                position: 0.0,
+            },
+            preset_id: None,
+        }))
+        .unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let output_path = temp_dir.path().join("Unsolvable.ttf");
+        let error = FontExporter::new()
+            .export(
+                &font,
+                FontExportRequest {
+                    path: output_path.clone(),
+                    format: ExportFormat::Ttf,
+                },
+            )
+            .unwrap_err();
+
+        match error {
+            ExportError::StrokeBakeFailed { glyph, message, .. } => {
+                assert_eq!(glyph, "o");
+                assert!(!message.is_empty(), "the refusal names the reason");
+            }
+            other => panic!("expected StrokeBakeFailed, got {other:?}"),
+        }
+        assert!(
+            !output_path.exists(),
+            "a refused export writes no partial font"
+        );
+    }
+
+    #[test]
+    fn ufo_export_bakes_strokes() {
+        use crate::font_loader::FontLoader;
+
+        let (font, _) = font_with_stroked_glyph();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let output_path = temp_dir.path().join("Stroked.ufo");
+
+        FontExporter::new()
+            .export(
+                &font,
+                FontExportRequest {
+                    path: output_path.clone(),
+                    format: ExportFormat::Ufo,
+                },
+            )
+            .unwrap();
+
+        let reloaded = FontLoader::new()
+            .read_font(output_path.to_str().unwrap())
+            .unwrap();
+        let glyph = reloaded.glyph_by_name("o").expect("reloaded glyph o");
+        let layer = glyph.layers().values().next().unwrap();
+        assert!(
+            layer.stroke_lib().is_none(),
+            "exported UFO should not carry the stroke lib"
+        );
+        let contours: Vec<_> = layer.contours_iter().collect();
+        assert_eq!(
+            contours.len(),
+            2,
+            "exported UFO should hold the baked ring, not the skeleton"
+        );
+        assert!(
+            contours.iter().all(|contour| contour.is_closed()),
+            "baked outlines are fills, so they are closed"
+        );
+    }
+
+    #[test]
+    fn export_preserves_advance_width() {
+        let (font, _) = font_with_stroked_glyph();
+
+        let baked = bake_strokes_for_export(&font).unwrap();
+        let bytes = FontExporter::new().compile_ttf(&*baked).unwrap();
+        let compiled = FontRef::new(&bytes).unwrap();
+        let gid = compiled.charmap().map(0x006Fu32).unwrap();
+        let advance = compiled
+            .glyph_metrics(
+                skrifa::instance::Size::unscaled(),
+                skrifa::instance::LocationRef::default(),
+            )
+            .advance_width(gid)
+            .unwrap();
+        assert_eq!(
+            advance, 500.0,
+            "advance width should match the authored value"
+        );
+    }
+
+    #[test]
+    fn export_does_not_mutate_source_font() {
+        use shift_font::stroke::STROKE_LIB_KEY;
+
+        let (font, layer_id) = font_with_stroked_glyph();
+        let temp_dir = tempfile::tempdir().unwrap();
+        let output_path = temp_dir.path().join("Stroked.ttf");
+
+        FontExporter::new()
+            .export(
+                &font,
+                FontExportRequest {
+                    path: output_path,
+                    format: ExportFormat::Ttf,
+                },
+            )
+            .unwrap();
+
+        let layer = font.layer(layer_id).unwrap();
+        assert!(
+            layer.lib().get(STROKE_LIB_KEY).is_some(),
+            "source font should still have stroke metadata"
+        );
+        assert!(
+            layer.stroke_lib().is_some(),
+            "source font should still have a parseable stroke lib"
+        );
+    }
+
+    #[test]
+    fn export_no_strokes_unchanged() {
+        let font = sample_variable_font();
+        let bytes_a = FontExporter::new().compile_ttf(&font).unwrap();
+
+        let baked = bake_strokes_for_export(&font).unwrap();
+        let bytes_b = FontExporter::new()
+            .compile_ttf_drawing_conditions_everywhere(&*baked)
+            .unwrap();
+
+        assert_eq!(
+            bytes_a, bytes_b,
+            "font without strokes should compile identically"
+        );
+    }
+
+    #[test]
+    fn proof_compile_bakes_strokes() {
+        let (font, _) = font_with_stroked_glyph();
+
+        let baked = bake_strokes_for_export(&font).unwrap();
+        let preview = FontExporter::new().compile_preview_ttf(&*baked).unwrap();
+
+        assert_baked_ring_bounds(compiled_o_bounds(&preview.bytes));
     }
 }

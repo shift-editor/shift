@@ -75,15 +75,33 @@ import type {
   SceneIntent,
   SourceSetWeights,
   PlacedText,
+  StrokeOutlinePreviews,
+  LiveStroke,
+  InkSnapContourPoints,
+  LayerExtent,
+  ReapplyLinkedMetricsScope,
+  SelectionExtentRequest,
+  StrokePreset,
 } from "@shift/wasm/protocol";
 
 export { initEngine, svgPaths, typedText } from "@shift/wasm/engine";
-export type { ContourPoints } from "@shift/wasm/protocol";
+export type {
+  ContourPoints,
+  InkSnapContourPoints,
+  LiveStroke,
+  StrokeOutlineFailure,
+  StrokeOutlinePreviewItem,
+  StrokeOutlinePreviews,
+  StrokePreset,
+} from "@shift/wasm/protocol";
 import type { EngineStore } from "../../types/engine";
 import type { KerningPlace } from "../../types/font";
 import { unkerned } from "../model/Kerning";
 import type { DesignAxisLocation } from "../../types/variation";
 import { locationValues } from "./variation";
+
+/** shift-font's default stroke offset tolerance for live previews (0.25). */
+export const STROKE_PREVIEW_TOLERANCE = 0.25;
 
 const released = new FinalizationRegistry<number>(engineRelease);
 
@@ -350,6 +368,70 @@ export class EngineSession {
    */
   counterparts(reference: LayerId, target: LayerId, ids: Counterparts): Counterparts | null {
     return this.#reads.counterparts(reference, target, ids.points, ids.anchors, ids.components);
+  }
+
+  /**
+   * Fill outlines derived from live stroke skeletons on `layerId`, unsaved edits
+   * included.
+   */
+  strokeOutlinePreviews(
+    layerId: LayerId,
+    tolerance = STROKE_PREVIEW_TOLERANCE,
+  ): StrokeOutlinePreviews {
+    return this.#reads.strokeOutlinePreviews(layerId, tolerance);
+  }
+
+  /**
+   * Fill outlines derived from live stroke skeletons of `glyphId` interpolated
+   * at a design location, unsaved edits included: skeleton and style
+   * interpolated from the glyph's masters, then solved.
+   */
+  strokeOutlinePreviewsAt(
+    glyphId: GlyphId,
+    location: DesignAxisLocation,
+    tolerance = STROKE_PREVIEW_TOLERANCE,
+  ): StrokeOutlinePreviews {
+    return this.#reads.strokeOutlinePreviewsAt(
+      glyphId,
+      locationValues(this.#reads.axes(), location),
+      tolerance,
+    );
+  }
+
+  /** Contours on `layerId` that carry a dynamic stroke and their styles, unsaved edits included. */
+  liveStrokes(layerId: LayerId): readonly LiveStroke[] {
+    return this.#reads.liveStrokes(layerId);
+  }
+
+  layerExtent(layerId: LayerId): LayerExtent {
+    return this.#reads.layerExtent(layerId);
+  }
+
+  selectionExtent(request: SelectionExtentRequest): LayerExtent {
+    return this.#reads.selectionExtent(request);
+  }
+
+  includeStrokeInMetrics(): boolean {
+    return this.#reads.includeStrokeInMetrics();
+  }
+
+  strokePresets(): readonly StrokePreset[] {
+    return this.#reads.strokePresets();
+  }
+
+  reapplyLinkedMetricsDisabledReason(scope: ReapplyLinkedMetricsScope): string | null {
+    return this.#reads.reapplyLinkedMetricsDisabledReason(scope);
+  }
+
+  /**
+   * On-curve points and extrema of the solved stroke outlines on `layerId`,
+   * grouped by skeleton contour. These are the snap targets and probes for
+   * ink snapping. Follows a gesture's preview while one is under way.
+   *
+   * Returns empty when "Include stroke" is off or the layer has no strokes.
+   */
+  inkSnapPoints(layerId: LayerId): readonly InkSnapContourPoints[] {
+    return this.#reads.inkSnapPoints(layerId);
   }
 
   /** What renaming a glyph to `name` does, as shift-font's `Font::glyph_rename` decides. */

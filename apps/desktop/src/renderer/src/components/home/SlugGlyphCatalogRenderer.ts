@@ -274,7 +274,9 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
     this.#needsRedraw = true;
     this.#updateResidency();
 
-    if (this.#targetFrame?.active) void this.#refreshAtlas();
+    // Rebuild eagerly even when the catalog is hidden so the atlas is
+    // current by the time the user navigates back to the grid.
+    void this.#refreshAtlas();
   }
 
   #startLayer(): void {
@@ -317,7 +319,7 @@ export class SlugGlyphCatalogRenderer implements GlyphCatalogRenderer {
   }
 
   async #refreshAtlas(): Promise<void> {
-    if (this.#disposed || !this.#targetFrame?.active || this.#refresh || this.#atlasBuild) return;
+    if (this.#disposed || this.#refresh || this.#atlasBuild) return;
     const layer = this.#layer;
     if (!layer) {
       this.#startLayer();

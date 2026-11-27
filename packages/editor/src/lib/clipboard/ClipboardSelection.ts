@@ -1,4 +1,11 @@
-import { ascending, isPointId, type PointId, type SelectableId } from "@shift/types";
+import {
+  ascending,
+  isPointId,
+  type ContourId,
+  type OutlineStrokeStyle,
+  type PointId,
+  type SelectableId,
+} from "@shift/types";
 import { Validate } from "@shift/validation";
 import type { Contour, Point } from "@shift/glyph-state";
 import type { ContourContent, PointContent, ShiftContent } from "./types";
@@ -54,9 +61,15 @@ export class ClipboardSelection {
    * from the source contours and can be written to the system clipboard.
    *
    * @param source - Contours that own the selected point ids.
+   * @param strokes - Dynamic stroke style per source contour id, when the
+   * caller can read them; a copied contour (or a fragment of one) keeps the
+   * stroke it had so paste can re-apply it.
    * @returns `null` when no selected points resolve to valid clipboard content.
    */
-  contentFrom(source: ClipboardContourSource): ShiftContent | null {
+  contentFrom(
+    source: ClipboardContourSource,
+    strokes?: ReadonlyMap<ContourId, OutlineStrokeStyle>,
+  ): ShiftContent | null {
     if (this.#pointIds.size === 0) return null;
 
     const contours: ContourContent[] = [];
@@ -65,16 +78,25 @@ export class ClipboardSelection {
       const selectedIndices = this.#selectedIndices(contour);
       if (selectedIndices.size === 0) continue;
 
+      const stroke = strokes?.get(contour.id);
+
       if (selectedIndices.size === contour.points.length) {
-        contours.push({
+        const content: ContourContent = {
           points: contour.points.map(toContent),
           closed: contour.closed,
-        });
+        };
+        if (stroke) content.stroke = stroke;
+        contours.push(content);
       } else {
         const expanded = expandPartialSelection(contour, selectedIndices);
         if (!Validate.hasValidAnchor(expanded)) continue;
 
-        contours.push({ points: expanded.map(toContent), closed: false });
+        const content: ContourContent = {
+          points: expanded.map(toContent),
+          closed: false,
+        };
+        if (stroke) content.stroke = stroke;
+        contours.push(content);
       }
     }
 

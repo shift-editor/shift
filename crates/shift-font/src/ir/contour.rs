@@ -5,6 +5,9 @@ use crate::segment::CurveSegmentIter;
 use kurbo::{BezPath, PathEl};
 use serde::{Deserialize, Serialize};
 
+/// How near a closing point must be to the start to count as repeating it.
+const REPEATED_POINT_EPSILON: f64 = 1e-6;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
 pub struct Contour {
@@ -76,6 +79,10 @@ impl Contour {
         self.points.len()
     }
 
+    /// Removes a trailing on-curve point that sits on the first point.
+    ///
+    /// A path closed by `ClosePath` often ends its last segment on its own
+    /// start; a closed contour wraps to the first point and must not repeat it.
     pub fn close(&mut self) {
         self.closed = true;
     }
@@ -196,50 +203,114 @@ impl std::ops::Deref for Contours {
 
 impl From<&BezPath> for Contours {
     fn from(path: &BezPath) -> Self {
-        let mut contours = Vec::new();
-        let mut current: Option<Contour> = None;
+        Self(
+            SubpathPoints::of_path(path)
+                .into_iter()
+                .map(Contour::from)
+                .collect(),
+        )
+    }
+}
 
-        for el in path.elements() {
-            match *el {
-                PathEl::MoveTo(p) => {
-                    if let Some(c) = current.take() {
-                        contours.push(c);
-                    }
-                    let mut c = Contour::new();
-                    c.add_point(p.x, p.y, PointType::OnCurve, false);
-                    current = Some(c);
+/// One subpath of a [`BezPath`] as plain data, with no ids.
+///
+/// A [`Contour`] mints a random id for itself and for every point, which costs
+/// several times what flattening a stroke outline does. A reader that only
+/// draws or sends the points takes them from here; [`Contours::from`] builds
+/// on this, so both read a path alike.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SubpathPoints {
+    /// Whether the subpath ends in a `ClosePath`.
+    pub closed: bool,
+    /// One entry per point, in path order: a cubic adds two off-curve points
+    /// and its end, a quadratic an off-curve point and a `QCurve` end.
+    pub point_types: Vec<PointType>,
+    /// The points' x and y in font units, interleaved: two numbers for each
+    /// entry of `point_types`.
+    pub coordinates: Vec<f64>,
+}
+
+impl SubpathPoints {
+    /// The subpaths of `path`, one for each `MoveTo`, in order.
+    ///
+    /// A closing `ClosePath` drops an end point that is on-curve and repeats
+    /// the start, since the closed contour already returns there.
+    pub fn of_path(path: &BezPath) -> Vec<Self> {
+        let mut subpaths = Vec::new();
+        let mut current: Option<Self> = None;
+
+        for element in path.elements() {
+            match *element {
+                PathEl::MoveTo(point) => {
+                    subpaths.extend(current.take());
+                    let mut subpath = Self::default();
+                    subpath.push(point, PointType::OnCurve);
+                    current = Some(subpath);
                 }
-                PathEl::LineTo(p) => {
-                    if let Some(c) = current.as_mut() {
-                        c.add_point(p.x, p.y, PointType::OnCurve, false);
+                PathEl::LineTo(point) => {
+                    if let Some(subpath) = current.as_mut() {
+                        subpath.push(point, PointType::OnCurve);
                     }
                 }
-                PathEl::QuadTo(ctrl, end) => {
-                    if let Some(c) = current.as_mut() {
-                        c.add_point(ctrl.x, ctrl.y, PointType::OffCurve, false);
-                        c.add_point(end.x, end.y, PointType::QCurve, false);
+                PathEl::QuadTo(control, end) => {
+                    if let Some(subpath) = current.as_mut() {
+                        subpath.push(control, PointType::OffCurve);
+                        subpath.push(end, PointType::QCurve);
                     }
                 }
-                PathEl::CurveTo(c1, c2, end) => {
-                    if let Some(c) = current.as_mut() {
-                        c.add_point(c1.x, c1.y, PointType::OffCurve, false);
-                        c.add_point(c2.x, c2.y, PointType::OffCurve, false);
-                        c.add_point(end.x, end.y, PointType::OnCurve, false);
+                PathEl::CurveTo(first, second, end) => {
+                    if let Some(subpath) = current.as_mut() {
+                        subpath.push(first, PointType::OffCurve);
+                        subpath.push(second, PointType::OffCurve);
+                        subpath.push(end, PointType::OnCurve);
                     }
                 }
                 PathEl::ClosePath => {
-                    if let Some(c) = current.as_mut() {
-                        c.close();
+                    if let Some(subpath) = current.as_mut() {
+                        subpath.close();
                     }
                 }
             }
         }
 
-        if let Some(c) = current {
-            contours.push(c);
-        }
+        subpaths.extend(current);
+        subpaths
+    }
 
-        Self(contours)
+    fn push(&mut self, point: kurbo::Point, point_type: PointType) {
+        self.point_types.push(point_type);
+        self.coordinates.extend([point.x, point.y]);
+    }
+
+    /// Marks the subpath closed, without an end point that repeats its start.
+    fn close(&mut self) {
+        self.closed = true;
+
+        let ([first, .., last], _) = self.coordinates.as_chunks::<2>() else {
+            return;
+        };
+        let repeats_start = self.point_types.last() == Some(&PointType::OnCurve)
+            && kurbo::Point::new(last[0], last[1]).distance(kurbo::Point::new(first[0], first[1]))
+                <= REPEATED_POINT_EPSILON;
+        if repeats_start {
+            self.point_types.pop();
+            self.coordinates.pop();
+            self.coordinates.pop();
+        }
+    }
+}
+
+impl From<SubpathPoints> for Contour {
+    fn from(subpath: SubpathPoints) -> Self {
+        let mut contour = Self::new();
+        let (points, _) = subpath.coordinates.as_chunks::<2>();
+        for (point_type, &[x, y]) in subpath.point_types.iter().zip(points) {
+            contour.add_point(x, y, *point_type, false);
+        }
+        if subpath.closed {
+            contour.close();
+        }
+        contour
     }
 }
 
@@ -506,6 +577,33 @@ mod tests {
     }
 
     #[test]
+    fn bezpath_close_path_drops_an_end_point_that_repeats_the_start() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.curve_to((0.0, 50.0), (50.0, 100.0), (100.0, 100.0));
+        path.curve_to((50.0, 0.0), (0.0, -50.0), (0.0, 0.0));
+        path.close_path();
+
+        let contours = Contours::from(&path);
+
+        assert_eq!(contours.len(), 1);
+        assert!(contours[0].is_closed());
+        // start + 2 controls + corner + 2 controls; the final curve ends on the start.
+        assert_eq!(contours[0].len(), 6);
+    }
+
+    #[test]
+    fn bezpath_close_path_keeps_distinct_end_points() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.line_to((100.0, 0.0));
+        path.line_to((100.0, 100.0));
+        path.close_path();
+
+        assert_eq!(Contours::from(&path)[0].len(), 3);
+    }
+
+    #[test]
     fn bezpath_cubic_to_contour() {
         let mut path = BezPath::new();
         path.move_to((0.0, 0.0));
@@ -566,6 +664,123 @@ mod tests {
         let path = BezPath::new();
         let contours = Contours::from(&path);
         assert!(contours.is_empty());
+    }
+
+    #[test]
+    fn subpath_points_of_a_cubic_path_are_flat_pairs_with_their_types() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.curve_to((10.0, 20.0), (30.0, 40.0), (50.0, 60.0));
+
+        assert_eq!(
+            SubpathPoints::of_path(&path),
+            vec![SubpathPoints {
+                closed: false,
+                point_types: vec![
+                    PointType::OnCurve,
+                    PointType::OffCurve,
+                    PointType::OffCurve,
+                    PointType::OnCurve,
+                ],
+                coordinates: vec![0.0, 0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0],
+            }]
+        );
+    }
+
+    #[test]
+    fn subpath_points_of_a_quad_ends_on_a_qcurve_point() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.quad_to((50.0, 100.0), (100.0, 0.0));
+
+        let [subpath] = SubpathPoints::of_path(&path).try_into().unwrap();
+
+        assert_eq!(
+            subpath.point_types,
+            vec![PointType::OnCurve, PointType::OffCurve, PointType::QCurve]
+        );
+    }
+
+    #[test]
+    fn subpath_points_close_drops_an_end_point_that_repeats_the_start() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.line_to((100.0, 0.0));
+        path.line_to((0.0, 0.0));
+        path.close_path();
+
+        let [subpath] = SubpathPoints::of_path(&path).try_into().unwrap();
+
+        assert!(subpath.closed);
+        assert_eq!(subpath.coordinates, vec![0.0, 0.0, 100.0, 0.0]);
+    }
+
+    #[test]
+    fn subpath_points_close_keeps_a_repeating_end_that_is_not_on_curve() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.quad_to((50.0, 50.0), (0.0, 0.0));
+        path.close_path();
+
+        let [subpath] = SubpathPoints::of_path(&path).try_into().unwrap();
+
+        assert_eq!(subpath.point_types.len(), 3);
+    }
+
+    #[test]
+    fn subpath_points_split_at_each_move_to() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.line_to((50.0, 0.0));
+        path.close_path();
+        path.move_to((100.0, 100.0));
+        path.line_to((200.0, 100.0));
+
+        let subpaths = SubpathPoints::of_path(&path);
+
+        assert_eq!(
+            subpaths
+                .iter()
+                .map(|subpath| subpath.closed)
+                .collect::<Vec<_>>(),
+            vec![true, false]
+        );
+        assert_eq!(subpaths[1].coordinates, vec![100.0, 100.0, 200.0, 100.0]);
+    }
+
+    #[test]
+    fn subpath_points_of_an_empty_path_are_empty() {
+        assert!(SubpathPoints::of_path(&BezPath::new()).is_empty());
+    }
+
+    #[test]
+    fn a_contour_from_subpath_points_keeps_their_types_coordinates_and_closure() {
+        let mut path = BezPath::new();
+        path.move_to((0.0, 0.0));
+        path.curve_to((10.0, 20.0), (30.0, 40.0), (50.0, 60.0));
+        path.line_to((0.0, 60.0));
+        path.close_path();
+        let [subpath] = SubpathPoints::of_path(&path).try_into().unwrap();
+
+        let contour = Contour::from(subpath.clone());
+
+        assert!(contour.is_closed());
+        assert_eq!(
+            contour
+                .points()
+                .iter()
+                .map(Point::point_type)
+                .collect::<Vec<_>>(),
+            subpath.point_types
+        );
+        assert_eq!(
+            contour
+                .points()
+                .iter()
+                .flat_map(|point| [point.x(), point.y()])
+                .collect::<Vec<_>>(),
+            subpath.coordinates
+        );
     }
 
     #[test]

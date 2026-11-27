@@ -1,0 +1,6 @@
+{
+  "name": "blackletter-stub",
+  "description": "Short calligraphic stub with one quadratic turn (blackletter placeholder)",
+  "path_d": "M 40 160 Q 70 40 150 80 L 220 180",
+  "stroke_width": 28.0
+}

@@ -41,7 +41,7 @@ pub use component::{
     Transform,
 };
 pub use condition::{Condition, ConditionRange};
-pub use contour::{Contour, Contours};
+pub use contour::{Contour, Contours, SubpathPoints};
 pub use entity::{
     AnchorId, AxisId, AxisLabelId, AxisMappingId, ComponentId, ContourId, EntityId, GlyphEntityId,
     GlyphId, GuidelineId, KerningGroupId, LayerId, MetricId, NamedInstanceId, NodeId, PointId,

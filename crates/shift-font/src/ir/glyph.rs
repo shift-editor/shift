@@ -199,8 +199,10 @@ impl GlyphLayer {
     pub fn clone_with_fresh_ids(&self, id: LayerId, location: LayerLocation) -> Self {
         let mut layer = self.without_content(id, location);
 
+        let mut renames: Vec<(ContourId, ContourId)> = Vec::new();
         for contour in self.contours_iter() {
             let mut cloned_contour = Contour::new();
+            renames.push((contour.id(), cloned_contour.id()));
             if contour.is_closed() {
                 cloned_contour.close();
             }
@@ -211,6 +213,10 @@ impl GlyphLayer {
 
             layer.add_contour(cloned_contour);
         }
+        // The copied lib names the original contours (the stroke lib does);
+        // point it at the copies, and drop what names no copied contour.
+        layer.remap_stroke_lib_contour_ids(&renames);
+        layer.prune_orphan_stroke_lib_entries();
 
         for component in self.components_iter() {
             layer.add_component(Component::with_transform(
@@ -252,9 +258,11 @@ impl GlyphLayer {
     pub fn with_derived_entity_ids(&self) -> Self {
         let namespace = self.id.as_str();
         let mut layer = self.without_content(self.id, self.location.clone());
+        let mut renames: Vec<(ContourId, ContourId)> = Vec::new();
         for (contour_index, contour) in self.contours_iter().enumerate() {
             let place = format!("contour {contour_index}");
             let mut derived = Contour::with_id(ContourId::derived(namespace, &place));
+            renames.push((contour.id(), derived.id()));
             if contour.is_closed() {
                 derived.close();
             }
@@ -298,6 +306,10 @@ impl GlyphLayer {
                 guideline.color().map(ToOwned::to_owned),
             ));
         }
+        // The copied lib names the original contours (the stroke lib does);
+        // point it at the derived contours, and drop what names none.
+        layer.remap_stroke_lib_contour_ids(&renames);
+        layer.prune_orphan_stroke_lib_entries();
         layer
     }
 
@@ -372,6 +384,7 @@ impl GlyphLayer {
         self.contours = new_contours;
         self.anchors = anchors;
         self.components = new_components;
+        self.prune_orphan_stroke_lib_entries();
         Ok(())
     }
 
@@ -427,7 +440,11 @@ impl GlyphLayer {
     }
 
     pub fn remove_contour(&mut self, id: &ContourId) -> Option<Contour> {
-        self.contours.shift_remove(id)
+        let removed = self.contours.shift_remove(id);
+        if removed.is_some() {
+            self.prune_orphan_stroke_lib_entries();
+        }
+        removed
     }
 
     pub fn clear_contours(&mut self) {
@@ -883,6 +900,66 @@ mod tests {
 
         assert_eq!(derived.metrics_keys(), layer.metrics_keys());
         assert_eq!(fresh.metrics_keys(), layer.metrics_keys());
+    }
+
+    fn stroked_layer() -> (GlyphLayer, ContourId) {
+        let mut layer = GlyphLayer::with_width(LayerId::new(), SourceId::new(), 500.0);
+        layer.add_contour(crate::contour![
+            (100.0, 0.0),
+            (400.0, 0.0),
+            (400.0, 700.0),
+            (100.0, 700.0)
+        ]);
+
+        let contour_id = layer.contours_iter().next().expect("one contour").id();
+        layer
+            .set_live_stroke_contours(
+                std::slice::from_ref(&contour_id),
+                crate::stroke::style::OutlineStrokeStyle {
+                    width: 40.0,
+                    cap: crate::stroke::style::StrokeCap::Round,
+                    join: crate::stroke::style::StrokeJoin::Round,
+                    miter_limit: 4.0,
+                    position: 0.5,
+                },
+            )
+            .expect("a stroked contour on the fixture");
+        (layer, contour_id)
+    }
+
+    #[test]
+    fn a_fresh_ids_copy_keeps_the_stroke_on_its_own_contour() {
+        let (layer, original_contour_id) = stroked_layer();
+
+        let fresh =
+            layer.clone_with_fresh_ids(LayerId::new(), LayerLocation::at_source(SourceId::new()));
+
+        let copied_contour_id = fresh.contours_iter().next().expect("one contour").id();
+        assert_ne!(copied_contour_id, original_contour_id);
+        let strokes = fresh.live_strokes();
+        let [copied_stroke] = strokes.as_slice() else {
+            panic!("the copy keeps exactly one live stroke");
+        };
+        assert_eq!(copied_stroke.contour_id, copied_contour_id);
+        assert_eq!(copied_stroke.style.width, 40.0);
+        assert!(fresh.orphan_stroke_lib_contour_ids().is_empty());
+        assert!(fresh.stroke_outlines_for_preview(0.25).is_ok());
+    }
+
+    #[test]
+    fn a_derived_ids_copy_keeps_the_stroke_on_its_own_contour() {
+        let (layer, _) = stroked_layer();
+
+        let derived = layer.with_derived_entity_ids();
+
+        let derived_contour_id = derived.contours_iter().next().expect("one contour").id();
+        let strokes = derived.live_strokes();
+        let [derived_stroke] = strokes.as_slice() else {
+            panic!("the converted layer keeps exactly one live stroke");
+        };
+        assert_eq!(derived_stroke.contour_id, derived_contour_id);
+        assert!(derived.orphan_stroke_lib_contour_ids().is_empty());
+        assert!(derived.stroke_outlines_for_preview(0.25).is_ok());
     }
 
     #[test]

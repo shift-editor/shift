@@ -219,7 +219,7 @@ impl Font {
             Arc::make_mut(glyph).set_layer(Arc::clone(layer));
         }
 
-        let FontState { data, index } = self.state_mut();
+        let FontState { data, index, .. } = self.state_mut();
         index.return_glyphs(&touched_glyph_ids, &before_glyphs, &data.glyphs)
     }
 

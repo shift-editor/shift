@@ -31,11 +31,12 @@ import type {
   NewGlyph,
   PositionGuide,
   SourceSelectionMode,
+  TransformSelectionBounds,
 } from "@shift/editor/types";
 import type { ToolName } from "@shift/editor/tools";
 import type { AlignmentType, DistributeType } from "@shift/editor/transform";
 import type { Bounds, Point2D, Rect2D } from "@shift/geo";
-import type { LocalPoint, ScreenPoint, ScreenVector } from "@shift/editor/spaces";
+import type { LocalBounds, LocalPoint, ScreenPoint, ScreenVector } from "@shift/editor/spaces";
 import type { EditorTool, KerningToolView, ResolvedGlyph } from "@shift/runtime";
 import type { AgentCallMap, DocumentOperation, TextOperation } from "@shared/agent/protocol";
 import type {
@@ -43,6 +44,7 @@ import type {
   AxisId,
   ComponentId,
   ComponentInheritance,
+  ContourId,
   GlyphName,
   GlyphRecord,
   KerningPosition,
@@ -57,7 +59,13 @@ import type {
   SourceMetrics,
   Unicode,
 } from "@shift/types";
-import type { SideLink } from "@shift/wasm/protocol";
+import type {
+  ContourPoints,
+  LiveStroke,
+  SideLink,
+  StrokeOutlinePreviews,
+  StrokePreset,
+} from "@shift/wasm/protocol";
 import type { CommandId, EditorCommandId } from "@shared/commands";
 import type { WorkspaceDocumentState } from "@shared/workspace/lanes";
 import type { DrawOptions, GlyphFixture, PointNames } from "./fixtures";
@@ -115,6 +123,9 @@ export interface DrawnGlyph {
   readonly advanceWidth: number;
   readonly bounds: Bounds | null;
   readonly sidebearings: { readonly lsb: number | null; readonly rsb: number | null };
+  readonly skeletonLsb: number | null;
+  readonly skeletonRsb: number | null;
+  readonly fallbackTooltip: string | null;
   /** Each placed component, by its base glyph's name, with where it is placed and the bounds it draws. */
   readonly components: readonly {
     readonly glyph: string;
@@ -158,13 +169,18 @@ export interface CanvasFrame {
 
 /**
  * The ids of the outlines the canvas draws for one glyph at the current
- * location: its closed contours, which it fills, and its open contours, which
- * it strokes. An outline keeps its id while it is unchanged and gets a new one
- * when it is rebuilt. Each is null until the glyph loads. Test-only.
+ * location: its closed contours, which it fills, its open contours, which it
+ * strokes, and the solved fills of its dynamic strokes. An outline keeps its id
+ * while it is unchanged and gets a new one when it is rebuilt. Each is null
+ * until the glyph loads; `strokeFills` is also null while the glyph has no
+ * solved stroke here. Test-only.
  */
 export interface DrawnOutlineIds {
   readonly closed: number | null;
   readonly open: number | null;
+  readonly strokeFills: number | null;
+  /** The solved fills the glyph's components place; null while no placed base draws a stroke. */
+  readonly componentStrokeFills: number | null;
 }
 
 // The read types tests see beyond {@link EditorReads}'s. Each aliases the
@@ -308,6 +324,23 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   setLeftSidebearing(value: number): void;
   /** Sets the open glyph's right sidebearing by changing its advance, as the sidebar's RSB field does. */
   setRightSidebearing(value: number): void;
+  /** Toggles whether metrics include stroke ink, as the glyph sidebar's Include stroke checkbox does. */
+  setIncludeStrokeInMetrics(include: boolean): void;
+  /** Re-applies linked metrics for the open glyph or the whole font, as the glyph heading menu does. */
+  reapplyLinkedMetrics(scope: "font" | "glyph"): void;
+  /** Bounds the transform panel's numeric fields show for the current selection. Test-only. */
+  transformPanelBounds(): TransformSelectionBounds | null;
+  /** Skeleton bounds of the current selection in the open glyph's units. Test-only. */
+  skeletonSelectionBounds(): LocalBounds | null;
+  /** Moves the transform panel Y minimum to `value`, as typing Y with ink bounds does. Test-only. */
+  setTransformPanelY(value: number): void;
+  /** Sets transform panel height through ink-bound fit, as typing H with ink bounds does. Test-only. */
+  setTransformPanelHeight(height: number): void;
+  /**
+   * Like {@link setTransformPanelHeight} but leaves geometry unchanged and
+   * throws when Rust refuses the fit.
+   */
+  setTransformPanelHeightUnchecked(height: number): void;
   /**
    * Links one side of the open glyph with a metrics key, as typing `=…` into
    * its sidebar field does.
@@ -608,6 +641,41 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
   kerningTool(): KerningToolState | null;
   /** The open glyph's outline as the canvas draws it now, a gesture's uncommitted preview included. */
   drawnOutline(): Outline;
+  /** The contours of the open glyph at the active source that carry a dynamic stroke. Test-only. */
+  dynamicStrokeContours(): readonly ContourId[];
+  /**
+   * The live strokes on the open glyph at the active source, with their styles.
+   *
+   * Use this to verify the stroke style the engine has stored after applying a stroke or preset.
+   * Test-only.
+   */
+  strokeStyles(): readonly LiveStroke[];
+  /** All stroke presets stored at the font level, in creation order. Test-only. */
+  strokePresets(): readonly StrokePreset[];
+  /**
+   * The stroke preset with `id`, or `undefined` when none matches.
+   *
+   * Prefer this selector over searching the `strokePresets()` array by id. Test-only.
+   */
+  strokePreset(selector: { readonly id: string }): StrokePreset | undefined;
+  /**
+   * The solved stroke fills the latest recorded canvas frame filled for the open glyph, as plain
+   * contour points; empty when that frame filled none. Needs {@link recordCanvas}. Test-only.
+   */
+  drawnStrokeFills(): readonly ContourPoints[];
+  /**
+   * Every outline the latest recorded canvas frame filled, as plain contour points in drawing
+   * order, whatever glyph part drew it. Needs {@link recordCanvas}. Test-only.
+   */
+  canvasFills(): readonly ContourPoints[];
+  /**
+   * Whether the latest recorded canvas frame also drew the edge of the solved stroke fills, the
+   * way a closed contour gets one; false when it drew no stroke fills. Needs {@link recordCanvas}.
+   * Test-only.
+   */
+  strokeFillsOutlined(): boolean;
+  /** The fill outlines the engine solves for the open glyph's dynamic strokes at the active source. Test-only. */
+  strokeOutlinePreviews(): StrokeOutlinePreviews;
   /** The point handles the canvas draws on the open glyph, with how each is styled. */
   drawnHandles(): readonly CanvasHandle[];
   /** The source and instance outlines the canvas draws around the open glyph, in drawing order. */
@@ -640,6 +708,14 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
    * regions. Null without one open glyph. Test-only.
    */
   editedGlyph(): { readonly glyph: string; readonly drawnAs: string } | null;
+  /** Sidebearings the glyph inspector would show now, including ink and skeleton labels. Test-only. */
+  glyphMetrics(): {
+    readonly lsb: number | null;
+    readonly rsb: number | null;
+    readonly skeletonLsb: number | null;
+    readonly skeletonRsb: number | null;
+    readonly fallbackTooltip: string | null;
+  };
   /** A glyph as the canvas draws it at the current location; the open glyph when `glyph` is omitted. Test-only. */
   drawnGlyph(glyph?: string): Promise<DrawnGlyph>;
   /**
@@ -652,6 +728,8 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
    * first frame. Test-only.
    */
   latestCanvasFrame(): CanvasFrame;
+  /** How many frames have been drawn since {@link recordCanvas}. Test-only. */
+  canvasFrameCount(): number;
   /** The ids of the outlines the canvas draws for the glyph named `glyph` now. Test-only. */
   drawnOutlineIds(glyph: string): DrawnOutlineIds;
   /**
@@ -665,6 +743,11 @@ export interface EditorTestSurface extends EditorReads, EditorActions, FontBuild
    * a gesture would change the font) since the editor opened. Test-only.
    */
   readOnlyNotices(): number;
+  /**
+   * The messages the editor has shown for a dynamic stroke it could not draw, oldest first, since
+   * the editor opened. Test-only.
+   */
+  strokeProblems(): readonly string[];
   /** Whether the glyph named `name` has loaded, so the canvas can draw it. Test-only: not agent data. */
   glyphLoaded(name: string): boolean;
   /**

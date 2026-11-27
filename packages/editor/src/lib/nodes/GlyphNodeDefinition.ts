@@ -57,6 +57,7 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     return [node.glyphId];
   }
   readonly #debugOverlays = new DebugOverlays();
+
   readonly #controlLines = new ControlLines();
   readonly #anchors = new Anchors();
   readonly #segments = new Segments();
@@ -440,6 +441,15 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     track(view.rootClosedContoursPathCell);
     ctx.canvas.fillPath(view.rootClosedContoursPath, ctx.canvas.theme.glyph.editableFill);
 
+    // Pulled here, in the frame, so a drag's preview is the one this frame reads.
+    track(view.strokeFillsCell);
+    const strokeFills = view.strokeFillsCell.peek();
+    track(view.componentStrokeFillsCell);
+    const componentFills = view.componentStrokeFillsCell.peek();
+    this.editor.reportStrokeProblem(node.id, strokeFills.failure ?? componentFills.failure);
+    const strokeFillPath = strokeFills.path;
+    if (strokeFillPath) ctx.canvas.fillPath(strokeFillPath, ctx.canvas.theme.glyph.editableFill);
+
     track(view.componentsCell);
     for (const component of view.components) {
       track(component.drawsCell);
@@ -447,6 +457,11 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
 
       track(component.closedContoursPathCell);
       ctx.canvas.fillPath(component.closedContoursPath, ctx.canvas.theme.component.fill);
+    }
+
+    // The strokes the components place fill as one ink, as the root's do.
+    if (componentFills.path) {
+      ctx.canvas.fillPath(componentFills.path, ctx.canvas.theme.component.fill);
     }
 
     this.#drawEditGhost(node, ctx);
@@ -467,6 +482,15 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
       ctx.canvas.theme.glyph.widthPx,
     );
 
+    // A closed contour's edge is drawn above; a stroke's solved edge is drawn the same way.
+    if (strokeFillPath) {
+      ctx.canvas.strokePath(
+        strokeFillPath,
+        ctx.canvas.theme.glyph.stroke,
+        ctx.canvas.theme.glyph.widthPx,
+      );
+    }
+
     for (const component of view.components) {
       // A component whose condition fails here stays selectable, drawn as a ghost.
       const { stroke, widthPx } = component.draws
@@ -474,6 +498,13 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
         : ctx.canvas.theme.component.hidden;
       for (const contour of component.contours) {
         ctx.canvas.strokePath(contour.fillPath, stroke, widthPx);
+      }
+
+      // A stroked base's solved edge is drawn the same way, over its skeleton.
+      if (component.draws) {
+        track(component.strokeFillsCell);
+        const fillsPath = component.strokeFillsCell.peek().path;
+        if (fillsPath) ctx.canvas.strokePath(fillsPath, stroke, widthPx);
       }
     }
 
@@ -516,6 +547,14 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
     track(view.closedContoursPathCell);
     track(view.openContoursPathCell);
     this.#outline.drawDisplay(ctx.canvas, view, ctx.canvas.theme.glyph);
+
+    track(view.strokeFillsCell);
+    const strokeFills = view.strokeFillsCell.peek().path;
+    if (strokeFills) ctx.canvas.fillPath(strokeFills, ctx.canvas.theme.glyph.fill);
+
+    track(view.componentStrokeFillsCell);
+    const componentFills = view.componentStrokeFillsCell.peek().path;
+    if (componentFills) ctx.canvas.fillPath(componentFills, ctx.canvas.theme.glyph.fill);
   }
 
   /**
@@ -529,6 +568,10 @@ export class GlyphNodeDefinition extends NodeDefinition<GlyphNode> {
    * @returns Handle state keyed by point; empty when the node has no render model.
    */
   handleStates(node: GlyphNode): ReadonlyMap<PointId, HandleState> {
+    // The controls pass draws handles only for a node being edited; modes
+    // that suspend editing (Hand, Text) draw the glyph as plain content.
+    if (!this.#isEditing(node)) return new Map();
+
     const view = this.#view(node);
     if (!view) return new Map();
 

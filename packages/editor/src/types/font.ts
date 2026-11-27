@@ -45,12 +45,20 @@ import type {
   FontChangeFlag,
   FontFeature,
   GlyphIdentityChange,
+  InkSnapContourPoints,
   NeverUsedSwap,
   SideLink,
   TextRun,
   PlacedText,
+  LayerExtent,
+  LiveStroke,
+  ReapplyLinkedMetricsScope,
+  SelectionExtentRequest,
+  StrokeOutlinePreviews,
+  StrokePreset,
 } from "@shift/wasm/protocol";
 import type { PendingEditId } from "./editing";
+import type { DesignAxisLocation } from "./variation";
 import type { WorkspaceEditListener } from "./history";
 import type { GlyphReader } from "./glyph";
 
@@ -295,6 +303,61 @@ export interface FontEngine {
     target: LayerId,
     ids: Counterparts,
   ): Counterparts | null;
+
+  /**
+   * Fill outlines shift-font derives from live stroke skeletons on `layerId`.
+   *
+   * @returns Empty when the layer has no live stroke metadata.
+   * @throws When the engine is not open or the layer is not resident.
+   */
+  strokeOutlinePreviews(layerId: LayerId, tolerance?: number): StrokeOutlinePreviews;
+
+  /**
+   * Fill outlines shift-font derives from live stroke skeletons of `glyphId`
+   * interpolated at a design location: skeleton and style interpolated from
+   * the glyph's masters, then solved.
+   *
+   * @returns Empty when the glyph does not interpolate or no contour is
+   * stroked across its masters.
+   * @throws When the engine is not open or the glyph is not resident.
+   */
+  strokeOutlinePreviewsAt(
+    glyphId: GlyphId,
+    location: DesignAxisLocation,
+    tolerance?: number,
+  ): StrokeOutlinePreviews;
+
+  /**
+   * Contours on `layerId` that carry a dynamic stroke, in contour order, each with the style
+   * stored for it. Solves no outlines.
+   *
+   * @returns Empty when the layer has no dynamic stroke.
+   * @throws When the engine is not open or the layer is not resident.
+   */
+  liveStrokes(layerId: LayerId): readonly LiveStroke[];
+
+  /** Skeleton, ink and effective bounds of `layerId` under the metrics measure. */
+  layerExtent(layerId: LayerId): LayerExtent;
+
+  /** Bounds of a whole layer or contour subset under the metrics measure. */
+  selectionExtent(request: SelectionExtentRequest): LayerExtent;
+
+  /** Whether metrics read ink rather than the skeleton. */
+  includeStrokeInMetrics(): boolean;
+
+  /** Named stroke style presets stored at the font level, in creation order. */
+  strokePresets(): readonly StrokePreset[];
+
+  /**
+   * Ink-outline on-curve points and parametric extrema for one layer's
+   * stroked contours, grouped by skeleton contour.
+   *
+   * @returns Empty when "Include stroke" is off or the layer has no strokes.
+   */
+  inkSnapPoints(layerId: LayerId): readonly InkSnapContourPoints[];
+
+  /** Why re-apply linked metrics would change nothing for `scope`, or null. */
+  reapplyLinkedMetricsDisabledReason(scope: ReapplyLinkedMetricsScope): string | null;
 
   /**
    * The features the engine's shaper font defines, in tag order, each with

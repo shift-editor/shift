@@ -24,6 +24,11 @@ export type {
   NewMemoryFont,
 } from "./types/fontSession";
 export type { CursorType } from "./types/editor";
+export type {
+  InkBoundEdge,
+  TransformBoundsMeasure,
+  TransformSelectionBounds,
+} from "./types/transformSelectionBounds";
 export type { DeleteMode, EditedGlyph, GlyphReader } from "./types/glyph";
 export type {
   HistoryEffect,

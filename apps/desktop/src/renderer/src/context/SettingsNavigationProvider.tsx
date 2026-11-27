@@ -4,8 +4,11 @@ import { glyphColorOf, isGlyphColorCommandId } from "@shared/commands";
 import type { MarkColor } from "@shift/types";
 import { SettingsDialog } from "@/components/chrome/settings/SettingsDialog";
 import { ComponentPickerDialog } from "@/components/editor/ComponentPickerDialog";
+import { OffsetContourDialog } from "@/components/editor/OffsetContourDialog";
 import { getShiftHost } from "@/host/shiftHost";
 import { runRendererCommand } from "@/lib/commands/rendererCommands";
+import { strokeAvailabilityFor } from "@/lib/commands/strokeCommands";
+import { notify } from "@/lib/notifications/notify";
 import { tagTargets } from "@/lib/glyph-grid/tagTargets";
 import type { SettingsTarget } from "@/types/settings";
 import { useFontSession } from "@/workspace/WorkspaceContext";
@@ -23,10 +26,14 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
   pathnameRef.current = pathname;
   const [target, setTarget] = useState<SettingsTarget | null>(null);
   const [componentPickerOpen, setComponentPickerOpen] = useState(false);
+  const [offsetDialogOpen, setOffsetDialogOpen] = useState(false);
   const { setOpen: setExportOpen, setPopoverOpen: setExportPopoverOpen } = useExport();
   const showPreviewNotice = usePreviewNotice();
   const open = useCallback((next: SettingsTarget) => setTarget(next), []);
   const navigation = useMemo<SettingsNavigation>(() => ({ open, target }), [open, target]);
+
+  // A dynamic stroke the canvas could not draw says why, instead of silently drawing a plain contour.
+  useEffect(() => session.editor.on("strokeProblem", notify), [session.editor]);
 
   useEffect(
     () =>
@@ -62,6 +69,14 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
           return;
         }
 
+        if (id === "glyph.stroke.offsetContour") {
+          // Offset needs a distance, so it asks in a dialog; what cannot be offset says why.
+          const availability = strokeAvailabilityFor(session.editor, id);
+          if (availability.enabled) setOffsetDialogOpen(true);
+          else notify(availability.reason);
+          return;
+        }
+
         try {
           await runRendererCommand(session.editor, id);
         } catch (error) {
@@ -82,6 +97,7 @@ export const SettingsNavigationProvider = ({ children }: { children: ReactNode }
     <SettingsNavigationContext.Provider value={navigation}>
       {children}
       <ComponentPickerDialog open={componentPickerOpen} onOpenChange={setComponentPickerOpen} />
+      <OffsetContourDialog open={offsetDialogOpen} onOpenChange={setOffsetDialogOpen} />
       <SettingsDialog
         target={target}
         canAuthor={session.mode === "workspace"}

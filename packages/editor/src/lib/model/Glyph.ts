@@ -7,6 +7,8 @@ import type {
   ComponentId,
   ContourEnd,
   ContourId,
+  OutlineStrokeStyle,
+  StrokeJoin,
   GlyphComponents,
   GlyphHandle,
   GlyphId,
@@ -30,7 +32,8 @@ import type {
   SetComponentAlignment,
   SetComponentLocations,
 } from "@shift/types";
-import { mintAnchorId, mintComponentId, mintContourId, mintPointId, EntityMap } from "@shift/types";
+import { EntityMap, mintAnchorId, mintComponentId, mintContourId, mintPointId } from "@shift/types";
+import type { InkBoundEdge } from "../../types/transformSelectionBounds";
 import {
   computed,
   keyedCache,
@@ -49,9 +52,16 @@ import type {
 } from "../../types/glyph";
 import { followingPlacements } from "../wasm/anchors";
 import { anchors as anchorRules } from "@shift/wasm";
-import type { PropagatedAnchors, PropagationAnchor } from "@shift/wasm/protocol";
+import type {
+  PropagatedAnchors,
+  PropagationAnchor,
+  StrokeOutlinePreviewItem,
+} from "@shift/wasm/protocol";
 import type { DesignAxisLocation, ExternalAxisLocation } from "../../types/variation";
 import type { WeightedSource } from "../../types/glyphRender";
+import type { StrokeFills } from "../../types/graphics";
+import { NO_STROKE_FILLS, dynamicContourIds, sameDynamicContourIds } from "./strokeFills";
+import type { GlyphMetricsSidebearings } from "../../types/metricsMeasure";
 import {
   designAxisLocationFromLocation,
   externalAxisLocationsEqual,
@@ -393,6 +403,10 @@ class GlyphLayerWriter {
     this.#workspaceIntents.shiftSidebearing({ sidebearing, delta });
   }
 
+  fitInkBound(contourIds: readonly ContourId[], edge: InkBoundEdge, target: number): void {
+    this.#workspaceIntents.fitInkBound({ contourIds: [...contourIds], edge, target });
+  }
+
   linkMetricsSide(side: MetricsKeySide, key: string): void {
     this.#send({
       kind: "linkMetricsSide",
@@ -472,6 +486,40 @@ class GlyphLayerWriter {
 
   reverseContour(contourId: ContourId): void {
     this.#workspaceIntents.reverseContour({ contourId });
+  }
+
+  setLiveStroke(
+    contourIds: readonly ContourId[],
+    style: OutlineStrokeStyle,
+    presetId?: string | null,
+  ): void {
+    this.#workspaceIntents.setLiveStroke({ contourIds: [...contourIds], style, presetId });
+  }
+
+  removeLiveStroke(contourIds: readonly ContourId[]): void {
+    this.#workspaceIntents.removeLiveStroke({ contourIds: [...contourIds] });
+  }
+
+  bakeStrokeOutlines(contourIds: readonly ContourId[], tolerance: number): void {
+    this.#workspaceIntents.bakeStrokeOutlines({ contourIds: [...contourIds], tolerance });
+  }
+
+  outlineStroke(
+    contourIds: readonly ContourId[],
+    style: OutlineStrokeStyle,
+    tolerance: number,
+  ): void {
+    this.#workspaceIntents.outlineStroke({ contourIds: [...contourIds], style, tolerance });
+  }
+
+  offsetContour(
+    contourId: ContourId,
+    distance: number,
+    join: StrokeJoin,
+    miterLimit: number,
+    tolerance: number,
+  ): void {
+    this.#workspaceIntents.offsetContour({ contourId, distance, join, miterLimit, tolerance });
   }
 
   setContourStart(contourId: ContourId, pointId: PointId): void {
@@ -661,6 +709,7 @@ export class GlyphLayer {
   readonly #writer: GlyphLayerWriter;
   readonly #editBaseGeometry: ComputedSignal<GlyphGeometry | null>;
   readonly #editBaseOutline: ComputedSignal<Path2D | null>;
+  readonly #metricsSidebearingsCell: Signal<GlyphMetricsSidebearings>;
 
   constructor(
     source: Source,
@@ -668,7 +717,18 @@ export class GlyphLayer {
     state: GlyphLayerState,
     gate: EditGate = new EditGate(),
     placement: LayerPlacement | null = null,
+    metricsSidebearingsCell: (layerId: LayerId) => Signal<GlyphMetricsSidebearings> = () =>
+      computed(() => {
+        const sidebearings = state.sidebearingsCell.value;
+        return {
+          ...sidebearings,
+          skeletonLsb: null,
+          skeletonRsb: null,
+          fallbackTooltip: null,
+        };
+      }),
   ) {
+    this.#metricsSidebearingsCell = metricsSidebearingsCell(state.layerId);
     this.#sourceCell = signal(source, { name: "glyphLayer.source" });
     this.#placementCell = signal(placement, {
       name: "glyphLayer.placement",
@@ -832,11 +892,11 @@ export class GlyphLayer {
 
   /** @knipclassignore — public authored-source metrics API. */
   get sidebearings(): GlyphSidebearings {
-    return this.#writer.layerState.sidebearings;
+    return this.#metricsSidebearingsCell.peek();
   }
 
-  get sidebearingsCell(): Signal<GlyphSidebearings> {
-    return this.#writer.layerState.sidebearingsCell;
+  get sidebearingsCell(): Signal<GlyphMetricsSidebearings> {
+    return this.#metricsSidebearingsCell;
   }
 
   get allPoints(): Point[] {
@@ -1209,6 +1269,75 @@ export class GlyphLayer {
   }
 
   /**
+   * Gives contours a dynamic stroke: the contour stays the editable centerline and the engine
+   * computes the outline from `style`. Replaces any stroke the contours already have.
+   *
+   * @param contourIds - Contours in this source that become stroke centerlines.
+   * @param style - Width, cap, join and miter limit of the stroke.
+   * @param presetId - Optional preset id to link the stroke to; `null` or omitted clears the link.
+   */
+  setLiveStroke(
+    contourIds: readonly ContourId[],
+    style: OutlineStrokeStyle,
+    presetId?: string | null,
+  ): void {
+    this.#writer.setLiveStroke(contourIds, style, presetId);
+  }
+
+  /**
+   * Drops the dynamic stroke from contours and keeps them as plain contours.
+   *
+   * @param contourIds - Contours in this source that currently have a dynamic stroke.
+   */
+  removeLiveStroke(contourIds: readonly ContourId[]): void {
+    this.#writer.removeLiveStroke(contourIds);
+  }
+
+  /**
+   * Replaces dynamic-stroke contours with their computed outline fills, using the stored style.
+   *
+   * @param contourIds - Contours in this source that currently have a dynamic stroke.
+   * @param tolerance - Flattening tolerance in font units.
+   */
+  bakeStrokeOutlines(contourIds: readonly ContourId[], tolerance: number): void {
+    this.#writer.bakeStrokeOutlines(contourIds, tolerance);
+  }
+
+  /**
+   * Replaces plain contours with the outline of a stroke of `style` along them.
+   *
+   * @param contourIds - Contours in this source to outline.
+   * @param style - Width, cap, join and miter limit of the stroke.
+   * @param tolerance - Flattening tolerance in font units.
+   */
+  outlineStroke(
+    contourIds: readonly ContourId[],
+    style: OutlineStrokeStyle,
+    tolerance: number,
+  ): void {
+    this.#writer.outlineStroke(contourIds, style, tolerance);
+  }
+
+  /**
+   * Grows (positive) or shrinks (negative) a closed contour by a constant distance.
+   *
+   * @param contourId - Closed contour in this source.
+   * @param distance - Signed offset in font units.
+   * @param join - How corners meet.
+   * @param miterLimit - Caps sharp miters when `join` is miter.
+   * @param tolerance - Flattening tolerance in font units.
+   */
+  offsetContour(
+    contourId: ContourId,
+    distance: number,
+    join: StrokeJoin,
+    miterLimit: number,
+    tolerance: number,
+  ): void {
+    this.#writer.offsetContour(contourId, distance, join, miterLimit, tolerance);
+  }
+
+  /**
    * Makes an on-curve point the start of a closed contour without changing its shape or winding.
    *
    * @param contourId - Closed contour whose ordered point cycle is rotated.
@@ -1547,6 +1676,14 @@ export class GlyphLayer {
   }
 
   /**
+   * Resizes the selection skeleton about the opposite edge until an ink box
+   * edge lands on `target`, as one undo step.
+   */
+  fitInkBound(contourIds: readonly ContourId[], edge: InkBoundEdge, target: number): void {
+    this.#writer.fitInkBound(contourIds, edge, target);
+  }
+
+  /**
    * Reflects points across an axis through an origin.
    *
    * @param pointIds - Points to reflect.
@@ -1618,6 +1755,7 @@ export class GlyphRenderModel {
 
   readonly #externalLocation: Signal<ExternalAxisLocation>;
   readonly #activeSourceId: Signal<SourceId | null>;
+  readonly #layerCell: Signal<GlyphLayer | null>;
 
   readonly #projectionCell: Signal<GlyphProjection | null>;
 
@@ -1658,11 +1796,16 @@ export class GlyphRenderModel {
   readonly #outlinePathCell: Signal<Path2D>;
   readonly #openCornerContoursPathCell: Signal<Path2D>;
   readonly #rootClosedContoursPathCell: Signal<Path2D>;
+  readonly #strokeFillsOf: (layerId: LayerId) => Signal<StrokeFills>;
+  readonly #strokeFillsAt: (glyphId: GlyphId, location: ExternalAxisLocation) => StrokeFills;
+  readonly #strokeFillsCell: Signal<StrokeFills>;
+  readonly #componentStrokeFillsCell: Signal<StrokeFills>;
+  readonly #dynamicContourIdsCell: Signal<ReadonlySet<ContourId>>;
   readonly #closedContoursPathCell: Signal<Path2D>;
   readonly #openContoursPathCell: Signal<Path2D>;
   readonly #hasOpenContoursCell: Signal<boolean>;
   readonly #svgPathCell: Signal<string>;
-  readonly #sidebearingsCell: Signal<GlyphSidebearings>;
+  readonly #sidebearingsCell: Signal<GlyphMetricsSidebearings>;
   readonly #anchorsCell: Signal<readonly RenderAnchor[]>;
   readonly #anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
   readonly #propagatedCache: KeyedCache<GlyphId, GlyphId, ComputedSignal<PropagatedAnchors>>;
@@ -1703,6 +1846,9 @@ export class GlyphRenderModel {
    * component sets no axis and follows its glyph.
    * @param componentDraws - Whether a component of `parentGlyphId` draws
    * where that glyph is drawn at `parent`: its condition holds there.
+   * @param strokeFillsOf - The solved fills of a layer's dynamic strokes.
+   * @param strokeFillsAt - The solved fills of a glyph's dynamic strokes
+   * interpolated at an external location, for positions between masters.
    */
   constructor(
     glyphId: GlyphId,
@@ -1730,11 +1876,16 @@ export class GlyphRenderModel {
       component: Component,
       parent: ExternalAxisLocation,
     ) => boolean,
+    strokeFillsOf: (layerId: LayerId) => Signal<StrokeFills>,
+    strokeFillsAt: (glyphId: GlyphId, location: ExternalAxisLocation) => StrokeFills,
+    metricsSidebearingsOf: (layerId: LayerId) => Signal<GlyphMetricsSidebearings>,
   ) {
     this.#glyphId = glyphId;
     this.#baseLocation = baseLocation;
     this.#componentDraws = componentDraws;
     this.#anchorCategory = anchorCategory;
+    this.#strokeFillsOf = strokeFillsOf;
+    this.#strokeFillsAt = strokeFillsAt;
     this.#propagatedCache = keyedCache<GlyphId, GlyphId, ComputedSignal<PropagatedAnchors>>({
       name: "glyph.renderModel.propagatedAnchors",
       key: (id) => id,
@@ -1769,6 +1920,7 @@ export class GlyphRenderModel {
     );
     this.#externalLocation = externalLocation;
     this.#activeSourceId = activeSourceId;
+    this.#layerCell = layer;
     this.#projectionCell = projectionCell;
     this.#exactSourceId = exactSourceId;
     this.#layerAt = layerAt;
@@ -1840,11 +1992,55 @@ export class GlyphRenderModel {
       }
       return path;
     });
+    this.#strokeFillsCell = computed(
+      () => {
+        const rootLayer = layer.value;
+        if (rootLayer) return strokeFillsOf(rootLayer.id).value;
+
+        // Between masters there is no authored layer: the stroke solved
+        // around the interpolated skeleton at this model's location.
+        return strokeFillsAt(this.#glyphId, externalLocation.value);
+      },
+      { name: "glyph.renderModel.strokeFills" },
+    );
+    this.#dynamicContourIdsCell = computed(() => dynamicContourIds(this.#strokeFillsCell.value), {
+      name: "glyph.renderModel.dynamicContourIds",
+      equals: sameDynamicContourIds,
+    });
+    this.#componentStrokeFillsCell = computed(
+      () => {
+        const items: StrokeOutlinePreviewItem[] = [];
+        let path: Path2D | null = null;
+        let failure: string | null = null;
+
+        for (const component of this.#componentsCell.value) {
+          if (!component.drawsCell.value) continue;
+
+          const fills = component.strokeFillsCell.value;
+          failure ??= fills.failure;
+          items.push(...fills.items);
+          if (fills.path) {
+            path ??= new Path2D();
+            path.addPath(fills.path);
+          }
+        }
+
+        if (items.length === 0 && failure === null) return NO_STROKE_FILLS;
+
+        return { items, path, failure };
+      },
+      { name: "glyph.renderModel.componentStrokeFills" },
+    );
     this.#rootClosedContoursPathCell = computed(() => {
+      const dynamicContourIds = this.#dynamicContourIdsCell.value;
       const path = new Path2D();
       for (const contour of this.#rootContoursCell.value) {
         contour.trackShape();
-        if (contour.contour.closed) path.addPath(contour.fillPath);
+        if (!contour.contour.closed) continue;
+        // A dynamic stroke fills as its solved outline, never as its skeleton.
+        if (dynamicContourIds.has(contour.contour.id)) continue;
+
+        path.addPath(contour.fillPath);
       }
       return path;
     });
@@ -1852,7 +2048,11 @@ export class GlyphRenderModel {
       const path = new Path2D();
       for (const contour of this.#drawnContoursCell.value) {
         contour.trackShape();
-        if (contour.contour.closed) path.addPath(contour.fillPath);
+        if (!contour.contour.closed) continue;
+        // A dynamic stroke is displayed as its solved outline, never as its skeleton.
+        if (this.#isDynamicSkeleton(contour)) continue;
+
+        path.addPath(contour.fillPath);
       }
       return path;
     });
@@ -1860,7 +2060,10 @@ export class GlyphRenderModel {
       const path = new Path2D();
       for (const contour of this.#drawnContoursCell.value) {
         contour.trackShape();
-        if (!contour.contour.closed) path.addPath(contour.path);
+        if (contour.contour.closed) continue;
+        if (this.#isDynamicSkeleton(contour)) continue;
+
+        path.addPath(contour.path);
       }
       return path;
     });
@@ -1869,7 +2072,10 @@ export class GlyphRenderModel {
         // Closedness lives in the contour's shape data, as for `#openContoursPathCell`.
         // Contours after the first open one cannot change the answer, so they go untracked.
         contour.trackShape();
-        if (!contour.contour.closed) return true;
+        if (contour.contour.closed) continue;
+        if (this.#isDynamicSkeleton(contour)) continue;
+
+        return true;
       }
       return false;
     });
@@ -1880,13 +2086,62 @@ export class GlyphRenderModel {
       return contours.map((contour) => contour.svgPath).join(" ");
     });
     this.#sidebearingsCell = computed(() => {
+      const rootLayer = layer.value;
       const bounds = this.#boundsCell.value;
-      if (!bounds) return { lsb: null, rsb: null };
+      const xAdvance = this.#geometry.xAdvanceCell.value;
 
-      return {
+      if (!rootLayer) {
+        if (!bounds) {
+          return {
+            lsb: null,
+            rsb: null,
+            skeletonLsb: null,
+            skeletonRsb: null,
+            fallbackTooltip: "Between masters",
+          };
+        }
+
+        return {
+          lsb: bounds.min.x,
+          rsb: xAdvance - bounds.max.x,
+          skeletonLsb: null,
+          skeletonRsb: null,
+          fallbackTooltip: "Between masters",
+        };
+      }
+
+      if (!bounds) {
+        return {
+          lsb: null,
+          rsb: null,
+          skeletonLsb: null,
+          skeletonRsb: null,
+          fallbackTooltip: null,
+        };
+      }
+
+      const fromOutline = {
         lsb: bounds.min.x,
-        rsb: this.#geometry.xAdvanceCell.value - bounds.max.x,
+        rsb: xAdvance - bounds.max.x,
+        skeletonLsb: null,
+        skeletonRsb: null,
+        fallbackTooltip: null,
       };
+
+      if (rootLayer) {
+        const strokeFills = strokeFillsOf(rootLayer.id).value;
+        const componentFills = this.#componentStrokeFillsCell.value;
+        const usesInkMetrics =
+          strokeFills.items.length > 0 ||
+          strokeFills.failure !== null ||
+          componentFills.items.length > 0 ||
+          componentFills.failure !== null;
+        if (usesInkMetrics) {
+          return metricsSidebearingsOf(rootLayer.id).value;
+        }
+      }
+
+      return fromOutline;
     });
   }
 
@@ -2088,6 +2343,41 @@ export class GlyphRenderModel {
     if (location === this.#externalLocation.peek()) return this.geometryAt(glyphId, location);
 
     return this.#geometryAt(glyphId, location, null);
+  }
+
+  /**
+   * @internal The solved stroke fills of `glyphId`'s drawing at `location`,
+   * in that drawing's own coordinates.
+   *
+   * @remarks
+   * Reads the authored layer drawn there, as {@link geometryWhere} resolves
+   * its geometry: this model's layer where the occurrence follows the model,
+   * the layer at `location` where a component moved its base. Between
+   * masters there is no authored layer, so the fills are the stroke solved
+   * around the interpolated skeleton there.
+   */
+  strokeFillsWhere(glyphId: GlyphId, location: ExternalAxisLocation): StrokeFills {
+    track(this.#externalLocation);
+    track(this.#activeSourceId);
+    const layer = this.#layerAt(
+      glyphId,
+      location,
+      location === this.#externalLocation.peek() ? this.#activeSourceId.peek() : null,
+    );
+    if (!layer) return this.#strokeFillsAt(glyphId, location);
+
+    const fills = this.#strokeFillsOf(layer.id);
+    track(fills);
+    return fills.peek();
+  }
+
+  /** Whether `contour` is a dynamic stroke's skeleton, which its occurrence draws as fills instead. */
+  #isDynamicSkeleton(contour: GlyphContour): boolean {
+    const component = contour.component;
+    // Called from the path computeds: track, then read.
+    const ids = component ? component.dynamicContourIdsCell : this.#dynamicContourIdsCell;
+    track(ids);
+    return ids.peek().has(contour.contour.id);
   }
 
   /**
@@ -2320,6 +2610,39 @@ export class GlyphRenderModel {
     return this.#openCornerContoursPathCell;
   }
 
+  /** The drawing the model shows exactly, or null where it draws between masters. */
+  get layerCell(): Signal<GlyphLayer | null> {
+    return this.#layerCell;
+  }
+
+  /**
+   * The solved fills of the root layer's dynamic strokes, with the path they draw as.
+   *
+   * @remarks
+   * Empty when the model has no exact authored layer here, as between masters.
+   * The skeleton contours these fills replace are left out of
+   * {@link rootClosedContoursPathCell} and of the display paths
+   * ({@link closedContoursPathCell}, {@link openContoursPathCell}).
+   */
+  get strokeFillsCell(): Signal<StrokeFills> {
+    return this.#strokeFillsCell;
+  }
+
+  /**
+   * The solved fills of the dynamic strokes this model's components place,
+   * each occurrence's fills under its placement, in root coordinates.
+   *
+   * @remarks
+   * Only occurrences that draw here contribute. The items stay in their own
+   * layers' coordinates, where their `skeletonContourId`s name contours;
+   * `failure` is the first occurrence's that could not be solved. Empty when
+   * no placed base carries a stroke here.
+   */
+  get componentStrokeFillsCell(): Signal<StrokeFills> {
+    return this.#componentStrokeFillsCell;
+  }
+
+  /** The root contours' closed fill, without the dynamic strokes' skeletons. */
   get rootClosedContoursPathCell(): Signal<Path2D> {
     return this.#rootClosedContoursPathCell;
   }
@@ -2328,6 +2651,12 @@ export class GlyphRenderModel {
     return this.#rootClosedContoursPathCell.peek();
   }
 
+  /**
+   * Every drawn closed contour's fill, as text draws it, without the dynamic strokes' skeletons.
+   *
+   * @remarks
+   * Draw {@link strokeFillsCell}'s path beside it for the strokes themselves.
+   */
   get closedContoursPathCell(): Signal<Path2D> {
     return this.#closedContoursPathCell;
   }
@@ -2336,6 +2665,7 @@ export class GlyphRenderModel {
     return this.#closedContoursPathCell.peek();
   }
 
+  /** Every drawn open contour, as text strokes it, without the dynamic strokes' skeletons. */
   get openContoursPathCell(): Signal<Path2D> {
     return this.#openContoursPathCell;
   }
@@ -2345,9 +2675,10 @@ export class GlyphRenderModel {
   }
 
   /**
-   * Whether any contour, the root's or a component's, is open.
+   * Whether any contour, the root's or a component's, is open and displays as itself.
    *
    * @remarks
+   * An open contour with a dynamic stroke displays as its solved outline, so it does not count.
    * Recomputes with the outline but notifies readers only when the answer
    * flips, so a reader can skip {@link openContoursPathCell} while it is false.
    */
@@ -2391,7 +2722,7 @@ export class GlyphRenderModel {
     return this.#sidebearingsCell.peek();
   }
 
-  get sidebearingsCell(): Signal<GlyphSidebearings> {
+  get sidebearingsCell(): Signal<GlyphMetricsSidebearings> {
     return this.#sidebearingsCell;
   }
 
@@ -2673,6 +3004,9 @@ export class Glyph {
   readonly #projectionCell: Signal<GlyphProjection | null>;
   readonly #defaultSourceId: SourceId;
   readonly #anchorCategory: (glyphId: GlyphId) => AnchorPropagationCategory;
+  readonly #strokeFillsCell: (layerId: LayerId) => Signal<StrokeFills>;
+  readonly #strokeFillsAt: (glyphId: GlyphId, location: DesignAxisLocation) => StrokeFills;
+  readonly #metricsSidebearingsCell: (layerId: LayerId) => Signal<GlyphMetricsSidebearings>;
   readonly #space: GlyphSpace;
   /** Each drawing exactly on a source, by that source; located drawings are left out. */
   readonly #layersBySourceIdCell = computed(
@@ -2722,6 +3056,9 @@ export class Glyph {
     this.#space = new GlyphSpace(options.designspace, options.axesCell);
     this.#defaultSourceId = options.defaultSourceId;
     this.#anchorCategory = options.anchorCategory;
+    this.#strokeFillsCell = options.strokeFillsCell;
+    this.#strokeFillsAt = options.strokeFillsAt;
+    this.#metricsSidebearingsCell = options.metricsSidebearingsCell;
     this.replaceComponentGlyphs(options.componentGlyphs);
   }
 
@@ -2840,6 +3177,43 @@ export class Glyph {
   }
 
   /**
+   * Whether any of the glyph's drawings, or a loaded base glyph's, carries a
+   * dynamic stroke, whether or not it solves.
+   *
+   * @remarks
+   * A reader reruns when a drawing it looked at gains or loses its strokes. A
+   * drawing the engine has not loaded counts as having none until it loads.
+   */
+  hasDynamicStroke(): boolean {
+    return this.#hasDynamicStroke(new Set());
+  }
+
+  /** {@link hasDynamicStroke} over this glyph and its loaded bases; `seen` stops at a cycle. */
+  #hasDynamicStroke(seen: Set<GlyphId>): boolean {
+    track(this.#layersCell);
+
+    const own = this.#layersCell.peek().some((layer) => {
+      const fills = this.#strokeFillsCell(layer.id);
+      track(fills);
+
+      const { items, failure } = fills.peek();
+
+      return items.length > 0 || failure !== null;
+    });
+    if (own) return true;
+
+    track(this.#componentGlyphsCell);
+    seen.add(this.id);
+    for (const base of this.#componentGlyphsCell.peek().values()) {
+      if (seen.has(base.id)) continue;
+
+      if (base.#hasDynamicStroke(seen)) return true;
+    }
+
+    return false;
+  }
+
+  /**
    * The font source exactly at `location`, when the location also leaves
    * this glyph's own axes at their defaults; null otherwise.
    */
@@ -2847,6 +3221,18 @@ export class Glyph {
     if (!this.#space.atOwnDefaults(location)) return null;
 
     return this.#designspace.sourceAt(location);
+  }
+
+  /**
+   * The solved fills of this glyph's dynamic strokes interpolated at
+   * `location`: between masters, the stroke solved around the interpolated
+   * skeleton there, named by the reference layer's contour ids.
+   */
+  strokeFillsAtLocation(location: ExternalAxisLocation): StrokeFills {
+    // Most glyphs, and every glyph of a preview, have no stroke: ask the engine only for one that does.
+    if (!this.hasDynamicStroke()) return NO_STROKE_FILLS;
+
+    return this.#strokeFillsAt(this.id, this.#space.toDesign(location));
   }
 
   geometryAt(externalLocation: ExternalAxisLocation): GlyphGeometry {
@@ -3051,6 +3437,12 @@ export class Glyph {
       (parent, component) => this.#baseLocation(parent, component),
       (parentGlyphId, component, parent) =>
         this.#designspace.componentDraws(parentGlyphId, component.condition, parent),
+      this.#strokeFillsCell,
+      (glyphId, location) => {
+        const glyph = glyphId === this.id ? this : this.#componentGlyphsCell.peek().get(glyphId);
+        return glyph ? glyph.strokeFillsAtLocation(location) : NO_STROKE_FILLS;
+      },
+      (layerId) => this.#metricsSidebearingsCell(layerId),
     );
     renderModels.set(activeSourceIdCell, renderModel);
     return renderModel;

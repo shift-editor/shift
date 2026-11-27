@@ -5,6 +5,7 @@ import { TooltipProvider } from "@shift/ui";
 
 import { ThemeProvider } from "@/context/ThemeProvider";
 import { FocusZoneProvider } from "@/context/FocusZoneContext";
+import { AppNotifications } from "@/components/chrome/AppNotifications";
 import { ZoomToast } from "@/components/chrome/ZoomToast";
 
 import { Screens } from "./Screens";
@@ -32,15 +33,17 @@ export const App = () => {
   return (
     <ThemeProvider>
       <TooltipProvider delayDuration={500}>
-        <ZoomToast>
-          <FocusZoneProvider defaultZone="canvas">
-            <HashRouter>
-              <AppErrorBoundary>
-                <Screens />
-              </AppErrorBoundary>
-            </HashRouter>
-          </FocusZoneProvider>
-        </ZoomToast>
+        <AppNotifications>
+          <ZoomToast>
+            <FocusZoneProvider defaultZone="canvas">
+              <HashRouter>
+                <AppErrorBoundary>
+                  <Screens />
+                </AppErrorBoundary>
+              </HashRouter>
+            </FocusZoneProvider>
+          </ZoomToast>
+        </AppNotifications>
       </TooltipProvider>
     </ThemeProvider>
   );

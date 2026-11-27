@@ -1,4 +1,4 @@
-import type { PointType } from "@shift/types";
+import type { OutlineStrokeStyle, PointType } from "@shift/types";
 import type { Rect2D } from "@shift/geo";
 
 export type { PasteResult } from "../../types/bridge";
@@ -15,6 +15,12 @@ export type PointContent = {
 export type ContourContent = {
   points: PointContent[];
   closed: boolean;
+  /**
+   * The dynamic stroke the source contour carried, when it had one. Paste
+   * re-applies it to the inserted contour; content from other sources
+   * (SVG import, older clipboards) simply has none.
+   */
+  stroke?: OutlineStrokeStyle;
 };
 
 /**

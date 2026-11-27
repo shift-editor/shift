@@ -35,7 +35,7 @@ pub struct ResolvedContour {
 impl ResolvedContour {
     /// `contour`'s points placed by `transform`, keeping each point's type and
     /// smoothness.
-    fn transformed(contour: &Contour, transform: Transform) -> Self {
+    pub(crate) fn transformed(contour: &Contour, transform: Transform) -> Self {
         let points = contour
             .points()
             .iter()
@@ -183,7 +183,7 @@ impl GlyphComponents {
 
     /// Each occurrence in parent-before-child order, with its base layer
     /// and its transform into root-glyph coordinates.
-    fn occurrences<'a>(
+    pub(crate) fn occurrences<'a>(
         &'a self,
         layers: &HashMap<GlyphId, &'a GlyphLayer>,
     ) -> CoreResult<Vec<ResolvedOccurrence<'a>>> {
@@ -230,11 +230,21 @@ impl GlyphComponents {
 }
 
 /// One component occurrence resolved against its base layer.
-struct ResolvedOccurrence<'a> {
+pub(crate) struct ResolvedOccurrence<'a> {
     component: &'a ComponentGlyph,
     /// Into root-glyph coordinates.
     transform: Transform,
     layer: &'a GlyphLayer,
+}
+
+impl ResolvedOccurrence<'_> {
+    pub(crate) fn base_glyph_id(&self) -> GlyphId {
+        self.component.base_glyph_id()
+    }
+
+    pub(crate) fn transform(&self) -> Transform {
+        self.transform
+    }
 }
 
 /// Borrows an owned layer map as the layer view consumed by composite reads.

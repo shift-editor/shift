@@ -1,0 +1,15 @@
+[workspace]
+
+[package]
+name = "strokes-exact-offset-spike"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "CP0 spike: constant-width outline via kurbo stroke()"
+
+[[bin]]
+name = "exact_offset"
+path = "exact_offset.rs"
+
+[dependencies]
+kurbo = "0.13.0"

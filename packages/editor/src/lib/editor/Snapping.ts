@@ -1,9 +1,15 @@
 import { Bounds, type Point2D } from "@shift/geo";
 import { Point } from "@shift/glyph-state";
-import type { PointId } from "@shift/types";
+import type { ContourId, PointId } from "@shift/types";
 import type { Font } from "../model/Font";
 import type { GlyphLayer } from "../model/Glyph";
-import { GridSnap, MetricSnap, PointAlignmentSnap, SnapSet } from "../model/positions";
+import {
+  GridSnap,
+  InkAlignmentSnap,
+  MetricSnap,
+  PointAlignmentSnap,
+  SnapSet,
+} from "../model/positions";
 import type { Grid } from "./Grid";
 import { sceneVector, screenVector } from "./spaces";
 import type { LocalBounds, LocalVector, SceneVector, ScreenVector } from "../../types/coordinates";
@@ -12,7 +18,10 @@ import type { PositionCondition, PositionSnapProvider } from "../../types/positi
 
 /** Editor state snapping reads when it builds a snap set. */
 export interface SnappingContext {
-  readonly font: Pick<Font, "metricsForSource">;
+  readonly font: Pick<
+    Font,
+    "metricsForSource" | "inkSnapTargets" | "inkSnapContours" | "componentOnCurveTargets"
+  >;
   /** The canvas grid; its intersections are snap targets while its snapping is on. */
   readonly grid: Pick<Grid, "settings">;
   /** Snap distance at the current zoom in the units of `node`. */
@@ -34,6 +43,12 @@ export interface LayerSnapOptions {
   /** Excluded points still guided when they sit exactly on a line another target snapped to. */
   // oxlint-disable-next-line shift/no-optional-collection-field -- an options bag; absent marks nothing
   readonly marking?: ReadonlySet<PointId>;
+  /**
+   * Skeleton contour IDs whose ink snap points are probes (moving), not targets.
+   * Their ink extrema are excluded from the ink alignment provider.
+   */
+  // oxlint-disable-next-line shift/no-optional-collection-field -- an options bag; absent excludes nothing
+  readonly excludingInkContours?: ReadonlySet<ContourId>;
   /** Per-frame switch for every snap in the set, such as a held modifier suspending it. */
   readonly condition?: PositionCondition;
 }
@@ -65,7 +80,7 @@ export class Snapping {
   forLayer(layer: GlyphLayer, node: ShiftNode | null, options: LayerSnapOptions = {}): SnapSet {
     const { font } = this.#context;
     const hitRadius = node ? this.#context.hitRadiusIn(node) : this.#context.hitRadius;
-    const { excluding, marking } = options;
+    const { excluding, marking, excludingInkContours } = options;
     const visible = node ? this.#context.visibleLocalBounds(node) : null;
     const onScreenOnCurve = layer.allPoints.filter(
       (point) => Point.isOnCurve(point) && (!visible || Bounds.containsPoint(visible, point)),
@@ -73,10 +88,24 @@ export class Snapping {
     const targets = onScreenOnCurve.filter((point) => !excluding?.has(point.id));
     const marked = onScreenOnCurve.filter((point) => marking?.has(point.id));
 
+    const componentTargets = font.componentOnCurveTargets(layer.id);
+
     const providers: PositionSnapProvider[] = [
       acrossAdvance(MetricSnap.standard(font.metricsForSource(layer.sourceId), hitRadius), layer),
-      PointAlignmentSnap.to(targets, hitRadius).marking(marked),
+      PointAlignmentSnap.to([...targets, ...componentTargets], hitRadius).marking(marked),
     ];
+
+    const inkContours = font.inkSnapContours(layer.id);
+    const stationaryInk = excludingInkContours
+      ? inkContours
+          .filter((c) => !excludingInkContours.has(c.skeletonContourId))
+          .flatMap((c) => c.points)
+      : inkContours.flatMap((c) => c.points);
+
+    if (stationaryInk.length > 0) {
+      providers.push(InkAlignmentSnap.to(stationaryInk, hitRadius));
+    }
+
     const grid = this.toGrid(node);
     if (grid) providers.push(grid);
 

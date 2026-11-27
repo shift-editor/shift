@@ -36,6 +36,7 @@ export type CommandId =
   | "glyph.decomposeComponents"
   | "glyph.reverseSelectedContour"
   | "glyph.makeFirstPoint"
+  | StrokeCommandId
   | GlyphColorCommandId
   | "window.showHome"
   | "tab.close"
@@ -49,6 +50,13 @@ export type CommandId =
   | "ui.increaseSize"
   | "ui.decreaseSize"
   | "ui.resetSize";
+
+/** A command in the Glyph › Stroke menu. */
+export type StrokeCommandId =
+  | "glyph.stroke.applyDynamic"
+  | "glyph.stroke.expand"
+  | "glyph.stroke.offsetContour"
+  | "glyph.stroke.removeDynamic";
 
 /** A command that tags glyphs with one of the main colours, or clears their colour. */
 export type GlyphColorCommandId =
@@ -222,7 +230,11 @@ export type RendererCommandId =
   | "app.showSettings"
   | "file.export"
   | "glyph.addComponent"
+  | OffsetContourCommandId
   | "tab.close";
+
+/** The stroke command that opens a dialog for its distance instead of running on the editor. */
+export type OffsetContourCommandId = Extract<StrokeCommandId, "glyph.stroke.offsetContour">;
 
 /** Identifies a renderer command that acts on the current editor or text focus. */
 export type EditorCommandId =
@@ -242,4 +254,5 @@ export type EditorCommandId =
   | "glyph.addAnchor"
   | "glyph.decomposeComponents"
   | "glyph.reverseSelectedContour"
-  | "glyph.makeFirstPoint";
+  | "glyph.makeFirstPoint"
+  | Exclude<StrokeCommandId, OffsetContourCommandId>;

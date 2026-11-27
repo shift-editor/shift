@@ -2,10 +2,11 @@
 //! and a component's placement as a matrix, as shift-font computes them.
 
 use pack::Pack;
-use shift_font::Contour;
 use shift_font::kurbo::{BezPath, PathEl};
+use shift_font::{Contour, SubpathPoints};
 use shift_font::{
-    DecomposedTransform, PointType, SegmentIndexIter, SegmentIndices, Transform, open_corners,
+    DecomposedTransform, Point, PointType, SegmentIndexIter, SegmentIndices, Transform,
+    open_corners,
 };
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -76,6 +77,31 @@ pub struct ContourPoints {
     pub closed: bool,
     pub point_types: Vec<PointType>,
     pub coordinates: Vec<f64>,
+}
+
+impl ContourPoints {
+    /// A contour's points for geometry reads and stroke preview outlines.
+    pub fn of_contour(contour: &Contour) -> Self {
+        Self {
+            closed: contour.is_closed(),
+            point_types: contour.points().iter().map(Point::point_type).collect(),
+            coordinates: contour
+                .points()
+                .iter()
+                .flat_map(|point| [point.x(), point.y()])
+                .collect(),
+        }
+    }
+}
+
+impl From<SubpathPoints> for ContourPoints {
+    fn from(subpath: SubpathPoints) -> Self {
+        Self {
+            closed: subpath.closed,
+            point_types: subpath.point_types,
+            coordinates: subpath.coordinates,
+        }
+    }
 }
 
 /// A tight axis-aligned box.

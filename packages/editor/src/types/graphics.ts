@@ -1,3 +1,5 @@
+import type { StrokeOutlinePreviewItem } from "@shift/wasm/protocol";
+
 /**
  * Discriminated union of drawing instructions that describe a path.
  * Used for serializing and replaying vector outlines independently of the canvas API.
@@ -22,6 +24,21 @@ export type PathCommand =
       readonly y: number;
     }
   | { readonly type: "close" };
+
+/**
+ * The solved fill outlines of the dynamic strokes on one glyph layer, with the
+ * one canvas path they draw as.
+ *
+ * `failure` is why some stroke could not be drawn. When one contour failed,
+ * `items` and `path` still hold the others. When the whole read failed,
+ * `items` is empty and `path` is null: the layer has no solved fill, which is
+ * not the same as having no dynamic stroke.
+ */
+export interface StrokeFills {
+  readonly items: readonly StrokeOutlinePreviewItem[];
+  readonly path: Path2D | null;
+  readonly failure: string | null;
+}
 
 /** RGBA colour as a four-element tuple (0-255 per channel). */
 export type Colour = [number, number, number, number];

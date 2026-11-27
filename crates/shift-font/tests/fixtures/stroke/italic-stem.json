@@ -1,0 +1,6 @@
+{
+  "name": "italic-stem",
+  "description": "Slanted stem skeleton for constant-width expansion",
+  "path_d": "M 100 0 L 130 200",
+  "stroke_width": 60.0
+}

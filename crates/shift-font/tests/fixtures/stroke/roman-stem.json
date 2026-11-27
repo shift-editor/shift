@@ -1,0 +1,6 @@
+{
+  "name": "roman-stem",
+  "description": "Vertical stem skeleton for constant-width expansion",
+  "path_d": "M 100 0 L 100 200",
+  "stroke_width": 80.0
+}

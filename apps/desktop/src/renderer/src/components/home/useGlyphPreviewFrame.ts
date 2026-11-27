@@ -64,8 +64,6 @@ export function useGlyphPreviewFrame(
   );
 
   useEffect(() => {
-    if (!active) return undefined;
-
     let cancelled = false;
     const requestRevision = requestRevisionRef.current + 1;
     requestRevisionRef.current = requestRevision;
@@ -79,7 +77,7 @@ export function useGlyphPreviewFrame(
         cache.rekey(locationKey);
         const glyphIds = frame.cells.map((cell) => cell.glyph.id);
         const missingGlyphIds = glyphIds.filter((glyphId) => !cache.has(glyphId));
-        if (missingGlyphIds.length > 0) {
+        if (active && missingGlyphIds.length > 0) {
           setReadiness(firstFramePublishedRef.current ? "Stale" : "Initial");
         }
 
@@ -93,6 +91,10 @@ export function useGlyphPreviewFrame(
         }
 
         if (isObsolete()) return;
+
+        // When hidden, only warm the cache; skip React state updates.
+        if (!active) return;
+
         if (glyphIds.some((glyphId) => !cache.has(glyphId))) {
           throw new Error("SVG preview frame exceeds the configured cache budget");
         }
@@ -110,6 +112,7 @@ export function useGlyphPreviewFrame(
         }
       } catch (error) {
         if (isObsolete()) return;
+        if (!active) return;
 
         console.error("SVG glyph catalog refresh failed", error);
         setReadiness("Unavailable");

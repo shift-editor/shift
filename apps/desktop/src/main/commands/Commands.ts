@@ -8,6 +8,7 @@ import {
   SHIFT_X_URL,
 } from "../../shared/links";
 import { glyphColorCommands, helpCommandLabels } from "../../shared/commands";
+import type { StrokeCommandId } from "../../shared/commands";
 
 const appCommands: Command[] = [
   {
@@ -339,6 +340,31 @@ const glyphCommands: Command[] = [
   },
 ];
 
+const strokeCommands: Command[] = [
+  strokeCommand("glyph.stroke.applyDynamic", "Add Dynamic Stroke"),
+  strokeCommand("glyph.stroke.expand", "Expand Stroke"),
+  strokeCommand("glyph.stroke.offsetContour", "Offset Contour…"),
+  strokeCommand("glyph.stroke.removeDynamic", "Remove Dynamic Stroke"),
+];
+
+/**
+ * A stroke command is enabled whenever a workspace is open.
+ *
+ * Whether the selection allows it is the renderer's answer, so the menu stays
+ * clickable and the renderer says why a refused command did nothing.
+ */
+function strokeCommand(id: StrokeCommandId, label: string): Command {
+  return {
+    id,
+    effect: "font",
+    label,
+    enabled: (ctx) => ctx.document.hasWorkspace(),
+    run: (ctx) => {
+      ctx.renderer.run(id);
+    },
+  };
+}
+
 const glyphColorCommandList: Command[] = glyphColorCommands.map(({ id, label }) => ({
   id,
   effect: "font",
@@ -361,6 +387,7 @@ export const commands: Command[] = [
   ...fileCommands,
   ...editCommands,
   ...glyphCommands,
+  ...strokeCommands,
   ...glyphColorCommandList,
 ];
 

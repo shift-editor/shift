@@ -50,7 +50,7 @@ export class GlyphTransformEdit {
     const followers = buffers.components.filter((component) =>
       options.transformedGlyphIds.has(component.data.baseGlyphId),
     );
-    const { lsb, rsb } = buffers.sidebearings;
+    const { lsb, rsb } = layer.sidebearingsCell.peek();
 
     this.#layer = layer;
     this.#state = state;

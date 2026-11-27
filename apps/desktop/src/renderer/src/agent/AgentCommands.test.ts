@@ -46,7 +46,8 @@ function windowContext(editor: EditorTestSurface, state: { hasWorkspace: boolean
           id === "app.showSettings" ||
           id === "file.export" ||
           id === "tab.close" ||
-          id === "glyph.addComponent";
+          id === "glyph.addComponent" ||
+          id === "glyph.stroke.offsetContour";
         if (windowCommand || isGlyphColorCommandId(id)) {
           unavailable();
           return;

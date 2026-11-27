@@ -10,6 +10,127 @@ use crate::{CoreResult, Font, GlyphId, LayerId, MetricsKeySide, Sidebearing, Sou
 /// A difference below this many units is already what the key gives.
 const SETTLED: f64 = 1e-6;
 
+/// Whether to re-apply linked metrics for one glyph or the whole font.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub enum ReapplyLinkedMetricsScope {
+    Glyph { glyph: GlyphId, source: SourceId },
+    Font,
+}
+
+/// What a re-apply pass moved, or why nothing ran.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReapplyLinkedMetricsOutcome {
+    pub moved_layers: Vec<LayerId>,
+    pub reason: Option<&'static str>,
+}
+
+impl Font {
+    /// Why [`reapply_linked_metrics`](Self::reapply_linked_metrics) would change no layer for `scope`.
+    pub fn reapply_linked_metrics_disabled_reason(
+        &self,
+        scope: ReapplyLinkedMetricsScope,
+    ) -> Option<&'static str> {
+        if self.metrics_keyed_glyph_ids().next().is_none() {
+            return Some("this font has no linked metrics");
+        }
+
+        match scope {
+            ReapplyLinkedMetricsScope::Font => None,
+            ReapplyLinkedMetricsScope::Glyph { glyph, source } => {
+                if self.glyph_has_linked_metrics_in_source(glyph, source) {
+                    None
+                } else {
+                    Some("this glyph has no linked metrics")
+                }
+            }
+        }
+    }
+
+    /// Re-applies linked metrics for `scope` in one pass.
+    ///
+    /// # Errors
+    ///
+    /// Returns the font's error when a layer the order names is missing.
+    pub fn reapply_linked_metrics(
+        &mut self,
+        scope: ReapplyLinkedMetricsScope,
+    ) -> CoreResult<ReapplyLinkedMetricsOutcome> {
+        if let Some(reason) = self.reapply_linked_metrics_disabled_reason(scope) {
+            return Ok(ReapplyLinkedMetricsOutcome {
+                moved_layers: Vec::new(),
+                reason: Some(reason),
+            });
+        }
+
+        let mut moved = Vec::new();
+        match scope {
+            ReapplyLinkedMetricsScope::Font => {
+                let source_ids: Vec<_> = self.sources().iter().map(crate::Source::id).collect();
+                let keyed: Vec<_> = self.metrics_keyed_glyph_ids().collect();
+                for source_id in source_ids {
+                    moved.extend(
+                        self.reapply_linked_metrics_in_source(source_id, keyed.iter().copied())?,
+                    );
+                }
+            }
+            ReapplyLinkedMetricsScope::Glyph { glyph, source } => {
+                let roots = BTreeSet::from([glyph]);
+                moved.extend(self.reapply_linked_metrics_in_source(source, roots)?);
+            }
+        }
+
+        Ok(ReapplyLinkedMetricsOutcome {
+            moved_layers: moved,
+            reason: None,
+        })
+    }
+
+    fn glyph_has_linked_metrics_in_source(&self, glyph: GlyphId, source: SourceId) -> bool {
+        let affected = self.keyed_glyphs_affected_by(source, &BTreeSet::from([glyph]));
+        affected.iter().any(|glyph_id| {
+            self.glyph(*glyph_id).is_some_and(|glyph| {
+                MetricsKeySide::ALL
+                    .into_iter()
+                    .any(|side| glyph.metrics_key(source, side).is_some())
+            })
+        })
+    }
+
+    fn reapply_linked_metrics_in_source(
+        &mut self,
+        source_id: SourceId,
+        roots: impl IntoIterator<Item = GlyphId>,
+    ) -> CoreResult<Vec<LayerId>> {
+        let roots: BTreeSet<_> = roots.into_iter().collect();
+        let affected = self.keyed_glyphs_affected_by(source_id, &roots);
+        if affected.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let order = self.linked_metrics_order_of(source_id, affected);
+        let mut moved = Vec::new();
+        let mut changed = roots;
+        for ordered in order.keys {
+            let glyph_id = ordered.linked.glyph_id;
+            let Some(layer_id) = self
+                .glyph(glyph_id)
+                .and_then(|glyph| glyph.layer_for_source(source_id))
+                .map(crate::GlyphLayer::id)
+            else {
+                continue;
+            };
+            let Some(delta) = self.correction(source_id, &ordered) else {
+                continue;
+            };
+            self.move_side(layer_id, ordered.linked.side, delta)?;
+            changed.insert(glyph_id);
+            moved.push(layer_id);
+        }
+        Ok(moved)
+    }
+}
+
 /// The glyphs an edit changed, by the source they changed in.
 pub type ChangedGlyphs = BTreeMap<SourceId, BTreeSet<GlyphId>>;
 

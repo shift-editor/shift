@@ -33,6 +33,7 @@ mod layer_place;
 mod mark_color;
 mod metrics_keys;
 mod report;
+mod stroke;
 mod swap;
 
 pub(crate) use axis::set_axis;
@@ -50,6 +51,9 @@ pub(crate) use layer_place::{move_layer, remove_layer};
 pub(crate) use mark_color::{parse_mark_color, set_mark_color};
 use report::report_changes;
 pub(crate) use report::{AuthoringChange, AuthoringReport, SwapReport};
+pub(crate) use stroke::{
+    bake_stroke, offset_contour, outline_stroke, set_live_stroke, stroke_preview,
+};
 pub(crate) use swap::{add_swap, move_swap, remove_swap, set_component_condition, set_swap};
 
 /// Creates a canonical SQLite `.shift` document with the model's default source.

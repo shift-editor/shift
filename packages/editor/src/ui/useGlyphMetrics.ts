@@ -1,4 +1,4 @@
-import type { GlyphSidebearings } from "@shift/glyph-state";
+import type { GlyphMetricsSidebearings } from "../types/metricsMeasure";
 import type { SideLink } from "@shift/wasm/protocol";
 import type { MetricsLinks } from "../lib/model/MetricsLinks";
 import { useMemo } from "react";
@@ -6,14 +6,27 @@ import type { Editor } from "../lib/editor/Editor";
 import type { Glyph } from "../lib/model/Glyph";
 import { computed, useSignalState } from "../lib/signals";
 
-const EMPTY_SIDEBEARINGS: GlyphSidebearings = { lsb: null, rsb: null };
+const EMPTY_METRICS_SIDEBEARINGS: GlyphMetricsSidebearings = {
+  lsb: null,
+  rsb: null,
+  skeletonLsb: null,
+  skeletonRsb: null,
+  fallbackTooltip: null,
+};
 
 export interface GlyphMetricsState {
   readonly glyph: Glyph | null;
-  readonly sidebearings: GlyphSidebearings;
+  readonly sidebearings: GlyphMetricsSidebearings;
   readonly xAdvance: number;
   /** Whether the displayed glyph has an authored layer at the active source or location. */
   readonly hasLayer: boolean;
+  /** Whether metrics include stroke ink for this font. */
+  readonly includeStroke: boolean;
+  /** Whether the open glyph has a dynamic stroke in any drawing. */
+  readonly hasDynamicStroke: boolean;
+  readonly skeletonLsb: number | null;
+  readonly skeletonRsb: number | null;
+  readonly fallbackTooltip: string | null;
   /** The glyph's linked sides at the active source; none between sources. */
   readonly linkedSides: readonly SideLink[];
   /** The glyph's metrics keys at the active source, to change; null between sources. */
@@ -22,9 +35,14 @@ export interface GlyphMetricsState {
 
 const EMPTY_METRICS: GlyphMetricsState = {
   glyph: null,
-  sidebearings: EMPTY_SIDEBEARINGS,
+  sidebearings: EMPTY_METRICS_SIDEBEARINGS,
   xAdvance: 0,
   hasLayer: false,
+  includeStroke: true,
+  hasDynamicStroke: false,
+  skeletonLsb: null,
+  skeletonRsb: null,
+  fallbackTooltip: null,
   linkedSides: [],
   links: null,
 };
@@ -48,14 +66,23 @@ export function useGlyphMetrics(editor: Editor): GlyphMetricsState {
         const editLocation = editor.editLocationCell.value;
         const activeSourceId = editor.activeSourceIdCell.value;
         const renderModel = glyph.renderModelAt(editor.editLocationCell, editor.activeSourceIdCell);
+        const metricsSidebearings = renderModel.sidebearingsCell.value;
+        const layer =
+          activeSourceId !== null
+            ? glyph.layerForSource(activeSourceId)
+            : glyph.layerAt(editLocation);
+        const hasDynamicStroke = glyph.hasDynamicStroke();
 
         return {
           glyph,
-          sidebearings: renderModel.sidebearingsCell.value,
+          sidebearings: metricsSidebearings,
           xAdvance: renderModel.xAdvanceCell.value,
-          hasLayer: activeSourceId
-            ? glyph.layerForSource(activeSourceId) !== null
-            : glyph.layerAt(editLocation) !== null,
+          hasLayer: layer !== null,
+          includeStroke: editor.font.includeStrokeInMetricsCell.value,
+          hasDynamicStroke,
+          skeletonLsb: metricsSidebearings.skeletonLsb,
+          skeletonRsb: metricsSidebearings.skeletonRsb,
+          fallbackTooltip: metricsSidebearings.fallbackTooltip,
           linkedSides: activeSourceId ? editor.font.linkedSides(glyph.id, activeSourceId) : [],
           links: editor.activeMetricsLinks(),
         };

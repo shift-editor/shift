@@ -12,6 +12,8 @@
 export interface LifecycleEventMap {
   /** A preview interaction attempted to mutate read-only font data. */
   previewMutationAttempted: undefined;
+  /** Something about dynamic strokes the person should read: one could not be drawn, or one is hidden. */
+  strokeProblem: string;
   /** The editor is being torn down. Subsystems should dispose resources. */
   destroying: undefined;
 }

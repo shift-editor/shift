@@ -11,7 +11,7 @@ const WIDTH: MetricsKeySide = MetricsKeySide::Width;
 /// A font of rectangles, so each sidebearing is easy to read off:
 /// `n` spans 50..450 of 500, `o` 40..480 of 520, `H` 80..620 of 700, and
 /// `A` is a triangle from 0 to 500 peaking at 250, 700. `space` is empty.
-fn font() -> (Font, SourceId) {
+pub(super) fn font() -> (Font, SourceId) {
     let mut font = Font::new();
     let source = font.default_source_id().unwrap();
     for (name, width, left, right) in [

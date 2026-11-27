@@ -767,7 +767,13 @@ describe("font-level intents make the font variable", () => {
       expect(renderModel.contours[index]).toBe(componentContours[index]);
     }
     expect(renderModel.xAdvance).toBe(483);
-    expect(renderModel.sidebearings).toEqual({ lsb: 20, rsb: 20 });
+    expect(renderModel.sidebearings).toEqual({
+      lsb: 20,
+      rsb: 20,
+      skeletonLsb: null,
+      skeletonRsb: null,
+      fallbackTooltip: null,
+    });
   });
 
   it("opens an imported UFO glyph that also has background and support layers", async () => {

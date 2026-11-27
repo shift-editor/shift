@@ -3,6 +3,7 @@ import type { ContourId } from "@shift/types";
 import type { Editor } from "@shift/editor";
 import { electronSystemClipboard } from "@/lib/clipboard/electronSystemClipboard";
 import { objectIsKindOf } from "@shift/editor/types";
+import { runStrokeMenuCommand } from "./strokeMenuCommand";
 
 const TEXT_EDIT_COMMANDS = new Set<EditorCommandId>([
   "edit.undo",
@@ -153,6 +154,15 @@ export async function runRendererCommand(editor: Editor, id: EditorCommandId): P
     case "glyph.decomposeComponents":
       return editor.decomposeSelection();
 
+    case "glyph.stroke.applyDynamic":
+    case "glyph.stroke.expand":
+    case "glyph.stroke.removeDynamic": {
+      const changed = runStrokeMenuCommand(editor, id);
+      if (changed) await editor.font.editCoordinator.settled();
+
+      return changed;
+    }
+
     case "glyph.reverseSelectedContour": {
       const contourIds = new Set<ContourId>();
 
@@ -215,6 +225,9 @@ async function runFocusedTextEditCommand(id: EditorCommandId): Promise<boolean |
     case "glyph.decomposeComponents":
     case "glyph.reverseSelectedContour":
     case "glyph.makeFirstPoint":
+    case "glyph.stroke.applyDynamic":
+    case "glyph.stroke.expand":
+    case "glyph.stroke.removeDynamic":
       return null;
   }
 }

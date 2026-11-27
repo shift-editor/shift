@@ -326,6 +326,14 @@ impl From<BridgeError> for NativeWorkspaceError {
   }
 }
 
+impl From<shift_backends::ExportError> for NativeWorkspaceError {
+  fn from(error: shift_backends::ExportError) -> Self {
+    Self::Failed {
+      detail: error.to_string(),
+    }
+  }
+}
+
 through_bridge_error!(NativeWorkspaceError);
 
 /// What a new untitled workspace starts with; a field left out keeps the
@@ -596,6 +604,10 @@ impl NativeWorkspace for Bridge {
     let mut drawn = glyph_ids.clone();
     drawn.extend(self.font()?.swap_glyphs_of(&glyph_ids));
     let font = self.acquire_and_font(&drawn, AcquireScope::ComponentClosure)?;
+
+    let baked = shift_backends::bake_strokes_for_export(font)?;
+    let font = &*baked;
+
     let glyphs = font
       .projection(&location)
       .drawn_glyphs(&glyph_ids)

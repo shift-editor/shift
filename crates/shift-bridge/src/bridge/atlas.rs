@@ -6,7 +6,8 @@ use std::time::{Duration, Instant};
 
 use pack::Pack;
 use shift_backends::{
-  GlyphIndex, OpenedFont, SourceAtlasDescriptor, build_binary_atlas_page, variable_glyph_inputs,
+  GlyphIndex, OpenedFont, SourceAtlasDescriptor, bake_strokes_for_export, build_binary_atlas_page,
+  variable_glyph_inputs,
 };
 use shift_font::wire::InterpolationBasis;
 use shift_font::{GlyphId, SourceId};
@@ -124,6 +125,14 @@ impl From<BridgeError> for NativeAtlasError {
       BridgeError::NoFontSource => Self::NoFontSource { detail },
       BridgeError::InvalidInput { .. } | BridgeError::Wire(_) => Self::InvalidInput { detail },
       _ => Self::Failed { detail },
+    }
+  }
+}
+
+impl From<shift_backends::ExportError> for NativeAtlasError {
+  fn from(error: shift_backends::ExportError) -> Self {
+    Self::Failed {
+      detail: error.to_string(),
     }
   }
 }
@@ -273,8 +282,13 @@ impl NativeAtlas for Bridge {
     let total_started = Instant::now();
     let started = Instant::now();
     self.workspace_mut()?.acquire_all_layers()?;
+    let font = self.font()?;
     let acquisition = started.elapsed();
-    let built = build_authored_atlas_profiled(self.font()?, shift_slug::DEFAULT_BAND_COUNT)?;
+
+    let baked = bake_strokes_for_export(font)?;
+    let font = &*baked;
+
+    let built = build_authored_atlas_profiled(font, shift_slug::DEFAULT_BAND_COUNT)?;
     self.publish_slug_atlas("complete", built, alignment, acquisition, total_started)
   }
 
@@ -291,6 +305,10 @@ impl NativeAtlas for Bridge {
     let started = Instant::now();
     let font = self.acquire_and_font(&glyph_ids, AcquireScope::ComponentClosure)?;
     let acquisition = started.elapsed();
+
+    let baked = bake_strokes_for_export(font)?;
+    let font = &*baked;
+
     let built =
       build_authored_atlas_page_profiled(font, &glyph_ids, shift_slug::DEFAULT_BAND_COUNT)?;
     self.publish_slug_atlas("page", built, alignment, acquisition, total_started)

@@ -25,8 +25,8 @@ pub struct SvgPathData {
 
 #[cfg(feature = "engine")]
 mod exports {
+    use shift_font::Contour;
     use shift_font::svg_path::contours_from_svg_path;
-    use shift_font::{Contour, Point};
     use wasm_bindgen::prelude::wasm_bindgen;
 
     use super::{SvgPathData, SvgPaths, svg_paths_request};
@@ -73,15 +73,7 @@ mod exports {
 
     impl ContourPoints {
         fn of(contour: &Contour) -> Self {
-            Self {
-                closed: contour.is_closed(),
-                point_types: contour.points().iter().map(Point::point_type).collect(),
-                coordinates: contour
-                    .points()
-                    .iter()
-                    .flat_map(|point| [point.x(), point.y()])
-                    .collect(),
-            }
+            Self::of_contour(contour)
         }
     }
 }

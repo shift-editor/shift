@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Button, ScrollArea, Separator, Tooltip } from "@shift/ui";
+import { ArrowLeftRight, Button, Checkbox, ScrollArea, Separator, Tooltip } from "@shift/ui";
 import type { MetricsKeySide } from "@shift/types";
 import type { SideLink } from "@shift/wasm/protocol";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
@@ -111,7 +111,19 @@ function metricKeyProps(
 export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
   const { editor } = session;
   const zoom = useSignalState(editor.zoomCell);
-  const { glyph, sidebearings, xAdvance, hasLayer, linkedSides, links } = useGlyphMetrics(editor);
+  const {
+    glyph,
+    sidebearings,
+    xAdvance,
+    hasLayer,
+    linkedSides,
+    links,
+    includeStroke,
+    hasDynamicStroke,
+    skeletonLsb,
+    skeletonRsb,
+    fallbackTooltip,
+  } = useGlyphMetrics(editor);
 
   // Metric edits go through workspace layer intents, which memory sessions lack.
   const editable = session.mode !== "memory" && hasLayer;
@@ -160,46 +172,75 @@ export function GlyphSidebar({ session, host = {} }: GlyphSidebarProps) {
               {host.glyphHeading}
             </div>
             <main className="flex flex-col items-center">
+              {hasDynamicStroke ? (
+                <label className="mb-2 flex items-center gap-2 text-ui text-secondary">
+                  <Checkbox
+                    checked={includeStroke}
+                    onCheckedChange={(checked) => {
+                      editor.font.setIncludeStrokeInMetrics(checked);
+                    }}
+                    disabled={session.mode !== "workspace"}
+                  />
+                  Include stroke
+                </label>
+              ) : null}
               <div className="flex items-center justify-center gap-2">
-                <EditableSidebarInput
-                  ariaLabel="Left sidebearing"
-                  label="LSB"
-                  className="text-right"
-                  value={leftSidebearing}
-                  disabled={!sidebearingsEditable}
-                  onValueChange={
-                    sidebearingsEditable ? (value) => editor.setLeftSidebearing(value) : undefined
-                  }
-                  {...metricKeyProps(
-                    links,
-                    "left",
-                    linkOn(linkedSides, "left"),
-                    sidebearingsEditable,
-                    leftSidebearing,
-                  )}
-                />
+                <div className="flex flex-col items-end gap-0.5">
+                  <EditableSidebarInput
+                    ariaLabel="Left sidebearing"
+                    label="LSB"
+                    className="text-right"
+                    value={leftSidebearing}
+                    disabled={!sidebearingsEditable}
+                    onValueChange={
+                      sidebearingsEditable ? (value) => editor.setLeftSidebearing(value) : undefined
+                    }
+                    {...metricKeyProps(
+                      links,
+                      "left",
+                      linkOn(linkedSides, "left"),
+                      sidebearingsEditable,
+                      leftSidebearing,
+                    )}
+                  />
+                  {skeletonLsb !== null ? (
+                    <span className="text-ui text-muted">skeleton {Math.round(skeletonLsb)}</span>
+                  ) : null}
+                </div>
                 <div className="px-2">
                   <ShiftIcon name="placeholder-glyph" className="h-[55px] w-8 text-primary" />
                 </div>
-                <EditableSidebarInput
-                  ariaLabel="Right sidebearing"
-                  label="RSB"
-                  labelPosition="right"
-                  className="text-left"
-                  value={rightSidebearing}
-                  disabled={!sidebearingsEditable}
-                  onValueChange={
-                    sidebearingsEditable ? (value) => editor.setRightSidebearing(value) : undefined
-                  }
-                  {...metricKeyProps(
-                    links,
-                    "right",
-                    linkOn(linkedSides, "right"),
-                    sidebearingsEditable,
-                    rightSidebearing,
-                  )}
-                />
+                <div className="flex flex-col items-start gap-0.5">
+                  <EditableSidebarInput
+                    ariaLabel="Right sidebearing"
+                    label="RSB"
+                    labelPosition="right"
+                    className="text-left"
+                    value={rightSidebearing}
+                    disabled={!sidebearingsEditable}
+                    onValueChange={
+                      sidebearingsEditable
+                        ? (value) => editor.setRightSidebearing(value)
+                        : undefined
+                    }
+                    {...metricKeyProps(
+                      links,
+                      "right",
+                      linkOn(linkedSides, "right"),
+                      sidebearingsEditable,
+                      rightSidebearing,
+                    )}
+                  />
+                  {skeletonRsb !== null ? (
+                    <span className="text-ui text-muted">skeleton {Math.round(skeletonRsb)}</span>
+                  ) : null}
+                </div>
               </div>
+              {fallbackTooltip ? (
+                <Tooltip content={fallbackTooltip}>
+                  <p className="mt-1 text-ui text-muted">Showing skeleton measure</p>
+                </Tooltip>
+              ) : null}
               <div className="mt-2">
                 <EditableSidebarInput
                   ariaLabel="Advance width"

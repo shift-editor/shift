@@ -39,7 +39,11 @@ impl FontWriter for UfoBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use shift_font::{Contour, Glyph, GlyphLayer, LayerId, PointType, SetLanguages};
+    use crate::FontExporter;
+    use shift_font::{
+        Contour, FontIntentSet, Glyph, GlyphLayer, LayerId, PointType, SetIgnoreStroke,
+        SetLanguages,
+    };
     use std::fs;
 
     fn create_test_font() -> Font {
@@ -168,13 +172,14 @@ mod tests {
         assert!(glif.contains("<glyph name=\"A\""));
         assert!(glif.contains("x=\"115.29469168717605\""));
         assert!(glif.contains("y=\"452.51873449628556\""));
-        assert_eq!(glif.matches("<contour>").count(), 1);
+        // `<contour` matches both bare and identifier-bearing contour elements.
+        assert_eq!(glif.matches("<contour").count(), 1);
     }
 
     #[test]
     fn tracked_languages_round_trip_through_font_lib_plist() {
         let mut font = create_test_font();
-        font.apply_intents(&shift_font::FontIntentSet::from(SetLanguages {
+        font.apply_intents(&FontIntentSet::from(SetLanguages {
             language_ids: vec!["eng-latin".to_string(), "cmn-chinese".to_string()],
         }))
         .unwrap();
@@ -192,6 +197,38 @@ mod tests {
             reloaded.language_ids(),
             Some(vec!["eng-latin".to_string(), "cmn-chinese".to_string()])
         );
+    }
+
+    #[test]
+    fn ignore_stroke_round_trips_through_font_lib_plist() {
+        let mut font = create_test_font();
+        font.apply_intents(&FontIntentSet::from(SetIgnoreStroke { ignore: true }))
+            .unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let ufo_path = temp_dir.path().join("ignore_stroke.ufo");
+        let ufo_path_str = ufo_path.to_str().unwrap();
+        UfoWriter::new().save(&font, ufo_path_str).unwrap();
+
+        let lib_plist = fs::read_to_string(ufo_path.join("lib.plist")).unwrap();
+        assert!(lib_plist.contains("<key>com.shift.ignoreStroke</key>"));
+
+        let reloaded = UfoReader::new().load(ufo_path_str).unwrap();
+        assert!(reloaded.ignore_stroke_in_metrics());
+    }
+
+    #[test]
+    fn compile_ttf_does_not_read_ignore_stroke_switch() {
+        let font = create_test_font();
+        let before = FontExporter::new().compile_ttf(&font).unwrap();
+
+        let mut with_switch = font;
+        with_switch
+            .apply_intents(&FontIntentSet::from(SetIgnoreStroke { ignore: true }))
+            .unwrap();
+
+        let after = FontExporter::new().compile_ttf(&with_switch).unwrap();
+        assert_eq!(before, after);
     }
 
     #[test]

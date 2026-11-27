@@ -11,8 +11,8 @@ mod summary;
 use std::path::Path;
 
 use miette::{IntoDiagnostic, Result, WrapErr, bail, miette};
-use shift_backends::FontExporter;
 use shift_backends::font_loader::FontLoader;
+use shift_backends::{FontExporter, bake_strokes_for_export};
 use shift_font::Font;
 use shift_proof::{
     AxisValue, Coordinates, ImageFormat, ProofError, ProofLocation, ProofMode, ProofRequest,
@@ -137,8 +137,11 @@ fn compile_font(path: &Path) -> Result<ProofBinary> {
         .read_font(path_text)
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to load font {}", path.display()))?;
+    let baked = bake_strokes_for_export(&font)
+        .into_diagnostic()
+        .wrap_err_with(|| format!("failed to bake strokes in {} for proofing", path.display()))?;
     let preview = FontExporter::new()
-        .compile_preview_ttf(&font)
+        .compile_preview_ttf(&*baked)
         .into_diagnostic()
         .wrap_err_with(|| format!("failed to compile {} for proofing", path.display()))?;
     let warnings = ProofWarning::components_drawn_everywhere(&preview.drawn_everywhere)

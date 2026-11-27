@@ -48,8 +48,11 @@ import type {
   GlyphSwap,
   GlyphSwapEdit,
   SetComponentCondition,
+  OutlineStrokeStyle,
 } from "@shift/types";
 import {
+  alphabetical,
+  comparing,
   mintSwapId,
   mintAxisId,
   mintGlyphId,
@@ -85,10 +88,17 @@ import type {
   NeverUsedSwap,
   SideLink,
   PlacedText,
+  LiveStroke,
+  ReapplyLinkedMetricsScope,
+  StrokeOutlinePreviews,
+  StrokePreset,
   TextRun,
 } from "@shift/wasm/protocol";
+import { Mat, type Point2D } from "@shift/geo";
+import { Point } from "@shift/glyph-state";
 import { FontVariation, locationValues } from "../wasm/variation";
 import type { GlyphIdentityEdit, GlyphReader } from "../../types/glyph";
+import type { StrokeFills } from "../../types/graphics";
 import { Glyph, GlyphLayer } from "./Glyph";
 import type { FontStore, GlyphInvalidation } from "./FontStore";
 import type { GlyphLayerState } from "./GlyphLayerState";
@@ -112,6 +122,18 @@ import { uniqueInOrder } from "../utils/utils";
 import { fallbackGlyphNameForUnicode, parseCodepoint } from "../utils/unicode";
 import { createBatchRequest } from "../utils/batchRequest";
 import { EditGate } from "./EditGate";
+import { NO_STROKE_FILLS, solveStrokeFills } from "./strokeFills";
+import { isUnreadLayerExtent, readLayerExtent, type LayerExtentRead } from "./layerExtent";
+import {
+  sidebearingsFromLayerExtent,
+  type GlyphMetricsSidebearings,
+} from "../../types/metricsMeasure";
+
+/** Ink snap points for one skeleton contour, unpacked from the WASM protocol. */
+export interface InkSnapContourTargets {
+  readonly skeletonContourId: ContourId;
+  readonly points: readonly Point2D[];
+}
 
 /**
  * Directory queries over the store's committed glyph index.
@@ -289,6 +311,20 @@ export class Font {
   readonly #metadataCell: Signal<FontMetadata>;
   readonly #sourcesCell: Signal<readonly Source[]>;
 
+  // non-reactive: lazy cache of per-layer computed cells; each cell subscribes when read
+  readonly #strokeFillsCells = new Map<LayerId, ComputedSignal<StrokeFills>>();
+  // non-reactive: last interpolated fills per glyph, so the frame that drew a
+  // path and a reader that peeks it hold the same value
+  readonly #strokeFillsAtMemo = new Map<
+    GlyphId,
+    { readonly key: string; readonly fills: StrokeFills }
+  >();
+  // non-reactive: lazy cache of per-layer computed cells; each cell subscribes when read
+  readonly #layerExtentCells = new Map<LayerId, ComputedSignal<LayerExtentRead>>();
+  // non-reactive: lazy cache of per-layer computed cells; each cell subscribes when read
+  readonly #metricsSidebearingsCells = new Map<LayerId, ComputedSignal<GlyphMetricsSidebearings>>();
+  readonly #includeStrokeInMetricsCell: Signal<boolean>;
+  readonly #strokePresetsCell: Signal<readonly StrokePreset[]>;
   readonly #axesCell: ComputedSignal<readonly Axis[]>;
   readonly #externalAxesCell: Signal<readonly Axis[]>;
   readonly #axisMappingsCell: Signal<readonly AxisMapping[]>;
@@ -375,6 +411,20 @@ export class Font {
     this.#namedInstancesCell = computed(() => fontCell.value?.namedInstances ?? []);
     this.#languageIdsCell = computed(() => fontCell.value?.languageIds ?? null);
     this.#gridCell = computed(() => fontCell.value?.grid ?? null);
+    this.#includeStrokeInMetricsCell = computed(
+      () => {
+        track(store.engine.revision("strokeMeasure"));
+        return store.engine.includeStrokeInMetrics();
+      },
+      { name: "font.includeStrokeInMetrics" },
+    );
+    this.#strokePresetsCell = computed(
+      () => {
+        track(store.engine.revision("strokePresets"));
+        return store.engine.strokePresets();
+      },
+      { name: "font.strokePresets" },
+    );
     this.#directoryCell = computed(
       () => new GlyphDirectory(this.#store.recordIndexCell.value, this.#glyphInfo),
     );
@@ -1256,6 +1306,9 @@ export class Font {
       projectionCell: this.#store.projectionCell(entry.id),
       axesCell: this.#glyphAxesCell(glyphId),
       defaultSourceId: this.defaultSource.id,
+      strokeFillsCell: (layerId) => this.strokeFillsCell(layerId),
+      strokeFillsAt: (glyphId, location) => this.strokeFillsAt(glyphId, location),
+      metricsSidebearingsCell: (layerId) => this.metricsSidebearingsCell(layerId),
       anchorCategory: (glyphId) => {
         // Called from render-model computeds: a re-read glyph directory re-runs them.
         track(this.#directoryCell);
@@ -1296,7 +1349,11 @@ export class Font {
         continue;
       }
 
-      layers.push(new GlyphLayer(source, this.#editCoordinator, state, this.#edits, placement));
+      layers.push(
+        new GlyphLayer(source, this.#editCoordinator, state, this.#edits, placement, (layerId) =>
+          this.metricsSidebearingsCell(layerId),
+        ),
+      );
     }
 
     return layers;
@@ -1486,6 +1543,368 @@ export class Font {
     if (!glyphId) throw new Error(`no glyph owns layer ${reference}`);
 
     return engine.counterparts(glyphId, reference, target, ids);
+  }
+
+  /** Live stroke fill outlines for `layerId`, when the window's engine is open. */
+  strokeOutlinePreviews(layerId: LayerId, tolerance?: number): StrokeOutlinePreviews {
+    const engine = this.#store.engine;
+    track(engine.revision("layers"));
+    return engine.strokeOutlinePreviews(layerId, tolerance);
+  }
+
+  /**
+   * Live stroke fill outlines for `glyphId` interpolated at a design
+   * location, when the window's engine is open.
+   */
+  strokeOutlinePreviewsAt(
+    glyphId: GlyphId,
+    location: DesignAxisLocation,
+    tolerance?: number,
+  ): StrokeOutlinePreviews {
+    const engine = this.#store.engine;
+    track(engine.revision("layers"));
+    return engine.strokeOutlinePreviewsAt(glyphId, location, tolerance);
+  }
+
+  /**
+   * The solved fills of `glyphId`'s dynamic strokes interpolated at a design
+   * `location`, and the path they draw as: the between-masters counterpart of
+   * {@link strokeFillsCell}.
+   *
+   * @remarks
+   * A plain read, not a cell: the caller holds the location in its own
+   * reactive state and re-asks as it moves, while the engine revision this
+   * tracks re-asks when a master changes. The last answer per glyph is kept
+   * while the location and the revision stand, so the frame that drew a path
+   * and a reader that peeks it hold the same value; the shared empty value
+   * is not kept, so a glyph that loads later is asked again. Never throws,
+   * as {@link strokeFillsCell} never does.
+   */
+  strokeFillsAt(glyphId: GlyphId, location: DesignAxisLocation): StrokeFills {
+    const revision = this.#store.engine.revision("layers");
+    track(revision);
+    const key = `${revision.peek()}|${designLocationKey(location)}`;
+    const memo = this.#strokeFillsAtMemo.get(glyphId);
+    if (memo?.key === key) return memo.fills;
+
+    const fills = solveStrokeFills(() => this.strokeOutlinePreviewsAt(glyphId, location));
+    if (fills !== NO_STROKE_FILLS) this.#strokeFillsAtMemo.set(glyphId, { key, fills });
+
+    return fills;
+  }
+
+  /**
+   * The solved fills of the dynamic strokes on `layerId`, and the path they draw as.
+   *
+   * @remarks
+   * One cell per layer, so every reader gets the same value until the engine's
+   * layers change: an edit, a gesture's preview frame, or ending one. Pan,
+   * zoom, hover and selection read it without a solve or a path build. Read it
+   * where the frame is drawn, never in an effect that runs between a drag's
+   * position write and its preview.
+   *
+   * A layer with no dynamic stroke reads as one shared empty value, so the
+   * cells kept for the layers a session has opened hold solved outlines only
+   * for layers that have strokes.
+   *
+   * @param layerId - The glyph layer to solve.
+   * @returns A cell that never throws: a layer that cannot be solved reads as a `failure`.
+   */
+  strokeFillsCell(layerId: LayerId): Signal<StrokeFills> {
+    const existing = this.#strokeFillsCells.get(layerId);
+    if (existing) return existing;
+
+    const cell = computed(() => solveStrokeFills(() => this.strokeOutlinePreviews(layerId)), {
+      name: `font.strokeFills.${layerId}`,
+    });
+    this.#strokeFillsCells.set(layerId, cell);
+    return cell;
+  }
+
+  /**
+   * Contours on `layerId` that carry a dynamic stroke, with the style stored for each, when the
+   * window's engine is open.
+   */
+  liveStrokes(layerId: LayerId): readonly LiveStroke[] {
+    const engine = this.#store.engine;
+    track(engine.revision("layers"));
+    return engine.liveStrokes(layerId);
+  }
+
+  /** Contours on `layerId` that carry a dynamic stroke, when the window's engine is open. */
+  liveStrokeContours(layerId: LayerId): readonly ContourId[] {
+    return this.liveStrokes(layerId).map((stroke) => stroke.contourId);
+  }
+
+  /** Live stroke contours when the preview read is available; otherwise none. */
+  liveStrokeContoursWhenLoaded(layerId: LayerId): readonly ContourId[] {
+    try {
+      return this.liveStrokeContours(layerId);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Whether `layerId`'s drawing, or a base glyph it places, carries a dynamic
+   * stroke on the drawing at the same source, so its extent reads as ink.
+   *
+   * @remarks
+   * Called from the metrics computed: the reads it makes (the glyph directory,
+   * each drawing's geometry, the engine's stroke lists) subscribe it to every
+   * change that could give the closure a stroke.
+   */
+  hasLiveStrokeInClosure(layerId: LayerId): boolean {
+    track(this.#directoryCell);
+    const glyphId = this.glyphIdForLayer(layerId);
+    const glyph = glyphId ? this.#glyph(glyphId) : null;
+    const layer = glyph?.layerForId(layerId) ?? null;
+    if (!layer) return this.liveStrokeContoursWhenLoaded(layerId).length > 0;
+
+    const seen = new Set<GlyphId>();
+    const pending: GlyphLayer[] = [layer];
+    while (pending.length > 0) {
+      const current = pending.pop()!;
+      if (this.liveStrokeContoursWhenLoaded(current.id).length > 0) return true;
+
+      track(current.geometryCell);
+      for (const component of current.geometry.components) {
+        if (seen.has(component.baseGlyphId)) continue;
+        seen.add(component.baseGlyphId);
+
+        const baseLayer = this.#glyph(component.baseGlyphId)?.layerForSource(current.sourceId);
+        if (baseLayer) pending.push(baseLayer);
+      }
+    }
+
+    return false;
+  }
+
+  /** Whether metrics read ink rather than the skeleton for this font. */
+  get includeStrokeInMetricsCell(): Signal<boolean> {
+    return this.#includeStrokeInMetricsCell;
+  }
+
+  /** Named stroke style presets stored at the font level, in creation order. */
+  get strokePresetsCell(): Signal<readonly StrokePreset[]> {
+    return this.#strokePresetsCell;
+  }
+
+  /**
+   * Ink-outline on-curve points and parametric extrema for a layer's stroked contours.
+   *
+   * @returns Empty when "Include stroke" is off or the layer has no stroke data.
+   */
+  inkSnapTargets(layerId: LayerId): readonly Point2D[] {
+    return this.inkSnapContours(layerId).flatMap((contour) => contour.points);
+  }
+
+  /**
+   * Ink snap points grouped by skeleton contour identity, so callers can filter
+   * moving contours from stationary ones.
+   *
+   * @returns Empty when "Include stroke" is off or the layer has no stroke data.
+   */
+  inkSnapContours(layerId: LayerId): readonly InkSnapContourTargets[] {
+    if (!this.#includeStrokeInMetricsCell.peek()) return [];
+
+    const contours = this.#store.engine.inkSnapPoints(layerId);
+    return contours.map((contour) => {
+      const coords = contour.coordinates;
+      const points: Point2D[] = [];
+      for (let i = 0; i < coords.length; i += 2) {
+        points.push({ x: coords[i]!, y: coords[i + 1]! });
+      }
+      return { skeletonContourId: contour.skeletonContourId, points };
+    });
+  }
+
+  /**
+   * On-curve points from each component's resolved base glyph outline, transformed
+   * by the component's affine matrix.
+   *
+   * @returns Empty when the layer has no components or a base glyph is not loaded.
+   */
+  componentOnCurveTargets(layerId: LayerId): readonly Point2D[] {
+    const glyphId = this.glyphIdForLayer(layerId);
+    if (!glyphId) return [];
+
+    const glyph = this.#glyph(glyphId);
+    if (!glyph) return [];
+
+    const layer = glyph.layerForId(layerId);
+    if (!layer) return [];
+
+    const components = layer.geometry.components;
+    if (components.length === 0) return [];
+
+    const targets: Point2D[] = [];
+
+    for (const component of components) {
+      const baseGlyph = this.#glyph(component.baseGlyphId);
+      if (!baseGlyph) continue;
+
+      const matrix = component.matrix;
+
+      for (const point of baseGlyph.allPoints) {
+        if (!Point.isOnCurve(point)) continue;
+        targets.push(Mat.applyToPoint(matrix, point));
+      }
+    }
+
+    return targets;
+  }
+
+  /** The extent of `layerId` under the font's current metrics measure. */
+  selectionExtent(layerId: LayerId, contourIds: readonly ContourId[]): LayerExtentRead {
+    const engine = this.#store.engine;
+    track(engine.revision("strokeMeasure"));
+    track(engine.revision("layers"));
+    return readLayerExtent(layerId, () =>
+      engine.selectionExtent({ layerId, contourIds: [...contourIds] }),
+    );
+  }
+
+  layerExtent(layerId: LayerId): LayerExtentRead {
+    const engine = this.#store.engine;
+    track(engine.revision("layers"));
+    track(engine.revision("strokeMeasure"));
+    return readLayerExtent(layerId, () => engine.layerExtent(layerId));
+  }
+
+  /**
+   * One cell per layer for its extent read; invalidates on layer edits and on
+   * the include-stroke switch.
+   */
+  layerExtentCell(layerId: LayerId): Signal<LayerExtentRead> {
+    const existing = this.#layerExtentCells.get(layerId);
+    if (existing) return existing;
+
+    const cell = computed(() => this.layerExtent(layerId), {
+      name: `font.layerExtent.${layerId}`,
+    });
+    this.#layerExtentCells.set(layerId, cell);
+    return cell;
+  }
+
+  /** Sidebearings that spacing and the inspector read for `layerId`. */
+  metricsSidebearingsCell(layerId: LayerId): Signal<GlyphMetricsSidebearings> {
+    const existing = this.#metricsSidebearingsCells.get(layerId);
+    if (existing) return existing;
+
+    const cell = computed(
+      (): GlyphMetricsSidebearings => {
+        const state = this.#store.layerStateCell(layerId).value;
+        const advance = state?.xAdvance ?? 0;
+        const skeletonOnly = {
+          lsb: state?.sidebearings.lsb ?? null,
+          rsb: state?.sidebearings.rsb ?? null,
+          skeletonLsb: null,
+          skeletonRsb: null,
+          fallbackTooltip: null,
+        };
+
+        if (!state) return skeletonOnly;
+
+        track(this.#includeStrokeInMetricsCell);
+        if (!this.#includeStrokeInMetricsCell.value) return skeletonOnly;
+
+        if (!this.hasLiveStrokeInClosure(layerId)) {
+          return skeletonOnly;
+        }
+
+        const extent = this.layerExtent(layerId);
+        if (isUnreadLayerExtent(extent)) {
+          return { ...skeletonOnly, fallbackTooltip: extent.reason };
+        }
+
+        return sidebearingsFromLayerExtent(extent, advance);
+      },
+      {
+        name: `font.metricsSidebearings.${layerId}`,
+      },
+    );
+    this.#metricsSidebearingsCells.set(layerId, cell);
+    return cell;
+  }
+
+  /**
+   * Sets whether metrics read ink or the skeleton; one undo step, touches no layer.
+   */
+  setIncludeStrokeInMetrics(include: boolean): void {
+    this.editCoordinator.push({
+      kind: "setIgnoreStroke",
+      setIgnoreStroke: { ignore: !include },
+    });
+  }
+
+  /**
+   * Creates a named stroke preset from `style` and returns the minted id.
+   *
+   * Call inside a transaction to control the undo step label.
+   */
+  createStrokePreset(name: string, style: OutlineStrokeStyle): string {
+    const id = crypto.randomUUID();
+    this.editCoordinator.push({
+      kind: "createStrokePreset",
+      createStrokePreset: { id, name, style },
+    });
+
+    return id;
+  }
+
+  /**
+   * Renames an existing stroke preset.
+   *
+   * Call inside a transaction to control the undo step label.
+   */
+  renameStrokePreset(presetId: string, name: string): void {
+    this.editCoordinator.push({
+      kind: "renameStrokePreset",
+      renameStrokePreset: { presetId, name },
+    });
+  }
+
+  /**
+   * Deletes a stroke preset.  Contours that referenced it keep their inline style
+   * but lose the preset link.
+   *
+   * Call inside a transaction to control the undo step label.
+   */
+  deleteStrokePreset(presetId: string): void {
+    this.editCoordinator.push({ kind: "deleteStrokePreset", deleteStrokePreset: { presetId } });
+  }
+
+  /** Re-applies linked metrics for one glyph or the whole font in one step. */
+  reapplyLinkedMetrics(
+    scope:
+      | { readonly kind: "glyph"; readonly glyphId: GlyphId; readonly sourceId: SourceId }
+      | { readonly kind: "font" },
+  ): void {
+    const intentScope: ReapplyLinkedMetricsScope =
+      scope.kind === "font"
+        ? { kind: "font" }
+        : { kind: "glyph", glyph: scope.glyphId, source: scope.sourceId };
+    this.editCoordinator.push({
+      kind: "reapplyLinkedMetrics",
+      reapplyLinkedMetrics: { scope: intentScope },
+    });
+  }
+
+  /** Why re-apply would change nothing for `scope`, or null when it may run. */
+  reapplyLinkedMetricsDisabledReason(
+    scope:
+      | { readonly kind: "glyph"; readonly glyphId: GlyphId; readonly sourceId: SourceId }
+      | { readonly kind: "font" },
+  ): string | null {
+    const engine = this.#store.engine;
+    track(engine.revision("layers"));
+    track(engine.revision("strokeMeasure"));
+    const intentScope: ReapplyLinkedMetricsScope =
+      scope.kind === "font"
+        ? { kind: "font" }
+        : { kind: "glyph", glyph: scope.glyphId, source: scope.sourceId };
+    return engine.reapplyLinkedMetricsDisabledReason(intentScope);
   }
 
   /**
@@ -2563,6 +2982,14 @@ const SWAP_EDIT_LABELS = {
   move: "Move Swap",
   remove: "Delete Swap",
 } as const satisfies Record<GlyphSwapEdit["kind"], string>;
+
+/** A design location as one string: axis ids in alphabetical order, each with its value. */
+function designLocationKey(location: DesignAxisLocation): string {
+  return [...location.entries()]
+    .sort(comparing(([axis]) => axis, alphabetical))
+    .map(([axis, value]) => `${axis}=${value}`)
+    .join(";");
+}
 
 /** Whether a read glyph has something to draw: a projection, or authored layers. */
 function hasGeometry(snapshot: GlyphSnapshot): boolean {

@@ -21,6 +21,7 @@ import {
   scenePoint,
   screenPoint,
   screenVector,
+  type LocalBounds,
   type LocalPoint,
   type ScreenPoint,
   type ScreenVector,
@@ -54,22 +55,25 @@ import {
   rotateSelection,
 } from "@/lib/editor/sidebarActions";
 import type { CommandId, EditorCommandId } from "@shared/commands";
-import { Bounds, Rect, type Point2D, type Rect2D } from "@shift/geo";
+import { Bounds, Mat, Rect, Vec2, type Point2D, type Rect2D } from "@shift/geo";
 import {
   mintAxisMappingId,
   mintGlyphId,
   mintLayerId,
   type AnchorId,
   type Axis,
+  type ContourId,
   type GlyphId,
   type GlyphName,
   type GlyphRecord,
+  type LayerId,
   type KerningGroupId,
   type KerningPosition,
   type MetricsKeySide,
   type MarkColor,
   type SidebearingEdit,
   type PointId,
+  type PointType,
   type SelectableId,
   type Axis as AxisRecord,
   type NamedInstance,
@@ -80,7 +84,13 @@ import {
   asNodeId,
 } from "@shift/types";
 import { segmentIdFor, type Contour } from "@shift/glyph-state";
-import type { SideLink } from "@shift/wasm/protocol";
+import type {
+  ContourPoints,
+  LiveStroke,
+  SideLink,
+  StrokeOutlinePreviews,
+  StrokePreset,
+} from "@shift/wasm/protocol";
 import type { SystemClipboard } from "@shift/editor/clipboard";
 import { createWorkspaceStack, type WorkspaceStack } from "./workspaceStack";
 import type {
@@ -89,6 +99,7 @@ import type {
   PositionGuide,
   SourceSelectionMode,
   TextRunNode,
+  TransformSelectionBounds,
 } from "@shift/editor/types";
 import type { FontSessionMode, WorkspaceDocumentState } from "@shared/workspace/lanes";
 import type { GlyphFixture, PointNames } from "./fixtures";
@@ -178,6 +189,85 @@ interface DragResult {
  * A stand-in canvas the renderer can draw to, 1000 by 800 screen pixels,
  * whose context records nothing until a caller replaces its methods.
  */
+/** One verb the test `Path2D` stub recorded; the only window tests have into a filled path's shape. */
+type RecordedPathCommand =
+  | { readonly type: "moveTo" | "lineTo"; readonly x: number; readonly y: number }
+  | {
+      readonly type: "quadraticCurveTo";
+      readonly cpx: number;
+      readonly cpy: number;
+      readonly x: number;
+      readonly y: number;
+    }
+  | {
+      readonly type: "bezierCurveTo";
+      readonly cpx1: number;
+      readonly cpy1: number;
+      readonly cpx2: number;
+      readonly cpy2: number;
+      readonly x: number;
+      readonly y: number;
+    }
+  | { readonly type: "closePath" }
+  | { readonly type: "addPath"; readonly path: Path2D }
+  | { readonly type: "constructor"; readonly path?: string | Path2D };
+
+/** The outlines `path` draws, rebuilt from the verbs the test `Path2D` stub recorded for it. */
+function contourPointsOf(path: Path2D): ContourPoints[] {
+  const contours: ContourPoints[] = [];
+  let coordinates: number[] = [];
+  let pointTypes: PointType[] = [];
+
+  const flush = (closed: boolean) => {
+    if (coordinates.length === 0) return;
+
+    contours.push({ coordinates, pointTypes, closed });
+    coordinates = [];
+    pointTypes = [];
+  };
+  const push = (x: number, y: number, pointType: PointType) => {
+    coordinates.push(x, y);
+    pointTypes.push(pointType);
+  };
+  const walk = (walked: Path2D) => {
+    const commands =
+      (walked as { readonly commands?: readonly RecordedPathCommand[] }).commands ?? [];
+    for (const command of commands) {
+      switch (command.type) {
+        case "constructor":
+          if (typeof command.path === "object") walk(command.path);
+          break;
+        case "addPath":
+          walk(command.path);
+          break;
+        case "moveTo":
+          flush(false);
+          push(command.x, command.y, "onCurve");
+          break;
+        case "lineTo":
+          push(command.x, command.y, "onCurve");
+          break;
+        case "quadraticCurveTo":
+          push(command.cpx, command.cpy, "offCurve");
+          push(command.x, command.y, "onCurve");
+          break;
+        case "bezierCurveTo":
+          push(command.cpx1, command.cpy1, "offCurve");
+          push(command.cpx2, command.cpy2, "offCurve");
+          push(command.x, command.y, "onCurve");
+          break;
+        case "closePath":
+          flush(true);
+          break;
+      }
+    }
+  };
+
+  walk(path);
+  flush(false);
+  return contours;
+}
+
 function recordingSurface() {
   const rect = { x: 0, y: 0, width: 1000, height: 800, left: 0, top: 0, right: 1000, bottom: 800 };
   const canvas = {
@@ -288,6 +378,9 @@ export class TestEditor extends Editor implements EditorTestSurface {
   readonly #outlineIds = new Map<Path2D, number>();
   /** How many times a preview said it is read-only, for {@link readOnlyNotices}. */
   #readOnlyNotices = 0;
+
+  /** The stroke problems the editor reported, for {@link strokeProblems}. */
+  readonly #strokeProblems: string[] = [];
   /** How many times the canvas text was laid out, once {@link textLayoutCount} first counts. */
   #textLayouts: { count: number } | null = null;
   /** The Kerning tool's uncommitted preview, discarded by {@link cancelGesture}. */
@@ -304,6 +397,7 @@ export class TestEditor extends Editor implements EditorTestSurface {
     super({ font: stack.font, fontStore: stack.store, clipboard, sessionMode });
     this.#stack = stack;
     this.on("previewMutationAttempted", () => this.#readOnlyNotices++);
+    this.on("strokeProblem", (message) => this.#strokeProblems.push(message));
     this.#tabs = new WindowTabs(this);
     this.#clipboard = clipboard;
     this.#reads = {
@@ -822,6 +916,93 @@ export class TestEditor extends Editor implements EditorTestSurface {
 
   setAdvanceWidth(width: number): void {
     this.setXAdvance(width);
+  }
+
+  setIncludeStrokeInMetrics(include: boolean): void {
+    this.font.setIncludeStrokeInMetrics(include);
+  }
+
+  reapplyLinkedMetrics(scope: "font" | "glyph"): void {
+    if (scope === "font") {
+      this.font.reapplyLinkedMetrics({ kind: "font" });
+      return;
+    }
+
+    const glyphId = this.glyphRecord?.id;
+    if (!glyphId) throw new Error("reapplyLinkedMetrics needs an open glyph");
+
+    const sourceId = this.activeSourceId;
+    if (!sourceId) throw new Error("reapplyLinkedMetrics needs an active source");
+
+    this.font.reapplyLinkedMetrics({ kind: "glyph", glyphId, sourceId });
+  }
+
+  transformPanelBounds(): TransformSelectionBounds | null {
+    return this.transformSelectionBounds();
+  }
+
+  skeletonSelectionBounds(): LocalBounds | null {
+    return this.selectionBounds();
+  }
+
+  setTransformPanelY(value: number): void {
+    this.#setTransformPanelInkMinimumY(value, "Set ink Y");
+  }
+
+  setTransformPanelHeight(height: number): void {
+    const bounds = this.transformSelectionBounds();
+    if (!bounds) throw new Error("setTransformPanelHeight needs transform bounds");
+
+    const position = this.positionSelection(this.selection.ids);
+    if (!position) throw new Error("setTransformPanelHeight needs a position selection");
+
+    const contourIds = this.#contourIdsForTransformBounds(bounds, position.layer.id);
+    const target = bounds.bounds.min.y + height;
+    position.layer.transaction("Set ink height", () =>
+      position.layer.fitInkBound(contourIds, "top", target),
+    );
+  }
+
+  setTransformPanelHeightUnchecked(height: number): void {
+    const bounds = this.transformSelectionBounds();
+    if (!bounds) throw new Error("setTransformPanelHeightUnchecked needs transform bounds");
+
+    const position = this.positionSelection(this.selection.ids);
+    if (!position) throw new Error("setTransformPanelHeightUnchecked needs a position selection");
+
+    const contourIds = this.#contourIdsForTransformBounds(bounds, position.layer.id);
+    const target = bounds.bounds.min.y + height;
+    position.layer.transaction("Set ink height", () =>
+      position.layer.fitInkBound(contourIds, "top", target),
+    );
+  }
+
+  #setTransformPanelInkMinimumY(value: number, label: string): void {
+    const bounds = this.transformSelectionBounds();
+    if (!bounds) throw new Error("setTransformPanelY needs transform bounds");
+
+    const component = this.componentTransformSelection(this.selection.ids);
+    if (component) {
+      const delta = Vec2.fromAxis("y", value - bounds.bounds.min.y);
+      component.layer.transformComponents(component, label, () => Mat.Translate(delta.x, delta.y));
+      return;
+    }
+
+    const position = this.positionSelection(this.selection.ids);
+    if (!position) throw new Error("setTransformPanelY needs a position selection");
+
+    position.layer.transaction(label, () =>
+      position.layer.moveSelectionTo(
+        [...position.targets.points],
+        { x: bounds.bounds.min.x, y: value },
+        bounds.bounds.min,
+      ),
+    );
+  }
+
+  #contourIdsForTransformBounds(bounds: TransformSelectionBounds, layerId: LayerId): ContourId[] {
+    if (bounds.contourIds.length > 0) return [...bounds.contourIds];
+    return [...this.font.liveStrokeContours(layerId)];
   }
 
   linkMetric(side: MetricsKeySide, key: string): string | null {
@@ -1623,6 +1804,26 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return this.#reads.editor.drawnOutline();
   }
 
+  dynamicStrokeContours(): readonly ContourId[] {
+    return this.font.liveStrokeContours(this.requireGlyphLayer().id);
+  }
+
+  strokeStyles(): readonly LiveStroke[] {
+    return this.font.liveStrokes(this.requireGlyphLayer().id);
+  }
+
+  strokePresets(): readonly StrokePreset[] {
+    return this.font.strokePresetsCell.peek();
+  }
+
+  strokePreset(selector: { readonly id: string }): StrokePreset | undefined {
+    return this.font.strokePresetsCell.peek().find((p) => p.id === selector.id);
+  }
+
+  strokeOutlinePreviews(): StrokeOutlinePreviews {
+    return this.font.strokeOutlinePreviews(this.requireGlyphLayer().id);
+  }
+
   drawnHandles(): readonly DrawnHandle[] {
     return this.#reads.editor.drawnHandles();
   }
@@ -1663,6 +1864,27 @@ export class TestEditor extends Editor implements EditorTestSurface {
     return { glyph: name(edited.glyphId), drawnAs: name(edited.drawnGlyphId) };
   }
 
+  glyphMetrics(): {
+    readonly lsb: number | null;
+    readonly rsb: number | null;
+    readonly skeletonLsb: number | null;
+    readonly skeletonRsb: number | null;
+    readonly fallbackTooltip: string | null;
+  } {
+    const model = this.sceneGlyphRenderModel;
+    if (!model) {
+      return {
+        lsb: null,
+        rsb: null,
+        skeletonLsb: null,
+        skeletonRsb: null,
+        fallbackTooltip: null,
+      };
+    }
+
+    return model.sidebearingsCell.peek();
+  }
+
   async drawnGlyph(glyph?: string): Promise<DrawnGlyph> {
     const model =
       glyph === undefined
@@ -1673,12 +1895,15 @@ export class TestEditor extends Editor implements EditorTestSurface {
           );
     if (!model) throw new Error("drawnGlyph needs an open glyph");
 
-    const { lsb, rsb } = model.sidebearings;
+    const { lsb, rsb, skeletonLsb, skeletonRsb, fallbackTooltip } = model.sidebearingsCell.peek();
     return {
       glyph: this.font.glyphName(model.glyphId) ?? model.glyphId,
       advanceWidth: model.xAdvance,
       bounds: plainBounds(model.bounds),
       sidebearings: { lsb, rsb },
+      skeletonLsb,
+      skeletonRsb,
+      fallbackTooltip,
       components: model.components.map((component) => ({
         glyph: this.font.glyphName(component.glyphId) ?? component.glyphId,
         dx: component.transform.e,
@@ -1710,6 +1935,10 @@ export class TestEditor extends Editor implements EditorTestSurface {
     });
   }
 
+  canvasFrameCount(): number {
+    return this.#canvasFrames.length;
+  }
+
   latestCanvasFrame(): CanvasFrame {
     const frame = this.#canvasFrames.at(-1);
     return {
@@ -1718,8 +1947,47 @@ export class TestEditor extends Editor implements EditorTestSurface {
     };
   }
 
+  drawnStrokeFills(): readonly ContourPoints[] {
+    const node = this.scene.first("glyph");
+    if (!node) return [];
+
+    const model = this.glyphForId(this.drawnGlyphId(node))?.renderModelAt(
+      this.externalLocationCell,
+      this.activeSourceIdCell,
+    );
+    const fills = model?.strokeFillsCell.peek();
+    if (!fills?.path) return [];
+
+    const filled = this.#canvasFrames.at(-1)?.fills.includes(fills.path) ?? false;
+    if (!filled) return [];
+
+    return fills.items.flatMap((item) => item.outlines);
+  }
+
+  canvasFills(): readonly ContourPoints[] {
+    return (this.#canvasFrames.at(-1)?.fills ?? []).flatMap((path) => contourPointsOf(path));
+  }
+
+  strokeFillsOutlined(): boolean {
+    const node = this.scene.first("glyph");
+    if (!node) return false;
+
+    const model = this.glyphForId(this.drawnGlyphId(node))?.renderModelAt(
+      this.externalLocationCell,
+      this.activeSourceIdCell,
+    );
+    const path = model?.strokeFillsCell.peek().path;
+    if (!path) return false;
+
+    return this.#canvasFrames.at(-1)?.strokes.includes(path) ?? false;
+  }
+
   readOnlyNotices(): number {
     return this.#readOnlyNotices;
+  }
+
+  strokeProblems(): readonly string[] {
+    return this.#strokeProblems;
   }
 
   drawnTextGlyphs(): (string | null)[] {
@@ -1736,9 +2004,13 @@ export class TestEditor extends Editor implements EditorTestSurface {
       this.externalLocationCell,
       this.activeSourceIdCell,
     );
+    const strokeFillPath = model?.strokeFillsCell.peek().path ?? null;
+    const componentFillPath = model?.componentStrokeFillsCell.peek().path ?? null;
     return {
       closed: model ? this.#outlineId(model.closedContoursPath) : null,
       open: model ? this.#outlineId(model.openContoursPath) : null,
+      strokeFills: strokeFillPath ? this.#outlineId(strokeFillPath) : null,
+      componentStrokeFills: componentFillPath ? this.#outlineId(componentFillPath) : null,
     };
   }
 

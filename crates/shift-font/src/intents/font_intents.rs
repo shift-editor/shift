@@ -82,6 +82,36 @@ impl FontLevelIntent for SetLanguages {
     }
 }
 
+/// Toggles whether metrics read the skeleton instead of the ink.
+///
+/// Stored under [`crate::stroke::IGNORE_STROKE_LIB_KEY`]; touches no layer.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct SetIgnoreStroke {
+    pub ignore: bool,
+}
+
+impl FontLevelIntent for SetIgnoreStroke {
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)> {
+        font.apply_set_ignore_stroke(self.ignore);
+        Ok((Vec::new(), Vec::new()))
+    }
+}
+
+/// Re-applies linked metrics for one glyph or the whole font in one step.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct ReapplyLinkedMetrics {
+    pub scope: crate::linked_metrics::ReapplyLinkedMetricsScope,
+}
+
+impl FontLevelIntent for ReapplyLinkedMetrics {
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)> {
+        let outcome = font.reapply_linked_metrics(self.scope)?;
+        Ok((outcome.moved_layers, Vec::new()))
+    }
+}
+
 /// Replaces the grid the font is drawn on, stored under [`crate::GRID_LIB_KEY`];
 /// `None` removes it, so the editor falls back to its default grid.
 #[derive(Clone, Debug)]
@@ -600,5 +630,69 @@ impl FontLevelIntent for SetMarkColor {
         let Self { glyph_ids, color } = self;
         font.set_mark_color(glyph_ids, *color)?;
         Ok((Vec::new(), glyph_ids.clone()))
+    }
+}
+
+// — Stroke preset intents ——————————————————————————————————————————————————
+
+use crate::stroke::OutlineStrokeStyle;
+
+/// Creates a new named stroke preset at the font level (stream A-stroke-presets).
+///
+/// The `id` must be unique across the font's presets; callers pre-mint it so
+/// the new preset's identity is known synchronously. Use `StrokePreset`'s
+/// `uuid`-based id minting or any other unique string.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct CreateStrokePreset {
+    /// Caller-minted stable identifier; must not match an existing preset.
+    pub id: String,
+    /// User-visible label.
+    pub name: String,
+    /// The style parameters to store.
+    pub style: OutlineStrokeStyle,
+}
+
+impl FontLevelIntent for CreateStrokePreset {
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)> {
+        font.apply_create_stroke_preset(self.id.clone(), self.name.clone(), self.style)?;
+        Ok((Vec::new(), Vec::new()))
+    }
+}
+
+/// Renames an existing stroke preset.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct RenameStrokePreset {
+    /// Stable id of the preset to rename.
+    pub preset_id: String,
+    /// New user-visible label.
+    pub name: String,
+}
+
+impl FontLevelIntent for RenameStrokePreset {
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)> {
+        font.apply_rename_stroke_preset(&self.preset_id, self.name.clone())?;
+        Ok((Vec::new(), Vec::new()))
+    }
+}
+
+/// Deletes an existing stroke preset.
+///
+/// Contours that referenced this preset by id keep their inline style but
+/// their `style_id` becomes an orphaned reference. It is the caller's
+/// responsibility to clear `style_id` from any contours that referenced the
+/// preset when that is desired.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct DeleteStrokePreset {
+    /// Stable id of the preset to delete.
+    pub preset_id: String,
+}
+
+impl FontLevelIntent for DeleteStrokePreset {
+    fn apply(&self, font: &mut Font) -> CoreResult<(Vec<LayerId>, Vec<GlyphId>)> {
+        font.apply_delete_stroke_preset(&self.preset_id)?;
+        Ok((Vec::new(), Vec::new()))
     }
 }

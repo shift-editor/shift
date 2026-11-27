@@ -1,7 +1,7 @@
 //! Evaluating a parsed key against one source of a font.
 
 use super::MetricsKeyError;
-use super::measure::Metric;
+use super::measure::{Metric, measure_contours};
 use super::syntax::{BinaryOp, Expr, Function, KeyBody, Measure, MeasureSide, ParsedMetricsKey};
 use crate::projection::FontProjection;
 use crate::{Font, GlyphId, MetricsKeySide, SourceId};
@@ -135,7 +135,17 @@ impl<'a> MetricsKeyEvaluator<'a> {
             .projection
             .glyph(target)?
             .ok_or_else(|| MetricsKeyError::NotDrawn(name.clone()))?;
-        resolved.measure(&name, metric, measure_ref.at)
+        let extent = self
+            .font
+            .glyph_extent_contours(&mut self.projection, target)
+            .map_err(MetricsKeyError::Font)?;
+        measure_contours(
+            &extent.contours,
+            &name,
+            metric,
+            measure_ref.at,
+            resolved.x_advance(),
+        )
     }
 }
 

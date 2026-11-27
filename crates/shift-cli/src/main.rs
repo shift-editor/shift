@@ -19,9 +19,13 @@ use authoring::{
     add_source, assign_kerning_group, copy_layer, create_font, create_kerning_group,
     delete_kerning_group, edit_glyph_axis, export_glyphs, font_info, move_layer, remove_glyph_axis,
     remove_instance, remove_kerning, remove_layer, rename_kerning_group, set_axis, set_font,
-    set_glyphs, set_instance, set_kerning, set_layer, set_mark_color, unassign_kerning_group,
+    set_glyphs, set_instance, set_kerning, set_layer, set_live_stroke, set_mark_color,
+    stroke_preview, unassign_kerning_group,
 };
-use authoring::{add_swap, move_swap, remove_swap, set_component_condition, set_swap};
+use authoring::{
+    add_swap, bake_stroke, move_swap, offset_contour, outline_stroke, remove_swap,
+    set_component_condition, set_swap,
+};
 use clap::Parser;
 use cli::{
     AxisCommand, Cli, Command, CompileArgs, ExportArgs, FontCommand, GlyphAxisCommand,
@@ -146,6 +150,25 @@ fn main() -> miette::Result<()> {
                     let json = args.mutation.json;
                     write_authoring_result(remove_glyph_axis(&args), json)
                 }
+            },
+            GlyphCommand::Stroke { command } => match command {
+                cli::StrokeCommand::OutlineStroke(args) => {
+                    let json = args.mutation.json;
+                    write_authoring_result(outline_stroke(&args), json)
+                }
+                cli::StrokeCommand::OffsetContour(args) => {
+                    let json = args.mutation.json;
+                    write_authoring_result(offset_contour(&args), json)
+                }
+                cli::StrokeCommand::SetLiveStroke(args) => {
+                    let json = args.mutation.json;
+                    write_authoring_result(set_live_stroke(&args), json)
+                }
+                cli::StrokeCommand::BakeStroke(args) => {
+                    let json = args.mutation.json;
+                    write_authoring_result(bake_stroke(&args), json)
+                }
+                cli::StrokeCommand::Preview(args) => write_stdout(&stroke_preview(&args)?),
             },
             GlyphCommand::Swap { command } => match command {
                 GlyphSwapCommand::Add(args) => {

@@ -4,8 +4,8 @@ use crate::import::collect_streamed_font;
 use crate::traits::FontReader;
 use norad::{Font as NoradFont, Line};
 use shift_font::{
-    Anchor, Component, Contour, FeatureData, Font, Glyph, GlyphId, GlyphLayer, Guideline, LayerId,
-    LibData, LibValue, PointType, SourceId, StandardMetrics, Transform,
+    Anchor, Component, Contour, ContourId, FeatureData, Font, Glyph, GlyphId, GlyphLayer,
+    Guideline, LayerId, LibData, LibValue, PointType, SourceId, StandardMetrics, Transform,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
@@ -68,7 +68,19 @@ impl UfoReader {
     }
 
     pub(crate) fn convert_contour(contour: &norad::Contour) -> Contour {
-        let mut shift_contour = Contour::new();
+        // Restore the contour id from the UFO identifier when present, so that
+        // a write→read round-trip is lossless and the stroke lib stays intact.
+        //
+        // Shift writes an identifier for every contour its stroke lib names (see
+        // `writer.rs`), so a stroke survives a round-trip through Shift.  Any other
+        // contour, from Shift or a third-party or legacy GLIF, has no identifier
+        // and gets a fresh id; any `com.shift.stroke` entries a GLIF carries for
+        // such a contour are pruned as orphans by `prune_orphan_stroke_lib_entries`.
+        // This is intentional: a contour nothing refers to has no id worth keeping.
+        let mut shift_contour = match contour.identifier() {
+            Some(id) => Contour::with_id(ContourId::from_raw(id.as_str())),
+            None => Contour::new(),
+        };
         let is_closed = contour.is_closed();
 
         for point in &contour.points {
@@ -238,7 +250,15 @@ impl UfoReader {
         if norad_glyph.height != 0.0 {
             layer.set_height(Some(norad_glyph.height));
         }
-        *layer.metrics_keys_mut() = take_metrics_keys(&mut norad_glyph.lib.clone()).layer;
+        let mut lib = norad_glyph.lib.clone();
+        *layer.metrics_keys_mut() = take_metrics_keys(&mut lib).layer;
+        // Strip mark colour — it belongs on the glyph, not the layer.
+        take_mark_color(&mut lib);
+        // Preserve any remaining lib keys (e.g. `com.shift.stroke`) on the layer
+        // so that a write → read round-trip is lossless.
+        if !lib.is_empty() {
+            *layer.lib_mut() = Self::convert_lib(&lib);
+        }
         layer
     }
 

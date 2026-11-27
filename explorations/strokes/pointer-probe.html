@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>C1.1 pointer probe</title>
+    <style>
+      :root {
+        color-scheme: dark light;
+        --bg: #14161a;
+        --panel: #1e2229;
+        --border: #343a45;
+        --text: #e8eaed;
+        --muted: #9aa3b2;
+        --accent: #6ea8fe;
+        --pad: #0d2b4a;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f4f5f7;
+          --panel: #fff;
+          --border: #d0d4dc;
+          --text: #1a1d21;
+          --muted: #5c6570;
+          --accent: #1a5fb4;
+          --pad: #dbeafe;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font: 14px/1.4 system-ui, -apple-system, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      header {
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      header h1 {
+        margin: 0 0 4px;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      main {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        padding: 12px 16px 16px;
+        max-width: 1200px;
+      }
+      @media (max-width: 900px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .panel h2 {
+        margin: 0;
+        padding: 10px 12px;
+        font-size: 13px;
+        font-weight: 600;
+        border-bottom: 1px solid var(--border);
+      }
+      #capture {
+        touch-action: none;
+        user-select: none;
+        height: 220px;
+        background: var(--pad);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        color: var(--muted);
+        padding: 16px;
+        cursor: crosshair;
+      }
+      #capture.active {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      th {
+        color: var(--muted);
+        font-weight: 500;
+      }
+      td.num {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      button {
+        font: inherit;
+        padding: 6px 10px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--text);
+        cursor: pointer;
+      }
+      button:hover {
+        border-color: var(--accent);
+      }
+      .log-wrap {
+        max-height: 320px;
+        overflow: auto;
+      }
+      .hint {
+        padding: 8px 12px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>C1.1 pointer probe</h1>
+      <p>
+        Log <code>pointerType</code>, <code>pressure</code>, <code>tiltX/Y</code>,
+        <code>twist</code>, <code>tangentialPressure</code>. Copy results into
+        <code>C1.1-pointer-audit.md</code>.
+      </p>
+    </header>
+    <main>
+      <section class="panel">
+        <h2>Capture area</h2>
+        <div id="capture" tabindex="0">
+          Pointer down / move / up here.<br />
+          Pen hover and tilt above the surface when testing tablets.
+        </div>
+        <div class="toolbar">
+          <button type="button" id="btn-freeze">Freeze log</button>
+          <button type="button" id="btn-clear">Clear log</button>
+          <button type="button" id="btn-copy">Copy last row</button>
+        </div>
+        <p class="hint" id="status">Events: 0 · frozen: off</p>
+      </section>
+      <section class="panel">
+        <h2>Live (last pointerdown → move/up)</h2>
+        <table>
+          <tbody id="live-body">
+            <tr>
+              <th>pointerType</th>
+              <td class="num" id="live-type">—</td>
+            </tr>
+            <tr>
+              <th>pressure</th>
+              <td class="num" id="live-pressure">—</td>
+            </tr>
+            <tr>
+              <th>tiltX</th>
+              <td class="num" id="live-tiltX">—</td>
+            </tr>
+            <tr>
+              <th>tiltY</th>
+              <td class="num" id="live-tiltY">—</td>
+            </tr>
+            <tr>
+              <th>twist</th>
+              <td class="num" id="live-twist">—</td>
+            </tr>
+            <tr>
+              <th>tangentialPressure</th>
+              <td class="num" id="live-tangential">—</td>
+            </tr>
+            <tr>
+              <th>buttons</th>
+              <td class="num" id="live-buttons">—</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="panel" style="grid-column: 1 / -1">
+        <h2>Event log (newest first, max 80)</h2>
+        <div class="log-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>type</th>
+                <th>pointerType</th>
+                <th>pressure</th>
+                <th>tiltX</th>
+                <th>tiltY</th>
+                <th>twist</th>
+                <th>tang.</th>
+                <th>btn</th>
+              </tr>
+            </thead>
+            <tbody id="log-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+    <script>
+      const capture = document.getElementById("capture");
+      const logBody = document.getElementById("log-body");
+      const status = document.getElementById("status");
+
+      const liveIds = {
+        type: "live-type",
+        pressure: "live-pressure",
+        tiltX: "live-tiltX",
+        tiltY: "live-tiltY",
+        twist: "live-twist",
+        tangential: "live-tangential",
+        buttons: "live-buttons",
+      };
+
+      let frozen = false;
+      let eventCount = 0;
+      let lastRow = null;
+      const maxRows = 80;
+
+      const fmt = (n) =>
+        typeof n === "number" && Number.isFinite(n) ? n.toFixed(3) : "—";
+
+      function pickFields(e) {
+        return {
+          type: e.type,
+          pointerType: e.pointerType,
+          pressure: e.pressure,
+          tiltX: e.tiltX,
+          tiltY: e.tiltY,
+          twist: e.twist,
+          tangentialPressure: e.tangentialPressure,
+          buttons: e.buttons,
+        };
+      }
+
+      function updateLive(row) {
+        document.getElementById(liveIds.type).textContent = row.pointerType;
+        document.getElementById(liveIds.pressure).textContent = fmt(
+          row.pressure
+        );
+        document.getElementById(liveIds.tiltX).textContent = fmt(row.tiltX);
+        document.getElementById(liveIds.tiltY).textContent = fmt(row.tiltY);
+        document.getElementById(liveIds.twist).textContent = fmt(row.twist);
+        document.getElementById(liveIds.tangential).textContent = fmt(
+          row.tangentialPressure
+        );
+        document.getElementById(liveIds.buttons).textContent = String(
+          row.buttons
+        );
+      }
+
+      function prependLog(row) {
+        const tr = document.createElement("tr");
+        const cells = [
+          row.type,
+          row.pointerType,
+          fmt(row.pressure),
+          fmt(row.tiltX),
+          fmt(row.tiltY),
+          fmt(row.twist),
+          fmt(row.tangentialPressure),
+          String(row.buttons),
+        ];
+        for (const text of cells) {
+          const td = document.createElement("td");
+          td.textContent = text;
+          if (text !== row.type && text !== row.pointerType) {
+            td.className = "num";
+          }
+          tr.appendChild(td);
+        }
+        logBody.prepend(tr);
+        while (logBody.children.length > maxRows) {
+          logBody.removeChild(logBody.lastChild);
+        }
+      }
+
+      function onPointer(e) {
+        if (frozen && e.type === "pointermove") {
+          return;
+        }
+        capture.classList.add("active");
+        const row = pickFields(e);
+        lastRow = row;
+        updateLive(row);
+        if (!frozen || e.type !== "pointermove") {
+          prependLog(row);
+          eventCount += 1;
+          status.textContent = `Events: ${eventCount} · frozen: ${frozen ? "on" : "off"}`;
+        }
+        if (e.type === "pointerup" || e.type === "pointercancel") {
+          capture.classList.remove("active");
+        }
+      }
+
+      for (const type of [
+        "pointerdown",
+        "pointermove",
+        "pointerup",
+        "pointercancel",
+        "pointerenter",
+        "pointerleave",
+      ]) {
+        capture.addEventListener(type, onPointer);
+      }
+
+      document.getElementById("btn-freeze").addEventListener("click", () => {
+        frozen = !frozen;
+        status.textContent = `Events: ${eventCount} · frozen: ${frozen ? "on" : "off"}`;
+      });
+
+      document.getElementById("btn-clear").addEventListener("click", () => {
+        logBody.replaceChildren();
+        eventCount = 0;
+        status.textContent = `Events: ${eventCount} · frozen: ${frozen ? "on" : "off"}`;
+      });
+
+      document.getElementById("btn-copy").addEventListener("click", async () => {
+        if (!lastRow) {
+          return;
+        }
+        const line = [
+          lastRow.pointerType,
+          lastRow.pressure,
+          lastRow.tiltX,
+          lastRow.tiltY,
+          lastRow.twist,
+          lastRow.tangentialPressure,
+        ]
+          .map((v) => (typeof v === "number" ? v : v))
+          .join("\t");
+        try {
+          await navigator.clipboard.writeText(line);
+          status.textContent = `Copied last row · Events: ${eventCount} · frozen: ${frozen ? "on" : "off"}`;
+        } catch {
+          status.textContent =
+            "Clipboard blocked — select from log table manually";
+        }
+      });
+
+      capture.focus();
+    </script>
+  </body>
+</html>

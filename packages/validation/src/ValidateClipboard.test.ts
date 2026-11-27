@@ -86,6 +86,31 @@ describe("ValidateClipboard", () => {
       };
       expect(ValidateClipboard.isShiftContent(content)).toBe(false);
     });
+
+    it("accepts a contour carrying a valid stroke", () => {
+      const content = {
+        contours: [
+          {
+            ...validContour(),
+            stroke: { width: 40, cap: "round", join: "miter", miterLimit: 4, position: 0 },
+          },
+        ],
+      };
+      expect(ValidateClipboard.isShiftContent(content)).toBe(true);
+    });
+
+    it("rejects a contour carrying a malformed stroke", () => {
+      const malformed = [
+        { width: 0, cap: "round", join: "round", miterLimit: 4, position: 0 },
+        { width: 40, cap: "pointy", join: "round", miterLimit: 4, position: 0 },
+        { width: 40, cap: "round", join: "round", miterLimit: 4 },
+        "round",
+      ];
+      for (const stroke of malformed) {
+        const content = { contours: [{ ...validContour(), stroke }] };
+        expect(ValidateClipboard.isShiftContent(content)).toBe(false);
+      }
+    });
   });
 
   describe("isClipboardPayload", () => {

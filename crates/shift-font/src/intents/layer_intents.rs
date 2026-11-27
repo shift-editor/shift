@@ -1,6 +1,7 @@
 //! Intents that edit one existing layer.
 
 use super::*;
+use crate::stroke::{LayerStrokeLib, OutlineStrokeStyle, StrokeJoin};
 
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
@@ -974,6 +975,194 @@ impl LayerIntent for ApplyBooleanOp {
     }
 }
 
+/// Attaches live stroke metadata to skeleton contours (stream A2.1).
+///
+/// When `preset_id` is `Some`, the contours' stroke lib entries record it as
+/// `style_id`, linking them to a named font-level preset. When `None`, any
+/// previous preset link is cleared (the style was manually edited).
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct SetLiveStroke {
+    pub layer_id: LayerId,
+    pub contour_ids: Vec<ContourId>,
+    pub style: OutlineStrokeStyle,
+    /// A preset id to link this stroke to, or `None` to clear any preset link.
+    pub preset_id: Option<String>,
+}
+
+impl LayerIntent for SetLiveStroke {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            contour_ids,
+            style,
+            preset_id,
+        } = self;
+        [style.width, style.miter_limit, style.position]
+            .require_finite(Coordinates::StrokeOutline)?;
+
+        let before = font.layer_snapshot(*layer_id)?;
+        {
+            let layer = font.require_layer_mut(*layer_id)?;
+            layer.set_live_stroke_contours(contour_ids, *style)?;
+            // Record the preset link (or clear it) in the stroke lib.
+            if let Some(id) = preset_id {
+                let mut stroke_lib = layer.stroke_lib().unwrap_or_else(|| LayerStrokeLib {
+                    contours: Default::default(),
+                });
+                for contour_id in contour_ids {
+                    if let Some(entry) = stroke_lib.contours.get_mut(&contour_id.to_string()) {
+                        entry.style_id = Some(id.clone());
+                    }
+                }
+                layer.set_stroke_lib(&stroke_lib);
+            }
+        }
+        font.reindex_layer(*layer_id, &before)?;
+        Ok(())
+    }
+}
+
+/// Drops the live stroke from contours, keeping them as plain contours (stream A3.1).
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct RemoveLiveStroke {
+    pub layer_id: LayerId,
+    pub contour_ids: Vec<ContourId>,
+}
+
+impl LayerIntent for RemoveLiveStroke {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            contour_ids,
+        } = self;
+
+        let before = font.layer_snapshot(*layer_id)?;
+        {
+            let layer = font.require_layer_mut(*layer_id)?;
+            layer.remove_live_stroke_contours(contour_ids)?;
+        }
+        font.reindex_layer(*layer_id, &before)?;
+        Ok(())
+    }
+}
+
+/// Expands live stroke skeletons into fill contours (stream A2.2).
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct BakeStrokeOutlines {
+    pub layer_id: LayerId,
+    pub contour_ids: Vec<ContourId>,
+    pub tolerance: f64,
+}
+
+impl LayerIntent for BakeStrokeOutlines {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            contour_ids,
+            tolerance,
+        } = self;
+        [*tolerance].require_finite(Coordinates::StrokeOutline)?;
+
+        let before = font.layer_snapshot(*layer_id)?;
+        {
+            let layer = font.require_layer_mut(*layer_id)?;
+            layer.bake_stroke_outlines(contour_ids, *tolerance)?;
+        }
+        font.reindex_layer(*layer_id, &before)?;
+        Ok(())
+    }
+}
+
+/// Bakes constant-width stroke outlines from skeleton contours (stream A1.1).
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct OutlineStroke {
+    pub layer_id: LayerId,
+    pub contour_ids: Vec<ContourId>,
+    pub style: OutlineStrokeStyle,
+    pub tolerance: f64,
+}
+
+impl LayerIntent for OutlineStroke {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            contour_ids,
+            style,
+            tolerance,
+        } = self;
+        [style.width, style.miter_limit, style.position, *tolerance]
+            .require_finite(Coordinates::StrokeOutline)?;
+
+        let before = font.layer_snapshot(*layer_id)?;
+        {
+            let layer = font.require_layer_mut(*layer_id)?;
+            layer.outline_stroke_contours(contour_ids, *style, *tolerance)?;
+        }
+        font.reindex_layer(*layer_id, &before)?;
+        Ok(())
+    }
+}
+
+/// Constant normal offset on one open or closed contour (stream A1.2).
+///
+/// A negative `distance` offsets to the left of the path direction, a positive one to the right.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "pack", derive(pack::Pack))]
+pub struct OffsetContour {
+    pub layer_id: LayerId,
+    pub contour_id: ContourId,
+    pub distance: f64,
+    pub join: StrokeJoin,
+    pub miter_limit: f64,
+    pub tolerance: f64,
+}
+
+impl LayerIntent for OffsetContour {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        let Self {
+            layer_id,
+            contour_id,
+            distance,
+            join,
+            miter_limit,
+            tolerance,
+        } = self;
+        [*distance, *miter_limit, *tolerance].require_finite(Coordinates::StrokeOffset)?;
+
+        let before = font.layer_snapshot(*layer_id)?;
+        {
+            let layer = font.require_layer_mut(*layer_id)?;
+            layer.offset_contour(contour_id, *distance, *join, *miter_limit, *tolerance)?;
+        }
+        font.reindex_layer(*layer_id, &before)?;
+        Ok(())
+    }
+}
+
 /// Deletes points and reconnects what survives: see [`GlyphLayer::delete_points`].
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "pack", derive(pack::Pack))]
@@ -1178,6 +1367,20 @@ pub struct ShiftSidebearing {
     pub layer_id: LayerId,
     pub sidebearing: Sidebearing,
     pub delta: f64,
+}
+
+impl LayerIntent for FitInkBound {
+    fn layer_id(&self) -> &LayerId {
+        &self.layer_id
+    }
+
+    fn structural(&self) -> bool {
+        false
+    }
+
+    fn apply(&self, font: &mut Font) -> CoreResult<()> {
+        crate::stroke::ink_bounds::apply_fit_ink_bound(font, self)
+    }
 }
 
 impl LayerIntent for ShiftSidebearing {

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Skeleton centerline only. Same geometry as open-line.json -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120">
+  <path id="skeleton" fill="none" stroke="#888" d="M 20 60 L 180 60" />
+</svg>

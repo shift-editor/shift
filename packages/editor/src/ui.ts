@@ -10,6 +10,7 @@ export { FloatingToolbar, type FloatingToolbarProps } from "./ui/FloatingToolbar
 export { TOOLBAR_DOCKS } from "./ui/toolbarPose";
 export type { ToolbarDock } from "./types/toolbar";
 export { GlyphSidebar, type GlyphSidebarHost, type GlyphSidebarProps } from "./ui/GlyphSidebar";
+export { GlyphReapplyMetrics } from "./ui/GlyphReapplyMetrics";
 export { ShiftEditor, type ShiftEditorProps } from "./ui/ShiftEditor";
 export { ShiftEditorChrome, type ShiftEditorChromeProps } from "./ui/ShiftEditorChrome";
 export { ShiftEditorRoot, type ShiftEditorRootProps } from "./ui/ShiftEditorRoot";

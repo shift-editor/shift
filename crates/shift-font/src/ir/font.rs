@@ -22,6 +22,7 @@ use crate::metrics::{
 use crate::metrics_keys::{MetricsKey, MetricsKeySide, MetricsKeys};
 use crate::named_instance::{NamedInstance, validate_named_instances};
 use crate::source::{Source, SourceList};
+use crate::stroke::ink::InkMeasureRuntime;
 use crate::{AxisLabelId, GlyphName, NamedInstanceId};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -116,6 +117,7 @@ pub struct FontCopyId(std::sync::Weak<FontState>);
 struct FontState {
     data: FontData,
     index: FontIndex,
+    ink_measure: InkMeasureRuntime,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -147,7 +149,11 @@ struct FontData {
 impl FontState {
     fn from_data(data: FontData) -> CoreResult<Self> {
         let index = FontIndex::from_glyphs(&data.glyphs)?;
-        Ok(Self { data, index })
+        Ok(Self {
+            data,
+            index,
+            ink_measure: InkMeasureRuntime::default(),
+        })
     }
 
     fn rebuild_index(&mut self) -> CoreResult<()> {
@@ -213,12 +219,17 @@ impl Default for Font {
                     images: BinaryData::new(),
                 },
                 index: FontIndex::default(),
+                ink_measure: InkMeasureRuntime::default(),
             }),
         }
     }
 }
 
 impl Font {
+    pub(crate) fn ink_measure_runtime(&self) -> &InkMeasureRuntime {
+        &self.state.ink_measure
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -246,6 +257,7 @@ impl Font {
                     images: BinaryData::new(),
                 },
                 index: FontIndex::default(),
+                ink_measure: InkMeasureRuntime::default(),
             }),
         }
     }

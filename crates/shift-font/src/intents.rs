@@ -36,6 +36,8 @@ mod glyph_intents;
 mod layer_intents;
 mod swap_intents;
 
+pub use crate::stroke::ink_bounds::FitInkBound;
+
 pub use font_intents::*;
 pub use glyph_axis_intents::*;
 pub use glyph_intents::*;
@@ -155,6 +157,11 @@ font_intents! {
         TransformLayer,
         SetXAdvance,
         ApplyBooleanOp,
+        SetLiveStroke,
+        RemoveLiveStroke,
+        BakeStrokeOutlines,
+        OutlineStroke,
+        OffsetContour,
         DeletePoints,
         SplitSegment,
         UpgradeLineToCubic,
@@ -165,12 +172,14 @@ font_intents! {
         ShiftSidebearing,
         SetLayerMetricsKey,
         ReplaceGlyphLayerContent,
+        FitInkBound,
     }
     font {
         CreateGlyph,
         UpdateGlyph,
         UpdateFontMetadata,
         SetLanguages,
+        SetIgnoreStroke,
         SetGrid,
         CreateAxis,
         UpdateAxis,
@@ -198,6 +207,7 @@ font_intents! {
         DuplicateGlyphs,
         DecomposeGlyphs,
         SetSidebearings,
+        ReapplyLinkedMetrics,
         CreateGlyphAxis,
         EditGlyphAxis,
         CreateLocatedGlyphLayer,
@@ -208,6 +218,9 @@ font_intents! {
         AddGlyphSwap,
         EditGlyphSwap,
         SetComponentCondition,
+        CreateStrokePreset,
+        RenameStrokePreset,
+        DeleteStrokePreset,
     }
 }
 
@@ -246,6 +259,8 @@ enum Coordinates {
     PointTransform,
     SidebearingDelta,
     LayerLocation,
+    StrokeOutline,
+    StrokeOffset,
 }
 
 impl Coordinates {
@@ -263,6 +278,8 @@ impl Coordinates {
             Self::PointTransform => "point transform",
             Self::SidebearingDelta => "sidebearing delta",
             Self::LayerLocation => "layer location",
+            Self::StrokeOutline => "stroke outline",
+            Self::StrokeOffset => "stroke offset",
         }
     }
 }

@@ -27,6 +27,13 @@ import {
   type RevisedNode,
   type SceneIntent,
   type TextRun,
+  type InkSnapContourPoints,
+  type LayerExtent,
+  type LiveStroke,
+  type ReapplyLinkedMetricsScope,
+  type SelectionExtentRequest,
+  type StrokeOutlinePreviews,
+  type StrokePreset,
 } from "@shift/wasm/protocol";
 import { batch, signal, type Signal, type WritableSignal } from "../signals";
 import {
@@ -452,6 +459,51 @@ export class SessionEngine implements FontEngine {
     // Loading a glyph changes nothing a reader holds, so no revision changes.
     session.preload([glyphId]);
     return session.counterparts(reference, target, ids);
+  }
+
+  strokeOutlinePreviews(layerId: LayerId, tolerance?: number): StrokeOutlinePreviews {
+    const session = this.#require();
+    return session.strokeOutlinePreviews(layerId, tolerance);
+  }
+
+  strokeOutlinePreviewsAt(
+    glyphId: GlyphId,
+    location: DesignAxisLocation,
+    tolerance?: number,
+  ): StrokeOutlinePreviews {
+    const session = this.#require();
+    // Loading a glyph changes nothing a reader holds, so no revision changes:
+    // this read is tracked by computeds, which a bump would re-run forever.
+    session.preload([glyphId]);
+    return session.strokeOutlinePreviewsAt(glyphId, location, tolerance);
+  }
+
+  liveStrokes(layerId: LayerId): readonly LiveStroke[] {
+    return this.#require().liveStrokes(layerId);
+  }
+
+  layerExtent(layerId: LayerId): LayerExtent {
+    return this.#require().layerExtent(layerId);
+  }
+
+  selectionExtent(request: SelectionExtentRequest): LayerExtent {
+    return this.#require().selectionExtent(request);
+  }
+
+  includeStrokeInMetrics(): boolean {
+    return this.#require().includeStrokeInMetrics();
+  }
+
+  strokePresets(): readonly StrokePreset[] {
+    return this.#require().strokePresets();
+  }
+
+  reapplyLinkedMetricsDisabledReason(scope: ReapplyLinkedMetricsScope): string | null {
+    return this.#require().reapplyLinkedMetricsDisabledReason(scope);
+  }
+
+  inkSnapPoints(layerId: LayerId): readonly InkSnapContourPoints[] {
+    return this.#require().inkSnapPoints(layerId);
   }
 
   newAnchorName(layerIds: readonly LayerId[]): string {
