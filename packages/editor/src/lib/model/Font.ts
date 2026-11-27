@@ -1654,7 +1654,7 @@ export class Font {
    * each drawing's geometry, the engine's stroke lists) subscribe it to every
    * change that could give the closure a stroke.
    */
-  #hasLiveStrokeInClosure(layerId: LayerId): boolean {
+  hasLiveStrokeInClosure(layerId: LayerId): boolean {
     track(this.#directoryCell);
     const glyphId = this.glyphIdForLayer(layerId);
     const glyph = glyphId ? this.#glyph(glyphId) : null;
@@ -1809,7 +1809,7 @@ export class Font {
         track(this.#includeStrokeInMetricsCell);
         if (!this.#includeStrokeInMetricsCell.value) return skeletonOnly;
 
-        if (!this.#hasLiveStrokeInClosure(layerId)) {
+        if (!this.hasLiveStrokeInClosure(layerId)) {
           return skeletonOnly;
         }
 

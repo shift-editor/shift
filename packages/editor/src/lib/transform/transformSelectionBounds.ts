@@ -8,6 +8,7 @@ import { localBounds } from "../editor/spaces";
 import type {
   TransformBoundsMeasure,
   TransformSelectionBounds,
+  TransformSelectionMeasure,
 } from "../../types/transformSelectionBounds";
 
 type ContourSelection = "partial" | "wholeLayer" | { contours: ContourId[] };
@@ -17,6 +18,16 @@ export function transformSelectionBounds(
   editor: Editor,
   ids = editor.selection.ids,
 ): TransformSelectionBounds | null {
+  const measured = measureSelection(editor, ids);
+  if (!measured) return null;
+
+  return { ...measured, stroked: editor.font.hasLiveStrokeInClosure(measured.layerId) };
+}
+
+function measureSelection(
+  editor: Editor,
+  ids: readonly SelectableId[],
+): TransformSelectionMeasure | null {
   const position = editor.positionSelection(ids);
   if (!position) {
     const componentSelection = editor.componentTransformSelection(ids);
@@ -102,7 +113,7 @@ function wholeLayerTransformBounds(
   editor: Editor,
   layer: GlyphLayer,
   ids: readonly SelectableId[],
-): TransformSelectionBounds | null {
+): TransformSelectionMeasure | null {
   const layerComponents = layer.components;
   if (layerComponents.length === 0) return null;
 

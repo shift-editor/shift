@@ -3229,6 +3229,9 @@ export class Glyph {
    * skeleton there, named by the reference layer's contour ids.
    */
   strokeFillsAtLocation(location: ExternalAxisLocation): StrokeFills {
+    // Most glyphs, and every glyph of a preview, have no stroke: ask the engine only for one that does.
+    if (!this.hasDynamicStroke()) return NO_STROKE_FILLS;
+
     return this.#strokeFillsAt(this.id, this.#space.toDesign(location));
   }
 

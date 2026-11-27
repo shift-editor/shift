@@ -6,8 +6,8 @@ use shift_backends::font_loader::FontLoader;
 use shift_font::{
     Contour, ContourId, Font, Glyph, GlyphLayer, LayerId, PointType,
     stroke::{
-        ContourStrokeEntry, ContourStrokeRole, LayerStrokeLib, OutlineStrokeStyle, StrokeCap,
-        StrokeJoin, STROKE_LIB_KEY,
+        ContourStrokeEntry, ContourStrokeRole, LayerStrokeLib, OutlineStrokeStyle, STROKE_LIB_KEY,
+        StrokeCap, StrokeJoin,
     },
 };
 
@@ -63,7 +63,7 @@ fn live_stroke_font() -> (Font, ContourId) {
     layer.add_contour(contour);
     let contour_id = layer.contours_iter().next().unwrap().id();
     layer
-        .set_live_stroke_contours(&[contour_id.clone()], style)
+        .set_live_stroke_contours(std::slice::from_ref(&contour_id), style)
         .expect("set live stroke");
     glyph.set_layer(layer);
     font.insert_glyph(glyph).unwrap();
@@ -118,7 +118,11 @@ fn live_stroke_survives_ufo_round_trip() {
     // the inline style was serialised, the contour-id round-trip let the remap succeed, and
     // the stroke lib survived `prune_orphan_stroke_lib_entries`.
     let live = layer.live_strokes();
-    assert_eq!(live.len(), 1, "one contour must carry a live stroke after reload");
+    assert_eq!(
+        live.len(),
+        1,
+        "one contour must carry a live stroke after reload"
+    );
 
     let stroke = &live[0];
 
@@ -146,9 +150,50 @@ fn live_stroke_survives_ufo_round_trip() {
             .map(|f| f.error.to_string())
             .collect::<Vec<_>>()
     );
-    assert_eq!(read.solved.len(), 1, "one contour must produce a solved outline");
+    assert_eq!(
+        read.solved.len(),
+        1,
+        "one contour must produce a solved outline"
+    );
     assert!(
         !read.solved[0].outlines.is_empty(),
         "solved outline must have at least one subpath"
+    );
+}
+
+fn written_glif(font: &Font) -> String {
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let output_path = temp_dir.path().join("identifiers.ufo");
+    FontLoader::new()
+        .write_font(font, output_path.to_str().unwrap())
+        .expect("UFO write");
+    std::fs::read_to_string(output_path.join("glyphs").join("A_.glif")).expect("written glif")
+}
+
+/// Only a contour the stroke lib names is written with an identifier: a plain contour has no
+/// stroke to keep, and a fresh random identifier would make every export of the same font
+/// differ.
+#[test]
+fn writes_an_identifier_only_for_contours_the_stroke_lib_names() {
+    let (stroked_font, _) = live_stroke_font();
+    assert!(
+        written_glif(&stroked_font).contains("identifier=\"contour_"),
+        "a stroked contour keeps its id across the round-trip"
+    );
+
+    let mut plain_font = Font::new();
+    let source_id = plain_font.default_source_id().unwrap();
+    let mut glyph = Glyph::with_unicode("A", 0x0041);
+    let mut layer = GlyphLayer::with_width(LayerId::from_raw("A_regular"), source_id, 600.0);
+    let mut contour = Contour::new();
+    contour.add_point(50.0, 50.0, PointType::OnCurve, false);
+    contour.add_point(50.0, 150.0, PointType::OnCurve, false);
+    layer.add_contour(contour);
+    glyph.set_layer(layer);
+    plain_font.insert_glyph(glyph).unwrap();
+
+    assert!(
+        !written_glif(&plain_font).contains("identifier="),
+        "a plain contour is written without an identifier"
     );
 }

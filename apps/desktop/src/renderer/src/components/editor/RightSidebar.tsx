@@ -49,8 +49,6 @@ export const RightSidebar = () => {
   const severalGlyphs = tagTargetsOf(pathname, gridSelection.ids, null).length > 1;
   const hasAnchorSelection = selection.ids.some(isAnchorId);
   const hasBooleanSelection = !textActive && selection.ids.filter(isContourId).length >= 2;
-  const shownGlyph = useSignalState(editor.scene.onlyCell("glyph"))?.glyphId ?? null;
-  const activeSourceId = useSignalState(editor.activeSourceIdCell);
 
   return (
     <GlyphSidebar
@@ -75,11 +73,7 @@ export const RightSidebar = () => {
         ),
         glyphHeading: (
           <span className="flex items-center gap-0.5">
-            <GlyphReapplyMetrics
-              font={session.font}
-              glyphId={shownGlyph}
-              sourceId={activeSourceId}
-            />
+            <GlyphReapplyMetrics editor={editor} />
             <GlyphTagButton />
           </span>
         ),

@@ -28,10 +28,10 @@ pub use ink_fit::{InkBoxEdge, InkEdgeFitError, InkEdgeFitRequest, InkEdgeFitResu
 pub use ink_snap::InkSnapContour;
 pub use layer_edit::{contour_bounds_oracle, contour_skeleton_path, contours_closed_oracle};
 pub use layer_lib::{ContourStrokeEntry, ContourStrokeRole, LayerStrokeLib, STROKE_LIB_KEY};
-pub use preset_lib::{FontStrokePresetLib, StrokePreset, STROKE_PRESETS_LIB_KEY};
 pub use live_stroke::{
     LiveStroke, StrokeContourFailure, StrokeOutlinePoints, StrokeOutlinePreview, StrokeOutlineRead,
     preview_bounds,
 };
+pub use preset_lib::{FontStrokePresetLib, STROKE_PRESETS_LIB_KEY, StrokePreset};
 pub use solve_cache::StrokeOutlineCache;
 pub use style::{OutlineStrokeStyle, StrokeCap, StrokeJoin};

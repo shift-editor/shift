@@ -702,7 +702,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id.clone()],
             style: OutlineStrokeStyle::round(20.0),
-                preset_id: None,
+            preset_id: None,
         }))
         .unwrap();
 

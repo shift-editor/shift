@@ -160,7 +160,17 @@ describe("stroke metrics transform bounds", () => {
       const transform = editor.transformPanelBounds();
       const skeleton = editor.skeletonSelectionBounds();
       expect(transform?.measure).toBe("skeleton");
+      expect(transform?.stroked).toBe(true);
       expect(Bounds.equals(transform!.bounds, skeleton)).toBe(true);
+    });
+
+    it("does not call the skeleton a skeleton on a glyph with no stroke", async () => {
+      await editor.openGlyph("o");
+      const [contour] = await editor.outline();
+      editor.select([contour!.points[0]!.id as PointId]);
+      await editor.settle();
+
+      expect(editor.transformPanelBounds()).toMatchObject({ measure: "skeleton", stroked: false });
     });
   });
 

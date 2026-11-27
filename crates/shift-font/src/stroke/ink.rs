@@ -608,7 +608,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(40.0),
-                preset_id: None,
+            preset_id: None,
         }))
         .unwrap();
 
@@ -658,7 +658,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(40.0),
-                preset_id: None,
+            preset_id: None,
         }))
         .unwrap();
 
@@ -710,7 +710,7 @@ mod tests {
             layer_id,
             contour_ids,
             style: OutlineStrokeStyle::round(20.0),
-                preset_id: None,
+            preset_id: None,
         }))
         .unwrap();
 
@@ -746,7 +746,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(40.0),
-                preset_id: None,
+            preset_id: None,
         }))
         .unwrap();
 
@@ -812,7 +812,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(24.0),
-                preset_id: None,
+            preset_id: None,
         }))
         .unwrap();
 
@@ -851,7 +851,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(40.0),
-                preset_id: None,
+            preset_id: None,
         }))
         .unwrap();
 
@@ -991,7 +991,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id.clone()],
             style: OutlineStrokeStyle::round(40.0),
-                preset_id: None,
+            preset_id: None,
         }))
         .unwrap();
         let narrow = font.layer_extent(layer_id).unwrap();
@@ -999,7 +999,7 @@ mod tests {
             layer_id,
             contour_ids: vec![contour_id],
             style: OutlineStrokeStyle::round(50.0),
-                preset_id: None,
+            preset_id: None,
         }))
         .unwrap();
         let wide = font.layer_extent(layer_id).unwrap();

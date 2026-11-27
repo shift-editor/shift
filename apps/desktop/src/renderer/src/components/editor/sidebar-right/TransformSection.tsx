@@ -148,7 +148,9 @@ export const TransformSection = () => {
   if (editable) {
     shownBounds = transformBounds ? transformBounds.bounds : selectionBounds;
   }
-  const skeletonLabel = boundsMeasure === "skeleton" && includeStrokeInMetrics ? "skeleton" : null;
+  const namesSkeleton =
+    transformBounds?.stroked === true && boundsMeasure === "skeleton" && includeStrokeInMetrics;
+  const skeletonLabel = namesSkeleton ? "skeleton" : null;
 
   const handleDimensionsChange = useCallback(
     (dimension: "width" | "height", value: number) => {

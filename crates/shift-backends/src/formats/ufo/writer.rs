@@ -7,6 +7,7 @@ use shift_font::{
     Contour, Font, Glyph, GlyphLayer, Guideline, LibData, LibValue, Point, PointType,
     StandardMetrics,
 };
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use super::glyph_order::{GLYPH_ORDER_KEY, glyph_order_value};
@@ -158,7 +159,7 @@ impl UfoWriter {
         }
     }
 
-    fn convert_contour(contour: &Contour) -> norad::Contour {
+    fn convert_contour(contour: &Contour, name_by_identifier: bool) -> norad::Contour {
         let points: Vec<norad::ContourPoint> = contour
             .points()
             .iter()
@@ -175,20 +176,27 @@ impl UfoWriter {
             })
             .collect();
 
-        // Preserve the contour id as a UFO identifier so the stroke lib survives
-        // a write→read round-trip; the reader uses it to restore the same id.
+        // A contour the layer's stroke lib names keeps its id as a UFO identifier,
+        // so the stroke survives a write→read round-trip: the reader restores the
+        // same id from it. Any other contour is written without one, so exporting
+        // the same font twice writes the same bytes.
         //
         // Shift ContourIds consist of "contour_" followed by nanoid characters
         // (letters, digits, hyphens, underscores) — all within the printable
         // ASCII range 0x20–0x7E that norad requires, and always ≤ 100 chars.
         // `Identifier::new` therefore never fails for Shift-generated ids.
-        let identifier = Identifier::new(contour.id().as_str()).ok();
-        debug_assert!(
-            identifier.is_some(),
-            "ContourId {:?} produced an invalid UFO identifier; \
-             the id alphabet may have drifted outside 0x20–0x7E",
-            contour.id().as_str()
-        );
+        let identifier = if name_by_identifier {
+            let identifier = Identifier::new(contour.id().as_str()).ok();
+            debug_assert!(
+                identifier.is_some(),
+                "ContourId {:?} produced an invalid UFO identifier; \
+                 the id alphabet may have drifted outside 0x20–0x7E",
+                contour.id().as_str()
+            );
+            identifier
+        } else {
+            None
+        };
         norad::Contour::new(points, identifier)
     }
 
@@ -293,11 +301,18 @@ impl UfoWriter {
             }
         }
 
+        let stroked: HashSet<String> = layer
+            .stroke_lib()
+            .map(|lib| lib.contours.into_keys().collect())
+            .unwrap_or_default();
         for contour in layer.contours_iter() {
             if contour.is_empty() {
                 continue;
             }
-            norad_glyph.contours.push(Self::convert_contour(contour));
+            let name_by_identifier = stroked.contains(contour.id().as_str());
+            norad_glyph
+                .contours
+                .push(Self::convert_contour(contour, name_by_identifier));
         }
 
         for component in layer.components_iter() {

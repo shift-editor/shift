@@ -129,7 +129,7 @@ impl Font {
     }
 
     /// Writes `lib` back to the font lib, or removes the key when empty.
-    fn set_stroke_preset_lib(&mut self, lib: FontStrokePresetLib) {
+    fn set_stroke_preset_lib(&mut self, lib: &FontStrokePresetLib) {
         if lib.presets.is_empty() {
             self.lib_mut().remove(STROKE_PRESETS_LIB_KEY);
         } else {
@@ -157,7 +157,7 @@ impl Font {
             return Err(CoreError::DuplicateStrokePresetId(id));
         }
         lib.presets.push(StrokePreset { id, name, style });
-        self.set_stroke_preset_lib(lib);
+        self.set_stroke_preset_lib(&lib);
         Ok(())
     }
 
@@ -166,17 +166,13 @@ impl Font {
     /// # Errors
     ///
     /// Returns [`CoreError::StrokePresetNotFound`] when no preset has `id`.
-    pub(crate) fn apply_rename_stroke_preset(
-        &mut self,
-        id: &str,
-        name: String,
-    ) -> CoreResult<()> {
+    pub(crate) fn apply_rename_stroke_preset(&mut self, id: &str, name: String) -> CoreResult<()> {
         let mut lib = self.stroke_preset_lib();
         let preset = lib
             .find_mut(id)
             .ok_or_else(|| CoreError::StrokePresetNotFound(id.to_string()))?;
         preset.name = name;
-        self.set_stroke_preset_lib(lib);
+        self.set_stroke_preset_lib(&lib);
         Ok(())
     }
 
@@ -196,7 +192,7 @@ impl Font {
         if lib.presets.len() == before {
             return Err(CoreError::StrokePresetNotFound(id.to_string()));
         }
-        self.set_stroke_preset_lib(lib);
+        self.set_stroke_preset_lib(&lib);
         Ok(())
     }
 }

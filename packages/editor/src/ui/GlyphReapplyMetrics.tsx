@@ -11,8 +11,14 @@ const LABEL = "Re-apply linked metrics";
  * @remarks
  * Glyph scope only: the font-wide re-apply is not offered here. When there is nothing to
  * apply the button stays in place and its tooltip says why.
+ *
+ * Reads the shown glyph and active source itself rather than taking them as props, so a
+ * location scrub re-renders this button and not the sidebar that hosts it.
  */
-export function GlyphReapplyMetrics({ font, glyphId, sourceId }: GlyphReapplyMetricsProps) {
+export function GlyphReapplyMetrics({ editor }: GlyphReapplyMetricsProps) {
+  const { font } = editor;
+  const glyphId = useSignalState(editor.scene.onlyCell("glyph"))?.glyphId ?? null;
+  const sourceId = useSignalState(editor.activeSourceIdCell);
   const reasonCell = useMemo(
     () =>
       computed(() => {
